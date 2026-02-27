@@ -168,7 +168,7 @@ private struct MovieRow: View {
                 Text(movie.title)
                     .font(.headline)
                     .lineLimit(2)
-                Text("\(movie.yearText)  ·  tmdb-\(movie.id)")
+                Text("\(movie.yearText)  ·  tmdb-\(String(movie.id))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

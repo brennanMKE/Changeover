@@ -17,11 +17,27 @@ enum Config {
     // Accessed on MainActor (UI startup only) so no nonisolated needed here.
 
     nonisolated static let tmdbAPIKey: String = {
-        if let key = Bundle.main.infoDictionary?["TMDB_API_KEY"] as? String,
-           !key.isEmpty,
-           key != "$(TMDB_API_KEY)" {
-            return key
+        // 1. Try Info.plist (populated via Secrets.xcconfig in build settings)
+        // We check for the exact key and also search the dictionary to be robust.
+        if let info = Bundle.main.infoDictionary {
+            // Priority 1: Exact match
+            if let exactMatch = info["TMDB_API_KEY"] as? String,
+               !exactMatch.isEmpty, !exactMatch.contains("$(") {
+                return exactMatch
+            }
+            
+            // Priority 2: Case-insensitive match or contains
+            for (key, value) in info {
+                if key.uppercased().contains("TMDB_API_KEY"),
+                   let stringValue = value as? String,
+                   !stringValue.isEmpty,
+                   !stringValue.contains("$(") {
+                    return stringValue
+                }
+            }
         }
+        
+        // 2. Fallback to environment variable
         return ProcessInfo.processInfo.environment["TMDB_API_KEY"] ?? ""
     }()
 }

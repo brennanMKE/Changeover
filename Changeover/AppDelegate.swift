@@ -3,15 +3,18 @@ import ServiceManagement
 import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    static private(set) var shared: AppDelegate?
+
     let settings = AppSettings()
 
-    private var statusItem: NSStatusItem?
-    private var popover: NSPopover?
+    private(set) var statusItem: NSStatusItem?
+    private(set) var popover: NSPopover?
     private var dvdMonitor: DVDMonitor?
     private var metadataWindow: NSWindow?
     private var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppDelegate.shared = self
         setupMenuBarIcon()
         setupPopover()
         startDVDMonitor()
@@ -64,6 +67,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Metadata window
 
     func showMetadataEntry() {
+        popover?.performClose(nil)
+
         if let w = metadataWindow, w.isVisible {
             w.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -90,6 +95,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Settings window
 
     func showSettings() {
+        popover?.performClose(nil)
+
         if let w = settingsWindow, w.isVisible {
             w.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
