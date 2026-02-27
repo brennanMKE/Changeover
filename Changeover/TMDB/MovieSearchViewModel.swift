@@ -12,20 +12,20 @@ final class MovieSearchViewModel {
 
     private let client: TMDBClient
 
-    init(client: TMDBClient = TMDBClient(apiKey: Config.tmdbAPIKey)) {
+    init(client: TMDBClient = TMDBClient()) {
         self.client = client
     }
 
     // MARK: - Search
 
-    func search() async {
+    func search(apiKey: String) async {
         errorMessage  = nil
         selectedMovie = nil
         isLoading     = true
         defer { isLoading = false }
 
         do {
-            results = try await client.searchMovies(query: query)
+            results = try await client.searchMovies(query: query, apiKey: apiKey)
         } catch {
             results = []
             errorMessage = (error as? LocalizedError)?.errorDescription

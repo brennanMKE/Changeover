@@ -1,17 +1,15 @@
 import Foundation
 
 final class TMDBClient {
-    private let apiKey:  String
     private let session: URLSession
 
-    nonisolated init(apiKey: String, session: URLSession = .shared) {
-        self.apiKey  = apiKey
+    nonisolated init(session: URLSession = .shared) {
         self.session = session
     }
 
     // MARK: - Search
 
-    func searchMovies(query: String) async throws -> [TMDBMovie] {
+    func searchMovies(query: String, apiKey: String) async throws -> [TMDBMovie] {
         guard !apiKey.isEmpty else { throw TMDBError.missingAPIKey }
 
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)

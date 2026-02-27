@@ -136,7 +136,7 @@ struct MetadataEntryView: View {
 
     private func runSearch() {
         searchTask?.cancel()
-        searchTask = Task { await vm.search() }
+        searchTask = Task { await vm.search(apiKey: settings.tmdbAPIKey) }
     }
 
     private func startRipping() {

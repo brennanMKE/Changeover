@@ -13,6 +13,7 @@ final class AppSettings {
     var plexMediaRoot: String  = ""
     var makemkvconPath: String = "/opt/homebrew/bin/makemkvcon"
     var handbrakePath: String  = "/opt/homebrew/bin/HandBrakeCLI"
+    var tmdbAPIKey: String     = ""
 
     // MARK: - Derived Plex paths (standard Plex folder structure under root)
 
@@ -28,8 +29,8 @@ final class AppSettings {
     /// Temporary folder where HandBrakeCLI writes the encoded .mp4
     var workingEncodePath: String { "\(plexMediaRoot)/Working/encoding" }
 
-    /// True once the user has chosen a Plex media root folder.
-    var isConfigured: Bool { !plexMediaRoot.isEmpty }
+    /// True once the user has chosen a Plex media root folder and a TMDB API key.
+    var isConfigured: Bool { !plexMediaRoot.isEmpty && !tmdbAPIKey.isEmpty }
 
     // MARK: - Init (loads from UserDefaults)
 
@@ -38,6 +39,7 @@ final class AppSettings {
         if let v = d.string(forKey: Keys.plexMediaRoot),  !v.isEmpty { plexMediaRoot  = v }
         if let v = d.string(forKey: Keys.makemkvconPath), !v.isEmpty { makemkvconPath = v }
         if let v = d.string(forKey: Keys.handbrakePath),  !v.isEmpty { handbrakePath  = v }
+        if let v = d.string(forKey: Keys.tmdbAPIKey),     !v.isEmpty { tmdbAPIKey     = v }
     }
 
     // MARK: - Persistence
@@ -48,6 +50,7 @@ final class AppSettings {
         d.set(plexMediaRoot,  forKey: Keys.plexMediaRoot)
         d.set(makemkvconPath, forKey: Keys.makemkvconPath)
         d.set(handbrakePath,  forKey: Keys.handbrakePath)
+        d.set(tmdbAPIKey,     forKey: Keys.tmdbAPIKey)
     }
 
     // MARK: - UserDefaults keys
@@ -56,5 +59,6 @@ final class AppSettings {
         static let plexMediaRoot  = "plexMediaRoot"
         static let makemkvconPath = "makemkvconPath"
         static let handbrakePath  = "handbrakePath"
+        static let tmdbAPIKey     = "tmdbAPIKey"
     }
 }

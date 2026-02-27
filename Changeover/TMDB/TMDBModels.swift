@@ -47,7 +47,7 @@ enum TMDBError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingAPIKey:       return "TMDB API key is not configured. See Secrets.xcconfig."
+        case .missingAPIKey:       return "TMDB API key is not configured. Get a free API key from themoviedb.org and enter it in Settings."
         case .emptyQuery:          return "Enter a movie title to search."
         case .invalidURL:          return "Invalid request URL."
         case .badResponse(let c):  return "Server returned status \(c)."

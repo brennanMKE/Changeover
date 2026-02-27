@@ -42,6 +42,23 @@ struct SettingsView: View {
                 .padding(6)
             }
 
+            // TMDB
+            GroupBox("Movie Database (TMDB)") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("API Key")
+                            .frame(width: 90, alignment: .trailing)
+                        SecureField("Your TMDB API Key", text: $settings.tmdbAPIKey)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    Text("The Movie Database (TMDB) API is used for movie metadata and poster art. You can get a free API key by creating an account at themoviedb.org.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(6)
+            }
+
             HStack {
                 Spacer()
                 Button("Save") {
