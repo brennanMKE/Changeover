@@ -1,0 +1,34 @@
+A Night at the Roxbury (1998) {tmdb-9429}
+BlacKkKlansman (2018) {tmdb-487558}
+Blade Runner (1982) {tmdb-78}
+Blades of Glory (2007) {tmdb-9955}
+Dream a Little Dream (1989) {tmdb-15142}
+Fargo (1996) {tmdb-275}
+Fast Times at Ridgemont High (1982) {tmdb-13342}
+Father of the Bride (1991) {tmdb-11846}
+Groove (2000) {tmdb-23655}
+Grosse Pointe Blank (1997) {tmdb-9434}
+High Fidelity (2000) {tmdb-243}
+Knowing (2009) {tmdb-13811}
+Movies.txt
+Nobody (2021) {tmdb-615457}
+Old School (2003) {tmdb-11635}
+Particle Fever (2013) {tmdb-202141}
+Planes, Trains and Automobiles (1987) {tmdb-2609}
+Pulp Fiction (1994) {tmdb-680}
+Scott Pilgrim vs. the World (2010) {tmdb-22538}
+Starship Troopers (1997) {tmdb-563}
+The Adjustment Bureau (2011) {tmdb-38050}
+The Big Lebowski (1998) {tmdb-115}
+The Fifth Element (1997) {tmdb-18}
+The Grand Budapest Hotel (2014) {tmdb-120467}
+The Great Outdoors (1988) {tmdb-2617}
+The Iron Giant (1999) {tmdb-10386}
+The Lost Boys (1987) {tmdb-1547}
+The Saint (1997) {tmdb-10003}
+The Unbearable Weight of Massive Talent (2022) {tmdb-648579}
+The Wizard (1989) {tmdb-183}
+Tombstone (1993) {tmdb-11969}
+Uncle Buck (1989) {tmdb-2616}
+Weird Science (1985) {tmdb-11814}
+Zoolander (2001) {tmdb-9398}
