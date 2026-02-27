@@ -7,6 +7,36 @@ Reference docs: `MacApp.md`, `Automated_DVD_to_Plex_Workflow.md`, `mac_plex_dvd_
 
 ---
 
+## Swift conventions
+
+- **Observable state:** Use `@Observable` macro (`import Observation`) — never `ObservableObject`, `@Published`, `@StateObject`, or `@ObservedObject`. In views, own the view model with `@State`.
+
+- **Deployment target:** macOS 26.2 — all modern APIs available.
+
+### MainActor default isolation
+
+`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` is set on this project. **Every type and function is `@MainActor` unless it explicitly opts out.** Consequences and rules:
+
+| Code | Isolation | Notes |
+|---|---|---|
+| SwiftUI views, view models, AppDelegate | `@MainActor` | default — no annotation needed |
+| `DVDPipeline` | `@MainActor` | plain `struct`, not `actor` — no custom executor needed |
+| `RipController`, `EncodeController` | `nonisolated` | must be explicit; runs on cooperative thread pool so MainActor stays free during long processes |
+| `PlexOrganizer` | `nonisolated` | synchronous file move; called from MainActor context |
+| `DVDMonitor.volumeMounted` | `nonisolated` | `@objc` selector called by NSWorkspace on an arbitrary thread |
+| `Config` static constants | `nonisolated` | constants accessed from `nonisolated` functions must be marked explicitly |
+
+**Do not use the `actor` keyword for types that have no reason to leave MainActor.** A plain struct or class gets `@MainActor` for free.
+
+**Log callbacks from background Process handlers** must be dispatched back to MainActor:
+```swift
+// Inside readabilityHandler / terminationHandler (background thread):
+Task { @MainActor in log(line) }
+```
+This lets the caller use a simple `(String) -> Void` closure that directly mutates `@State` without an inner `Task { @MainActor in ... }` at the call site.
+
+---
+
 ## How to use this document
 
 - Check off `[x]` items as work is completed.
@@ -63,11 +93,11 @@ No manual entry of year or TMDB ID — all populated from the selected TMDB resu
 
 Convert the blank SwiftUI starter into a menu bar app with no Dock icon.
 
-- [ ] **1.1** Update `Info.plist` — add `LSUIElement = true` (menu bar only, no Dock icon)
-- [ ] **1.2** Update `Info.plist` — add `LSBackgroundOnly = false` (allow windows to appear)
-- [ ] **1.3** Disable the app sandbox in `Changeover.entitlements` (`com.apple.security.app-sandbox = false`) — required to shell out to `makemkvcon` and `HandBrakeCLI` and write to arbitrary SSD paths
-- [ ] **1.4** Rewrite `ChangeoverApp.swift` — replace `WindowGroup` with `Settings { EmptyView() }` and wire in `AppDelegate` via `@NSApplicationDelegateAdaptor`
-- [ ] **1.5** Create `AppDelegate.swift` — `NSApplicationDelegate` that sets up the menu bar `NSStatusItem` (disc icon), attaches an `NSPopover` for status, starts `DVDMonitor`, and registers the app as a Login Item via `SMAppService`
+- [x] **1.1** `LSUIElement = YES` added via `INFOPLIST_KEY_LSUIElement` in project.pbxproj (auto-generated plist; no separate plist file in this Xcode 26.2 project)
+- [x] **1.2** Not required — `LSUIElement` alone is sufficient; `LSBackgroundOnly` omitted
+- [x] **1.3** `ENABLE_APP_SANDBOX = NO` set in project.pbxproj for both Debug and Release; `ENABLE_USER_SELECTED_FILES` and `REGISTER_APP_GROUPS` removed
+- [x] **1.4** `ChangeoverApp.swift` rewritten — `Settings { EmptyView() }` + `@NSApplicationDelegateAdaptor`
+- [x] **1.5** `AppDelegate.swift` created
 
 ---
 
@@ -75,31 +105,12 @@ Convert the blank SwiftUI starter into a menu bar app with no Dock icon.
 
 Centralize all paths, encoding settings, and API key access.
 
-- [ ] **2.1** Create `Config.swift` — defines:
-  - Plex Movies path (`/Volumes/MediaSSD/Plex Media/Movies`)
-  - Plex TV Shows path
-  - Working/ripping path
-  - Working/encoding path
-  - `makemkvcon` binary path (comment both Intel and Apple Silicon variants)
-  - `HandBrakeCLI` binary path
-  - RF quality value (default `21`)
-  - Audio encoder string
-  - TMDB API key — read from `Bundle.main.infoDictionary["TMDB_API_KEY"]` (populated via xcconfig)
-
-- [ ] **2.2** Create `Secrets.xcconfig` (not committed to git) — single line:
-  ```
-  TMDB_API_KEY = your_key_here
-  ```
-  Set the project's build configuration to use this file (Project → Info → Configurations). Add a corresponding entry in `Info.plist`:
-  ```xml
-  <key>TMDB_API_KEY</key>
-  <string>$(TMDB_API_KEY)</string>
-  ```
-  Add `Secrets.xcconfig` to `.gitignore`.
+- [x] **2.1** `Config.swift` created — Plex paths, CLI paths, RF quality 21, audio encoder, TMDB key (Info.plist first, env var fallback)
+- [x] **2.2** `Secrets.xcconfig` created and populated with API key; added to `.gitignore`. `INFOPLIST_KEY_TMDB_API_KEY = $(TMDB_API_KEY)` in target build settings. `baseConfigurationReference` wired to both project-level Debug and Release configs in project.pbxproj — no manual Xcode step needed.
 
 > **Note:** `TMDB_API_KEY` is already exported in `~/.zshrc`. For Xcode scheme runs, the xcconfig approach is more reliable than environment variables. Copy the key from your shell (`echo $TMDB_API_KEY`) into `Secrets.xcconfig`.
 
-> **Note:** Run `which makemkvcon` and `which HandBrakeCLI` on the target Mac. Apple Silicon uses `/opt/homebrew/bin/`, Intel uses `/usr/local/bin/`.
+> **Note:** Run `which makemkvcon` and `which HandBrakeCLI` on the target Mac to confirm paths. Homebrew installs to `/opt/homebrew/bin/` on Apple Silicon.
 
 ---
 
@@ -107,7 +118,7 @@ Centralize all paths, encoding settings, and API key access.
 
 Watch for DVD mounts using `NSWorkspace` notifications.
 
-- [ ] **3.1** Create `DVDMonitor.swift` — subscribes to `NSWorkspace.didMountNotification`, checks for a `VIDEO_TS` folder on the mounted volume to confirm it is a DVD (not a USB drive or disk image), then calls a callback on the main thread
+- [x] **3.1** `DVDMonitor.swift` created — `NSWorkspace.didMountNotification`, `VIDEO_TS` check, dispatches to `@MainActor` via `Task { @MainActor in }`
 
 ---
 
@@ -115,24 +126,9 @@ Watch for DVD mounts using `NSWorkspace` notifications.
 
 Networking layer for movie search and poster art. No UI yet — just the data layer.
 
-- [ ] **4.1** Create `TMDBModels.swift` — `Codable` structs:
-  - `TMDBSearchResponse` (page, results, total_pages, total_results)
-  - `TMDBMovie: Identifiable` (id, title, release_date → `yearText`, poster_path)
-  - `TMDBError: LocalizedError` (invalidURL, badResponse, decodingFailed, emptyQuery)
-
-- [ ] **4.2** Create `TMDBClient.swift` — `final class` with:
-  - `init(apiKey: String)`
-  - `func searchMovies(query: String) async throws -> [TMDBMovie]` — calls `GET /3/search/movie`
-  - `func posterURL(path: String?, size: String) -> URL?` — builds `https://image.tmdb.org/t/p/<size><path>`
-
-- [ ] **4.3** Create `MovieSearchViewModel.swift` — `@MainActor ObservableObject`:
-  - `@Published var query: String`
-  - `@Published var results: [TMDBMovie]`
-  - `@Published var isLoading: Bool`
-  - `@Published var errorMessage: String?`
-  - `@Published var selectedMovie: TMDBMovie?`
-  - `func search() async`
-  - `func posterURL(for:) -> URL?`
+- [x] **4.1** `TMDB/TMDBModels.swift` created — `TMDBSearchResponse`, `TMDBMovie` (with `yearText`), `TMDBError`
+- [x] **4.2** `TMDB/TMDBClient.swift` created — `searchMovies()`, `posterURL()`
+- [x] **4.3** `TMDB/MovieSearchViewModel.swift` created — `@MainActor @Observable` class (not `ObservableObject`) with query, results, isLoading, errorMessage, selectedMovie. Use `@Observable` macro from the `Observation` framework throughout this project — never `ObservableObject`/`@Published`/`@StateObject`/`@ObservedObject`.
 
 ---
 
@@ -140,24 +136,10 @@ Networking layer for movie search and poster art. No UI yet — just the data la
 
 The metadata window: search field, poster results list, and rip trigger.
 
-- [ ] **5.1** Create `MovieMetadata.swift` — plain struct constructed from a selected `TMDBMovie`:
-  - `title: String`, `year: String`, `tmdbID: String` (all required — non-optional)
-  - Computed `folderName: String` → `"Title (Year) {tmdb-ID}"`, e.g. `"Blade Runner (1982) {tmdb-78}"`
-  - Computed `fileName: String` → `"Title (Year).mp4"`, e.g. `"Blade Runner (1982).mp4"`
-  - These values drive the exact path: `Movies/<folderName>/<fileName>`
-
-- [ ] **5.2** Create `MetadataEntryView.swift` — SwiftUI view:
-  - Search bar (TextField + Search button / `.onSubmit`)
-  - `ProgressView` spinner while loading
-  - Error message label (red, shown on failure)
-  - Results `List` — each row: `PosterThumb` (44×66 pt via `AsyncImage`) + title + year + TMDB ID; row shows the full Plex folder name that will be created (e.g. `Blade Runner (1982) {tmdb-78}`)
-  - Selected row highlighted; tapping a row sets `selectedMovie`
-  - **Start Ripping** button — disabled until a row is selected and no rip is in progress
-  - Scrolling monospace log area — appears once ripping starts
-
-- [ ] **5.3** Create `PosterThumb.swift` (or inline in MetadataEntryView) — `AsyncImage` wrapper showing a spinner while loading, poster on success, SF Symbol placeholder on failure
-
-- [ ] **5.4** Wire `AppDelegate.showMetadataEntry()` — open `MetadataEntryView` in a plain `NSWindow` (420×560 pt) when `DVDMonitor` fires; bring window to front
+- [x] **5.1** `MovieMetadata.swift` created — `init(from: TMDBMovie)`, `folderName`, `fileName`, `destinationPath`
+- [x] **5.2** `MetadataEntryView.swift` created — search bar, spinner/error row, `List` with `selection:` binding, folder name preview, scrolling log area, Start Ripping button
+- [x] **5.3** `PosterThumb` implemented inline in `MetadataEntryView` as `MovieRow`'s `posterThumb` computed view
+- [x] **5.4** `AppDelegate.showMetadataEntry()` wired — creates `NSWindow` (480×580) hosting `MetadataEntryView`; reuses existing window if already open
 
 ---
 
@@ -165,7 +147,7 @@ The metadata window: search field, poster results list, and rip trigger.
 
 Shell out to `makemkvcon` to rip the disc.
 
-- [ ] **6.1** Create `RipController.swift` — runs `makemkvcon mkv disc:0 all <workingRipPath>` as a `Process`, streams stdout/stderr line-by-line to the log callback, and on success returns the path of the **largest `.mkv`** file found in the working rip directory
+- [x] **6.1** `RipController.swift` created — `nonisolated static func rip(log:)`, `makemkvcon mkv disc:0 all`, streams output line-by-line, returns largest `.mkv` on success
 
 ---
 
@@ -173,7 +155,7 @@ Shell out to `makemkvcon` to rip the disc.
 
 Shell out to `HandBrakeCLI` to encode the MKV to MP4.
 
-- [ ] **7.1** Create `EncodeController.swift` — runs `HandBrakeCLI` with settings from `Config.swift` (`--format av_mp4`, `--quality`, `--aencoder`, `--subtitle scan`, `--markers`), streams output to the log callback, returns `Bool` success
+- [x] **7.1** `EncodeController.swift` created — `nonisolated static func encode(input:output:log:)`, HandBrakeCLI with av_mp4/RF21/copy:aac,copy:ac3/scan subtitles/chapter markers
 
 ---
 
@@ -181,7 +163,7 @@ Shell out to `HandBrakeCLI` to encode the MKV to MP4.
 
 Move the encoded file into the correct Plex folder structure.
 
-- [ ] **8.1** Create `PlexOrganizer.swift` — creates `Movies/<folderName>/` on the SSD, moves the encoded `.mp4` there, logs result; overwrites any existing file at that path
+- [x] **8.1** `PlexOrganizer.swift` created — `nonisolated static func move(encodedFile:metadata:log:)`, creates `Movies/<folderName>/`, moves file, overwrites if exists
 
 ---
 
@@ -189,9 +171,9 @@ Move the encoded file into the correct Plex folder structure.
 
 Tie rip → encode → organize into a single async flow.
 
-- [ ] **9.1** Create `DVDPipeline.swift` — Swift `actor` that calls `RipController`, `EncodeController`, and `PlexOrganizer` in sequence; logs each stage; handles errors at each step without crashing
-- [ ] **9.2** Connect `MetadataEntryView` — on **Start Ripping** tap, construct `MovieMetadata` from `selectedMovie` (title from TMDB, year from `release_date`, tmdbID from `id`), run `DVDPipeline`, stream log lines into the view's log area
-- [ ] **9.3** Final output path logged on completion — e.g. `✓ Moved to: /Volumes/MediaSSD/Plex Media/Movies/Blade Runner (1982) {tmdb-78}/Blade Runner (1982).mp4`
+- [x] **9.1** `DVDPipeline.swift` created — Swift `actor`, rip → encode → move sequence with per-stage error handling
+- [x] **9.2** `MetadataEntryView.startRipping()` constructs `MovieMetadata(from: selectedMovie)`, runs pipeline, streams log lines via `Task { @MainActor in logLines.append(line) }`
+- [x] **9.3** `PlexOrganizer.move()` logs `✓ Moved to: <full path>` on success
 
 ---
 
@@ -199,7 +181,20 @@ Tie rip → encode → organize into a single async flow.
 
 Give the menu bar icon something useful to show.
 
-- [ ] **10.1** Create `StatusMenuView.swift` — SwiftUI view shown in the popover when the user clicks the menu bar disc icon; shows current status (Idle / Ripping / Encoding) and a **Quit** button
+- [x] **10.1** `StatusMenuView.swift` updated — shows configured/unconfigured status, Open… (disabled until configured), Settings…, Quit
+
+---
+
+## Phase 12 — Settings
+
+User-configurable paths; no hardcoded assumptions about folder locations.
+
+- [x] **12.1** `AppSettings.swift` created — `@Observable`, UserDefaults-backed; single `plexMediaRoot` input; all working and library paths derived; `isConfigured` computed from non-empty root
+- [x] **12.2** `SettingsView.swift` created — `NSOpenPanel` folder picker for Plex root; text fields + Detect buttons for CLI paths; derived path preview; Save button calls `settings.persist()`
+- [x] **12.3** `Config.swift` stripped — removed all path constants (moved to `AppSettings`); retained `videoQuality`, `audioEncoder`, `tmdbAPIKey`
+- [x] **12.4** `AppDelegate.swift` updated — owns `let settings = AppSettings()`; injects via `.environment(settings)` into popover and windows; calls `showSettings()` on first launch if `!settings.isConfigured`
+- [x] **12.5** `DVDPipeline.swift` updated — accepts `settings: AppSettings`; captures paths on MainActor then passes as parameters to `nonisolated` controllers
+- [x] **12.6** `RipController`, `EncodeController`, `PlexOrganizer` updated — all `Config` path references replaced with explicit parameters
 
 ---
 
