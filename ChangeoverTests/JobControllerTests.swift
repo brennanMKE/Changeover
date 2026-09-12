@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import Testing
 @testable import Changeover
@@ -273,59 +272,30 @@ struct JobControllerTests {
     }
 }
 
-/// `JobController.insertedDiscURL` is only useful if something writes it, so the
-/// monitor's volume URL is carried through the notification rather than dropped
-/// (#0002 stores it; #0005 ejects it).
+/// `JobController.insertedDisc` is only useful if something writes it. The
+/// monitor's classification and identity logic now live in
+/// `OpticalDiscClassifier`/`DVDMonitor` — see `DVDMonitorTests.swift` (#0013).
+/// This just covers that a `DiscInsertion` handed to `onDVDInserted` lands on
+/// the controller and clears on `onDVDRemoved`.
 @MainActor
-struct DVDMonitorVolumeURLTests {
+struct DVDMonitorWiringTests {
 
-    private func mountNotification(for url: URL) -> Notification {
-        Notification(name: NSWorkspace.didMountNotification,
-                     object: nil,
-                     userInfo: [NSWorkspace.volumeURLUserInfoKey: url])
-    }
-
-    private func makeVolume(withVideoTS: Bool) throws -> URL {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ChangeoverVolume-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        if withVideoTS {
-            try FileManager.default.createDirectory(
-                at: root.appendingPathComponent("VIDEO_TS"),
-                withIntermediateDirectories: true)
-        }
-        return root
-    }
-
-    @Test func aMountedDVDReportsItsVolumeURL() async throws {
-        let volume = try makeVolume(withVideoTS: true)
-        defer { try? FileManager.default.removeItem(at: volume) }
-
+    @Test func insertedDiscIsStoredAndClearedOnRemoval() {
         let controller = JobController()
         let monitor = DVDMonitor()
-        monitor.onDVDInserted = { url in controller.insertedDiscURL = url }
+        monitor.onDVDInserted = { insertion in controller.insertedDisc = insertion }
+        monitor.onDVDRemoved = { controller.insertedDisc = nil }
 
-        monitor.volumeMounted(mountNotification(for: volume))
+        #expect(controller.insertedDisc == nil)
 
-        var spins = 0
-        while controller.insertedDiscURL == nil && spins < 100_000 {
-            await Task.yield()
-            spins += 1
-        }
-        #expect(controller.insertedDiscURL == volume)
-    }
+        let insertion = DiscInsertion(
+            mountURL: URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
+            deviceNode: "disk6",
+            discID: "ceaaceba983071d9a7e28fd6107947b7")
+        monitor.onDVDInserted?(insertion)
+        #expect(controller.insertedDisc == insertion)
 
-    @Test func aMountedVolumeWithoutVideoTSIsIgnored() async throws {
-        let volume = try makeVolume(withVideoTS: false)
-        defer { try? FileManager.default.removeItem(at: volume) }
-
-        let controller = JobController()
-        let monitor = DVDMonitor()
-        monitor.onDVDInserted = { url in controller.insertedDiscURL = url }
-
-        monitor.volumeMounted(mountNotification(for: volume))
-        for _ in 0..<100 { await Task.yield() }
-
-        #expect(controller.insertedDiscURL == nil)
+        monitor.onDVDRemoved?()
+        #expect(controller.insertedDisc == nil)
     }
 }

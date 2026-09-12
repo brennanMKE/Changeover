@@ -66,11 +66,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startDVDMonitor() {
         dvdMonitor = DVDMonitor()
-        dvdMonitor?.onDVDInserted = { [weak self] volumeURL in
+        dvdMonitor?.onDVDInserted = { [weak self] insertion in
             guard let self else { return }
-            // Record which disc is in the drive; #0005 ejects this URL.
-            self.jobs.insertedDiscURL = volumeURL
+            // Record which disc is in the drive; #0005 ejects it.
+            self.jobs.insertedDisc = insertion
             self.showMetadataEntry()
+        }
+        dvdMonitor?.onDVDRemoved = { [weak self] in
+            self?.jobs.insertedDisc = nil
         }
     }
 

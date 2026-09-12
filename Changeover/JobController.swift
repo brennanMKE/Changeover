@@ -44,9 +44,11 @@ final class JobController {
     /// Terminal state of the most recent finished job, `nil` while one runs.
     private(set) var lastOutcome: JobOutcome?
 
-    /// Volume URL of the inserted disc, written by the DVD monitor. #0005 reads
-    /// it to know what to eject.
-    var insertedDiscURL: URL?
+    /// The disc currently in the drive, written by `DVDMonitor` — mount URL,
+    /// device node, and identity, not just a bare `URL` (#0013). #0005 reads
+    /// `mountURL`/`deviceNode` to know what to eject. Cleared when
+    /// `DVDMonitor.onDVDRemoved` fires.
+    var insertedDisc: DiscInsertion?
 
     // MARK: - Private
 
