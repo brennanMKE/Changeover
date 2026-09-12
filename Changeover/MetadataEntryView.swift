@@ -6,6 +6,8 @@ struct MetadataEntryView: View {
     @State private var selectedID: Int?
     @State private var isProcessing = false
     @State private var logLines: [String] = []
+    /// Terminal state of the last job. #0002 moves this onto `JobController`.
+    @State private var lastOutcome: JobOutcome?
     @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
@@ -144,12 +146,13 @@ struct MetadataEntryView: View {
         let metadata = MovieMetadata(from: movie)
         isProcessing = true
         logLines = []
+        lastOutcome = nil
 
         Task {
             let pipeline = DVDPipeline(metadata: metadata, settings: settings) { @MainActor line in
                 logLines.append(line)
             }
-            await pipeline.run()
+            lastOutcome = await pipeline.run()
             isProcessing = false
         }
     }

@@ -6,14 +6,19 @@ enum EncodeController {
     /// Declared nonisolated so it runs on the cooperative thread pool, keeping
     /// MainActor free during encoding. All log calls are dispatched back to
     /// MainActor via Task so the caller's log closure can safely update UI state.
+    ///
+    /// Returns the encoded MP4 on success, or a `JobFailure` naming the reason —
+    /// a launch failure and a non-zero exit are distinct values, not both false.
     nonisolated static func encode(
         input:         String,
         output:        String,
         handbrakePath: String,
         log:           @escaping @MainActor (String) -> Void
-    ) async -> Bool {
+    ) async -> Result<URL, JobFailure> {
         await withCheckedContinuation { continuation in
             Task { @MainActor in log("▶ Starting HandBrakeCLI encode…") }
+
+            let tail = LogTailBuffer()
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: handbrakePath)
@@ -39,19 +44,28 @@ enum EncodeController {
                 for line in text.components(separatedBy: .newlines) {
                     let trimmed = line.trimmingCharacters(in: .whitespaces)
                     if !trimmed.isEmpty {
+                        tail.append(trimmed)
                         Task { @MainActor in log(trimmed) }
                     }
                 }
             }
 
-            // terminationHandler fires on a background thread — dispatch log to MainActor
+            // terminationHandler fires on a background thread — dispatch log to MainActor.
+            // Exactly one resume happens here; the catch below only runs when
+            // process.run() threw, in which case terminationHandler never fires.
             process.terminationHandler = { proc in
                 pipe.fileHandleForReading.readabilityHandler = nil
-                if proc.terminationStatus != 0 {
+                guard proc.terminationStatus == 0 else {
                     let status = proc.terminationStatus
                     Task { @MainActor in log("✗ HandBrakeCLI exited with status \(status)") }
+                    continuation.resume(returning: .failure(JobFailure(
+                        stage:   .encode,
+                        reason:  .toolExited(code: status),
+                        logTail: tail.snapshot()
+                    )))
+                    return
                 }
-                continuation.resume(returning: proc.terminationStatus == 0)
+                continuation.resume(returning: .success(URL(fileURLWithPath: output)))
             }
 
             do {
@@ -59,7 +73,11 @@ enum EncodeController {
             } catch {
                 let msg = error.localizedDescription
                 Task { @MainActor in log("✗ Failed to launch HandBrakeCLI: \(msg)") }
-                continuation.resume(returning: false)
+                continuation.resume(returning: .failure(JobFailure(
+                    stage:   .encode,
+                    reason:  .launchFailure(toolPath: handbrakePath, error: error),
+                    logTail: tail.snapshot()
+                )))
             }
         }
     }
