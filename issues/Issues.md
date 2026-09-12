@@ -1,10 +1,10 @@
 # Changeover
 
-Changeover is a native macOS menu bar app that automates the DVD-to-Plex workflow: detect an inserted DVD, search TMDB for the movie, rip with MakeMKV, encode with HandBrake, and drop the file into a Plex-ready folder. This tracker covers bugs, design refinements, and feature gaps for the macOS app. Platform is macOS unless noted otherwise.
+Changeover is a native macOS menu bar app (no Dock icon) that automates the DVD-to-Plex workflow: it detects a disc, searches TMDB for the movie with poster art, rips with MakeMKV, encodes with HandBrake, and places the finished file into a Plex-ready folder structure (`Title (Year) {tmdb-ID}/Title (Year).mp4`). Planned work extends it to remote control from a Mac, iPhone and iPad over the local network, and eventually to movie-clip montages for ambient displays. This tracker covers the macOS host app, the remote clients (macOS / iOS / iPadOS), and the shared protocol package. Work is organized by the phases in `Roadmap.md`, each phase ending in a demo.
 
 This file is the local guide for managing issues in this project. The companion Mac app (Issues.app) watches the `issues/` folder and renders the current state. Markdown files (and `project.json`) are the source of truth — there is no generated artifact or index to keep in sync.
 
-The `# {Project Name}` heading above should match the `name` field in `issues/project.json`. `project.json` is the canonical source for the project's identity (name + repo URL); this guide is the workflow companion.
+The `# Changeover` heading above should match the `name` field in `issues/project.json`. `project.json` is the canonical source for the project's identity (name + repo URL); this guide is the workflow companion.
 
 ## Folder layout
 
@@ -12,6 +12,7 @@ The `# {Project Name}` heading above should match the `name` field in `issues/pr
 issues/
 ├── project.json       # canonical project name + repo URL
 ├── Issues.md          # this file
+├── model-pricing.json # daily-refreshed model price cache (see "Token usage and cost tracking")
 ├── 0001.md            # one file per issue
 ├── 0001/              # optional sibling folder for screenshots, crash logs, etc.
 │   └── screenshot.png
@@ -25,7 +26,7 @@ A small JSON file naming the project and its repo. Two required fields:
 
 ```json
 {
-  "name": "{Project Name}",
+  "name": "Changeover",
   "url": "https://github.com/user/repo"
 }
 ```
@@ -58,7 +59,7 @@ The most important rule of this workflow: an issue must **never** be marked `res
 
 Leave status at `open` (or `in-progress` if work has started) until the user confirms in words like "close this", "this is fixed", "mark resolved", or "won't fix". When in doubt, ask.
 
-The deliberate exception: a subagent that finishes a fix may set `resolved` (work-is-done-but-not-confirmed). It must not set `closed` — that's the user's call. This separation is the entire reason `resolved` and `closed` are different states.
+The deliberate exception: the **review subagent** (Opus, phase 3 of the standard workflow) may set `resolved` after independently re-verifying the fix (work-is-done-but-not-confirmed). The implementation subagent never sets `resolved` — it leaves the issue `in-progress` for review. No subagent ever sets `closed` — that's the user's call. This separation is the entire reason `resolved` and `closed` are different states.
 
 ## Git tracking
 
@@ -78,10 +79,14 @@ When tracked:
 |---|---|---|
 | Initial setup | `project.json` + `Issues.md` together | `Add issue tracker setup` (or bundle with the first `#NNNN` commit) |
 | File a new issue | the new `NNNN.md` (and `project.json` / `Issues.md` if newly created) | `#NNNN <issue title>` |
+| Planning adds `## Plan` | markdown (the `## Plan` section) | folded into `#NNNN <issue title>` if it lands first, else `#NNNN Plan` |
 | Edit project config | `project.json` only | `Update project config` (or e.g. `Update project URL`) |
-| Resolve — code commit | code changes only | `#NNNN <verb> <title>` |
-| Resolve — resolution commit | markdown update (status + Closed + Commit + summary) | `#NNNN Resolve: <title>` |
+| Implementation — code commit | code changes only | `#NNNN <verb> <title>` |
+| Review — resolution commit | markdown update (status + Closed + Commit + summary), made by the Opus reviewer | `#NNNN Resolve: <title>` |
+| Review — bounce to open | markdown (status back to `open` + `## Review notes`) | `#NNNN Review: <reason>` |
 | Bail with notes | markdown only | `#NNNN Notes: <brief>` |
+| Work-log row appended | markdown only | `#NNNN Work log: <model>, <total tokens>, $<cost>` |
+| Daily pricing refresh | `model-pricing.json` only | `Update model pricing` |
 | User-confirmed close | markdown only | `#NNNN Close` |
 | Won't fix | markdown only | `#NNNN Won't fix` |
 
@@ -149,7 +154,8 @@ Any additional context, guesses at root cause, related code locations.
 4. Set status to `open`.
 5. Use today's date for First seen.
 6. Phrase the title as a single declarative sentence describing the bug, not a question or a fix description.
-7. **If `issues/` is tracked by git**, commit the new file with message `#NNNN <issue title>` so the issue enters git history with its `open` status. If ignored, skip.
+7. **Plan it (phase 1).** Dispatch a fresh subagent on the **top available model (currently Fable)** to read this guide, `CLAUDE.md`, the new issue, and the relevant code, then write a `## Plan` section into `issues/NNNN.md` (after `## Description`). It writes no code and leaves status at `open`. This gives whoever picks the issue up a running start. Record the planner's usage in `## Work log`. Skip if the user is jotting a quick note and doesn't want planning yet.
+8. **If `issues/` is tracked by git**, commit the new file with message `#NNNN <issue title>` so the issue enters git history with its `open` status — the `## Plan` rides along if it's landed, else commit it separately as `#NNNN Plan`. If ignored, skip.
 
 ## Updating an issue
 
@@ -157,40 +163,50 @@ Edit the file in place. The Mac app picks up changes automatically — no follow
 
 When status moves to `resolved` or `closed`, add a `**Closed**` row with the date. When the move to `resolved` was driven by a fix commit, also add a `**Commit**` row with the short hash. For any move toward `resolved`, `closed`, or `wontfix`, the "Critical rule" near the top of this file applies — those transitions require explicit user confirmation, not inference.
 
-## Resolving an issue (the standard workflow)
+## The standard workflow (plan → implement → review)
 
-Each open issue is handled by a fresh subagent. The orchestrator picks the issue; the subagent does the work in isolation and returns when done.
+Issues move from filed to resolved through a **three-phase pipeline**. Each phase runs in a **fresh subagent** dispatched by the orchestrator, on the model that fits the work:
+
+| Phase | When | Model | The subagent does | Status after |
+|---|---|---|---|---|
+| **1. Planning** | at issue creation (see "Filing a new issue") | **Fable** (top model) | reads conventions + issue, writes `## Plan`; no code | `open` |
+| **2. Implementation** | when the issue is worked | **Sonnet** | follows the plan, fixes, builds + verifies, code commit, drafts resolution sections | `in-progress` |
+| **3. Review** | after implementation returns | **Opus** | independently re-verifies the diff, then approves or bounces | `resolved` or `open` |
+
+Fresh context per phase is deliberate: each subagent reloads this guide and `CLAUDE.md` cleanly, so edits to those files take effect on the next dispatch. The top model runs *only* in a subagent, never in the orchestrator's own context, to keep its large context isolated.
 
 ### Orchestrator: pick and dispatch
 
-1. List `issues/*.md` (skip `Issues.md`). Pick the lowest-numbered file whose status is `open`.
-2. Spawn a fresh subagent with the issue id and instructions to follow the resolve workflow below.
-3. When the subagent returns, move on to the next open issue (or stop if only one was requested).
+1. **Refresh the pricing cache if stale.** If `issues/model-pricing.json` is missing or its `fetched` date isn't today, fetch current model prices and rewrite it (once per day). See "Token usage and cost tracking" below.
+2. List `issues/*.md` (skip `Issues.md`). Pick the lowest-numbered file whose status is `open` — it should already carry a `## Plan` from phase 1.
+3. **Dispatch a fresh Sonnet subagent** (phase 2) with the issue id and instructions to follow the implementation steps below.
+4. **When it returns, record its usage** and dispatch a fresh **Opus reviewer** (phase 3) for the same issue. Record the reviewer's usage when it returns.
+5. If the reviewer bounced the issue back to `open`, re-dispatch phase 2. Otherwise move on to the next open issue (or stop if only one was requested).
 
-If the user names a specific issue ("fix 0046"), dispatch to that id directly.
+Usage is recorded per phase — locate the subagent's transcript, sum token counts (deduped by `requestId`), note the model, compute cost, and append a `## Work log` row. Bails and bounces get a row too. If the user names a specific issue ("fix 0046"), dispatch phase 2 to that id directly.
 
-### Subagent: claim → fix → build → commit → resolve
+### Phase 2 — Implementation subagent (Sonnet): claim → fix → build → commit
 
-A subagent starts with fresh context, so its first job is loading the project's conventions before touching anything.
+A subagent starts with fresh context, so its first job is loading the project's conventions.
 
-1. **Orient in the project.** Read these in order, every time:
-   - **`issues/Issues.md`** (this file) — status vocabulary, module conventions, build/verify command, commit conventions, project-specific rules. **Authoritative for issue-tracking workflow.**
-   - **`CLAUDE.md`** at the repo root, if it exists — project-wide guidance, code conventions, restricted areas, build/test commands. **Treat its instructions as binding.**
-   - **`issues/NNNN.md`** — the issue you're working on, in full, including attachments in `issues/NNNN/`.
+1. **Orient in the project.** Read, every time, in order:
+   - **`issues/Issues.md`** (this file) — status vocabulary, module conventions, build/verify command, commit conventions, project rules. **Authoritative for issue-tracking workflow.**
+   - **`CLAUDE.md`** at the repo root, if it exists — project-wide guidance, code conventions, restricted areas, build/test commands. **Binding.**
+   - **`issues/NNNN.md`** — the issue in full, **including its `## Plan`** and any attachments in `issues/NNNN/`.
 
-   If the two project guides disagree, prefer `CLAUDE.md` for code/repo conventions and this file for issue-tracking specifics.
+   If the two guides disagree, prefer `CLAUDE.md` for code/repo conventions and this file for issue-tracking specifics.
 
 2. **Set status to `in-progress`** in the markdown — working copy only, no commit. The Mac app picks it up immediately.
-3. **Make the code changes** required to fix the bug.
-4. **Build *and* run the project's verification command, and confirm tests actually executed and passed.** This step is mandatory and cannot be shortcutted.
+3. **Make the code changes** required to fix the bug, following the `## Plan`. If you deviate, note why in `## Fix` so the reviewer understands.
+4. **Build *and* run the project's verification command, and confirm tests actually executed and passed.** Mandatory; cannot be shortcutted.
 
-   - **Compilation is not verification.** "It builds" / "it compiles" / "no type errors" does not count. Tests must actually run — unit tests execute, UI tests run on a simulator, the app launches, whatever the project defines as proof. A green build with zero tests run is a failure of this step.
-   - **If you wrote or modified tests as part of the fix, you MUST execute those specific tests and observe them pass.** Confirm the test names you added appear in the run output, the counts increased, and the result was success. A test that compiles but never ran proves nothing.
-   - **Read the output, don't just check the exit code.** "0 tests run", "skipped", "no tests found", or a "build succeeded" line with no test summary are red flags even when the exit code is 0. iOS in particular will report `xcodebuild` success when no tests actually executed.
-   - **If verification cannot be run in your environment** (no simulator, missing credentials, hardware required, sandbox), you have not verified the fix. Do not mark the issue `resolved` — bail per "When the subagent can't finish" below, naming the verification step you couldn't run.
-   - **If the build was already failing before you started**, note it on the issue and bail — don't fix unrelated breakage.
+   - **Compilation is not verification.** "It builds" / "no type errors" does not count. Tests must actually run — unit tests execute, UI tests run on a simulator, the app launches, whatever the project defines as proof. A green build with zero tests run is a failure of this step.
+   - **If you wrote or modified tests, you MUST execute those specific tests and observe them pass.** Confirm the test names appear in the output, the counts increased, and the result was success. A test that compiles but never ran proves nothing.
+   - **Read the output, don't just check the exit code.** "0 tests run", "skipped", "no tests found", or "build succeeded" with no test summary are red flags even at exit code 0. iOS in particular reports `xcodebuild` success when no tests ran.
+   - **If verification can't run in your environment** (no simulator, missing credentials, hardware, sandbox), you have not verified the fix. Bail per "When the subagent can't finish", naming the step you couldn't run.
+   - **If the build was already failing before you started**, note it and bail — don't fix unrelated breakage.
 
-5. **Make the code commit.** Stage *only the code changes* (not the issue markdown yet). The message starts with `#NNNN` and a short, declarative title — pick the verb that actually fits (`Fix`, `Add`, `Refactor`, `Update`, `Remove`, etc.); not every issue is a bug fix. Leave a blank line after the title, then add a paragraph of details. Example:
+5. **Make the code commit.** Stage *only the code changes* (not the issue markdown yet). The message starts with `#NNNN` and a short, declarative title — the verb that fits (`Fix`, `Add`, `Refactor`, `Update`, `Remove`, …); not every issue is a bug fix. Blank line, then a paragraph of detail. Example:
 
    ```
    #0046 Add navigation from avatar tap to profile
@@ -201,32 +217,81 @@ A subagent starts with fresh context, so its first job is loading the project's 
    ```
 
 6. **Capture the commit hash** with `git rev-parse --short HEAD`.
+7. **Draft the resolution sections in the markdown — but do NOT set `resolved`.** That's the reviewer's transition.
 
-7. **Update the issue markdown** to mark it resolved. **Precondition:** step 4 actually executed and passed. If it didn't, bail — don't resolve.
+   - Leave **Status** at `in-progress`; add a `**Commit**` row with the short hash from step 6.
+   - Add, all *after* `## Description`:
+     - **`## Root cause`** — what was actually wrong.
+     - **`## Fix`** — the approach taken; call out any divergence from the plan.
+     - **`## Verification`** — the exact command(s) you ran and what you observed (e.g. "`xcodebuild test -scheme MyAppUITests` — 14 tests passed including the 3 new in `ReplyButtonUITests`"). Name new tests and confirm they ran.
+     - **`## Files changed`** — one bullet per file, with a short note on what changed.
+     - **`## Gotchas`** *(optional)* — surprises, dead ends, non-obvious behavior. Skip if nothing's notable; be specific when present.
 
-   - Change Status to `resolved`.
-   - Add a `**Closed**` row with today's date.
-   - Add a `**Commit**` row with the short hash from step 6.
+8. **Do not commit the markdown draft.** Return to the orchestrator with a one-line summary. The reviewer makes the single resolution commit in phase 3.
 
-   Then add a structured summary in this order so the issue becomes a primary-source record:
+### Phase 3 — Review subagent (Opus): verify → resolve or bounce
 
-   - **`## Root cause`** — what was actually wrong (often different from the original report).
-   - **`## Fix`** — the approach taken.
-   - **`## Verification`** — the exact command(s) run and what was observed (e.g. "`xcodebuild test -scheme MyAppUITests` — 14 tests passed including the 3 new tests in `ReplyButtonUITests`"). If new tests were added, name them and confirm they ran. Mandatory — this is the audit trail that distinguishes "verified" from "compiled and hoped".
-   - **`## Files changed`** — bulleted list, one bullet per file, with a short note describing what changed in each.
-   - **`## Gotchas`** *(optional)* — surprises, dead ends, non-obvious behavior, or anything a future engineer working on similar code should know. Skip if nothing is notable. Be specific — these notes accumulate across issues and feed future "common pitfalls" docs.
+An independent reviewer is the gate between "code landed" and "issue resolved". It owns the `resolved` transition; the implementation subagent never sets it.
 
-8. **If `issues/` is tracked by git, make the resolution commit.** Stage `issues/NNNN.md` and commit with message `#NNNN Resolve: <title>`. Body briefly notes which code commit it pairs with (the hash from step 6). If `issues/` is ignored or there's no repo, skip — the markdown change from step 7 is the entire record.
+1. **Orient** the same way (this file, `CLAUDE.md`, `issues/NNNN.md` including the `## Plan` and the drafted resolution sections).
+2. **Inspect the code commit** — read its diff (`git show <hash>`). Does it actually address the reported bug? Right scope? Any correctness, security, or regression risk?
+3. **Re-run the verification command yourself** and read the output — don't trust the drafted `## Verification`. Confirm tests actually executed and passed (same standard as phase 2, step 4). This independent run is the core of the review.
+4. **Decide:**
+   - **Approve** (fix is correct, verification passed): change **Status** to `resolved`; add a `**Closed**` row with today's date; ensure the `**Commit**` row is present; add a top-of-resolution `## Resolution notes` blockquote (`> 🟢 Resolved YYYY-MM-DD — <one sentence>.`). **If `issues/` is tracked**, make the resolution commit — stage `issues/NNNN.md`, message `#NNNN Resolve: <title>`, body noting the code commit hash. If ignored, skip; the markdown is the record.
+   - **Bounce** (verification failed, fix wrong, scope off): revert **Status** to `open`; add a `## Review notes` section stating exactly what failed and what the next implementation pass must fix. Leave the code commit in place unless you say otherwise in the notes. **If tracked**, commit the markdown with `#NNNN Review: <reason>`. Return to the orchestrator, which re-dispatches phase 2.
 
-Status flow: `open` → `in-progress` → `resolved`. **Never set `closed`** — the user does that after verifying the fix.
+Status flow: `open` (with `## Plan`) → `in-progress` → review → `resolved`, or bounced back to `open`. **Never set `closed`** — the user does that after verifying the fix.
+
+### Issue numbering — blocked by roadmap phase
+
+Issue ids are **allocated in blocks by `Roadmap.md` phase**, not strictly
+sequentially, so an id tells you which phase it belongs to at a glance. Gaps
+between blocks are intentional; do not backfill them.
+
+| Block | Roadmap phase | Umbrella |
+|---|---|---|
+| 0001–0019 | Phase 1 — Trustworthy single-disc rip | `0001` |
+| 0020–0039 | Phase 2 — Choose what gets ripped | `0020` |
+| 0040–0059 | Phase 3 — Unattended multi-disc | `0040` |
+| 0060–0079 | Phase 4 — Remote control from a Mac | `0060` |
+| 0080–0099 | Phase 5 — iPhone and iPad clients | `0080` |
+| 0100–0119 | Phase 6 — Ship to other people | `0100` |
+| 0120–0139 | Phase 7 — Montages | `0120` |
+
+The first id in each block is the phase's **umbrella ticket** (see the umbrella
+pattern in the issues skill). Within a block, ids are sequential with no gaps.
+New work discovered inside a phase takes the next free id in that phase's block.
+
+### Model roles for this project
+
+This project **overrides** the default model assignment in the issues skill, at
+the user's direction:
+
+| Phase | Model | Notes |
+|---|---|---|
+| **1. Planning** | **Opus** | plans each issue against `Roadmap.md` and `Plan.md` |
+| **2. Implementation** | Sonnet | unchanged |
+| **3. Per-phase review** | **Fable** | reviews *all* issues in a roadmap phase together, checking for gaps and confirming the phase's demo is worthwhile |
+
+Note that the Fable review here is a **phase-level** review of the issue set, run
+when a roadmap phase has been fully broken down — it is distinct from the
+per-issue implementation review in the standard workflow.
 
 ### Build / verify command for this project
 
-See `CLAUDE.md` at the repo root for the full command set. In short:
+```bash
+xcodebuild -project Changeover.xcodeproj -scheme Changeover -destination 'platform=macOS' build
+xcodebuild -project Changeover.xcodeproj -scheme Changeover -destination 'platform=macOS' test
+```
 
-- Build: `./build.sh` (or `xcodebuild -project Changeover.xcodeproj -scheme Changeover -configuration Debug build`)
-- Tests: `xcodebuild -project Changeover.xcodeproj -scheme Changeover test` (unit tests use Swift Testing; UI tests use XCTest)
-- Note: the build requires `Changeover/Secrets.xcconfig` to exist (gitignored) — copy it from `Secrets.xcconfig.example`.
+**Verification caveat specific to this project:** much of Changeover shells out
+to `makemkvcon` and `HandBrakeCLI` and depends on a physical optical disc. A
+green build is *not* verification for anything in the rip path. Where a change
+cannot be covered by an automated test, the issue's `## Verification` section
+must state what was exercised manually and with which disc — and say plainly
+that it was manual. Parsers, path derivation, naming, state machines and the
+remote protocol should all have real unit tests; those are the parts where
+"tests must actually run" applies literally.
 
 ### When the subagent can't finish
 
@@ -239,6 +304,60 @@ If the bug is unreproducible, out of scope, or the build won't pass after reason
 5. Return with a one-line summary of why work stalled.
 
 Never use `wontfix` or `closed` to escape a stuck issue.
+
+## Token usage and cost tracking
+
+Every subagent dispatch gets a usage record on the issue it worked: which model did the work, exactly how many tokens it consumed, and an estimated cost. The **orchestrator** records this after the subagent returns — a subagent can't measure its own totals. Under the three-phase workflow each issue accumulates a row per phase — **planning (Fable), recorded at filing time; implementation (Sonnet); review (Opus)** — plus a row for every bounce or bail.
+
+### Pricing cache (`issues/model-pricing.json`)
+
+Anthropic publishes prices on the docs site (no API endpoint). Fetch once per day, cache to:
+
+```json
+{
+  "fetched": "YYYY-MM-DD",
+  "source": "https://docs.claude.com/en/docs/about-claude/pricing",
+  "currency": "USD per MTok",
+  "models": {
+    "claude-fable-5": { "input": 5.00, "output": 25.00, "cache_write_5m": 6.25, "cache_read": 0.50 },
+    "claude-opus-4-8": { "input": 5.00, "output": 25.00, "cache_write_5m": 6.25, "cache_read": 0.50 },
+    "claude-sonnet-4-6": { "input": 3.00, "output": 15.00, "cache_write_5m": 3.75, "cache_read": 0.30 }
+  }
+}
+```
+
+If `fetched` is today, use as-is. If the fetch fails, use the stale cache and note the staleness next to the cost; with no cache at all, record tokens and model with `—` for cost. Never trust example numbers over a fresh fetch.
+
+### Getting exact token counts
+
+Claude Code writes each subagent's transcript to `~/.claude/projects/<project-slug>/<session-id>/subagents/agent-<id>.jsonl`, where `<project-slug>` is the working directory with `/`, `.`, and `_` replaced by `-`. Assistant lines carry `message.usage` (exact `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`) and `message.model`.
+
+**Dedupe by `requestId`** — one API response can span several JSONL lines repeating the same usage object; summing every line over-counts. Find the newest agent file mentioning the issue id, keep one usage entry per `requestId`, and sum.
+
+```
+cost = (input × input_rate + output × output_rate
+      + cache_read × cache_read_rate + cache_write × cache_write_5m_rate) / 1,000,000
+```
+
+If no transcript is available (different harness), record whatever total the harness reported, or `—`. Never fabricate counts.
+
+### The `## Work log` section
+
+One row per work session, conventionally the last section of the issue file (always after `## Description`). The optional **Phase** column (`plan` / `implement` / `review`) makes the three-phase breakdown legible:
+
+```markdown
+## Work log
+
+| Date | Phase | Model | Input | Output | Cache read | Cache write | Cost |
+|---|---|---|---|---|---|---|---|
+| 2026-06-03 | plan | claude-fable-5 | 84 | 6,102 | 512,400 | 41,200 | $0.58 |
+| 2026-06-04 | implement | claude-sonnet-4-6 | 120 | 18,530 | 2,904,110 | 98,400 | $1.12 |
+| 2026-06-04 | review | claude-opus-4-8 | 96 | 9,240 | 1,331,200 | 44,800 | $1.05 |
+
+**Total: $2.75**
+```
+
+Update the `**Total**` line whenever a row is appended. The `plan` row lands at filing time; the `implement` and `review` rows land as each phase returns. Bails and bounces get a row too. Don't reformat existing rows.
 
 ## Attachments
 
@@ -287,11 +406,6 @@ The `*` matches the U+202F. Substitute the actual timestamp; if you don't know w
 
 ## Module conventions for this project
 
-Use the source file (or grouping) an issue centers on. Common ones:
+<!-- List the canonical module / area names so issues stay consistent. Delete this section if not relevant. -->
 
-- `AppDelegate` — menu bar, windows, popover, DVD-monitor wiring
-- `AppSettings` / `SettingsView` — user settings and the Settings window
-- `DVDMonitor` — disc detection
-- `DVDPipeline` / `RipController` / `EncodeController` / `PlexOrganizer` — the rip→encode→move pipeline
-- `TMDB` — TMDB client, models, search view model
-- `Build config` — Xcode project settings, xcconfig, signing, release scripts
+- e.g. `BlueskyFeed`, `BlueskyAuth`, `Bluesky-SwiftUI`

@@ -21,12 +21,36 @@ Reference docs: `MacApp.md`, `Automated_DVD_to_Plex_Workflow.md`, `mac_plex_dvd_
 |---|---|---|
 | SwiftUI views, view models, AppDelegate | `@MainActor` | default — no annotation needed |
 | `DVDPipeline` | `@MainActor` | plain `struct`, not `actor` — no custom executor needed |
-| `RipController`, `EncodeController` | `nonisolated` | must be explicit; runs on cooperative thread pool so MainActor stays free during long processes |
+| `RipController`, `EncodeController` | `nonisolated` | must be explicit. **Not** because they run on the cooperative pool — see the note below |
 | `PlexOrganizer` | `nonisolated` | synchronous file move; called from MainActor context |
 | `DVDMonitor.volumeMounted` | `nonisolated` | `@objc` selector called by NSWorkspace on an arbitrary thread |
 | `Config` static constants | `nonisolated` | constants accessed from `nonisolated` functions must be marked explicitly |
 
 **Do not use the `actor` keyword for types that have no reason to leave MainActor.** A plain struct or class gets `@MainActor` for free.
+
+### `nonisolated async` does NOT mean "off the main actor"
+
+`SWIFT_APPROACHABLE_CONCURRENCY = YES` is set on every target in this project
+(`project.pbxproj:415`, `:444`, `:464`, `:484`, `:502`, `:520`). That enables
+`NonisolatedNonsendingByDefault`, which means **a `nonisolated async` function
+called from a MainActor context runs on MainActor**, not on the cooperative
+thread pool.
+
+`RipController.rip` and `EncodeController.encode` are safe today only because
+they immediately suspend on a continuation while a *child process* does the
+work — no Swift code runs during the long operation, so MainActor is free in
+practice. The isolation annotation is not what frees it.
+
+**Consequence:** if real CPU work is ever added to one of those functions —
+parsing a large output buffer, classifying log lines, batching — it will block
+the UI, and the `nonisolated` keyword will not prevent that. Mark such work
+`@concurrent` explicitly.
+
+**Also note:** the `ChangeoverTests` and UI-test targets do **not** set
+`SWIFT_DEFAULT_ACTOR_ISOLATION` (`project.pbxproj:455-468`, `:475-488`). Test
+code therefore sees different default isolation than app code — suites touching
+MainActor-isolated types need `@MainActor`, while the `nonisolated` pure
+functions are directly testable as-is.
 
 **Log callbacks from background Process handlers** must be dispatched back to MainActor:
 ```swift
@@ -171,7 +195,7 @@ Move the encoded file into the correct Plex folder structure.
 
 Tie rip → encode → organize into a single async flow.
 
-- [x] **9.1** `DVDPipeline.swift` created — Swift `actor`, rip → encode → move sequence with per-stage error handling
+- [x] **9.1** `DVDPipeline.swift` created — plain `struct` (not an `actor`; see Swift conventions above), rip → encode → move sequence with per-stage error handling
 - [x] **9.2** `MetadataEntryView.startRipping()` constructs `MovieMetadata(from: selectedMovie)`, runs pipeline, streams log lines via `Task { @MainActor in logLines.append(line) }`
 - [x] **9.3** `PlexOrganizer.move()` logs `✓ Moved to: <full path>` on success
 
