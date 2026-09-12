@@ -2,12 +2,13 @@ import SwiftUI
 
 struct MetadataEntryView: View {
     @Environment(AppSettings.self) private var settings
+    /// Job state lives on the app-level controller, not here — closing this
+    /// window must not orphan a running rip (#0002).
+    @Environment(JobController.self) private var jobs
+    /// The search view model's lifetime genuinely *is* this view's, so it stays
+    /// `@State`-owned. Only job state was hoisted.
     @State private var vm = MovieSearchViewModel()
     @State private var selectedID: Int?
-    @State private var isProcessing = false
-    @State private var logLines: [String] = []
-    /// Terminal state of the last job. #0002 moves this onto `JobController`.
-    @State private var lastOutcome: JobOutcome?
     @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
@@ -94,11 +95,11 @@ struct MetadataEntryView: View {
 
     @ViewBuilder
     private var logArea: some View {
-        if !logLines.isEmpty || isProcessing {
+        if !jobs.logLines.isEmpty || jobs.isRunning {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
-                        ForEach(Array(logLines.enumerated()), id: \.offset) { index, line in
+                        ForEach(Array(jobs.logLines.enumerated()), id: \.offset) { index, line in
                             Text(line)
                                 .font(.system(.caption2, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -109,7 +110,7 @@ struct MetadataEntryView: View {
                 }
                 .background(Color(.textBackgroundColor))
                 .frame(height: 130)
-                .onChange(of: logLines.count) { _, count in
+                .onChange(of: jobs.logLines.count) { _, count in
                     if count > 0 {
                         proxy.scrollTo(count - 1, anchor: .bottom)
                     }
@@ -128,7 +129,7 @@ struct MetadataEntryView: View {
             Button("Start Ripping") {
                 startRipping()
             }
-            .disabled(vm.selectedMovie == nil || isProcessing)
+            .disabled(vm.selectedMovie == nil || jobs.isRunning)
             .buttonStyle(.borderedProminent)
         }
         .padding()
@@ -143,18 +144,7 @@ struct MetadataEntryView: View {
 
     private func startRipping() {
         guard let movie = vm.selectedMovie else { return }
-        let metadata = MovieMetadata(from: movie)
-        isProcessing = true
-        logLines = []
-        lastOutcome = nil
-
-        Task {
-            let pipeline = DVDPipeline(metadata: metadata, settings: settings) { @MainActor line in
-                logLines.append(line)
-            }
-            lastOutcome = await pipeline.run()
-            isProcessing = false
-        }
+        jobs.start(metadata: MovieMetadata(from: movie), settings: settings)
     }
 }
 

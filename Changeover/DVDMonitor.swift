@@ -1,7 +1,9 @@
 import AppKit
 
 class DVDMonitor {
-    var onDVDInserted: (() -> Void)?
+    /// Fired with the mounted volume's URL. The URL is what #0005 will eject,
+    /// so it is carried through rather than dropped.
+    var onDVDInserted: ((URL) -> Void)?
 
     init() {
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -22,7 +24,7 @@ class DVDMonitor {
         guard FileManager.default.fileExists(atPath: videoTS.path) else { return }
 
         Task { @MainActor [weak self] in
-            self?.onDVDInserted?()
+            self?.onDVDInserted?(url)
         }
     }
 }

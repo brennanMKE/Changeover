@@ -3,6 +3,7 @@ import AppKit
 
 struct StatusMenuView: View {
     @Environment(AppSettings.self) private var settings
+    @Environment(JobController.self) private var jobs
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -13,11 +14,13 @@ struct StatusMenuView: View {
                     .font(.headline)
                 HStack(spacing: 5) {
                     Circle()
-                        .fill(settings.isConfigured ? Color.green : Color.red)
+                        .fill(statusColor)
                         .frame(width: 7, height: 7)
-                    Text(settings.isConfigured ? "Idle — insert a DVD to begin" : "Settings required")
+                    Text(statusText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
             .padding(.horizontal, 14)
@@ -53,6 +56,20 @@ struct StatusMenuView: View {
         }
         .padding(.bottom, 8)
         .frame(width: 260)
+    }
+
+    // MARK: - Status
+
+    /// Job state is app-level now (#0002), so the popover can report the running
+    /// job instead of always claiming to be idle.
+    private var statusText: String {
+        guard settings.isConfigured else { return "Settings required" }
+        return jobs.statusDescription
+    }
+
+    private var statusColor: Color {
+        guard settings.isConfigured else { return .red }
+        return jobs.isRunning ? .blue : .green
     }
 }
 
