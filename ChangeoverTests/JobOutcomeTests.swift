@@ -190,6 +190,107 @@ struct JobOutcomeTests {
         #expect(FileManager.default.fileExists(atPath: encoded.path))
     }
 
+    /// The actual bug in #0012: `move` used to `removeItem` the existing
+    /// destination *before* attempting the replacement, so if the
+    /// replacement then failed for an unrelated reason, the original was
+    /// already gone. To reproduce that window precisely, the *destination*
+    /// folder stays writable (so an unconditional `removeItem` would
+    /// succeed) while the *source* (working encode) folder is locked down,
+    /// which makes the move/replace step itself fail. Pre-populate the
+    /// destination with known bytes and assert they survive.
+    @Test func moveLeavesExistingLibraryFileIntactWhenReplacementFails() throws {
+        let root = try Self.makeTempDir()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let movies = root.appendingPathComponent("Movies")
+        let metadata = try Self.metadata()
+        let folder = movies.appendingPathComponent("Blade Runner (1982) {tmdb-78}")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        // The file already in the Plex library, from an earlier successful
+        // rip. The destination folder is left fully writable — an
+        // unconditional `removeItem` on this file would succeed.
+        let existingDest = folder.appendingPathComponent("Blade Runner (1982).mp4")
+        let originalBytes = Data("original library copy".utf8)
+        try originalBytes.write(to: existingDest)
+
+        // The newly encoded replacement, sitting in its own working folder.
+        let workingEncode = root.appendingPathComponent("WorkingEncode")
+        try FileManager.default.createDirectory(at: workingEncode, withIntermediateDirectories: true)
+        let encoded = workingEncode.appendingPathComponent("encoded.mp4")
+        try Data("new encoded replacement".utf8).write(to: encoded)
+
+        // Lock the *source* folder so the file can't be removed from it —
+        // this is what makes the move/replace step fail, independent of the
+        // (writable) destination.
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: workingEncode.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: workingEncode.path)
+        }
+
+        var logged: [String] = []
+        var thrown: JobFailure?
+        do {
+            _ = try PlexOrganizer.move(
+                encodedFile:    encoded.path,
+                metadata:       metadata,
+                plexMoviesPath: movies.path,
+                log:            { logged.append($0) }
+            )
+        } catch {
+            thrown = error
+        }
+
+        let failure = try #require(thrown, "move should throw when the source folder can't be written to")
+        #expect(failure.stage == .organize)
+        #expect(logged.contains { $0.hasPrefix("✗ ERROR moving file:") })
+
+        // The whole point: the pre-existing library file must survive a
+        // failed replacement, byte for byte — it must never have been
+        // deleted just because the destination folder was writable.
+        #expect(FileManager.default.fileExists(atPath: existingDest.path))
+        #expect(try Data(contentsOf: existingDest) == originalBytes)
+
+        // And the encoded replacement is not silently lost either — it's
+        // still sitting in the working folder, unfiled.
+        #expect(FileManager.default.fileExists(atPath: encoded.path))
+    }
+
+    /// The success path must keep working: re-ripping a movie that already
+    /// has a library copy replaces it with the new encode.
+    @Test func moveReplacesAnExistingLibraryFileOnSuccess() throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let moviesPath = root.appendingPathComponent("Movies").path
+        let metadata = try Self.metadata()
+
+        let folder = (moviesPath as NSString).appendingPathComponent(metadata.folderName)
+        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        let existingDest = (folder as NSString).appendingPathComponent(metadata.fileName)
+        try Data("stale encode from an earlier rip".utf8).write(to: URL(fileURLWithPath: existingDest))
+
+        let encoded = root.appendingPathComponent("encoded.mp4")
+        let newBytes = Data("fresh encode".utf8)
+        try newBytes.write(to: encoded)
+
+        var logged: [String] = []
+        let destination = try PlexOrganizer.move(
+            encodedFile:    encoded.path,
+            metadata:       metadata,
+            plexMoviesPath: moviesPath,
+            log:            { logged.append($0) }
+        )
+
+        #expect(destination.path == existingDest)
+        #expect(try Data(contentsOf: destination) == newBytes)
+        #expect(!FileManager.default.fileExists(atPath: encoded.path))
+        #expect(logged.contains { $0.hasPrefix("✓ Moved to:") })
+    }
+
     // MARK: - Log tail
 
     @Test func logTailKeepsTheMostRecentLines() {

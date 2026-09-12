@@ -22,14 +22,22 @@ enum PlexOrganizer {
             .appendingPathComponent(metadata.folderName)
         let destPath = (folderPath as NSString)
             .appendingPathComponent(metadata.fileName)
+        let destURL = URL(fileURLWithPath: destPath)
+        let encodedURL = URL(fileURLWithPath: encodedFile)
 
         do {
             try fm.createDirectory(atPath: folderPath,
                                    withIntermediateDirectories: true)
-            if fm.fileExists(atPath: destPath) {
-                try fm.removeItem(atPath: destPath)
-            }
-            try fm.moveItem(atPath: encodedFile, toPath: destPath)
+            // `replaceItemAt` never deletes an existing destination up front.
+            // It stages the incoming file and performs the destructive swap
+            // only once that staging succeeds, so a failure anywhere in this
+            // call — permissions, full disk, an unplugged volume — leaves a
+            // pre-existing library file exactly as it was. When nothing
+            // exists at `destURL` yet, it degrades to a plain move. See
+            // #0012: the previous `removeItem` then `moveItem` sequence
+            // deleted the existing file before the replacement was known to
+            // be good.
+            _ = try fm.replaceItemAt(destURL, withItemAt: encodedURL)
         } catch {
             log("✗ ERROR moving file: \(error.localizedDescription)")
             throw JobFailure(stage: .organize,
