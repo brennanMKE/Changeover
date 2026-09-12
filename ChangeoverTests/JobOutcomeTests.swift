@@ -291,6 +291,79 @@ struct JobOutcomeTests {
         #expect(logged.contains { $0.hasPrefix("✓ Moved to:") })
     }
 
+    /// #0012's re-pass: staging the encoded file on the destination volume
+    /// before the swap (via `itemReplacementDirectory`) means the failure
+    /// window can now open *after* staging succeeds, not just before it —
+    /// the destination folder itself can go unwritable between "encoded
+    /// file staged" and "swap performed". Lock the *destination* folder
+    /// (not the source) so `moveItem` into staging still succeeds, but the
+    /// final `replaceItemAt` write into that folder fails. Both properties
+    /// must hold: the pre-existing library file survives, and the encoded
+    /// file is moved back to its original location rather than stranded in
+    /// a hidden staging directory.
+    @Test func moveRestoresEncodedFileWhenSwapFailsAfterStaging() throws {
+        let root = try Self.makeTempDir()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let movies = root.appendingPathComponent("Movies")
+        let metadata = try Self.metadata()
+        let folder = movies.appendingPathComponent("Blade Runner (1982) {tmdb-78}")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        // The file already in the Plex library.
+        let existingDest = folder.appendingPathComponent("Blade Runner (1982).mp4")
+        let originalBytes = Data("original library copy".utf8)
+        try originalBytes.write(to: existingDest)
+
+        // The newly encoded replacement, in its own (fully writable)
+        // working folder — staging it out of here must succeed.
+        let workingEncode = root.appendingPathComponent("WorkingEncode")
+        try FileManager.default.createDirectory(at: workingEncode, withIntermediateDirectories: true)
+        let encoded = workingEncode.appendingPathComponent("encoded.mp4")
+        let newBytes = Data("new encoded replacement".utf8)
+        try newBytes.write(to: encoded)
+
+        // Lock the *destination* folder itself. This does not block
+        // creating the item-replacement directory (elsewhere on the
+        // volume) or moving the encoded file into it, but it does block
+        // `replaceItemAt` from writing into this folder — the failure this
+        // test needs happens strictly after staging.
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: folder.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+        }
+
+        var logged: [String] = []
+        var thrown: JobFailure?
+        do {
+            _ = try PlexOrganizer.move(
+                encodedFile:    encoded.path,
+                metadata:       metadata,
+                plexMoviesPath: movies.path,
+                log:            { logged.append($0) }
+            )
+        } catch {
+            thrown = error
+        }
+
+        let failure = try #require(thrown, "move should throw when the swap into a locked destination folder fails")
+        #expect(failure.stage == .organize)
+        #expect(logged.contains { $0.hasPrefix("✗ ERROR moving file:") })
+
+        // Property A: the pre-existing library file survives untouched.
+        #expect(FileManager.default.fileExists(atPath: existingDest.path))
+        #expect(try Data(contentsOf: existingDest) == originalBytes)
+
+        // Property B (encoded file never lost): the staged copy is moved
+        // back to its original location rather than stranded in a hidden
+        // itemReplacementDirectory.
+        #expect(FileManager.default.fileExists(atPath: encoded.path))
+        #expect(try Data(contentsOf: encoded) == newBytes)
+    }
+
     // MARK: - Log tail
 
     @Test func logTailKeepsTheMostRecentLines() {
