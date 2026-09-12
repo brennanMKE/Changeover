@@ -106,6 +106,7 @@ Each issue is `NNNN.md` (4-digit zero-padded) with this structure:
 | | |
 |---|---|
 | **Status** | open |
+| **Phase** | N — Theme |
 | **Module** | <module name(s)> |
 | **Platform** | iOS · macOS · iPadOS · All |
 | **First seen** | YYYY-MM-DD |
@@ -140,6 +141,14 @@ Any additional context, guesses at root cause, related code locations.
 
 - **Title separator** is an em-dash (U+2014, `—`), not a hyphen.
 - **Metadata field rows** must keep the field name in `**bold**` exactly.
+- **Phase** is **required** on every issue. Its value is `N — Theme`, copied
+  verbatim from the phase-overview table in `Roadmap.md`, with an em-dash
+  (U+2014, `—`) and a single space on each side of it. Do not prefix the word
+  "Phase" — tooling renders `Phase N — Theme` from the key name itself. The
+  string must be **byte-identical across every issue in a phase**:
+  `list-recent-issues` groups on the exact value, so a single stray character
+  splits one phase into two groups. The value is determined by the id block —
+  see "Issue numbering — blocked by roadmap phase" below.
 - **Dates** are `YYYY-MM-DD`.
 - **Module** can list multiple modules separated by ` / ` (e.g. `BlueskyFeed / BlueskyDataStore`).
 - **Platform** is `iOS`, `macOS`, `iPadOS`, `All`, or any other string. `All` is treated as matching every platform filter.
@@ -261,6 +270,11 @@ between blocks are intentional; do not backfill them.
 The first id in each block is the phase's **umbrella ticket** (see the umbrella
 pattern in the issues skill). Within a block, ids are sequential with no gaps.
 New work discovered inside a phase takes the next free id in that phase's block.
+
+**The block also determines the `**Phase**` metadata row value.** Derive it from
+the file number, not from the issue's title or content, and use the `N — Theme`
+string exactly as it appears in the table above minus the leading `Phase ` — for
+example an issue numbered `0043` takes `| **Phase** | 3 — Unattended multi-disc |`.
 
 ### Model roles for this project
 
