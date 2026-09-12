@@ -16,7 +16,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Internal rather than private so a test can assert the window is *reused*
     /// across a close/reopen instead of being rebuilt (#0002).
     private(set) var metadataWindow: NSWindow?
-    private var settingsWindow: NSWindow?
+    /// Internal rather than private so a test can assert the window is *reused*
+    /// across a close/reopen instead of being rebuilt (#0011).
+    private(set) var settingsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
@@ -109,7 +111,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func showSettings() {
         popover?.performClose(nil)
 
-        if let w = settingsWindow, w.isVisible {
+        // Reuse the window whenever it exists, not only while it is visible:
+        // `isReleasedWhenClosed = false` keeps the object alive across a close,
+        // so existence — not visibility — is the right test (#0011).
+        if let w = settingsWindow {
             w.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return

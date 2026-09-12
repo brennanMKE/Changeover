@@ -67,4 +67,31 @@ struct MetadataWindowReuseTests {
         #expect(delegate.jobs === controller)
         #expect(controller.isRunning == false)
     }
+
+    /// The Settings half of #0011: `showSettings()` had the same
+    /// `w.isVisible` bug `showMetadataEntry()` was fixed for in #0002, so a
+    /// closed Settings window fell through to a brand-new `NSWindow` +
+    /// `NSHostingView` on every reopen.
+    @Test func closingAndReopeningReusesTheSameSettingsWindow() throws {
+        let delegate = AppDelegate()
+        defer { delegate.settingsWindow?.close() }
+
+        delegate.showSettings()
+        let first = try #require(delegate.settingsWindow, "no window was created")
+        #expect(first.isVisible)
+        // The window must survive a close, or reuse is impossible.
+        #expect(first.isReleasedWhenClosed == false)
+
+        first.close()
+        #expect(first.isVisible == false)
+
+        delegate.showSettings()
+        let second = try #require(delegate.settingsWindow)
+
+        // Identity, not just "a window exists": before the fix this was a
+        // different object, and the previous one leaked.
+        #expect(second === first)
+        #expect(second.isVisible)
+        #expect(second.contentView === first.contentView)
+    }
 }
