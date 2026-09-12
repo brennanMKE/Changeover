@@ -15,12 +15,56 @@ struct MovieMetadata {
 
     /// Plex folder name, e.g. "Blade Runner (1982) {tmdb-78}"
     nonisolated var folderName: String {
-        "\(title) (\(year)) {tmdb-\(tmdbID)}"
+        "\(Self.pathSafe(title)) (\(year)) {tmdb-\(tmdbID)}"
     }
 
     /// Encoded file name, e.g. "Blade Runner (1982).mp4"
     nonisolated var fileName: String {
-        "\(title) (\(year)).mp4"
+        "\(Self.pathSafe(title)) (\(year)).mp4"
+    }
+
+    /// Makes an arbitrary title safe to sit inside a single filesystem path
+    /// component. `title` itself is left untouched — only `folderName` and
+    /// `fileName` apply this — so anything that wants the raw TMDB title
+    /// (search UI, logging) still gets it verbatim. See #0010.
+    ///
+    /// Character decisions, in the priority order the issue calls for:
+    /// - `/` is the actual break (e.g. "Face/Off" silently nests a folder).
+    ///   Substituted with `-`, not stripped, so "Face-Off" stays readable —
+    ///   "FaceOff" would not.
+    /// - `:` is legal on APFS, but Finder displays it as `/` and it is a
+    ///   known irritant for titles like "Star Wars: Episode IV". Decided
+    ///   explicitly here rather than by omission: treated the same as `/`
+    ///   and substituted with `-`, since Finder's rendering makes it just as
+    ///   confusing as a real separator, and folder-tree tools/SMB shares are
+    ///   often no more forgiving of a literal colon than of a slash.
+    /// - NUL is stripped outright — never meaningful in a title, but
+    ///   load-bearing once #0070 lets a remote client supply the title.
+    /// - A leading `.` would produce a hidden folder/file; leading dots are
+    ///   stripped. Applied before the "whole component" check below, so a
+    ///   title that is only dots (e.g. "..") collapses to empty and falls
+    ///   through to the empty-string fallback rather than surviving as a
+    ///   traversal component.
+    /// - Trailing dots and spaces are trimmed — harmless on APFS, but broken
+    ///   on SMB/exFAT shares, a plausible Plex NAS setup.
+    /// - An empty result (the title was nothing but dots/spaces/NULs) falls
+    ///   back to a placeholder so folderName/fileName never degenerate to
+    ///   just " (Year) {tmdb-ID}" or ".mp4".
+    nonisolated private static func pathSafe(_ value: String) -> String {
+        var result = value
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .replacingOccurrences(of: "\0", with: "")
+
+        while result.hasPrefix(".") {
+            result.removeFirst()
+        }
+
+        while let last = result.last, last == "." || last == " " {
+            result.removeLast()
+        }
+
+        return result.isEmpty ? "Untitled" : result
     }
 
 }
