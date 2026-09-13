@@ -23,10 +23,10 @@ struct SettingsView: View {
                     }
                     if !settings.plexMediaRoot.isEmpty {
                         VStack(alignment: .leading, spacing: 2) {
-                            pathPreviewRow("Movies",   settings.plexMoviesPath)
-                            pathPreviewRow("TV Shows", settings.plexTVPath)
-                            pathPreviewRow("Ripping",  settings.workingRipPath)
-                            pathPreviewRow("Encoding", settings.workingEncodePath)
+                            pathPreviewRow("Movies",       settings.plexMoviesPath)
+                            pathPreviewRow("TV Shows",     settings.plexTVPath)
+                            pathPreviewRow("Fallback rip", settings.workingRipPath)
+                            pathPreviewRow("Encoding",     settings.workingEncodePath)
                         }
                     }
                 }
@@ -36,8 +36,12 @@ struct SettingsView: View {
             // CLI Tools
             GroupBox("CLI Tools") {
                 VStack(alignment: .leading, spacing: 10) {
-                    cliRow(label: "makemkvcon", path: $settings.makemkvconPath)
                     cliRow(label: "HandBrakeCLI", path: $settings.handbrakePath)
+                    cliRow(label: "makemkvcon", path: $settings.makemkvconPath)
+                    Text("Optional. Used only as a fallback when HandBrake can't read a disc. Changeover works without it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(6)
             }

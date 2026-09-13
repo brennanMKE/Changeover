@@ -1,5 +1,23 @@
 import Foundation
 
+/// Who ultimately produced the encoded `.mp4`. Private to the pipeline — not
+/// part of `JobOutcome` (#0015 §3: adding a "produced by" value to
+/// `.succeeded` would change that case's wire encoding and break older
+/// decoders; #0006/#0060 decide the wire shape if a notification ever needs
+/// it).
+private enum ProducedBy: String {
+    case handbrake
+    case makemkvFallback
+}
+
+/// Wraps a top-level `JobFailure` (already carrying `.fallback`) together
+/// with the reliability-log record for what the fallback itself did. A plain
+/// tuple can't conform to `Error`, hence this.
+private struct FallbackRunFailure: Error {
+    let failure: JobFailure
+    let record: DiscReliabilityLog.StageReason
+}
+
 /// Orchestrates the encode → move pipeline on MainActor.
 ///
 /// Declared as a plain struct so it inherits the module-wide @MainActor default
@@ -11,9 +29,13 @@ import Foundation
 /// the machine channel — cleanup (#0004), eject (#0005) and the notification
 /// (#0006) all read the outcome rather than inferring anything from the log.
 ///
-/// #0014 removed the rip stage: HandBrakeCLI reads the disc
-/// directly, so `makemkvcon`/`RipController` are no longer part of the happy
-/// path and there is no intermediate `.mkv`.
+/// #0014 removed the rip stage: HandBrakeCLI reads the disc directly, so
+/// there is no intermediate `.mkv` on the happy path. #0015 adds `makemkvcon`
+/// back in, but only as an optional fallback tried after a disc-shaped
+/// HandBrake failure — see `FallbackPolicy` and `MakeMKVRipper`. Only the
+/// *primary* HandBrake failure is ever handed to `FallbackPolicy`; the
+/// fallback's own result never goes back through it, so a second fallback
+/// can never happen.
 struct DVDPipeline {
     let metadata: MovieMetadata
     let settings: AppSettings
@@ -23,6 +45,12 @@ struct DVDPipeline {
     let disc: URL
     let log: @MainActor (String) -> Void
 
+    /// Where `DiscReliabilityLog.append` writes. Defaulted so existing call
+    /// sites (`JobController.pipelineRunner`, `EncodeControllerTests`)
+    /// compile unchanged; tests that care about the reliability log point
+    /// this at a temp file instead of `DiscReliabilityLog.defaultURL`.
+    var reliabilityLogURL: URL = DiscReliabilityLog.defaultURL
+
     // MARK: - Run
 
     func run() async -> JobOutcome {
@@ -31,10 +59,13 @@ struct DVDPipeline {
         // Capture paths on MainActor before entering nonisolated functions
         let discPath          = disc.path
         let handbrakePath     = settings.handbrakePath
+        let makemkvconPath    = settings.makemkvconPath
         let workingEncodePath = settings.workingEncodePath
+        let workingRipPath    = settings.workingRipPath
         let plexMoviesPath    = settings.plexMoviesPath
+        let volumeName        = disc.lastPathComponent
+        let logURL            = reliabilityLogURL
 
-        // Step 1: Encode, straight from the disc's VIDEO_TS — no rip stage.
         // Phase 1 always asks HandBrake for the main feature (#0014 G1); a
         // single named `let` so the policy is visible and swappable. Phase
         // 2's scanner (#0023/#0025) replaces this with `.index(n)` at this
@@ -44,6 +75,36 @@ struct DVDPipeline {
         let mp4Path = (workingEncodePath as NSString)
             .appendingPathComponent(metadata.fileName)
 
+        // Reliability-log bookkeeping, filled in as the run progresses so
+        // every `return` below can pass through `finish(_:)` — no path
+        // skips the record.
+        var producedBy: ProducedBy?
+        var primaryRecord: DiscReliabilityLog.StageReason?
+        var decisionRecord: String?
+        var fallbackRecord: DiscReliabilityLog.StageReason?
+
+        func finish(_ outcome: JobOutcome) -> JobOutcome {
+            let record = DiscReliabilityLog.Record(
+                date:           ISO8601DateFormatter().string(from: Date()),
+                volumeName:     volumeName,
+                movie:          metadata.folderName,
+                producedBy:     producedBy?.rawValue,
+                primary:        primaryRecord,
+                decision:       decisionRecord,
+                fallback:       fallbackRecord,
+                // Capturing MSG:1005's version string would require widening
+                // MakeMKVRipper.rip's return type beyond the plan's given
+                // signature; left `nil` here rather than doing that — see
+                // `## Gotchas`.
+                makemkvVersion: nil,
+                outcome:        outcome.failure == nil ? "succeeded" : "failed"
+            )
+            DiscReliabilityLog.append(record, to: logURL, log: log)
+            return outcome
+        }
+
+        // Step 1: Encode, straight from the disc's VIDEO_TS — no rip stage
+        // on the happy path.
         let mp4URL: URL
         switch await EncodeController.encode(
             source:        discPath,
@@ -54,9 +115,62 @@ struct DVDPipeline {
         ) {
         case .success(let url):
             mp4URL = url
-        case .failure(let failure):
-            log("✗ Encoding failed. Aborting.")
-            return .failed(failure)
+            producedBy = .handbrake
+
+        case .failure(let primaryFailure):
+            primaryRecord = DiscReliabilityLog.StageReason(
+                stage:  primaryFailure.stage,
+                reason: String(describing: primaryFailure.reason)
+            )
+
+            let decision = FallbackPolicy.decide(
+                primary:        primaryFailure,
+                makemkvconPath: makemkvconPath,
+                isExecutable:   { FileManager.default.isExecutableFile(atPath: $0) },
+                discStillPresent: {
+                    FileManager.default.fileExists(
+                        atPath: (discPath as NSString).appendingPathComponent("VIDEO_TS")
+                    )
+                }
+            )
+
+            switch decision {
+            case .notEligible:
+                decisionRecord = "notEligible"
+                log("✗ Encoding failed. Aborting.")
+                return finish(.failed(primaryFailure))
+
+            case .unavailable(let path):
+                decisionRecord = "unavailable"
+                log("✗ FALLBACK UNAVAILABLE disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) makemkvcon=\(path) (not installed)")
+                return finish(.failed(JobFailure(
+                    stage:    primaryFailure.stage,
+                    reason:   primaryFailure.reason,
+                    logTail:  primaryFailure.logTail,
+                    fallback: .unavailable(makemkvconPath: path)
+                )))
+
+            case .attempt:
+                decisionRecord = "attempted"
+                log("⚠︎ FALLBACK disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) makemkvcon=\(makemkvconPath) → ripping with MakeMKV")
+
+                switch await runFallback(
+                    primaryFailure: primaryFailure,
+                    discPath:       discPath,
+                    workingRipPath: workingRipPath,
+                    makemkvconPath: makemkvconPath,
+                    handbrakePath:  handbrakePath,
+                    mp4Path:        mp4Path,
+                    volumeName:     volumeName
+                ) {
+                case .failure(let runFailure):
+                    fallbackRecord = runFailure.record
+                    return finish(.failed(runFailure.failure))
+                case .success(let url):
+                    mp4URL = url
+                    producedBy = .makemkvFallback
+                }
+            }
         }
         log("✓ Encode complete: \(mp4URL.path)")
 
@@ -71,10 +185,94 @@ struct DVDPipeline {
             )
         } catch {
             log("✗ Moving into Plex failed. Aborting.")
-            return .failed(error)
+            return finish(.failed(error))
+        }
+
+        if producedBy == .makemkvFallback {
+            log("✓ Produced by: MakeMKV fallback, then HandBrake")
+        } else {
+            log("✓ Produced by: HandBrake, direct from disc")
         }
 
         log("── Done. Scan your Plex Movies library to pick up the new title.")
-        return .succeeded(destination: destination)
+        return finish(.succeeded(destination: destination))
+    }
+
+    // MARK: - Fallback
+
+    /// Runs the MakeMKV fallback: rip one title into a fresh per-job
+    /// directory, then a second HandBrakeCLI pass over the ripped `.mkv`.
+    /// The job directory is deleted as soon as the second encode returns
+    /// (pass or fail), and also when the rip itself fails — it is gone
+    /// before `PlexOrganizer.move` ever runs. A cleanup failure only logs a
+    /// warning; it never fails the job.
+    ///
+    /// Returns either the produced `.mp4`, or a tuple of the *top-level*
+    /// `JobFailure` (the original HandBrake failure, with `.fallback` set —
+    /// never masked) and the reliability-log record for what the fallback
+    /// itself did.
+    private func runFallback(
+        primaryFailure: JobFailure,
+        discPath:       String,
+        workingRipPath: String,
+        makemkvconPath: String,
+        handbrakePath:  String,
+        mp4Path:        String,
+        volumeName:     String
+    ) async -> Result<URL, FallbackRunFailure> {
+        let jobDirectory = (workingRipPath as NSString)
+            .appendingPathComponent(JobController.makeJobID())
+
+        switch await MakeMKVRipper.rip(
+            discMountPath:  discPath,
+            jobDirectory:   jobDirectory,
+            makemkvconPath: makemkvconPath,
+            log:            log
+        ) {
+        case .failure(let ripFailure):
+            if !MakeMKVRipper.removeJobDirectory(jobDirectory, under: workingRipPath) {
+                log("⚠︎ Could not clean up \(jobDirectory)")
+            }
+            log("✗ FALLBACK FAILED disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) fallback=\(ripFailure.stage.rawValue):\(String(describing: ripFailure.reason))")
+            let combined = JobFailure(
+                stage:    primaryFailure.stage,
+                reason:   primaryFailure.reason,
+                logTail:  primaryFailure.logTail,
+                fallback: .failed(stage: ripFailure.stage, reason: ripFailure.reason, logTail: ripFailure.logTail)
+            )
+            let record = DiscReliabilityLog.StageReason(stage: ripFailure.stage, reason: String(describing: ripFailure.reason))
+            return .failure(FallbackRunFailure(failure: combined, record: record))
+
+        case .success(let mkvURL):
+            // A MakeMKV `.mkv` contains exactly one title.
+            let secondResult = await EncodeController.encode(
+                source:        mkvURL.path,
+                title:         .index(1),
+                output:        mp4Path,
+                handbrakePath: handbrakePath,
+                log:           log
+            )
+
+            // Cleanup happens before inspecting `secondResult`, whatever its
+            // result (#0015 §6).
+            if !MakeMKVRipper.removeJobDirectory(jobDirectory, under: workingRipPath) {
+                log("⚠︎ Could not clean up \(jobDirectory)")
+            }
+
+            switch secondResult {
+            case .failure(let encodeFailure):
+                log("✗ FALLBACK FAILED disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) fallback=\(encodeFailure.stage.rawValue):\(String(describing: encodeFailure.reason))")
+                let combined = JobFailure(
+                    stage:    primaryFailure.stage,
+                    reason:   primaryFailure.reason,
+                    logTail:  primaryFailure.logTail,
+                    fallback: .failed(stage: encodeFailure.stage, reason: encodeFailure.reason, logTail: encodeFailure.logTail)
+                )
+                let record = DiscReliabilityLog.StageReason(stage: encodeFailure.stage, reason: String(describing: encodeFailure.reason))
+                return .failure(FallbackRunFailure(failure: combined, record: record))
+            case .success(let url):
+                return .success(url)
+            }
+        }
     }
 }

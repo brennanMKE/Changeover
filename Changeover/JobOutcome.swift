@@ -60,6 +60,19 @@ nonisolated enum FailureReason: Codable, Sendable, Equatable {
     }
 }
 
+/// What the MakeMKV fallback did after a disc-shaped HandBrake failure
+/// (#0015). Not embedded inside `JobFailure` because a struct can't contain
+/// itself; carried as an additive optional field on `JobFailure` instead so
+/// an older or newer decoder round-trips this struct either way (see
+/// `JobFailure` below).
+nonisolated enum FallbackAttempt: Codable, Sendable, Equatable {
+    /// `makemkvcon` was not present/executable — nothing was tried.
+    case unavailable(makemkvconPath: String)
+    /// The fallback ran and failed. `stage` is `.rip` or `.encode` (the
+    /// second HandBrake pass over the ripped file).
+    case failed(stage: JobStage, reason: FailureReason, logTail: [String])
+}
+
 // MARK: - Failure
 
 /// A failure with the stage it happened at, a machine-readable reason, and the
@@ -68,11 +81,26 @@ nonisolated struct JobFailure: Error, Codable, Sendable, Equatable {
     let stage: JobStage
     let reason: FailureReason
     let logTail: [String]
+    /// What the MakeMKV fallback did, if a disc-shaped HandBrake failure
+    /// triggered one (#0015). `nil` means no fallback ran — either the
+    /// failure wasn't disc-shaped, `makemkvcon` was unavailable and never
+    /// probed further back than that, or (for a payload predating #0015)
+    /// there was no such thing as a fallback yet. Deliberately an additive
+    /// *field*, not a new `FailureReason` case: a new case would break an
+    /// older decoder, which throws on an unknown case key (#0007 review),
+    /// and would swap out the top-level reason rather than sit alongside it,
+    /// which is exactly the masking the filing Notes forbid. Keep the
+    /// synthesized `Codable` conformance — do not hand-write `init(from:)` —
+    /// so an older payload without this key decodes to `nil`
+    /// (`decodeIfPresent`) and a newer payload without the field just
+    /// ignores the extra key.
+    let fallback: FallbackAttempt?
 
-    init(stage: JobStage, reason: FailureReason, logTail: [String] = []) {
+    init(stage: JobStage, reason: FailureReason, logTail: [String] = [], fallback: FallbackAttempt? = nil) {
         self.stage = stage
         self.reason = reason
         self.logTail = logTail
+        self.fallback = fallback
     }
 }
 
