@@ -1,8 +1,9 @@
 import AppKit
 import ServiceManagement
 import SwiftUI
+import UserNotifications
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     static private(set) var shared: AppDelegate?
 
     let settings = AppSettings()
@@ -26,6 +27,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupPopover()
         startDVDMonitor()
         registerLoginItem()
+
+        // #0006: so a finished job is announced even when the window is
+        // closed. Requested at launch, not lazily at job completion — see
+        // `JobNotifier.requestAuthorizationIfNeeded`'s header for why.
+        UNUserNotificationCenter.current().delegate = self
+        Task { await JobNotifier.requestAuthorizationIfNeeded() }
 
         if !settings.isConfigured {
             showSettings()
@@ -146,5 +153,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if #available(macOS 13.0, *) {
             try? SMAppService.mainApp.register()
         }
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate (#0006)
+
+    /// `UNUserNotificationCenter` suppresses banners for the frontmost app
+    /// unless the delegate says otherwise — a job can finish while the
+    /// window happens to be open, and that must still notify.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+
+    /// Clicking the banner opens the metadata window on the job's log.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        showMetadataEntry()
     }
 }

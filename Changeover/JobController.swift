@@ -104,7 +104,8 @@ final class JobController {
 
         isRunning = true
         currentMetadata = metadata
-        currentJobID = Self.makeJobID()
+        let jobID = Self.makeJobID()
+        currentJobID = jobID
         lastOutcome = nil
         logLines = []
 
@@ -114,6 +115,13 @@ final class JobController {
                 self?.append(line)
             }
             self?.finish(outcome)
+            // #0006: fires on both outcomes, after DVDPipeline has already
+            // ejected the disc on success — "done" means the disc is out.
+            // Captures `metadata`/`jobID` directly rather than reading them
+            // back off `self` so this still fires correctly even if the
+            // caller that started the job (and everything holding `self`)
+            // has since gone away.
+            await JobNotifier.notify(metadata: metadata, outcome: outcome, jobID: jobID)
         }
         return true
     }
