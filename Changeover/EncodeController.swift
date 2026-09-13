@@ -55,10 +55,12 @@ enum EncodeController {
         }
 
         args += [
-            "--output",   output,
-            "--format",   "av_mp4",
-            "--quality",  Config.videoQuality,
-            "--aencoder", Config.audioEncoder,
+            "--output",         output,
+            "--format",         "av_mp4",
+            "--encoder",        Config.videoEncoder,
+            "--encoder-preset", Config.encoderPreset,
+            "--quality",        Config.videoQuality,
+            "--aencoder",       Config.audioEncoder,
             "--markers",
         ]
         return args

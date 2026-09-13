@@ -63,12 +63,14 @@ struct EncodeControllerTests {
         )
 
         #expect(args == [
-            "--input",    "/Volumes/FARGO_SE__16X9",
+            "--input",          "/Volumes/FARGO_SE__16X9",
             "--main-feature",
-            "--output",   "/tmp/out.mp4",
-            "--format",   "av_mp4",
-            "--quality",  Config.videoQuality,
-            "--aencoder", Config.audioEncoder,
+            "--output",         "/tmp/out.mp4",
+            "--format",         "av_mp4",
+            "--encoder",        Config.videoEncoder,
+            "--encoder-preset", Config.encoderPreset,
+            "--quality",        Config.videoQuality,
+            "--aencoder",       Config.audioEncoder,
             "--markers",
         ])
         #expect(args.contains("--main-feature"))
@@ -83,12 +85,14 @@ struct EncodeControllerTests {
         )
 
         #expect(args == [
-            "--input",    "/Volumes/FARGO_SE__16X9",
-            "--title",    "7",
-            "--output",   "/tmp/out.mp4",
-            "--format",   "av_mp4",
-            "--quality",  Config.videoQuality,
-            "--aencoder", Config.audioEncoder,
+            "--input",          "/Volumes/FARGO_SE__16X9",
+            "--title",          "7",
+            "--output",         "/tmp/out.mp4",
+            "--format",         "av_mp4",
+            "--encoder",        Config.videoEncoder,
+            "--encoder-preset", Config.encoderPreset,
+            "--quality",        Config.videoQuality,
+            "--aencoder",       Config.audioEncoder,
             "--markers",
         ])
         #expect(args.contains("--title"))
@@ -117,9 +121,9 @@ struct EncodeControllerTests {
         #expect(args[inputIndex + 1] == "/Volumes/FARGO SE/")
     }
 
-    /// `--quality`/`--aencoder` must read `Config` by reference, so the
-    /// separate encoder-settings experiment (#0018) cannot silently diverge
-    /// from what ships.
+    /// `--quality`/`--aencoder`/`--encoder`/`--encoder-preset` must all read
+    /// `Config` by reference, so the encoder-settings decision (#0018) cannot
+    /// silently diverge from what ships.
     @Test func qualityAndAudioEncoderComeFromConfig() throws {
         let args = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4")
 
@@ -128,6 +132,21 @@ struct EncodeControllerTests {
 
         let aencoderIndex = try #require(args.firstIndex(of: "--aencoder"))
         #expect(args[aencoderIndex + 1] == Config.audioEncoder)
+
+        let encoderIndex = try #require(args.firstIndex(of: "--encoder"))
+        #expect(args[encoderIndex + 1] == Config.videoEncoder)
+
+        let presetIndex = try #require(args.firstIndex(of: "--encoder-preset"))
+        #expect(args[presetIndex + 1] == Config.encoderPreset)
+    }
+
+    /// #0018: a duplicated `--encoder` is the likely merge artefact if this
+    /// ticket and #0014 ever land out of order — guard against it directly.
+    @Test func encoderFlagsAppearExactlyOnce() {
+        let args = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4")
+
+        #expect(args.filter { $0 == "--encoder" }.count == 1)
+        #expect(args.filter { $0 == "--encoder-preset" }.count == 1)
     }
 
     // MARK: - Directory creation (#0014 G2)
