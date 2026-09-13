@@ -15,14 +15,24 @@ open Changeover.xcodeproj
 # Command-line build
 xcodebuild -project Changeover.xcodeproj -scheme Changeover -configuration Debug build
 
-# Run all unit tests (Swift Testing) + UI tests (XCTest)
-xcodebuild -project Changeover.xcodeproj -scheme Changeover test
+# Run unit tests — THE ONLY ROUTINE TEST COMMAND
+xcodebuild -project Changeover.xcodeproj -scheme Changeover -destination 'platform=macOS' test -only-testing:ChangeoverTests
 
 # Run a single Swift Testing test by name
-xcodebuild -project Changeover.xcodeproj -scheme Changeover test -only-testing:ChangeoverTests/ChangeoverTests/example
+xcodebuild -project Changeover.xcodeproj -scheme Changeover -destination 'platform=macOS' test -only-testing:ChangeoverTests/ChangeoverTests/example
 ```
 
 Unit tests in `ChangeoverTests/` use the **Swift Testing** framework (`import Testing`, `@Test`, `#expect`) — not XCTest. UI tests in `ChangeoverUITests/` use XCTest.
+
+### ⚠️ UI tests are approval-gated — never run them on your own
+
+**Never run `ChangeoverUITests`, and never run a bare `xcodebuild ... test` on the `Changeover` scheme** — the scheme includes the UI tests, so a bare `test` starts XCUITest. On 2026-09-12 that crashed the user's terminal app (Batty) and killed every live session they had open: `testmanagerd` injects `XCTAutomationSupport` into *other* running GUI apps, and it segfaulted inside the terminal. See [`docs/ui-test-crash-prevention.md`](docs/ui-test-crash-prevention.md).
+
+- Always pass `-only-testing:ChangeoverTests`. That is the verification command for every change.
+- A UI test run needs the user's explicit approval **for that specific run**; approval does not carry over.
+- Subagents must never run UI tests. If UI verification seems needed, record it as unverified and report back to the main session, which asks the user.
+- Approved UI test runs go on a separate Mac with no live sessions (not the development Mac, and not the Plex host), never on the machine the user is working at.
+- Every implementer and reviewer subagent prompt must carry this rule.
 
 ### Setup required before building
 
