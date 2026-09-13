@@ -211,7 +211,17 @@ struct ProcessRunnerTests {
     // `markProcessDone` to arm the grace timer unconditionally at
     // construction (instead of only once one side has already reported)
     // makes that test fail immediately, at watchdog+grace rather than after
-    // the workload actually finishes.
+    // the workload actually finishes. **None of these three claims —
+    // 31-minute regression, its fix, or the retain-cycle fix below — has
+    // been confirmed by an actual run; see `issues/0009.md` `## Verification`
+    // and `## Gotchas`, which record them as predicted, not observed.**
+    //
+    // A *second* version armed the grace period from `markReaderDone()` too
+    // (either side reporting first started the countdown). That's also
+    // wrong: EOF can arrive before the process actually exits, and grace
+    // expiring in that state would report a still-running process as done.
+    // Only `markProcessDone(_:)` arms it now — see
+    // `readerDoneAloneNeverArmsGraceOrFires` below.
 
     /// Whichever arrives first — a normal completion or a forced expiry —
     /// wins, and the other is a no-op. This is the gate's core guarantee,
@@ -249,6 +259,40 @@ struct ProcessRunnerTests {
         gate2.markReaderDone()
         gate2.markProcessDone(normal)
         #expect(deliveries2 == [forced])
+    }
+
+    /// `markReaderDone()` alone must never arm the grace period or fire the
+    /// gate (#0009, 2026-09-12) — a process that hasn't reported yet is
+    /// still `watchdog`'s job, not this gate's, and firing on EOF alone
+    /// would report a still-running process as finished, closing its pipe
+    /// out from under it. A short grace, only the reader reporting, waited
+    /// well past what that grace window would have been, must show no
+    /// delivery at all; only calling `markProcessDone(_:)` afterward
+    /// resolves it.
+    @Test func readerDoneAloneNeverArmsGraceOrFires() async throws {
+        var deliveries: [ProcessRunner.Termination] = []
+        let lock = NSLock()
+        let gate = RunCompletionGate(grace: 0.2) { termination in
+            lock.lock()
+            deliveries.append(termination)
+            lock.unlock()
+        }
+
+        gate.markReaderDone()
+        // Wait well past what the grace period would have been, if it had
+        // (wrongly) armed on markReaderDone() alone.
+        try await Task.sleep(nanoseconds: 500_000_000)
+        lock.lock()
+        let deliveredWhileWaiting = deliveries
+        lock.unlock()
+        #expect(deliveredWhileWaiting.isEmpty, "markReaderDone() alone must never fire the gate")
+
+        let real = ProcessRunner.Termination(status: 0, uncaughtSignal: false, timedOut: false)
+        gate.markProcessDone(real)
+        lock.lock()
+        let finalDeliveries = deliveries
+        lock.unlock()
+        #expect(finalDeliveries == [real])
     }
 
     /// **The 31-minute regression, caught before it ever ran on gordon.** A

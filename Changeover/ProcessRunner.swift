@@ -41,6 +41,33 @@ import Foundation
 /// so it can't happen: `process` (and `pipe`, transitively) now lives as
 /// long as `gate` does, which self-retains until it fires.
 ///
+/// **A retain cycle, found 2026-09-12 (#0009) while fixing the above.**
+/// `onReady` captures `process` (that's the fix just described);
+/// `process.terminationHandler` captures `gate` (via `markProcessDone`),
+/// `absoluteWorkItem` and `inactivityTimer`; both of those capture `process`
+/// again in their own closures. `process → terminationHandler → gate →
+/// onReady → process` is a direct cycle, and Darwin does not document that
+/// `Process` releases `terminationHandler` once it has fired — so left
+/// alone, *every* call would leak a `Process`, a `Pipe` and (for
+/// `.inactivity`) a timer source, not only the hung ones. `onReady` below
+/// breaks it explicitly: it nils `process.terminationHandler` and the two
+/// watchdog variables the moment it runs, which is safe precisely because
+/// `onReady` only ever runs after `markProcessDone(_:)` has already
+/// recorded the process as done (see the next paragraph) — the watchdog has
+/// nothing left to do by then, and `terminationHandler` will never be asked
+/// to fire again.
+///
+/// **The grace period arms only from `markProcessDone(_:)`, never from
+/// `markReaderDone()`.** A process that is still genuinely running is
+/// already bounded by its own watchdog, which guarantees
+/// `terminationHandler` eventually fires. If the reader saw EOF first (a
+/// child that closes its output but keeps running) and `markReaderDone()`
+/// armed a countdown of its own, three things would go wrong: the gate
+/// would report `timedOut: true` and a synthetic status while the process
+/// **is still running**; nothing would actually terminate it; and
+/// `onReady`'s pipe close would run under a still-live child. So
+/// `markReaderDone()` with no termination recorded simply waits.
+///
 /// `nonisolated` throughout — this has no reason to run on MainActor, and the
 /// module default is MainActor (`CLAUDE.md`).
 nonisolated enum ProcessRunner {
@@ -91,17 +118,19 @@ nonisolated enum ProcessRunner {
     /// **`hardCeilingGrace` (#0009, 2026-09-12).** Not a bound on the whole
     /// call — a healthy, still-running process is bounded only by `watchdog`
     /// itself, which terminates it and so guarantees `terminationHandler`
-    /// fires. `hardCeilingGrace` only ever starts counting once **one** of
-    /// the two completion signals has already arrived and the other hasn't:
-    /// see `RunCompletionGate.markReaderDone()`/`markProcessDone(_:)`. That
-    /// window is normally microseconds (the two signals arrive together);
-    /// this bounds the abnormal case — an orphaned grandchild still holding
-    /// the pipe open after the tracked process has already exited, for
-    /// instance — instead of waiting on it indefinitely. A first version of
-    /// this backstop scheduled a single `watchdog`-bound-plus-grace deadline
-    /// **at launch**, which silently killed any encode running past that
-    /// point — a 40-minute real HandBrake encode with a 30-minute inactivity
-    /// bound, for example. That version never shipped past review.
+    /// fires. `hardCeilingGrace` only ever starts counting once
+    /// `markProcessDone(_:)` has recorded the process side done and the
+    /// reader hasn't caught up yet — never from `markReaderDone()` alone,
+    /// and never while the process is still running (see
+    /// `RunCompletionGate`'s doc comment for why). That window is normally
+    /// microseconds (the two signals arrive together); this bounds the
+    /// abnormal case — an orphaned grandchild still holding the pipe open
+    /// after the tracked process has already exited, for instance — instead
+    /// of waiting on it indefinitely. A first version of this backstop
+    /// scheduled a single `watchdog`-bound-plus-grace deadline **at
+    /// launch**, which silently killed any encode running past that point —
+    /// a 40-minute real HandBrake encode with a 30-minute inactivity bound,
+    /// for example. That version never shipped past review.
     nonisolated static func run(
         executablePath:   String,
         arguments:        [String],
@@ -122,15 +151,26 @@ nonisolated enum ProcessRunner {
             let splitter = LineSplitter()
             let watchdogState = WatchdogState()
 
+            // Declared before `gate` so its `onReady` closure (below) can
+            // cancel and release them once it runs.
+            var absoluteWorkItem: DispatchWorkItem?
+            var inactivityTimer: DispatchSourceTimer?
+
             let gate = RunCompletionGate(grace: hardCeilingGrace) { termination in
-                // Keep `process` (and, via `process.standardOutput`/
-                // `standardError`, `pipe`) alive for this closure's entire
-                // lifetime — which is `gate`'s entire lifetime, since `gate`
-                // stores this closure and self-retains until it fires. See
-                // the file header and `RunCompletionGate`'s doc comment:
-                // this is the fix for the real leak, not the grace period
-                // above, which is only a backstop for what's left over.
-                _ = process
+                // Break the process<->gate retain cycle (#0009, 2026-09-12
+                // — see the file header): `onReady` captures `process`, and
+                // `process.terminationHandler` captures `gate` plus the two
+                // watchdog variables, whose own closures capture `process`
+                // again. Safe to clear all of it here — `onReady` only ever
+                // runs after `markProcessDone(_:)` has already recorded the
+                // process as done, so the watchdog has nothing left to do
+                // and `terminationHandler` will never fire again.
+                process.terminationHandler = nil
+                absoluteWorkItem?.cancel()
+                absoluteWorkItem = nil
+                inactivityTimer?.cancel()
+                inactivityTimer = nil
+
                 let leftover = splitter.flush().trimmingCharacters(in: .whitespaces)
                 if !leftover.isEmpty {
                     onLine(leftover)
@@ -162,9 +202,6 @@ nonisolated enum ProcessRunner {
                 }
                 handle(data)
             }
-
-            var absoluteWorkItem: DispatchWorkItem?
-            var inactivityTimer: DispatchSourceTimer?
 
             switch watchdog {
             case .absolute(let timeout):
@@ -206,7 +243,14 @@ nonisolated enum ProcessRunner {
                 try process.run()
             } catch {
                 absoluteWorkItem?.cancel()
+                absoluteWorkItem = nil
                 inactivityTimer?.cancel()
+                inactivityTimer = nil
+                // `process.terminationHandler` was already assigned above
+                // (it captures `gate`) even though the process never
+                // launched — break that side of the same retain cycle
+                // `onReady` breaks on every other path.
+                process.terminationHandler = nil
                 pipe.fileHandleForReading.readabilityHandler = nil
                 // `gate` was never fired (the process never launched, so
                 // neither `markReaderDone`/`markProcessDone` will ever be
@@ -229,11 +273,12 @@ nonisolated enum ProcessRunner {
 /// type exists to close. Internal (not `private`) so `ProcessRunnerTests` can
 /// exercise it directly, matching `MakeMKVRipper`'s existing types.
 ///
-/// **Two lifetime guarantees added 2026-09-12 (#0009), after a real
+/// **Lifetime and arming guarantees added 2026-09-12 (#0009), after a real
 /// leaked-continuation hang on gordon** (`SWIFT TASK CONTINUATION MISUSE:
 /// run(executablePath:arguments:watchdog:readerDelay:onLine:) leaked its
 /// continuation without resuming it`, during a 30ms-`readerDelay` race test
-/// — see `issues/0009.md` `## Gotchas` for the full trace):
+/// — see `issues/0009.md` `## Gotchas` for the full trace, including what's
+/// still unconfirmed):
 ///
 /// 1. **This gate self-retains from `init` until it fires.** Before this,
 ///    the only things holding it alive were the two handler closures
@@ -247,18 +292,37 @@ nonisolated enum ProcessRunner {
 ///    Now it can't: `selfRetain` keeps the instance alive regardless of what
 ///    happens to either handler, and is cleared only once `onReady` has
 ///    actually run.
-/// 2. **The grace timer (`hardCeilingGrace`) arms only once one side has
-///    already reported, never at construction.** A process that is still
-///    genuinely running is `watchdog`'s job, not this gate's — arming a
-///    deadline at `init` time bounded the *entire call*, including a
-///    perfectly healthy multi-hour encode, which is the bug the first
-///    version of this backstop shipped with. Now, `markReaderDone()` starts
-///    the grace period only if the process side hasn't reported yet, and
-///    `markProcessDone(_:)` only if the reader hasn't — i.e., only in the
-///    window between one side finishing and the other's confirmation, which
-///    is normally microseconds. If it expires, the gate fires with a
-///    synthetic `Termination` (`timedOut: true`), preferring the real
-///    process exit status if one was already recorded.
+/// 2. **The grace timer (`hardCeilingGrace`) arms only from
+///    `markProcessDone(_:)`, and only if the reader hasn't reported yet —
+///    never from `markReaderDone()`, and never at construction.** A process
+///    that is still genuinely running is `watchdog`'s job, not this gate's:
+///    the watchdog terminates it, which guarantees `terminationHandler`
+///    fires. Arming at `init` time bounded the *entire call*, including a
+///    perfectly healthy multi-hour encode — the bug the first version of
+///    this backstop shipped with. Arming from `markReaderDone()` has a
+///    subtler problem: EOF can arrive before the process actually exits (a
+///    child that closes its output but keeps running), and if that alone
+///    started a countdown, expiry would report `timedOut: true` and a
+///    synthetic status **while the process is still running**, close the
+///    pipe out from under it, and let the caller act (e.g. fall back) on a
+///    job that hasn't actually finished. So only `markProcessDone(_:)` ever
+///    arms the grace period, only when the reader hasn't reported yet — the
+///    window between the process exiting and the reader's own EOF catching
+///    up, normally microseconds — and `markReaderDone()` with no
+///    termination recorded simply waits. If grace expires, the gate fires
+///    with a synthetic `Termination` (`timedOut: true`), preferring the
+///    real process exit status that was already recorded.
+/// 3. **`onReady` breaks the `process ↔ gate` retain cycle.** `onReady`
+///    (defined in `ProcessRunner.run`) captures `process`;
+///    `process.terminationHandler` captures `gate` (via `markProcessDone`)
+///    and the two watchdog variables, whose own closures capture `process`
+///    again — a direct cycle that would otherwise leak a `Process`, a
+///    `Pipe`, and a timer source on *every* call, not just a hung one,
+///    since Darwin does not document that `Process` releases
+///    `terminationHandler` once it has fired. Safe to clear all of it
+///    inside `onReady`, because guarantee 2 means `onReady` never runs
+///    until `markProcessDone(_:)` already has — the watchdog has nothing
+///    left to do by then.
 nonisolated final class RunCompletionGate: @unchecked Sendable {
     private let lock = NSLock()
     private var readerDone = false
@@ -278,21 +342,29 @@ nonisolated final class RunCompletionGate: @unchecked Sendable {
         self.selfRetain = self
     }
 
+    /// Records EOF. If the process side already reported (and hasn't
+    /// already fired via grace expiry), fires immediately with the real
+    /// termination. Otherwise **just waits** — this never arms the grace
+    /// period itself (guarantee 2 above): a process that hasn't reported
+    /// yet is still `watchdog`'s responsibility, not this gate's.
     func markReaderDone() {
         lock.lock()
         readerDone = true
         let pending = termination
-        if !fired, let pending {
-            fired = true
+        guard !fired, let pending else {
             lock.unlock()
-            fire(with: pending)
             return
         }
-        let shouldArmGrace = !fired && pending == nil
+        fired = true
         lock.unlock()
-        if shouldArmGrace { armGrace() }
+        fire(with: pending)
     }
 
+    /// Records the process's exit. If the reader already reported EOF,
+    /// fires immediately with the real termination. Otherwise arms the
+    /// grace period (guarantee 2 above) — the *only* place it's armed: the
+    /// process is confirmed done, so a countdown here can never cut off a
+    /// still-running child.
     func markProcessDone(_ termination: ProcessRunner.Termination) {
         lock.lock()
         self.termination = termination
