@@ -26,16 +26,16 @@ xcodebuild -project Changeover.xcodeproj -scheme Changeover -destination 'platfo
 
 Unit tests in `ChangeoverTests/` use the **Swift Testing** framework (`import Testing`, `@Test`, `#expect`) — not XCTest. UI tests in `ChangeoverUITests/` use XCTest.
 
-### ⚠️ UI tests are approval-gated — never run them on your own
+### ⚠️ UI tests: never on the development Mac
 
 **Never run `ChangeoverUITests`, and never run a bare `xcodebuild ... test` on the `Changeover` scheme** — the scheme includes the UI tests, so a bare `test` starts XCUITest. On 2026-09-12 that crashed the user's terminal app (Batty) and killed every live session they had open: `testmanagerd` injects `XCTAutomationSupport` into *other* running GUI apps, and it segfaulted inside the terminal. See [`docs/ui-test-crash-prevention.md`](docs/ui-test-crash-prevention.md).
 
 - **Hard stop in place:** the shared `Changeover` scheme's Test action contains only `ChangeoverTests`, so even a bare `test` on it cannot start XCUITest. The UI tests live in a separate `Changeover UI Tests` scheme, which must only be used for an approved run. Do not add `ChangeoverUITests` back to the `Changeover` scheme.
 - Always pass `-only-testing:ChangeoverTests` anyway. That is the verification command for every change.
 - Don't write new UI tests to verify behaviour. Put logic behind a plain-value seam and unit-test it in the app-hosted `ChangeoverTests` bundle, the way `JobController.Runner`, the #0013 disc classifier and #0014's `arguments()` do. The three existing UI tests are unmodified Xcode template boilerplate that assert nothing.
-- A UI test run needs the user's explicit approval **for that specific run**; approval does not carry over.
-- Subagents must never run UI tests. If UI verification seems needed, record it as unverified and report back to the main session, which asks the user.
-- Approved UI test runs go on a separate Mac with no live sessions (not the development Mac, and not the Plex host), never on the machine the user is working at.
+- **UI test runs happen only on the dedicated test Mac, gordon.** The user approved runs there to go ahead unattended (2026-09-12): the main session may start one without asking, after checking that no other test run is active on gordon. Anywhere else, a UI test run still needs the user's explicit approval **for that specific run**.
+- Subagents must never run UI tests. If UI verification seems needed, record it as unverified and report back to the main session.
+- UI test runs go on gordon, a separate Mac with no live sessions — never the development Mac the user works at, and never the Plex host. The run recipe is in the user's Homelab repo: `gordon/ui-tests-from-cameron.md`.
 - Every implementer and reviewer subagent prompt must carry this rule.
 
 ### Setup required before building
