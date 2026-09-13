@@ -94,8 +94,10 @@ if [[ "${1:-}" == "--remote" ]]; then
     fi
 
     # A Swift Testing selector that matches nothing still "succeeds" with 0 tests.
-    COUNTS=$(grep -aE 'Test run with [0-9]+ test|Executed [0-9]+ test' "$LOG" | tail -n 3 | cut_line || true)
-    if (( CODE == 0 )) && { [[ -z "$COUNTS" ]] || echo "$COUNTS" | grep -qE 'with 0 tests|Executed 0 tests'; }; then
+    # XCTest also prints "Executed 0 tests" for the (empty) XCTest side of a
+    # Swift Testing run, so only count lines reporting at least one test.
+    COUNTS=$(grep -aE 'Test run with [1-9][0-9]* test|Executed [1-9][0-9]* test' "$LOG" | tail -n 3 | cut_line || true)
+    if (( CODE == 0 )) && [[ -z "$COUNTS" ]]; then
         RESULT="FAILED (0 tests ran: check the selector)"
         CODE=1
     fi
