@@ -40,10 +40,19 @@ enum EncodeController {
     /// `--subtitle scan` is deliberately absent (#0014 §5): it doubled wall
     /// clock on the verified run and was the sole source of the `bin_data`
     /// VOBSUB stream (#0017). Do not reinstate it here.
+    ///
+    /// `filter` (#0016) is `.none` by default so every existing call site —
+    /// and every pre-#0016 test asserting an exact argument vector — is
+    /// unaffected; it is never read from a scan, settings, or a global here.
+    /// The caller (`DVDPipeline.run()`) is the one that runs
+    /// `DeinterlaceDecision.decide(frameRate:interlaceDetected:)` and passes
+    /// the result in, the same way it already resolves `title` before
+    /// calling in.
     nonisolated static func arguments(
         source: String,
         title:  TitleSelection,
-        output: String
+        output: String,
+        filter: DeinterlaceFilter = .none
     ) -> [String] {
         var args = ["--input", source]
 
@@ -53,6 +62,10 @@ enum EncodeController {
         case .mainFeature:
             args += ["--main-feature"]
         }
+
+        // At most one filter flag, never more — `DeinterlaceFilter.arguments`
+        // is `[]` for `.none`, so this is a no-op on the common path.
+        args += filter.arguments
 
         args += [
             "--output",         output,
@@ -102,6 +115,7 @@ enum EncodeController {
         title:            TitleSelection,
         output:           String,
         handbrakePath:    String,
+        filter:           DeinterlaceFilter = .none,
         hangTimeout:      TimeInterval = 30 * 60,
         readerDelay:      @escaping () -> Void = {},
         hardCeilingGrace: TimeInterval = 10,
@@ -138,7 +152,7 @@ enum EncodeController {
 
         let result = await ProcessRunner.run(
             executablePath:   handbrakePath,
-            arguments:        arguments(source: source, title: title, output: output),
+            arguments:        arguments(source: source, title: title, output: output, filter: filter),
             watchdog:         .inactivity(hangTimeout),
             readerDelay:      readerDelay,
             hardCeilingGrace: hardCeilingGrace

@@ -149,6 +149,30 @@ struct DVDPipeline {
         }
         log("✓ Preflight passed")
 
+        // #0016: the deinterlace/detelecine decision, made here (not inside
+        // EncodeController) so the controller never reads a scan, settings,
+        // or a global — it only ever takes the resolved filter as a plain
+        // parameter, the same way it already takes `titleSelection`.
+        //
+        // `frameRate`/`interlaceDetected` are `nil` today: #0022/#0023 (the
+        // disc model and the HandBrake scanner) haven't landed, so there is
+        // no scan to read yet — see issues/0016.md's Notes. `decide` treats
+        // missing data the same as an ambiguous scan and returns `.none`,
+        // which matches today's actual (unfiltered) HandBrakeCLI output
+        // byte-for-byte; only the plumbing is new. Logged unconditionally so
+        // the day a real scan starts feeding this, the log line already
+        // shows the values driving the choice — and so a `nil` today reads
+        // as "no scan yet," not silence.
+        let scannedFrameRate: Double?         = nil
+        let scannedInterlaceDetected: Bool?   = nil
+        let deinterlaceFilter = DeinterlaceDecision.decide(
+            frameRate:         scannedFrameRate,
+            interlaceDetected: scannedInterlaceDetected
+        )
+        let frameRateText: String = scannedFrameRate.map { String($0) } ?? "unknown"
+        let interlaceText: String = scannedInterlaceDetected.map { String($0) } ?? "unknown"
+        log("▶ Deinterlace: frameRate=\(frameRateText) interlaceDetected=\(interlaceText) → filter=\(deinterlaceFilter)")
+
         // Step 1: Encode, straight from the disc's VIDEO_TS — no rip stage
         // on the happy path.
         let mp4URL: URL
@@ -157,6 +181,7 @@ struct DVDPipeline {
             title:         titleSelection,
             output:        mp4Path,
             handbrakePath: handbrakePath,
+            filter:        deinterlaceFilter,
             log:           log
         ) {
         case .success(let url):
@@ -322,11 +347,24 @@ struct DVDPipeline {
 
         case .success(let mkvURL):
             // A MakeMKV `.mkv` contains exactly one title.
+            //
+            // #0016 Risks: the interlace decision for this second pass must
+            // come from HandBrake's own scan of `mkvURL`, never from the
+            // disc's MakeMKV metadata (MakeMKV reported Fargo at 29.97;
+            // HandBrake correctly resolved 23.976). No such scan exists yet
+            // (#0022/#0023), so this is `.none` — the same "no scan, no
+            // filter" rule `run()` applies to the primary encode — rather
+            // than reusing whatever `deinterlaceFilter` the primary attempt
+            // computed, which would be exactly the wrong-source mistake this
+            // note warns against.
+            let fallbackFilter = DeinterlaceDecision.decide(frameRate: nil, interlaceDetected: nil)
+            log("▶ Deinterlace (fallback re-encode): frameRate=unknown interlaceDetected=unknown → filter=\(fallbackFilter)")
             let secondResult = await EncodeController.encode(
                 source:        mkvURL.path,
                 title:         .index(1),
                 output:        mp4Path,
                 handbrakePath: handbrakePath,
+                filter:        fallbackFilter,
                 log:           log
             )
 

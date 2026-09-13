@@ -149,6 +149,51 @@ struct EncodeControllerTests {
         #expect(args.filter { $0 == "--encoder-preset" }.count == 1)
     }
 
+    // MARK: - filter (#0016) — at most one flag, driven by DeinterlaceDecision
+
+    @Test func argumentsOmitAnyFilterFlagByDefault() {
+        let args = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4")
+        #expect(!args.contains("--decomb"))
+        #expect(!args.contains("--detelecine"))
+    }
+
+    @Test func argumentsIncludeDecombWhenFilterIsDecomb() {
+        let args = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4", filter: .decomb)
+        #expect(args.contains("--decomb"))
+        #expect(!args.contains("--detelecine"))
+    }
+
+    @Test func argumentsIncludeDetelecineWhenFilterIsDetelecine() {
+        let args = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4", filter: .detelecine)
+        #expect(args.contains("--detelecine"))
+        #expect(!args.contains("--decomb"))
+    }
+
+    /// Required falsification #1 (issues/0016.md): if `arguments(...)` ever
+    /// goes back to appending `--detelecine` unconditionally — the exact trap
+    /// this ticket is filed against — this must fail on Fargo's real, soft-
+    /// telecined scan values. Driven end to end through
+    /// `DeinterlaceDecision.decide`, not a hand-picked `.none`, so a broken
+    /// `decide` and a broken `arguments` are both caught by the same test.
+    @Test func softTelecinedDiscNeverGetsDetelecineInTheFinalVector() {
+        let filter = DeinterlaceDecision.decide(frameRate: 23.976, interlaceDetected: false)
+        let args = EncodeController.arguments(source: "/Volumes/FARGO_SE__16X9", title: .mainFeature, output: "/tmp/fargo.mp4", filter: filter)
+        #expect(!args.contains("--detelecine"))
+        #expect(!args.contains("--decomb"))
+    }
+
+    /// Required falsification #2 (issues/0016.md): if the `--decomb` decision
+    /// is ever dropped (e.g. `decide` hard-coded to `.none`, or `arguments`
+    /// stops appending `filter.arguments`), this must fail on a genuinely
+    /// interlaced disc's scan values — the real gap the ticket calls out
+    /// ("a genuinely interlaced disc … gets no filter at all today").
+    @Test func interlacedDiscGetsDecombInTheFinalVector() {
+        let filter = DeinterlaceDecision.decide(frameRate: 29.97, interlaceDetected: true)
+        let args = EncodeController.arguments(source: "/Volumes/CONCERT_DISC", title: .mainFeature, output: "/tmp/concert.mp4", filter: filter)
+        #expect(args.contains("--decomb"))
+        #expect(!args.contains("--detelecine"))
+    }
+
     // MARK: - Directory creation (#0014 G2)
 
     @Test func encodeCreatesTheOutputDirectoryEvenWhenTheToolIsMissing() async throws {
