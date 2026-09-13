@@ -365,26 +365,16 @@ enum MakeMKVRipper {
         return codes
     }
 
-    /// Removes `path` only if it is a direct child of `root` whose name
-    /// starts with `job-`. Never removes `root` itself. Returns `false`
-    /// (never throws) for anything it refuses, so the caller can log a
-    /// warning without failing the job (#0015 §6, following #0004's safety
-    /// rules).
+    /// Removes `path` only if it is a job-id-shaped direct child of `root`.
+    /// Never removes `root` itself. Returns `false` (never throws) for
+    /// anything it refuses, so the caller can log a warning without failing
+    /// the job (#0015 §6). A thin wrapper over `WorkingFiles.removeJobDirectory`
+    /// (#0004), which adds the full guard set — `lstat` kind, canonical
+    /// containment via `realpath`, Movies-library exclusion, and the exact
+    /// `job-<8 digits>-<6 digits>-<4 hex>` shape — on top of what this
+    /// function checked before.
     nonisolated static func removeJobDirectory(_ path: String, under root: String) -> Bool {
-        guard !root.isEmpty else { return false }
-        let standardizedRoot = (root as NSString).standardizingPath
-        let standardizedPath = (path as NSString).standardizingPath
-        guard standardizedPath != standardizedRoot else { return false }
-        let parent = (standardizedPath as NSString).deletingLastPathComponent
-        guard parent == standardizedRoot else { return false }
-        let lastComponent = (standardizedPath as NSString).lastPathComponent
-        guard lastComponent.hasPrefix("job-") else { return false }
-        do {
-            try FileManager.default.removeItem(atPath: standardizedPath)
-            return true
-        } catch {
-            return false
-        }
+        WorkingFiles.removeJobDirectory(path, under: root).isRemoved
     }
 
     // MARK: - Private helpers
