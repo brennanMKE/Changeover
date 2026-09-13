@@ -44,13 +44,31 @@ final class DVDMonitor {
     /// merely held as a stored property — a plain stored property has
     /// exactly `DVDMonitor`'s lifetime too, so it went dangling the same way
     /// one level down (reproduced as a second real crash, `EXC_BAD_ACCESS` in
-    /// `swift_weakLoadStrong` reading a freed `Box`). This SDK's
-    /// `DiskArbitration` exposes no session-invalidate call to unregister
-    /// callbacks deterministically before then, so a tiny (~16 byte),
-    /// cycle-free leak per `DVDMonitor` instance — never the real
-    /// `DVDMonitor` or its `DASession`, since `Box` only holds `monitor`
-    /// weakly — is the accepted, documented trade-off for correctness.
-    private final class Box {
+    /// `swift_weakLoadStrong` reading a freed `Box`).
+    ///
+    /// **Corrected justification (#0013 re-pass).** An earlier version of
+    /// this comment claimed this SDK's `DiskArbitration` has no
+    /// session-invalidate call — that's false; `DAUnregisterCallback(session,
+    /// callback, context)` exists (`DiskArbitration.h:552`). The real reason
+    /// `Box` stays immortal here is different: a callback can already be
+    /// *executing* on `queue` at the moment `deinit` runs, and there is no
+    /// way to release `Box` (with or without first unregistering) from
+    /// `deinit` without either racing that in-flight callback or blocking to
+    /// wait for it — and blocking here is exactly the self-deadlock this file
+    /// hit once and reverted (a `queue.sync` teardown attempt — see
+    /// `## Gotchas` in `issues/0013.md`). A leak-free alternative does exist:
+    /// call `DASessionSetDispatchQueue(session, nil)` (which guarantees no
+    /// *new* callback block is ever enqueued on `queue` again), then release
+    /// `Box` inside a `queue.async` block, which — because `queue` is
+    /// serial — is guaranteed to run only after every callback already
+    /// enqueued has finished. It wasn't adopted in this pass: it changes the
+    /// teardown shape enough to warrant the same kind of dedicated stress
+    /// test that found both crashes above, which is out of scope for this
+    /// re-pass. The leak is bounded regardless — exactly one `Box` per
+    /// `DVDMonitor` (`passRetained` runs once, in `init`), one `DVDMonitor`
+    /// for the app's lifetime, and `Box` only holds `monitor` weakly, so the
+    /// leak is never the real `DVDMonitor` or its `DASession`.
+    private nonisolated final class Box {
         weak var monitor: DVDMonitor?
     }
 
@@ -114,43 +132,61 @@ final class DVDMonitor {
     nonisolated private func diskAppeared(_ disk: DADisk) {
         guard let description = DADiskCopyDescription(disk) as? [String: Any] else { return }
 
+        // Cheap first: `kDADiskDescriptionMediaKindKey`/
+        // `kDADiskDescriptionDeviceProtocolKey` are already sitting in
+        // `description` — no stat, no process launch. Everything below this
+        // (the `VIDEO_TS` stat, and identity resolution via `lsdvd`) is
+        // gated behind it via `evaluateAppearance` (#0013 re-pass, "must fix"
+        // #2). This callback fires for *every* disk-appeared/
+        // description-changed event on the system, not just discs — the boot
+        // volume, every NAS share, every mounted DMG — so anything read here
+        // unconditionally used to run once per such event.
         let mediaKind = description[kDADiskDescriptionMediaKindKey as String] as? String
         let protocolName = description[kDADiskDescriptionDeviceProtocolKey as String] as? String
-        let deviceNode = DADiskGetBSDName(disk).map { String(cString: $0) }
         let mountURL = description[kDADiskDescriptionVolumePathKey as String] as? URL
-        let volumeName = description[kDADiskDescriptionVolumeNameKey as String] as? String
-        // The SDK's exact bridged Swift type for this key (CFUUID vs.
-        // Foundation's `UUID`) isn't something this machine can observe on
-        // real hardware, so both are tried defensively rather than
-        // force-casting — a wrong guess here must degrade to "no UUID", never
-        // crash the whole monitor.
-        let volumeUUID: String? = {
-            guard let raw = description[kDADiskDescriptionVolumeUUIDKey as String] else { return nil }
-            if let uuid = raw as? UUID { return uuid.uuidString }
-            // `as? CFUUID` is a known Swift/ClangImporter trap here — a
-            // conditional cast to *any* CF class type from `Any` reports
-            // "always succeeds" and, worse, actually always succeeds at
-            // runtime regardless of the real underlying type, which is what
-            // crashed this monitor against a real DiskArbitration event
-            // during #0013's verification. `CFGetTypeID` is the only
-            // reliable check; only bit-cast once it confirms the type.
-            let object = raw as AnyObject
-            guard CFGetTypeID(object) == CFUUIDGetTypeID() else { return nil }
-            let cfUUID = unsafeBitCast(object, to: CFUUID.self)
-            return CFUUIDCreateString(kCFAllocatorDefault, cfUUID) as String
-        }()
-        let totalCapacity = (description[kDADiskDescriptionMediaSizeKey as String] as? NSNumber)?.int64Value
+        let deviceNode = DADiskGetBSDName(disk).map { String(cString: $0) }
 
-        let hasVideoTS = mountURL.map(Self.videoTSExists) ?? false
-        let discID = mountURL.flatMap { LSDVDIdentity.discID(mountPath: $0.path) }
-            ?? OpticalDiscClassifier.fallbackDiscID(volumeName: volumeName, volumeUUID: volumeUUID, totalCapacity: totalCapacity)
+        // Captured by `resolveDiscID` below so the actual resolved value
+        // (not just the `DiscMountDecision`) is available for `.newDisc`.
+        var resolvedDiscID: String?
 
-        let decision = OpticalDiscClassifier.classify(
+        let decision = OpticalDiscClassifier.evaluateAppearance(
             mediaKind: mediaKind,
             protocolName: protocolName,
-            hasVideoTS: hasVideoTS,
-            discID: discID,
-            previousDiscID: currentDiscID
+            previousDiscID: currentDiscID,
+            resolveVideoTS: {
+                mountURL.map(Self.videoTSExists) ?? false
+            },
+            resolveDiscID: {
+                let volumeName = description[kDADiskDescriptionVolumeNameKey as String] as? String
+                // The SDK's exact bridged Swift type for this key (CFUUID vs.
+                // Foundation's `UUID`) isn't something this machine can
+                // observe on real hardware, so both are tried defensively
+                // rather than force-casting — a wrong guess here must
+                // degrade to "no UUID", never crash the whole monitor.
+                let volumeUUID: String? = {
+                    guard let raw = description[kDADiskDescriptionVolumeUUIDKey as String] else { return nil }
+                    if let uuid = raw as? UUID { return uuid.uuidString }
+                    // `as? CFUUID` is a known Swift/ClangImporter trap here —
+                    // a conditional cast to *any* CF class type from `Any`
+                    // reports "always succeeds" and, worse, actually always
+                    // succeeds at runtime regardless of the real underlying
+                    // type, which is what crashed this monitor against a
+                    // real DiskArbitration event during #0013's
+                    // verification. `CFGetTypeID` is the only reliable
+                    // check; only bit-cast once it confirms the type.
+                    let object = raw as AnyObject
+                    guard CFGetTypeID(object) == CFUUIDGetTypeID() else { return nil }
+                    let cfUUID = unsafeBitCast(object, to: CFUUID.self)
+                    return CFUUIDCreateString(kCFAllocatorDefault, cfUUID) as String
+                }()
+                let totalCapacity = (description[kDADiskDescriptionMediaSizeKey as String] as? NSNumber)?.int64Value
+
+                let discID = mountURL.flatMap { LSDVDIdentity.discID(mountPath: $0.path) }
+                    ?? OpticalDiscClassifier.fallbackDiscID(volumeName: volumeName, volumeUUID: volumeUUID, totalCapacity: totalCapacity)
+                resolvedDiscID = discID
+                return discID
+            }
         )
 
         switch decision {
@@ -160,13 +196,13 @@ final class DVDMonitor {
             NSLog("DVDMonitor: ignored mount at %@ — %@", mountURL?.path ?? "(no volume path)", reason)
 
         case .sameDiscRemounted:
-            NSLog("DVDMonitor: same disc remounted (id: %@) — not re-firing", discID ?? "?")
+            NSLog("DVDMonitor: same disc remounted (id: %@) — not re-firing", resolvedDiscID ?? "?")
 
         case .newDisc:
             guard let mountURL else { return }
-            currentDiscID = discID
+            currentDiscID = resolvedDiscID
             currentDeviceNode = deviceNode
-            let insertion = DiscInsertion(mountURL: mountURL, deviceNode: deviceNode, discID: discID)
+            let insertion = DiscInsertion(mountURL: mountURL, deviceNode: deviceNode, discID: resolvedDiscID)
             Task { @MainActor [weak self] in
                 self?.onDVDInserted?(insertion)
             }

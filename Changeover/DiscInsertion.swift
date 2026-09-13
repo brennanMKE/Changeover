@@ -111,6 +111,46 @@ enum OpticalDiscClassifier {
         return .newDisc
     }
 
+    /// Gates the *expensive* parts of evaluating one appearance event — the
+    /// `VIDEO_TS` filesystem stat and disc-identity resolution, which may
+    /// spawn `lsdvd` — behind the cheap media-kind/protocol check, so neither
+    /// ever runs for a disk that was never going to qualify (#0013 re-pass,
+    /// "must fix" #2: the previous shape in `DVDMonitor.diskAppeared` ran
+    /// both unconditionally for *every* disk-appeared/description-changed
+    /// event on the system — the boot volume, every NAS share, every mounted
+    /// DMG — before `classify` ever looked at `mediaKind`/`protocolName`).
+    ///
+    /// `resolveVideoTS`/`resolveDiscID` are closures, not plain `Bool`/
+    /// `String?` values, specifically so this *ordering* is observable in a
+    /// test with no real `DiskArbitration` disk at all: a test's closures
+    /// record whether they were called, and must never be invoked when
+    /// `mediaKind`/`protocolName` don't pass `isGenuineOpticalMedia` — see
+    /// `DVDMonitorGateOrderingTests`. `classify`'s own signature, and every
+    /// test built on it, are untouched: this function only decides *when* to
+    /// compute the values `classify` takes, not how it decides given them.
+    nonisolated static func evaluateAppearance(
+        mediaKind: String?,
+        protocolName: String?,
+        previousDiscID: String?,
+        resolveVideoTS: () -> Bool,
+        resolveDiscID: () -> String?
+    ) -> DiscMountDecision {
+        guard isGenuineOpticalMedia(mediaKind: mediaKind, protocolName: protocolName) else {
+            return .ignored(reason: "not optical media (kind: \(mediaKind ?? "nil"), protocol: \(protocolName ?? "nil"))")
+        }
+        let hasVideoTS = resolveVideoTS()
+        guard hasVideoTS else {
+            return .ignored(reason: "no VIDEO_TS directory at the mount root")
+        }
+        return classify(
+            mediaKind: mediaKind,
+            protocolName: protocolName,
+            hasVideoTS: hasVideoTS,
+            discID: resolveDiscID(),
+            previousDiscID: previousDiscID
+        )
+    }
+
     /// Whether a disk-disappeared event should clear the currently-tracked
     /// disc. Matched on device node rather than mount path, because a
     /// disappearance event may arrive after the volume has already
