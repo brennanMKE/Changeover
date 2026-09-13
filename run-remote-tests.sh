@@ -105,7 +105,10 @@ if [[ "${1:-}" == "--remote" ]]; then
     echo "== $RESULT in ${ELAPSED}s on $(hostname -s)"
     [[ -n "$COUNTS" ]] && echo "$COUNTS"
 
-    FAILURES=$(grep -aE '✘|error:|Expectation failed|Fatal error|crashed' "$LOG" \
+    # Swift Testing issues, XCTest failures, compiler errors and test-host
+    # crashes. Plain "error:" is too broad: the test host logs benign
+    # "[Connection] … error: Error Domain=…" lines on every run.
+    FAILURES=$(grep -aE '✘|:[0-9]+:[0-9]+: error: |error: -\[|Test Case .* failed|Fatal error|Restarting after unexpected exit|crashed while' "$LOG" \
         | grep -av 'Test run with' | cut_line | awk '!seen[$0]++' | head -n 30 || true)
     if [[ -n "$FAILURES" ]]; then
         echo "-- failures (first 30):"
