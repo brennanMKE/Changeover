@@ -1121,4 +1121,55 @@ struct MakeMKVFallbackTests {
         let record = try Self.readLastJSONLine(at: reliabilityURL)
         #expect(record.decision == "notEligible")
     }
+
+    /// #0004 T17: a fallback that fails at the rip stage leaves no working
+    /// files at all — the rip job directory is removed by `runFallback` as
+    /// before, and the primary encode's partial `.mp4` (and its job
+    /// directory) is removed by the outcome-driven disposition.
+    @Test func pipelineFallbackFailureLeavesNoWorkingFiles() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+
+        let handbrakeStub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        // Default WRITE_OUTPUT=1: the primary attempt writes a partial
+        // `.mp4` before exiting 3 (disc-shaped → fallback attempted).
+        try Self.writeConf(forStubAt: handbrakeStub, ["EXIT_DIR_INPUT=3"])
+        settings.handbrakePath = handbrakeStub
+
+        let makemkvStub = try Self.copyStub("stub-makemkvcon.sh", into: root)
+        try Self.writeConf(forStubAt: makemkvStub, [
+            "INFO_FIXTURE=\"\(Self.fixturePath("makemkvcon/dragon-tattoo-min0.txt"))\"",
+            "MKV_FILES=0",
+        ])
+        settings.makemkvconPath = makemkvStub
+
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            log:      { _ in }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .failed(let failure) = outcome else {
+            Issue.record("expected failure, got \(outcome)")
+            return
+        }
+        #expect(failure.stage == .encode)
+        guard case .failed(let ripStage, let ripReason, _) = failure.fallback else {
+            Issue.record("expected a failed fallback, got \(String(describing: failure.fallback))")
+            return
+        }
+        #expect(ripStage == .rip)
+        #expect(ripReason == .noTitlesProduced)
+
+        // No `job-*` directory under either working root.
+        #expect((try? FileManager.default.contentsOfDirectory(atPath: settings.workingEncodePath))?.filter { $0.hasPrefix("job-") }.isEmpty == true)
+        #expect((try? FileManager.default.contentsOfDirectory(atPath: settings.workingRipPath))?.filter { $0.hasPrefix("job-") }.isEmpty == true)
+    }
 }

@@ -53,6 +53,54 @@ struct EncodeControllerTests {
             .path
     }()
 
+    // #0004: per-test stub copies with a sidecar `.conf`, the same pattern
+    // as MakeMKVFallbackTests — never the process-wide STUB_EXIT.
+    private static func copyStub(_ name: String, into dir: URL) throws -> String {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/\(name)")
+        let dest = dir.appendingPathComponent(name)
+        try FileManager.default.copyItem(at: source, to: dest)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dest.path)
+        return dest.path
+    }
+
+    private static func writeConf(forStubAt stubPath: String, _ lines: [String]) throws {
+        try lines.joined(separator: "\n").write(toFile: stubPath + ".conf", atomically: true, encoding: .utf8)
+    }
+
+    private static func makeFakeDisc(named name: String = "FAKE_DISC", in dir: URL) throws -> URL {
+        let disc = dir.appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: disc.appendingPathComponent("VIDEO_TS"), withIntermediateDirectories: true)
+        return disc
+    }
+
+    private static func readLastJSONLine(at url: URL) throws -> DiscReliabilityLog.Record {
+        let raw = try String(contentsOf: url, encoding: .utf8)
+        let lines = raw.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        let last = try #require(lines.last)
+        return try JSONDecoder().decode(DiscReliabilityLog.Record.self, from: Data(last.utf8))
+    }
+
+    /// Every file under `dir` whose extension is `mp4`, recursively.
+    private static func mp4Files(under dir: URL) throws -> [String] {
+        guard FileManager.default.fileExists(atPath: dir.path) else { return [] }
+        let enumerator = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil)
+        var found: [String] = []
+        for case let url as URL in enumerator ?? FileManager.DirectoryEnumerator() {
+            if url.pathExtension.lowercased() == "mp4" { found.append(url.path) }
+        }
+        return found
+    }
+
+    /// Direct `job-*` children of `dir`.
+    private static func jobDirectories(under dir: URL) throws -> [String] {
+        guard FileManager.default.fileExists(atPath: dir.path) else { return [] }
+        return try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            .filter { $0.hasPrefix("job-") }
+            .sorted()
+    }
+
     // MARK: - arguments(source:title:output:) — pure, no disc, no HandBrake
 
     @Test func argumentsForMainFeature() {
@@ -340,5 +388,195 @@ struct EncodeControllerTests {
         }
         #expect(failure.stage == .encode)
         #expect(failure.reason == .toolExited(code: 1))
+    }
+
+    // MARK: - Working-file disposal (#0004) — pipeline-level
+
+    /// T14: a succeeded job leaves no `job-*` directory behind — the `.mp4`
+    /// has been moved into the library and the directory (now holding only
+    /// its marker) is removed.
+    @Test func pipelineRemovesTheJobDirectoryAfterSuccess() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        let stub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0"])
+        settings.handbrakePath = stub
+
+        var logged: [String] = []
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            log:      { logged.append($0) }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .succeeded(let destination) = outcome else {
+            Issue.record("expected success, got \(outcome)")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: destination.path))
+        #expect(try Self.jobDirectories(under: URL(fileURLWithPath: settings.workingEncodePath)).isEmpty)
+        #expect(logged.contains { $0.hasPrefix("▶ Job job-") })
+    }
+
+    /// T15: a failed encode's partial `.mp4` is unplayable and nothing in
+    /// the app can use it — the job directory (partial file and marker
+    /// included) is removed, and nothing complains, because removal
+    /// succeeded.
+    @Test func pipelineRemovesThePartialMP4WhenTheEncodeFails() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        let stub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        // Default WRITE_OUTPUT=1: the stub writes the partial file, then
+        // exits 1 for a directory (disc) input.
+        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=1"])
+        settings.handbrakePath = stub
+        settings.makemkvconPath = root.appendingPathComponent("no-such-makemkvcon").path
+
+        var logged: [String] = []
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            log:      { logged.append($0) }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .failed(let failure) = outcome else {
+            Issue.record("expected failure, got \(outcome)")
+            return
+        }
+        #expect(failure.stage == .encode)
+        #expect(failure.reason == .toolExited(code: 1))
+        #expect(try Self.jobDirectories(under: URL(fileURLWithPath: settings.workingEncodePath)).isEmpty)
+        #expect(try Self.mp4Files(under: URL(fileURLWithPath: settings.plexMediaRoot).appendingPathComponent("Working")).isEmpty)
+        #expect(!logged.contains { $0.contains("Could not") })
+    }
+
+    /// T16: an organize failure keeps the encoded `.mp4` — it is the only
+    /// copy (#0012) — marked `kept`, and a later job in the same root uses
+    /// its own fresh directory and never touches the kept one.
+    @Test func pipelineKeepsTheEncodedFileWhenTheMoveFailsAndTheNextJobDoesNotTouchIt() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        let stub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0"])
+        settings.handbrakePath = stub
+
+        // A regular file planted at the movie's *folder* path: P4 probes
+        // only `Movies` itself (which stays a real directory), so preflight
+        // passes and `PlexOrganizer.move`'s createDirectory throws.
+        let movies = URL(fileURLWithPath: settings.plexMoviesPath)
+        try FileManager.default.createDirectory(at: movies, withIntermediateDirectories: true)
+        let metadata = try Self.metadata()
+        let blocker = movies.appendingPathComponent(metadata.folderName)
+        try Data("not a directory".utf8).write(to: blocker)
+
+        var firstLog: [String] = []
+        var pipeline = DVDPipeline(
+            metadata: metadata,
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            log:      { firstLog.append($0) }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let firstOutcome = await pipeline.run()
+
+        guard case .failed(let failure) = firstOutcome else {
+            Issue.record("expected an organize failure, got \(firstOutcome)")
+            return
+        }
+        #expect(failure.stage == .organize)
+
+        let encodingRoot = URL(fileURLWithPath: settings.workingEncodePath)
+        let keptDirs = try Self.jobDirectories(under: encodingRoot)
+        #expect(keptDirs.count == 1)
+        let keptDir = try #require(keptDirs.first)
+        let keptMP4 = encodingRoot.appendingPathComponent(keptDir).appendingPathComponent(metadata.fileName)
+        #expect(FileManager.default.fileExists(atPath: keptMP4.path))
+        #expect(WorkingFiles.readMarker(inJobDirectory: encodingRoot.appendingPathComponent(keptDir).path)
+            == .marker(WorkingFiles.JobMarker(state: .kept, movie: metadata.folderName)))
+        #expect(firstLog.contains { $0.contains("kept at") })
+
+        // Remove the blocker and run a second job in the same root.
+        try FileManager.default.removeItem(at: blocker)
+
+        var secondLog: [String] = []
+        var secondPipeline = DVDPipeline(
+            metadata: metadata,
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            log:      { secondLog.append($0) }
+        )
+        secondPipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let secondOutcome = await secondPipeline.run()
+
+        guard case .succeeded = secondOutcome else {
+            Issue.record("expected the second job to succeed, got \(secondOutcome)")
+            return
+        }
+        // The first job's kept directory and `.mp4` still exist, untouched.
+        let remainingDirs = try Self.jobDirectories(under: encodingRoot)
+        #expect(remainingDirs == [keptDir])
+        #expect(FileManager.default.fileExists(atPath: keptMP4.path))
+        #expect(WorkingFiles.readMarker(inJobDirectory: encodingRoot.appendingPathComponent(keptDir).path)
+            == .marker(WorkingFiles.JobMarker(state: .kept, movie: metadata.folderName)))
+        // The second job used a different job directory (its own, now
+        // removed) — the flat-path overwrite this test guards against would
+        // have moved the kept file into the library instead.
+        #expect(secondLog.contains { $0.hasPrefix("▶ Job job-") })
+        let firstJobID = try #require(firstLog.compactMap { $0.hasPrefix("▶ Job ") ? $0 : nil }.first)
+        let secondJobID = try #require(secondLog.compactMap { $0.hasPrefix("▶ Job ") ? $0 : nil }.first)
+        #expect(firstJobID != secondJobID)
+    }
+
+    /// T19: a cleanup failure is logged and never changes the outcome — the
+    /// reliability record still says "succeeded".
+    @Test func cleanupFailureNeverChangesTheOutcome() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        let stub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0"])
+        settings.handbrakePath = stub
+
+        var logged: [String] = []
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            log:      { logged.append($0) }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+        pipeline.removeJobDirectory = { _, _, _ in .failed("boom") }
+
+        let outcome = await pipeline.run()
+
+        guard case .succeeded = outcome else {
+            Issue.record("expected success despite the cleanup failure, got \(outcome)")
+            return
+        }
+        #expect(logged.contains { $0.contains("⚠︎ Could not remove") && $0.contains("boom") })
+
+        let record = try Self.readLastJSONLine(at: root.appendingPathComponent("reliability.jsonl"))
+        #expect(record.outcome == "succeeded")
     }
 }

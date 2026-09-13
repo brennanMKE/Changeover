@@ -51,6 +51,14 @@ struct DVDPipeline {
     /// this at a temp file instead of `DiscReliabilityLog.defaultURL`.
     var reliabilityLogURL: URL = DiscReliabilityLog.defaultURL
 
+    /// #0004 §7 step 10: the test seam for the end-of-job disposal. A test
+    /// can force a removal failure (`{ _, _, _ in .failed("boom") }`) to
+    /// prove a cleanup failure never changes the outcome (T19). Production
+    /// uses the real guard chain.
+    var removeJobDirectory: @Sendable (String, String, String) -> WorkingFiles.RemovalResult = {
+        WorkingFiles.removeJobDirectory($0, under: $1, forbidding: $2)
+    }
+
     // MARK: - Run
 
     func run() async -> JobOutcome {
@@ -66,15 +74,29 @@ struct DVDPipeline {
         let plexMoviesPath    = settings.plexMoviesPath
         let volumeName        = disc.lastPathComponent
         let logURL            = reliabilityLogURL
+        let remover           = removeJobDirectory
+
+        // #0004 §2: one job id for this run — the encode job directory and,
+        // on the fallback path, the rip job directory share it, so the two
+        // always correlate.
+        let jobID = JobController.makeJobID()
+        log("▶ Job \(jobID)")
+
+        // #0004 §2: this job encodes into its own fresh directory, so two
+        // jobs for the same movie — or a retry after an organize failure —
+        // can never share an output path, and HandBrake can never overwrite
+        // a kept file.
+        let jobDirectory = (workingEncodePath as NSString)
+            .appendingPathComponent(jobID)
+        let mp4Path = (jobDirectory as NSString)
+            .appendingPathComponent(metadata.fileName)
+        var jobDirectoryCreated = false
 
         // Phase 1 always asks HandBrake for the main feature (#0014 G1); a
         // single named `let` so the policy is visible and swappable. Phase
         // 2's scanner (#0023/#0025) replaces this with `.index(n)` at this
         // one call site — the whole migration.
         let titleSelection: EncodeController.TitleSelection = .mainFeature
-
-        let mp4Path = (workingEncodePath as NSString)
-            .appendingPathComponent(metadata.fileName)
 
         // Reliability-log bookkeeping, filled in as the run progresses so
         // every `return` below can pass through `finish(_:)` — no path
@@ -84,7 +106,7 @@ struct DVDPipeline {
         var decisionRecord: String?
         var fallbackRecord: DiscReliabilityLog.StageReason?
 
-        func finish(_ outcome: JobOutcome) -> JobOutcome {
+        func finish(_ outcome: JobOutcome) async -> JobOutcome {
             // #0009 §4.1: the presenter's rendering of *any* failure, right
             // before it's recorded — this is what replaces a bare exit code
             // with an actual explanation. Every `FALLBACK …` line above stays
@@ -95,6 +117,28 @@ struct DVDPipeline {
                 for detail in message.details {
                     log("   " + detail)
                 }
+            }
+
+            // #0004 §7 step 9: dispose of this job's working directory by
+            // the typed outcome. A cleanup refusal or failure is logged and
+            // never changes the outcome being returned.
+            let disposeOutcome = await WorkingFiles.dispose(
+                outcome:              outcome,
+                jobDirectoryCreated:  jobDirectoryCreated,
+                jobDirectory:         jobDirectory,
+                under:                workingEncodePath,
+                forbidding:           plexMoviesPath,
+                remover:              remover
+            )
+            switch disposeOutcome {
+            case .nothingToDo, .removed:
+                break
+            case .keptAmbiguousContent(let names):
+                log("⚠︎ Kept \(jobDirectory): a successful job's directory should hold nothing but its marker, and it still holds \(names.joined(separator: ", "))")
+            case .refused(let reason):
+                log("⚠︎ Could not remove \(jobDirectory): \(reason)")
+            case .failed(let message):
+                log("⚠︎ Could not remove \(jobDirectory): \(message)")
             }
 
             let record = DiscReliabilityLog.Record(
@@ -114,6 +158,28 @@ struct DVDPipeline {
             )
             DiscReliabilityLog.append(record, to: logURL, log: log)
             return outcome
+        }
+
+        // #0004 §3: advance the job marker. A failed write must land on the
+        // safe side: an `encoding` failure just logs (a fresh directory with
+        // no marker is never auto-deleted by the sweep); a failed
+        // `encoded`/`kept` write removes the marker instead, because a stale
+        // `encoding` marker must never sit in front of a complete `.mp4` —
+        // and a directory without a marker is kept.
+        func advanceMarker(_ state: WorkingFiles.JobMarkerState) async {
+            let marker = WorkingFiles.JobMarker(state: state, movie: metadata.folderName)
+            if await WorkingFiles.writeMarker(marker, inJobDirectory: jobDirectory) {
+                return
+            }
+            log("⚠︎ Could not write \(jobDirectory)/.changeover-job (state \(state.rawValue))")
+            if state == .encoding {
+                return
+            }
+            if await WorkingFiles.deleteMarker(inJobDirectory: jobDirectory) {
+                log("⚠︎ Removed the marker instead — the directory will be kept")
+            } else {
+                log("⚠︎ Could not remove \(jobDirectory)/.changeover-job either")
+            }
         }
 
         // #0008: preflight — check HandBrake, the Plex destinations and free
@@ -145,7 +211,7 @@ struct DVDPipeline {
                 stage:  preflightFailure.stage,
                 reason: String(describing: preflightFailure.reason)
             )
-            return finish(.failed(preflightFailure))
+            return await finish(.failed(preflightFailure))
         }
         log("✓ Preflight passed")
 
@@ -172,6 +238,27 @@ struct DVDPipeline {
         let frameRateText: String = scannedFrameRate.map { String($0) } ?? "unknown"
         let interlaceText: String = scannedInterlaceDetected.map { String($0) } ?? "unknown"
         log("▶ Deinterlace: frameRate=\(frameRateText) interlaceDetected=\(interlaceText) → filter=\(deinterlaceFilter)")
+
+        // #0004 §7 step 4: create this job's encode directory — fresh, never
+        // adopted — and mark it `encoding` before HandBrake launches. On a
+        // creation failure this job created nothing, so it must never delete
+        // whatever is at that path: return early with
+        // `jobDirectoryCreated == false` and let `finish`'s disposition do
+        // nothing.
+        do {
+            _ = try await WorkingFiles.createJobDirectory(root: workingEncodePath, jobID: jobID)
+            jobDirectoryCreated = true
+        } catch {
+            primaryRecord = DiscReliabilityLog.StageReason(
+                stage:  .encode,
+                reason: String(describing: FailureReason.destinationUnwritable(path: jobDirectory))
+            )
+            return await finish(.failed(JobFailure(
+                stage:  .encode,
+                reason: .destinationUnwritable(path: jobDirectory)
+            )))
+        }
+        await advanceMarker(.encoding)
 
         // Step 1: Encode, straight from the disc's VIDEO_TS — no rip stage
         // on the happy path.
@@ -215,12 +302,12 @@ struct DVDPipeline {
                 decisionRecord = "notEligible"
                 // #0009: `finish(_:)` now says this better than a fixed
                 // string ever could — no replacement line needed here.
-                return finish(.failed(primaryFailure))
+                return await finish(.failed(primaryFailure))
 
             case .unavailable(let path):
                 decisionRecord = "unavailable"
                 log("✗ FALLBACK UNAVAILABLE disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) makemkvcon=\(path) (not installed)")
-                return finish(.failed(JobFailure(
+                return await finish(.failed(JobFailure(
                     stage:    primaryFailure.stage,
                     reason:   primaryFailure.reason,
                     logTail:  primaryFailure.logTail,
@@ -231,6 +318,23 @@ struct DVDPipeline {
                 decisionRecord = "attempted"
                 log("⚠︎ FALLBACK disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) makemkvcon=\(makemkvconPath) → ripping with MakeMKV")
 
+                // #0004 §1: the primary's partial `.mp4` is useless — the
+                // second encode overwrites this path anyway — and removing
+                // it now frees about 1 GB before the fallback's 5–8 GB rip.
+                // Refusal or failure only logs a warning; a missing file is
+                // normal (the primary may have failed before writing).
+                switch WorkingFiles.removeFile(
+                    mp4Path,
+                    inJobDirectory: jobDirectory,
+                    under:           workingEncodePath,
+                    forbidding:      plexMoviesPath
+                ) {
+                case .removed, .refused(.missing):
+                    break
+                case .refused, .failed:
+                    log("⚠︎ Could not remove the partial encode at \(mp4Path)")
+                }
+
                 switch await runFallback(
                     primaryFailure: primaryFailure,
                     discPath:       discPath,
@@ -238,11 +342,12 @@ struct DVDPipeline {
                     makemkvconPath: makemkvconPath,
                     handbrakePath:  handbrakePath,
                     mp4Path:        mp4Path,
-                    volumeName:     volumeName
+                    volumeName:     volumeName,
+                    jobID:          jobID
                 ) {
                 case .failure(let runFailure):
                     fallbackRecord = runFailure.record
-                    return finish(.failed(runFailure.failure))
+                    return await finish(.failed(runFailure.failure))
                 case .success(let url):
                     mp4URL = url
                     producedBy = .makemkvFallback
@@ -250,6 +355,11 @@ struct DVDPipeline {
             }
         }
         log("✓ Encode complete: \(mp4URL.path)")
+
+        // #0004 §3: mark the directory `encoded` before the move, so the
+        // sweep can always tell a complete, unmoved `.mp4` from a stale
+        // partial.
+        await advanceMarker(.encoded)
 
         // Step 2: Move into Plex
         let destination: URL
@@ -262,7 +372,19 @@ struct DVDPipeline {
             )
         } catch {
             log("✗ Moving into Plex failed. Aborting.")
-            return finish(.failed(error))
+
+            // #0004 §3/§5: the working `.mp4` is now the only copy (#0012).
+            // Mark the directory `kept` and tell the user where the file is
+            // and what to do with it — twice, if they don't act: the sweep
+            // repeats the reminder at the start of every later job.
+            await advanceMarker(.kept)
+            if FileManager.default.fileExists(atPath: mp4Path) {
+                log("⚠︎ The encoded file was kept at \(mp4Path). Move it into \"\(plexMoviesPath)/\(metadata.folderName)/\" by hand, or delete \(jobDirectory) to discard it.")
+            } else {
+                log("⚠︎ The encoded file is not in the working folder — see PlexOrganizer's log line above for where it was left.")
+            }
+
+            return await finish(.failed(error))
         }
 
         if producedBy == .makemkvFallback {
@@ -287,7 +409,7 @@ struct DVDPipeline {
         }
 
         log("── Done. Scan your Plex Movies library to pick up the new title.")
-        return finish(.succeeded(destination: destination))
+        return await finish(.succeeded(destination: destination))
     }
 
     // MARK: - Fallback
@@ -310,10 +432,14 @@ struct DVDPipeline {
         makemkvconPath: String,
         handbrakePath:  String,
         mp4Path:        String,
-        volumeName:     String
+        volumeName:     String,
+        jobID:          String
     ) async -> Result<URL, FallbackRunFailure> {
+        // #0004 §2: the rip job directory shares the run's single job id, so
+        // `Working/encoding/<jobID>/` and `Working/ripping/<jobID>/` always
+        // correlate.
         let jobDirectory = (workingRipPath as NSString)
-            .appendingPathComponent(JobController.makeJobID())
+            .appendingPathComponent(jobID)
 
         switch await MakeMKVRipper.rip(
             discMountPath:  discPath,
@@ -328,7 +454,7 @@ struct DVDPipeline {
             // collision case) `jobDirectory` already existed and step (a)
             // refused to adopt it. Either way, this job did not create
             // whatever is at that path, so it must never delete it — leave
-            // it for #0004's launch-time sweep — and logging "could not
+            // it for #0004's pre-job sweep — and logging "could not
             // clean up" here would be spurious, not a real cleanup failure.
             if case .destinationUnwritable = ripFailure.reason {
                 // Nothing to clean up: never created, never touched.
