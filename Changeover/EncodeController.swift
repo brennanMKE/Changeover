@@ -104,7 +104,7 @@ enum EncodeController {
         handbrakePath:    String,
         hangTimeout:      TimeInterval = 30 * 60,
         readerDelay:      @escaping () -> Void = {},
-        hardCeilingGrace: TimeInterval = 60,
+        hardCeilingGrace: TimeInterval = 10,
         log:              @escaping @MainActor (String) -> Void
     ) async -> Result<URL, JobFailure> {
         Task { @MainActor in log("▶ Starting HandBrakeCLI encode…") }

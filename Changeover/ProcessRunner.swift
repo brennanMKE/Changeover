@@ -26,6 +26,21 @@ import Foundation
 /// continuation — exactly once, and only after both signals have been
 /// observed.
 ///
+/// **A second race, found 2026-09-12 (#0009): `process`/`pipe` lifetime.**
+/// See `RunCompletionGate`'s doc comment for the trace. In short: nothing
+/// but the watchdog closures (`absoluteWorkItem`'s item, `inactivityTimer`'s
+/// handler) held a strong reference to `process`, and both get canceled from
+/// inside `terminationHandler` — the moment the process side alone finishes,
+/// before the reader may have drained everything. If that cancellation was
+/// also the *last* strong reference to `process`, ARC could deallocate it,
+/// releasing `pipe` (held only via `process.standardOutput`/`standardError`)
+/// before the reader's dispatch source had delivered its final chunk or EOF
+/// — silently tearing down the one thing that would have called
+/// `markReaderDone()`. Neither signal then completes, and the continuation
+/// leaks. `gate`'s `onReady` closure below deliberately captures `process`
+/// so it can't happen: `process` (and `pipe`, transitively) now lives as
+/// long as `gate` does, which self-retains until it fires.
+///
 /// `nonisolated` throughout — this has no reason to run on MainActor, and the
 /// module default is MainActor (`CLAUDE.md`).
 nonisolated enum ProcessRunner {
@@ -49,7 +64,9 @@ nonisolated enum ProcessRunner {
         /// `Process.terminationReason == .uncaughtSignal` — a crash rather
         /// than a normal exit.
         let uncaughtSignal: Bool
-        /// `true` only when the watchdog itself called `terminate()`.
+        /// `true` only when the watchdog itself called `terminate()`, or the
+        /// gate's own grace period (`hardCeilingGrace`) expired waiting for
+        /// the other side to confirm — see `RunCompletionGate`.
         let timedOut: Bool
     }
 
@@ -71,32 +88,26 @@ nonisolated enum ProcessRunner {
     /// insert a pause between capturing `availableData` and processing it, to
     /// reproduce the exact race above deterministically regardless of timing.
     ///
-    /// **`hardCeilingGrace` (#0009, 2026-09-12): a last-resort backstop, added
-    /// after a real 58-minute hang on gordon.** A `SWIFT TASK CONTINUATION
-    /// MISUSE: run(executablePath:arguments:watchdog:readerDelay:onLine:)
-    /// leaked its continuation without resuming it` was observed during
-    /// `ProcessRunnerTests/encodeSurvivesTheReaderTerminationRaceAndKeepsTheFinalLine()`
-    /// (20 iterations of `EncodeController.encode` with a 30ms `readerDelay`
-    /// against a >64KB fixture). Despite comparing this function line by line
-    /// against `MakeMKVRipper.runMakeMKV`'s reviewed original (`git show
-    /// 6143729^:Changeover/MakeMKVRipper.swift`) — the reader/gate/termination
-    /// sequencing is unchanged — **the exact leaking path has not been
-    /// conclusively identified**; see `issues/0009.md` `## Gotchas` for what
-    /// was ruled in and out. Rather than ship a mechanism that can still hang
-    /// the calling task forever if some interaction is missed, this adds a
-    /// hard ceiling — `watchdog`'s own bound plus `hardCeilingGrace` — after
-    /// which the gate is forced to fire with a synthetic `Termination`
-    /// (`timedOut: true`) regardless of whether the reader or the process
-    /// ever separately reported completion. This is a backstop, not a
-    /// substitute for finding the real cause: it can leave an unreaped
-    /// process or an orphaned pipe behind, but it guarantees the *caller*
-    /// is never the one left hanging.
+    /// **`hardCeilingGrace` (#0009, 2026-09-12).** Not a bound on the whole
+    /// call — a healthy, still-running process is bounded only by `watchdog`
+    /// itself, which terminates it and so guarantees `terminationHandler`
+    /// fires. `hardCeilingGrace` only ever starts counting once **one** of
+    /// the two completion signals has already arrived and the other hasn't:
+    /// see `RunCompletionGate.markReaderDone()`/`markProcessDone(_:)`. That
+    /// window is normally microseconds (the two signals arrive together);
+    /// this bounds the abnormal case — an orphaned grandchild still holding
+    /// the pipe open after the tracked process has already exited, for
+    /// instance — instead of waiting on it indefinitely. A first version of
+    /// this backstop scheduled a single `watchdog`-bound-plus-grace deadline
+    /// **at launch**, which silently killed any encode running past that
+    /// point — a 40-minute real HandBrake encode with a 30-minute inactivity
+    /// bound, for example. That version never shipped past review.
     nonisolated static func run(
         executablePath:   String,
         arguments:        [String],
         watchdog:         Watchdog,
         readerDelay:      @escaping () -> Void = {},
-        hardCeilingGrace: TimeInterval = 60,
+        hardCeilingGrace: TimeInterval = 10,
         onLine:           @escaping (String) -> Void
     ) async -> Result<Termination, Error> {
         await withCheckedContinuation { continuation in
@@ -111,13 +122,19 @@ nonisolated enum ProcessRunner {
             let splitter = LineSplitter()
             let watchdogState = WatchdogState()
 
-            let gate = RunCompletionGate { termination in
+            let gate = RunCompletionGate(grace: hardCeilingGrace) { termination in
+                // Keep `process` (and, via `process.standardOutput`/
+                // `standardError`, `pipe`) alive for this closure's entire
+                // lifetime — which is `gate`'s entire lifetime, since `gate`
+                // stores this closure and self-retains until it fires. See
+                // the file header and `RunCompletionGate`'s doc comment:
+                // this is the fix for the real leak, not the grace period
+                // above, which is only a backstop for what's left over.
+                _ = process
                 let leftover = splitter.flush().trimmingCharacters(in: .whitespaces)
                 if !leftover.isEmpty {
                     onLine(leftover)
                 }
-                // Best-effort cleanup, whichever path fired: never rely on
-                // deinit alone to close these across a tight loop of calls.
                 pipe.fileHandleForReading.readabilityHandler = nil
                 try? pipe.fileHandleForReading.close()
                 try? pipe.fileHandleForWriting.close()
@@ -174,35 +191,6 @@ nonisolated enum ProcessRunner {
                 timer.resume()
             }
 
-            // The hard ceiling: `watchdog`'s own bound plus a grace period.
-            // Deliberately **never canceled** — only ever scheduled once,
-            // and `forceExpire`/`process.terminate()` are no-ops if the gate
-            // or the process are already done by the time it fires, so
-            // there's nothing to race by leaving it armed. (An earlier
-            // version canceled this from inside `gate`'s `onReady`, which
-            // needed `gate`'s closure to capture the work item itself — a
-            // retain cycle. Not canceling it removes the need for that
-            // capture entirely, at the cost of one harmless pending
-            // DispatchWorkItem per call until it fires as a no-op.) This is
-            // what turns an unidentified leak into a bounded, reported
-            // failure instead of a silent hang, including when the process
-            // has already exited but the reader never sees EOF.
-            let watchdogBound: TimeInterval
-            switch watchdog {
-            case .absolute(let t):    watchdogBound = t
-            case .inactivity(let t):  watchdogBound = t
-            }
-            let ceilingItem = DispatchWorkItem {
-                if process.isRunning {
-                    process.terminate()
-                }
-                gate.forceExpire(with: Termination(status: -1, uncaughtSignal: false, timedOut: true))
-            }
-            DispatchQueue.global(qos: .utility).asyncAfter(
-                deadline: .now() + watchdogBound + hardCeilingGrace,
-                execute:  ceilingItem
-            )
-
             process.terminationHandler = { proc in
                 absoluteWorkItem?.cancel()
                 inactivityTimer?.cancel()
@@ -219,8 +207,13 @@ nonisolated enum ProcessRunner {
             } catch {
                 absoluteWorkItem?.cancel()
                 inactivityTimer?.cancel()
-                ceilingItem.cancel()
                 pipe.fileHandleForReading.readabilityHandler = nil
+                // `gate` was never fired (the process never launched, so
+                // neither `markReaderDone`/`markProcessDone` will ever be
+                // called) — release its self-retain directly rather than
+                // through `forceExpire`, which would call `onReady` and
+                // resume `continuation` a second time here.
+                gate.abandon()
                 continuation.resume(returning: .failure(error))
             }
         }
@@ -234,53 +227,161 @@ nonisolated enum ProcessRunner {
 /// queue vs. `Process`'s own termination-handler queue) with no ordering
 /// guarantee between them — that lack of ordering is exactly the race this
 /// type exists to close. Internal (not `private`) so `ProcessRunnerTests` can
-/// exercise it directly if needed, matching `MakeMKVRipper`'s existing types.
+/// exercise it directly, matching `MakeMKVRipper`'s existing types.
+///
+/// **Two lifetime guarantees added 2026-09-12 (#0009), after a real
+/// leaked-continuation hang on gordon** (`SWIFT TASK CONTINUATION MISUSE:
+/// run(executablePath:arguments:watchdog:readerDelay:onLine:) leaked its
+/// continuation without resuming it`, during a 30ms-`readerDelay` race test
+/// — see `issues/0009.md` `## Gotchas` for the full trace):
+///
+/// 1. **This gate self-retains from `init` until it fires.** Before this,
+///    the only things holding it alive were the two handler closures
+///    (`readabilityHandler`, `terminationHandler`) `ProcessRunner.run`
+///    installs — and both of those can, in principle, be released (the
+///    reader's explicitly, by setting `readabilityHandler = nil`; the
+///    process side's by `Process` itself, or by whatever keeps `process`
+///    alive going away) before "both done" is ever recorded. A gate that
+///    can be deallocated while still waiting is a gate whose `onReady` — and
+///    the `CheckedContinuation` it captures — can be deallocated unresumed.
+///    Now it can't: `selfRetain` keeps the instance alive regardless of what
+///    happens to either handler, and is cleared only once `onReady` has
+///    actually run.
+/// 2. **The grace timer (`hardCeilingGrace`) arms only once one side has
+///    already reported, never at construction.** A process that is still
+///    genuinely running is `watchdog`'s job, not this gate's — arming a
+///    deadline at `init` time bounded the *entire call*, including a
+///    perfectly healthy multi-hour encode, which is the bug the first
+///    version of this backstop shipped with. Now, `markReaderDone()` starts
+///    the grace period only if the process side hasn't reported yet, and
+///    `markProcessDone(_:)` only if the reader hasn't — i.e., only in the
+///    window between one side finishing and the other's confirmation, which
+///    is normally microseconds. If it expires, the gate fires with a
+///    synthetic `Termination` (`timedOut: true`), preferring the real
+///    process exit status if one was already recorded.
 nonisolated final class RunCompletionGate: @unchecked Sendable {
     private let lock = NSLock()
     private var readerDone = false
     private var termination: ProcessRunner.Termination?
     private var fired = false
     private let onReady: (ProcessRunner.Termination) -> Void
+    private let grace: TimeInterval
+    private var graceTimer: DispatchWorkItem?
 
-    init(onReady: @escaping (ProcessRunner.Termination) -> Void) {
+    /// See guarantee 1 above. Set to `self` at the end of `init`, cleared
+    /// once `fire(with:)` runs.
+    private var selfRetain: RunCompletionGate?
+
+    init(grace: TimeInterval, onReady: @escaping (ProcessRunner.Termination) -> Void) {
+        self.grace = grace
         self.onReady = onReady
+        self.selfRetain = self
     }
 
     func markReaderDone() {
         lock.lock()
         readerDone = true
         let pending = termination
-        let shouldFire = !fired && pending != nil
-        if shouldFire { fired = true }
+        if !fired, let pending {
+            fired = true
+            lock.unlock()
+            fire(with: pending)
+            return
+        }
+        let shouldArmGrace = !fired && pending == nil
         lock.unlock()
-        if shouldFire, let pending { onReady(pending) }
+        if shouldArmGrace { armGrace() }
     }
 
     func markProcessDone(_ termination: ProcessRunner.Termination) {
         lock.lock()
         self.termination = termination
-        let shouldFire = !fired && readerDone
-        if shouldFire { fired = true }
+        if !fired, readerDone {
+            fired = true
+            lock.unlock()
+            fire(with: termination)
+            return
+        }
+        let shouldArmGrace = !fired && !readerDone
         lock.unlock()
-        if shouldFire { onReady(termination) }
+        if shouldArmGrace { armGrace() }
     }
 
     /// Fires with `termination` if — and only if — nothing has fired yet,
     /// regardless of whether either `markReaderDone()` or
-    /// `markProcessDone(_:)` has been called. The hard-ceiling backstop
-    /// (#0009, 2026-09-12): whatever the still-unidentified path is that can
-    /// leave one of the two signals unrecorded, this guarantees the gate
-    /// still fires exactly once, eventually, rather than never. Returns
-    /// `true` only when this call is the one that fired it, so a caller can
-    /// tell a genuine backstop firing from a no-op.
+    /// `markProcessDone(_:)` has been called. A manual override for tests;
+    /// `ProcessRunner.run` itself never needs to call this — the grace timer
+    /// armed by `markReaderDone`/`markProcessDone` is what exercises the
+    /// same path at runtime. Returns `true` only when this call is the one
+    /// that fired it.
     @discardableResult
     func forceExpire(with termination: ProcessRunner.Termination) -> Bool {
         lock.lock()
         let shouldFire = !fired
         if shouldFire { fired = true }
         lock.unlock()
-        if shouldFire { onReady(termination) }
-        return shouldFire
+        guard shouldFire else { return false }
+        cancelGrace()
+        fire(with: termination)
+        return true
+    }
+
+    /// Releases the self-retain **without** ever calling `onReady` — for
+    /// the one path where a gate is constructed but the operation it would
+    /// have tracked never starts (`Process.run()` itself threw, so neither
+    /// `markReaderDone()` nor `markProcessDone(_:)` will ever be called).
+    /// Calling `forceExpire` there instead would call `onReady` and resume
+    /// its continuation a second time. Safe to call even after `fire(with:)`
+    /// already ran, or more than once.
+    func abandon() {
+        lock.lock()
+        fired = true
+        lock.unlock()
+        cancelGrace()
+        lock.lock()
+        selfRetain = nil
+        lock.unlock()
+    }
+
+    /// Starts (or restarts) the grace period — only ever called with one
+    /// side already recorded and the other still outstanding (guarantee 2
+    /// above).
+    private func armGrace() {
+        let item = DispatchWorkItem { [self] in
+            lock.lock()
+            let pending = termination
+            let shouldFire = !fired
+            if shouldFire { fired = true }
+            lock.unlock()
+            guard shouldFire else { return }
+            // Prefer the real exit status if the process side already
+            // reported one — this only means the *reader* never caught up,
+            // not that the process itself misbehaved.
+            let synthetic = pending.map {
+                ProcessRunner.Termination(status: $0.status, uncaughtSignal: $0.uncaughtSignal, timedOut: true)
+            } ?? ProcessRunner.Termination(status: -1, uncaughtSignal: false, timedOut: true)
+            fire(with: synthetic)
+        }
+        lock.lock()
+        graceTimer = item
+        lock.unlock()
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + grace, execute: item)
+    }
+
+    private func cancelGrace() {
+        lock.lock()
+        let timer = graceTimer
+        graceTimer = nil
+        lock.unlock()
+        timer?.cancel()
+    }
+
+    private func fire(with termination: ProcessRunner.Termination) {
+        cancelGrace()
+        onReady(termination)
+        lock.lock()
+        selfRetain = nil
+        lock.unlock()
     }
 }
 

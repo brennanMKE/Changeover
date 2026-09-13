@@ -187,25 +187,31 @@ struct ProcessRunnerTests {
         #expect(message.contains("no output"))
     }
 
-    // MARK: - 4. The hard-ceiling backstop (#0009, 2026-09-12)
+    // MARK: - 4. The hard-ceiling backstop, and its own regression (#0009, 2026-09-12)
     //
     // A `SWIFT TASK CONTINUATION MISUSE: run(executablePath:arguments:watchdog:readerDelay:onLine:)
     // leaked its continuation without resuming it` was observed on gordon
     // during `encodeSurvivesTheReaderTerminationRaceAndKeepsTheFinalLine()`
     // above (20 iterations, 30ms `readerDelay`, a >64KB fixture) — a genuine
-    // ~58-minute hang at 0% CPU. Line-by-line comparison against
-    // `MakeMKVRipper.runMakeMKV`'s reviewed original (`git show
-    // 6143729^:Changeover/MakeMKVRipper.swift`) found the reader/gate/
-    // termination sequencing unchanged, so **the exact leaking path is not
-    // confirmed** — see `issues/0009.md` `## Gotchas` for what was
-    // considered. These tests don't reproduce that exact interleaving
-    // (nothing here has managed to, deterministically, yet); they instead
-    // pin the backstop `ProcessRunner.run` now has regardless of *why* the
-    // gate might fail to fire on its own: `RunCompletionGate.forceExpire`
-    // fires at most once even when raced against a normal completion, and
-    // `run(...)` returns within its watchdog bound plus a small
-    // `hardCeilingGrace` even when the reader can never see EOF at all — one
-    // of the leak candidates the coordinator named directly.
+    // ~58-minute hang at 0% CPU. The leading theory, not yet confirmed by a
+    // live run: nothing but the watchdog closures held `process` alive, and
+    // canceling them inside `terminationHandler` — the moment the process
+    // side alone finishes — could release the last strong reference to it,
+    // cascading to `pipe` and tearing down the reader's dispatch source
+    // before it ever saw the final EOF. `RunCompletionGate`'s `onReady`
+    // closure now explicitly captures `process`, tying its lifetime to the
+    // gate's own self-retain (see its doc comment), which is the actual fix.
+    //
+    // A *first version* of a backstop on top of that scheduled a single
+    // `watchdog`-bound-plus-grace deadline **at launch** — which would have
+    // killed any real, healthy encode running past that point (a 40-minute
+    // encode against a 30-minute inactivity bound, per #0018). That version
+    // is what `aLongHealthyRunIsNeverBoundedByTheGracePeriod` below exists
+    // to catch: reverting `RunCompletionGate.markReaderDone`/
+    // `markProcessDone` to arm the grace timer unconditionally at
+    // construction (instead of only once one side has already reported)
+    // makes that test fail immediately, at watchdog+grace rather than after
+    // the workload actually finishes.
 
     /// Whichever arrives first — a normal completion or a forced expiry —
     /// wins, and the other is a no-op. This is the gate's core guarantee,
@@ -213,7 +219,7 @@ struct ProcessRunnerTests {
     @Test func runCompletionGateFiresAtMostOnceAcrossNormalAndForcedCompletion() {
         var deliveries: [ProcessRunner.Termination] = []
         let lock = NSLock()
-        let gate = RunCompletionGate { termination in
+        let gate = RunCompletionGate(grace: 1) { termination in
             lock.lock()
             deliveries.append(termination)
             lock.unlock()
@@ -233,7 +239,7 @@ struct ProcessRunnerTests {
         // afterward (e.g. a slow reader finally catching up) must not
         // deliver a second time.
         var deliveries2: [ProcessRunner.Termination] = []
-        let gate2 = RunCompletionGate { termination in
+        let gate2 = RunCompletionGate(grace: 1) { termination in
             lock.lock()
             deliveries2.append(termination)
             lock.unlock()
@@ -245,33 +251,67 @@ struct ProcessRunnerTests {
         #expect(deliveries2 == [forced])
     }
 
+    /// **The 31-minute regression, caught before it ever ran on gordon.** A
+    /// stub keeps producing output every 0.5s for ~6 seconds — comfortably
+    /// past a 2s inactivity bound plus a 1s grace (3s combined) — and must
+    /// still complete normally, because neither bound ever has a reason to
+    /// fire: the process never goes idle long enough to trip the inactivity
+    /// watchdog, and the grace period only starts once the process side has
+    /// actually finished. The version of this backstop that scheduled its
+    /// ceiling at launch (`watchdog + grace`, unconditionally) would have
+    /// killed this at ~3s instead of letting it run to completion — exactly
+    /// the shape of bug that would have killed a real 40-minute HandBrake
+    /// encode (#0018) against its 30-minute inactivity bound.
+    @Test func aLongHealthyRunIsNeverBoundedByTheGracePeriod() async throws {
+        let start = Date()
+        let result = await ProcessRunner.run(
+            executablePath:   "/bin/sh",
+            arguments:        ["-c", "i=0; while [ $i -lt 12 ]; do echo tick $i; sleep 0.5; i=$((i+1)); done; exit 0"],
+            watchdog:         .inactivity(2),
+            hardCeilingGrace: 1,
+            onLine:           { _ in }
+        )
+        let elapsed = Date().timeIntervalSince(start)
+        #expect(elapsed >= 5.5, "took only \(elapsed)s — looks cut short at watchdog+grace (3s) rather than run to completion (~6s)")
+        #expect(elapsed < 15, "took \(elapsed)s — should finish shortly after the ~6s workload does")
+
+        guard case .success(let termination) = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        #expect(termination.status == 0)
+        #expect(!termination.timedOut)
+    }
+
     /// Reproduces, deterministically and without any fixture, "the reader
     /// never sees EOF" — one of the coordinator's named leak candidates: a
     /// `/bin/sh -c` command backgrounds a detached `sleep`, inheriting the
     /// pipe's write end, then the *tracked* process exits immediately.
-    /// `terminationHandler` fires almost at once; `markReaderDone()` would
-    /// not, on its own, until the orphaned `sleep` also exits 30 seconds
-    /// later — so without the hard-ceiling backstop this call would take
-    /// ~30s. With a 1-second `hardCeilingGrace` it must return in a few
-    /// seconds instead, `timedOut: true`, proving `run(...)` cannot be left
-    /// hanging by an orphan holding the pipe open, regardless of whether
-    /// that's the actual gordon leak's mechanism.
+    /// `terminationHandler` fires almost at once, recording the process
+    /// side done; `markReaderDone()` would not, on its own, until the
+    /// orphaned `sleep` also exits 30 seconds later — so without the grace
+    /// backstop this call would take ~30s. With a 1-second
+    /// `hardCeilingGrace`, armed only once the process side reports (never
+    /// at launch — see the test above), it must return in a few seconds
+    /// instead, preferring the process's real exit status (0) but flagging
+    /// `timedOut: true` since the reader never confirmed.
     @Test func runReturnsWithinTheHardCeilingWhenAnOrphanKeepsThePipeOpen() async throws {
         let start = Date()
         let result = await ProcessRunner.run(
             executablePath:   "/bin/sh",
             arguments:        ["-c", "( sleep 30 & ); exit 0"],
-            watchdog:         .inactivity(1),
+            watchdog:         .inactivity(60),
             hardCeilingGrace: 1,
             onLine:           { _ in }
         )
         let elapsed = Date().timeIntervalSince(start)
-        #expect(elapsed < 10, "took \(elapsed)s — the hard ceiling should bound this to a few seconds, not the orphan's 30s sleep")
+        #expect(elapsed < 10, "took \(elapsed)s — the grace backstop should bound this to a few seconds, not the orphan's 30s sleep")
 
         guard case .success(let termination) = result else {
-            Issue.record("expected a synthetic success from the hard ceiling, got \(result)")
+            Issue.record("expected a synthetic success from the grace backstop, got \(result)")
             return
         }
-        #expect(termination.timedOut)
+        #expect(termination.status == 0, "should prefer the process's real exit status")
+        #expect(termination.timedOut, "but still flag that the reader never confirmed")
     }
 }
