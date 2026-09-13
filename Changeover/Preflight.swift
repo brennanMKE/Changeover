@@ -291,18 +291,16 @@ enum Preflight {
     /// was tried against during development; 5s leaves generous room.
     nonisolated static let helpTimeout: TimeInterval = 5
 
-    /// **`false`**: no real HandBrakeCLI `--help` capture (§4.3/§8 "H1" in
-    /// `issues/0008.md`'s plan) was available to this implementation pass —
-    /// joe, the only Mac with real HandBrakeCLI and a disc drive, was out of
-    /// reach for this subagent. Per the plan's own contingency for exactly
-    /// this situation: an `.incompatible` verdict becomes the
-    /// `.handbrakeUnverified` warning instead of a blocker, so a wrong
-    /// guess about HandBrakeCLI's real `--help` wording can never block
-    /// every job on every disc. Flipping this to `true` needs a real
-    /// capture and the two-part test the plan's §4.3 describes (capture
-    /// parses `.compatible`; removing the `x265` or `--encoder-preset` line
-    /// makes it `.incompatible`) — see `## Fix` in `issues/0008.md`.
-    nonisolated static let capabilityCheckBlocks: Bool = false
+    /// **`true`**: confirmed against a real capture (§4.3/§8 "H1" in
+    /// `issues/0008.md`'s plan — `HandBrakeCLI --help 2>&1`, 1.11.2, joe,
+    /// `ChangeoverTests/Fixtures/handbrake/help-hb1.11.2-exit0.txt`). The
+    /// capture passes the recognition gate (`--input`/`--output` present,
+    /// 190 lines contain `--`) and lists every token
+    /// `requiredHelpTokens()` needs, `x265` included, under `--encoder`.
+    /// `PreflightTests.capabilityIsCompatibleAgainstTheRealCaptureH1` and
+    /// its two removal variants are the two-part test §4.3 requires before
+    /// this flag may be `true`. See `## Fix` in `issues/0008.md`.
+    nonisolated static let capabilityCheckBlocks: Bool = true
 
     // MARK: - The full check
 

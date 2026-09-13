@@ -42,10 +42,17 @@
 # calls). It also always exits 0, ignoring STUB_EXIT/EXIT_DIR_INPUT/
 # EXIT_FILE_INPUT, because a `.conf` written to make the *encode* invocation
 # fail must never also make the `--help` probe fail:
-#   HELP_FIXTURE    — a file to `cat` verbatim as the --help transcript. When
-#                     unset (the common case — no real HandBrakeCLI --help
-#                     capture exists yet, see issues/0008.md's `## Fix`),
-#                     prints the embedded SYNTHETIC transcript below instead.
+#   HELP_FIXTURE    — a file to `cat` verbatim as the --help transcript.
+#
+# When HELP_FIXTURE is unset, this looks for the real capture
+# (`handbrake/help-hb1.11.2-exit0.txt`, alongside this script) relative to
+# *this script's own location* (`$0`) — which resolves correctly when tests
+# run this file straight from `ChangeoverTests/Fixtures/`, but not for
+# `MakeMKVFallbackTests`' `copyStub`, which copies only this one `.sh` file
+# into a fresh per-test temp directory with no `handbrake/` sibling. Falls
+# back to the embedded SYNTHETIC transcript below for exactly that case —
+# never adjusted to match the real capture; kept only so a copied stub with
+# no `.conf` at all still produces a `.compatible`-parseable transcript.
 #
 # With no "$0.conf" present, behavior is byte for byte what it always was
 # except for the new --help branch — EncodeControllerTests' STUB_EXIT keeps
@@ -61,8 +68,15 @@ if [ -f "$conf" ]; then
 fi
 
 if [ "$1" = "--help" ]; then
+    real_capture="$(dirname "$0")/handbrake/help-hb1.11.2-exit0.txt"
     if [ -n "$HELP_FIXTURE" ] && [ -f "$HELP_FIXTURE" ]; then
         cat "$HELP_FIXTURE"
+    elif [ -f "$real_capture" ]; then
+        # The real thing: HandBrakeCLI 1.11.2 on joe, `--help 2>&1`, captured
+        # verbatim (issues/0008.md's `## Fix`). Confirmed by
+        # PreflightTests.capabilityIsCompatibleAgainstTheRealCaptureH1 to
+        # parse as `.compatible`.
+        cat "$real_capture"
     else
         # SYNTHETIC help, not a capture. Kept in sync with
         # Preflight.requiredHelpTokens() by PreflightTests' stub-sync test —

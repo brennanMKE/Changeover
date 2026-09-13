@@ -32,6 +32,36 @@ struct PreflightTests {
             .path
     }()
 
+    private static func fixturePath(_ relative: String) -> String {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/\(relative)")
+            .path
+    }
+
+    /// A fresh copy of the stub in `dir`, for the one test that needs to
+    /// override its `--help` output via `HELP_FIXTURE` without touching the
+    /// checked-in original (other tests use that original concurrently with
+    /// no sidecar `.conf` at all).
+    private static func copyStub(into dir: URL) throws -> String {
+        let source = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/stub-HandBrakeCLI.sh")
+        let dest = dir.appendingPathComponent("stub-HandBrakeCLI.sh")
+        try FileManager.default.copyItem(at: source, to: dest)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dest.path)
+        return dest.path
+    }
+
+    /// HandBrakeCLI 1.11.2 on joe, `--help 2>&1`, captured verbatim
+    /// (`issues/0008.md` `## Fix`, H1). 190 lines contain `--`; `--input`
+    /// and `--output` are both present; every `requiredHelpTokens()` token
+    /// is listed, `x265` among the encoders under `--encoder`.
+    private static func helpH1Lines() throws -> [String] {
+        let raw = try String(contentsOfFile: Self.fixturePath("handbrake/help-hb1.11.2-exit0.txt"), encoding: .utf8)
+        return raw.components(separatedBy: .newlines)
+    }
+
     /// A generous, whitespace-separated help transcript containing every
     /// required token plus enough filler to clear the recognition gate.
     private static func goodHelpLines() -> [String] {
@@ -342,6 +372,99 @@ struct PreflightTests {
             return
         }
         #expect(Preflight.capability(helpLines: lines) == .compatible)
+    }
+
+    // MARK: - The real H1 capture (§4.3's required two-part test)
+
+    /// §4.3: `Preflight.capabilityCheckBlocks` may ship `true` only once a
+    /// real capture parses `.compatible` against the current vector, **and**
+    /// removing a required line from it makes it `.incompatible` — both
+    /// halves below. This one is the first half.
+    @Test func capabilityIsCompatibleAgainstTheRealCaptureH1() throws {
+        let lines = try Self.helpH1Lines()
+        #expect(Preflight.capability(helpLines: lines) == .compatible)
+    }
+
+    /// §4.3's second half, encoder variant: removing H1's standalone `x265`
+    /// line (leaving `x265_10bit`/`x265_12bit`, neither of which is the
+    /// exact token required) makes the capture `.incompatible`.
+    @Test func capabilityIsIncompatibleWhenH1sEncoderLineIsRemoved() throws {
+        let lines = try Self.helpH1Lines().filter { $0.trimmingCharacters(in: .whitespaces) != "x265" }
+        guard case .incompatible(let missing) = Preflight.capability(helpLines: lines) else {
+            Issue.record("expected .incompatible")
+            return
+        }
+        #expect(missing == [Config.videoEncoder])
+    }
+
+    /// §4.3's second half, flag variant: removing every H1 line mentioning
+    /// `--encoder-preset` makes it `.incompatible` on that token specifically
+    /// — `--encoder` itself (a different line, a different token) still
+    /// matches.
+    @Test func capabilityIsIncompatibleWhenH1sEncoderPresetLinesAreRemoved() throws {
+        let lines = try Self.helpH1Lines().filter { !$0.contains("--encoder-preset") }
+        guard case .incompatible(let missing) = Preflight.capability(helpLines: lines) else {
+            Issue.record("expected .incompatible")
+            return
+        }
+        #expect(missing.contains("--encoder-preset"))
+        #expect(!missing.contains("--encoder"))
+    }
+
+    /// The stub's default `--help` (no `.conf`, no `HELP_FIXTURE`) now finds
+    /// the real H1 capture alongside itself and prints that, not the
+    /// hand-written synthetic transcript — the synthetic one is a fallback
+    /// for a copied stub with no `handbrake/` sibling directory (see the
+    /// script's own comment).
+    @Test func stubHelpDefaultsToTheRealCaptureWhenRunFromItsOriginalLocation() async throws {
+        let result = await PreflightProbes.live.handbrakeHelp(Self.stubHandBrakePath)
+        guard case .lines(let lines) = result else {
+            Issue.record("expected .lines, got \(result)")
+            return
+        }
+        #expect(lines.contains { $0.contains("HandBrake has exited.") })
+        #expect(Preflight.capability(helpLines: lines) == .compatible)
+    }
+
+    /// The one negative pipeline test: a HandBrakeCLI whose `--help` is real
+    /// H1 minus its encoder line blocks the job at `.preflight`, before the
+    /// disc is ever touched — this is what `capabilityCheckBlocks = true`
+    /// buys over the warning-only behaviour it replaced.
+    @Test func pipelineBlocksAtPreflightWhenHandBrakesHelpIsMissingTheEncoder() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let stubPath = try Self.copyStub(into: root)
+        try #"HELP_FIXTURE="\#(Self.fixturePath("handbrake/synthetic-help-no-encoder.txt"))""#
+            .write(toFile: stubPath + ".conf", atomically: true, encoding: .utf8)
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        settings.handbrakePath = stubPath
+
+        var logged: [String] = []
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
+            log:      { logged.append($0) }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .failed(let failure) = outcome else {
+            Issue.record("expected failure, got \(outcome)")
+            return
+        }
+        #expect(failure.stage == .preflight)
+        guard case .toolIncompatible(let detail) = failure.reason else {
+            Issue.record("expected .toolIncompatible, got \(failure.reason)")
+            return
+        }
+        #expect(detail.contains(Config.videoEncoder))
+        #expect(logged.contains { $0.contains("can't run Changeover's encode") })
+        #expect(!logged.contains { $0.contains("Starting HandBrakeCLI encode") })
     }
 
     // MARK: - 9. P3-P5 on the real filesystem, via Preflight.check
