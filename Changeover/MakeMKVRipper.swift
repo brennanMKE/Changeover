@@ -421,54 +421,23 @@ enum MakeMKVRipper {
         return device.isEmpty ? nil : device
     }
 
-    /// Runs `makemkvcon`, streaming stdout+stderr through a carry-over line
-    /// buffer so a chunk boundary can never split or drop a record
-    /// (#0021 §3, #0024). `onLine` fires once per complete line, in order,
-    /// synchronously from whichever thread is running the readability
-    /// handler at the time.
+    /// Runs `makemkvcon` via the shared `ProcessRunner` (#0009 §1), which
+    /// owns the drain-before-resume fix this function used to implement
+    /// itself. Kept as a thin wrapper — **exact same signature and return
+    /// value** — so `MakeMKVFallbackTests`' 45 tests, including the three
+    /// `runMakeMKV…` race regressions, prove the extraction preserved
+    /// behaviour by passing unmodified.
     ///
-    /// **The reader/termination race (2026-09-12 re-pass, review of
-    /// `e0a96f2`).** The previous shape resumed only from
-    /// `terminationHandler`, which called `readDataToEndOfFile()` there.
-    /// `readabilityHandler` runs on the pipe's own private queue;
-    /// `terminationHandler` runs on a separate, unrelated queue, and nothing
-    /// orders one against the other. If the readability handler had already
-    /// drained the pipe via `availableData` but was still splitting that
-    /// chunk into lines and appending them when termination was noticed,
-    /// `readDataToEndOfFile()` found nothing left to read (it had already
-    /// been read) and returned immediately, so the continuation resumed with
-    /// whatever the accumulator held *so far* — empty, or missing the
-    /// transcript's final lines. On a disc HandBrake had already failed on,
-    /// that made the fallback report `.noTitlesProduced` on a disc that had
-    /// titles, and made an expired key surface as a bare
-    /// `.toolExited(code: 253)` because `MSG:5021` never reached the
-    /// transcript the classifier reads.
+    /// `onLine` fires once per complete `makemkvcon` line; every one is also
+    /// appended to an unbounded `LineAccumulator`, because `MakeMKVRipper.rip`
+    /// needs the whole `info`/`mkv` transcript to parse titles and message
+    /// codes from after the process ends — never from a `var` mutated by
+    /// `ProcessRunner`'s reader while the process is still running.
     ///
-    /// **The fix.** There is exactly **one** reader: the readability
-    /// handler. Empty `availableData` *is* EOF — the child closed its end of
-    /// the pipe, normally because it exited — and the handler recognizes
-    /// that itself, unregisters, and records "reader done" through
-    /// `RunCompletionGate`. `terminationHandler` never touches the pipe; it
-    /// only records "process done," under the same lock. Whichever of the
-    /// two arrives **second** flushes the line splitter's trailing
-    /// carry-over and resumes the continuation — exactly once, and only
-    /// after both signals have been observed. Reading only ever happens
-    /// inside the readability handler as data becomes available, so a
-    /// transcript larger than the pipe's kernel buffer (~64KB;
-    /// `super-troopers-2-min0.txt` is 112KB) is drained incrementally rather
-    /// than deadlocking the child in `write` — the same fix #0013 made for
-    /// `LSDVDIdentity`, kept here.
-    ///
-    /// A watchdog kills the child if it never terminates within
-    /// `hangTimeout` — a defensive backstop against a genuinely hung
-    /// process. No fixture here approaches it; every stub exits in
-    /// milliseconds.
-    ///
-    /// `readerDelay` is a test-only seam (a no-op by default): a test can
-    /// insert a pause between capturing `availableData` and processing it,
-    /// reproducing the exact interleaving above deterministically, to prove
-    /// the new synchronization survives it regardless of timing — see
-    /// `MakeMKVFallbackTests`.
+    /// `hangTimeout` stays an **absolute** watchdog — unchanged 4 hours —
+    /// because `EncodeController`'s inactivity reasoning (#0009 §1) doesn't
+    /// apply here: `makemkvcon` is not believed to go silent for any
+    /// legitimate reason for anywhere near that long.
     nonisolated static func runMakeMKV(
         executablePath: String,
         arguments:      [String],
@@ -476,136 +445,27 @@ enum MakeMKVRipper {
         readerDelay:    @escaping () -> Void = {},
         onLine:         @escaping (String) -> Void = { _ in }
     ) async -> Result<(exitStatus: Int32, lines: [String]), JobFailure> {
-        await withCheckedContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: executablePath)
-            process.arguments = arguments
+        let accumulator = LineAccumulator()
 
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError  = pipe
-
-            let splitter = LineSplitter()
-            let accumulator = LineAccumulator()
-
-            let gate = RunCompletionGate { exitStatus in
-                let leftover = splitter.flush().trimmingCharacters(in: .whitespaces)
-                if !leftover.isEmpty {
-                    accumulator.append(leftover)
-                    onLine(leftover)
-                }
-                continuation.resume(returning: .success((exitStatus, accumulator.snapshot())))
-            }
-
-            func handle(_ data: Data) {
-                guard let text = String(data: data, encoding: .utf8) else { return }
-                for line in splitter.feed(text) {
-                    let trimmed = line.trimmingCharacters(in: .whitespaces)
-                    guard !trimmed.isEmpty else { continue }
-                    accumulator.append(trimmed)
-                    onLine(trimmed)
-                }
-            }
-
-            pipe.fileHandleForReading.readabilityHandler = { fh in
-                let data = fh.availableData
-                readerDelay()
-                guard !data.isEmpty else {
-                    // Empty availableData is EOF: the child closed its end
-                    // of the pipe. Stop firing and record "reader done."
-                    fh.readabilityHandler = nil
-                    gate.markReaderDone()
-                    return
-                }
-                handle(data)
-            }
-
-            let watchdog = DispatchWorkItem {
-                if process.isRunning {
-                    process.terminate()
-                }
-            }
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + hangTimeout, execute: watchdog)
-
-            process.terminationHandler = { proc in
-                watchdog.cancel()
-                gate.markProcessDone(exitStatus: proc.terminationStatus)
-            }
-
-            do {
-                try process.run()
-            } catch {
-                watchdog.cancel()
-                pipe.fileHandleForReading.readabilityHandler = nil
-                continuation.resume(returning: .failure(JobFailure(
-                    stage:  .rip,
-                    reason: .launchFailure(toolPath: executablePath, error: error)
-                )))
-            }
+        let result = await ProcessRunner.run(
+            executablePath: executablePath,
+            arguments:      arguments,
+            watchdog:       .absolute(hangTimeout),
+            readerDelay:    readerDelay
+        ) { line in
+            accumulator.append(line)
+            onLine(line)
         }
-    }
-}
 
-/// Fires its completion exactly once, only after **both**
-/// `markReaderDone()` and `markProcessDone(exitStatus:)` have been called —
-/// whichever call arrives second performs the firing. Locked because the
-/// two calls always happen from different threads (the readability
-/// handler's private queue vs. `Process`'s own termination-handler queue)
-/// with no ordering guarantee between them — that lack of ordering is
-/// exactly the race this type exists to close.
-nonisolated private final class RunCompletionGate: @unchecked Sendable {
-    private let lock = NSLock()
-    private var readerDone = false
-    private var processExitStatus: Int32?
-    private var fired = false
-    private let onReady: (Int32) -> Void
-
-    init(onReady: @escaping (Int32) -> Void) {
-        self.onReady = onReady
-    }
-
-    func markReaderDone() {
-        lock.lock()
-        readerDone = true
-        let status = processExitStatus
-        let shouldFire = !fired && status != nil
-        if shouldFire { fired = true }
-        lock.unlock()
-        if shouldFire, let status { onReady(status) }
-    }
-
-    func markProcessDone(exitStatus: Int32) {
-        lock.lock()
-        processExitStatus = exitStatus
-        let shouldFire = !fired && readerDone
-        if shouldFire { fired = true }
-        lock.unlock()
-        if shouldFire { onReady(exitStatus) }
-    }
-}
-
-/// Accumulates bytes across `Process` chunk callbacks into complete lines,
-/// keeping a partial trailing line as carry-over between calls. Locked
-/// because `readabilityHandler` fires on an arbitrary background thread.
-nonisolated private final class LineSplitter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var carry = ""
-
-    func feed(_ text: String) -> [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        carry += text
-        var parts = carry.components(separatedBy: "\n")
-        carry = parts.removeLast()
-        return parts
-    }
-
-    func flush() -> String {
-        lock.lock()
-        defer { lock.unlock() }
-        let remainder = carry
-        carry = ""
-        return remainder
+        switch result {
+        case .success(let termination):
+            return .success((termination.status, accumulator.snapshot()))
+        case .failure(let error):
+            return .failure(JobFailure(
+                stage:  .rip,
+                reason: .launchFailure(toolPath: executablePath, error: error)
+            ))
+        }
     }
 }
 

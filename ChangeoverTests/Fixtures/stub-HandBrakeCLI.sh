@@ -14,10 +14,22 @@
 #   EXIT_DIR_INPUT  — exit code when --input names a directory (a disc)
 #   EXIT_FILE_INPUT — exit code when --input names a file (a ripped .mkv)
 #   ARGV_LOG        — path to append this invocation's argv to, one line
+#
+# #0009 extends the same sidecar mechanism, backward-compatibly, for
+# ProcessRunnerTests/HandBrakeFailureClassifierTests:
+#   OUTPUT_FIXTURE  — a file to `cat` (raw bytes, unmodified) after the two
+#                     progress lines, for feeding a captured or synthetic
+#                     transcript through the real reader/drain path
+#   WRITE_OUTPUT    — 0 skips writing the placeholder `--output` file
+#                     (default 1, i.e. always write it, same as before)
+#   SLEEP_SECONDS   — sleep this long before exiting, for the inactivity
+#                     watchdog test
+#
 # With no "$0.conf" present, behavior is byte for byte what it always was —
 # EncodeControllerTests' STUB_EXIT keeps working unmodified, so it and
-# MakeMKVFallbackTests (which uses its own per-test copy + sidecar file) can
-# run concurrently under Swift Testing without racing a shared env var.
+# MakeMKVFallbackTests/ProcessRunnerTests (which use their own per-test copy +
+# sidecar file) can run concurrently under Swift Testing without racing a
+# shared env var.
 
 conf="$0.conf"
 using_conf=0
@@ -33,6 +45,10 @@ fi
 echo "Scanning title 1 of 1..."
 echo "Encoding: task 1 of 1, 50.00 %"
 
+if [ -n "$OUTPUT_FIXTURE" ] && [ -f "$OUTPUT_FIXTURE" ]; then
+    cat "$OUTPUT_FIXTURE"
+fi
+
 input=""
 output=""
 prev=""
@@ -46,8 +62,12 @@ for arg in "$@"; do
     prev="$arg"
 done
 
-if [ -n "$output" ]; then
+if [ -n "$output" ] && [ "${WRITE_OUTPUT:-1}" != "0" ]; then
     echo "stub encoded output" > "$output"
+fi
+
+if [ -n "$SLEEP_SECONDS" ]; then
+    sleep "$SLEEP_SECONDS"
 fi
 
 if [ "$using_conf" = "1" ]; then

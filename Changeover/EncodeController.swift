@@ -67,11 +67,26 @@ enum EncodeController {
     }
 
     /// Encodes straight from `source` (a disc's mount root, or a ripped
-    /// `.mkv` path) to `output` using HandBrakeCLI.
+    /// `.mkv` path) to `output` using HandBrakeCLI, via the shared
+    /// `ProcessRunner` (#0009 §1) — the same drain-before-resume fix
+    /// `MakeMKVRipper.runMakeMKV` uses, rather than a second hand-rolled copy
+    /// of it. Fixes three latent defects the old hand-rolled reader had: the
+    /// trailing-output race (HandBrake's last lines could miss `logTail`), no
+    /// carry-over between chunks (a line straddling a chunk boundary became
+    /// two unmatched fragments), and a chunk dropped whole when it split a
+    /// multi-byte UTF-8 character.
     ///
     /// Declared nonisolated so it runs on the cooperative thread pool, keeping
     /// MainActor free during encoding. All log calls are dispatched back to
     /// MainActor via Task so the caller's log closure can safely update UI state.
+    ///
+    /// `hangTimeout` and `readerDelay` are defaulted, internal parameters —
+    /// `DVDPipeline`'s two call sites don't change. `hangTimeout` is used as
+    /// an **inactivity** watchdog, not an absolute one: #0018 measured 40m06s
+    /// for the full *Dragon Tattoo* feature at x265 `slow` on an M1, and a
+    /// longer film on a slower Mac can legitimately exceed any absolute bound
+    /// worth setting. HandBrake prints progress several times a second, so 30
+    /// minutes of total silence on the pipe is a hang, not a slow encode.
     ///
     /// Returns the encoded MP4 on success, or a `JobFailure` naming the reason —
     /// a launch failure and a non-zero exit are distinct values, not both false.
@@ -80,94 +95,85 @@ enum EncodeController {
         title:         TitleSelection,
         output:        String,
         handbrakePath: String,
+        hangTimeout:   TimeInterval = 30 * 60,
+        readerDelay:   @escaping () -> Void = {},
         log:           @escaping @MainActor (String) -> Void
     ) async -> Result<URL, JobFailure> {
-        await withCheckedContinuation { continuation in
-            Task { @MainActor in log("▶ Starting HandBrakeCLI encode…") }
+        Task { @MainActor in log("▶ Starting HandBrakeCLI encode…") }
 
-            let tail = LogTailBuffer()
+        let tail = LogTailBuffer()
 
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: handbrakePath)
-            process.arguments = arguments(source: source, title: title, output: output)
+        // Create the output's parent directory at the moment of use —
+        // immediately before the child process launches, and the last thing
+        // that can fail before it does. This ordering is deliberate (#0014
+        // G2): it is what lets a test exercise both the directory-creation
+        // success path and a bogus `handbrakePath` with no HandBrake binary
+        // at all. Every path the app writes to is now created at the moment
+        // of use — `PlexOrganizer` already does the same for its destination
+        // folder.
+        let outputDir = (output as NSString).deletingLastPathComponent
+        do {
+            try FileManager.default.createDirectory(atPath: outputDir, withIntermediateDirectories: true)
+        } catch {
+            let msg = error.localizedDescription
+            Task { @MainActor in log("✗ Could not create output directory: \(msg)") }
+            return .failure(JobFailure(
+                stage:   .encode,
+                reason:  .destinationUnwritable(path: outputDir),
+                logTail: tail.snapshot()
+            ))
+        }
 
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError  = pipe
-
-            // readabilityHandler fires on a background thread — dispatch log to MainActor
-            pipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty,
-                      let text = String(data: data, encoding: .utf8) else { return }
-                for line in text.components(separatedBy: .newlines) {
-                    let trimmed = line.trimmingCharacters(in: .whitespaces)
-                    if !trimmed.isEmpty {
-                        tail.append(trimmed)
-                        Task { @MainActor in log(trimmed) }
-                        // Defensive, evidence-based visibility for G1: a wrong
-                        // main-feature pick costs a 20-40 minute encode with
-                        // no way to interrupt it (no `cancel()`, by design —
-                        // `JobController.swift`). A failure to parse must
-                        // never fail the job — it just means no extra line.
-                        if let selected = selectedTitle(fromLogLine: trimmed) {
-                            Task { @MainActor in log("▶ HandBrake selected title \(selected)") }
-                        }
-                    }
-                }
+        let result = await ProcessRunner.run(
+            executablePath: handbrakePath,
+            arguments:      arguments(source: source, title: title, output: output),
+            watchdog:       .inactivity(hangTimeout),
+            readerDelay:    readerDelay
+        ) { line in
+            tail.append(line)
+            Task { @MainActor in log(line) }
+            // Defensive, evidence-based visibility for G1: a wrong
+            // main-feature pick costs a 20-40 minute encode with no way to
+            // interrupt it (no `cancel()`, by design — `JobController.swift`).
+            // A failure to parse must never fail the job — it just means no
+            // extra line.
+            if let selected = selectedTitle(fromLogLine: line) {
+                Task { @MainActor in log("▶ HandBrake selected title \(selected)") }
             }
+        }
 
-            // terminationHandler fires on a background thread — dispatch log to MainActor.
-            // Exactly one resume happens here; the catch below only runs when
-            // process.run() threw, in which case terminationHandler never fires.
-            process.terminationHandler = { proc in
-                pipe.fileHandleForReading.readabilityHandler = nil
-                guard proc.terminationStatus == 0 else {
-                    let status = proc.terminationStatus
-                    Task { @MainActor in log("✗ HandBrakeCLI exited with status \(status)") }
-                    continuation.resume(returning: .failure(JobFailure(
-                        stage:   .encode,
-                        reason:  .toolExited(code: status),
-                        logTail: tail.snapshot()
-                    )))
-                    return
-                }
-                continuation.resume(returning: .success(URL(fileURLWithPath: output)))
+        switch result {
+        case .failure(let error):
+            let msg = error.localizedDescription
+            Task { @MainActor in log("✗ Failed to launch HandBrakeCLI: \(msg)") }
+            return .failure(JobFailure(
+                stage:   .encode,
+                reason:  .launchFailure(toolPath: handbrakePath, error: error),
+                logTail: tail.snapshot()
+            ))
+
+        case .success(let termination):
+            // The watchdog itself stopping the child is a runner fact, not a
+            // tool-reported signature — always reported, whatever #0009's
+            // classifier eventually confirms by capture (§2.1 tier 0).
+            if termination.timedOut {
+                let minutes = Int(hangTimeout / 60)
+                let reason = FailureReason.unknown(
+                    "HandBrakeCLI produced no output for \(minutes) minute\(minutes == 1 ? "" : "s") and was stopped"
+                )
+                Task { @MainActor in log("✗ HandBrakeCLI produced no output for \(minutes) minutes and was stopped") }
+                return .failure(JobFailure(stage: .encode, reason: reason, logTail: tail.snapshot()))
             }
-
-            // Create the output's parent directory at the moment of use —
-            // immediately before the child process launches, and the last
-            // thing that can fail before it does. This ordering is
-            // deliberate (#0014 G2): it is what lets a test exercise both the
-            // directory-creation success path and a bogus `handbrakePath`
-            // with no HandBrake binary at all. Every path the app writes to
-            // is now created at the moment of use — `PlexOrganizer` already
-            // does the same for its destination folder.
-            let outputDir = (output as NSString).deletingLastPathComponent
-            do {
-                try FileManager.default.createDirectory(atPath: outputDir, withIntermediateDirectories: true)
-            } catch {
-                let msg = error.localizedDescription
-                Task { @MainActor in log("✗ Could not create output directory: \(msg)") }
-                continuation.resume(returning: .failure(JobFailure(
+            guard termination.status == 0 else {
+                let status = termination.status
+                Task { @MainActor in log("✗ HandBrakeCLI exited with status \(status)") }
+                return .failure(JobFailure(
                     stage:   .encode,
-                    reason:  .destinationUnwritable(path: outputDir),
+                    reason:  .toolExited(code: status),
                     logTail: tail.snapshot()
-                )))
-                return
+                ))
             }
-
-            do {
-                try process.run()
-            } catch {
-                let msg = error.localizedDescription
-                Task { @MainActor in log("✗ Failed to launch HandBrakeCLI: \(msg)") }
-                continuation.resume(returning: .failure(JobFailure(
-                    stage:   .encode,
-                    reason:  .launchFailure(toolPath: handbrakePath, error: error),
-                    logTail: tail.snapshot()
-                )))
-            }
+            return .success(URL(fileURLWithPath: output))
         }
     }
 
