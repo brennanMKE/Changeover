@@ -6,9 +6,9 @@ import Observation
 /// Before this type existed, rip/encode progress lived as `@State` inside
 /// `MetadataEntryView`, so closing the window left the running `Task` writing
 /// into a view nobody could see — and a reopened window came up idle, happy to
-/// launch a second `makemkvcon` against the same drive. Job state now outlives
-/// every window: `AppDelegate` owns the controller and hands it to the hosted
-/// views through `.environment(_:)`.
+/// launch a second `HandBrakeCLI` against the same drive. Job state now
+/// outlives every window: `AppDelegate` owns the controller and hands it to
+/// the hosted views through `.environment(_:)`.
 ///
 /// A plain `final class`, deliberately **not** an `actor`:
 /// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` is set on this target, so the
@@ -16,17 +16,19 @@ import Observation
 /// the long-running work happens inside the `nonisolated` CLI controllers.
 ///
 /// There is intentionally **no `cancel()`**. Cancelling the Swift `Task` would
-/// not kill the child `makemkvcon` / `HandBrakeCLI` process — the rip would
-/// keep running with the UI claiming it had stopped. A real cancel needs
-/// `Process.terminate()` plumbed through `RipController` / `EncodeController`,
-/// which is out of scope here; shipping a button that lies is worse than
-/// shipping no button.
+/// not kill the child `HandBrakeCLI` process — the encode would keep running
+/// with the UI claiming it had stopped. A real cancel needs
+/// `Process.terminate()` plumbed through `EncodeController`, which is out of
+/// scope here; shipping a button that lies is worse than shipping no button.
 @Observable
 final class JobController {
 
     /// The unit of work a job performs, injectable so tests can drive the
     /// controller without `makemkvcon`, `HandBrakeCLI`, or a physical disc.
-    typealias Runner = @MainActor (MovieMetadata, AppSettings, @escaping @MainActor (String) -> Void) async -> JobOutcome
+    ///
+    /// The `URL` is the disc's mount root (#0014) — `start(metadata:settings:)`
+    /// refuses to run without one, so the runner never sees a nil disc.
+    typealias Runner = @MainActor (MovieMetadata, AppSettings, URL, @escaping @MainActor (String) -> Void) async -> JobOutcome
 
     /// Default cap on retained log lines. The log now outlives the window, so
     /// unbounded growth is a real leak rather than something the next view
@@ -63,9 +65,9 @@ final class JobController {
         self.runner = runner ?? JobController.pipelineRunner
     }
 
-    /// The production runner: the real rip → encode → move pipeline.
-    static let pipelineRunner: Runner = { metadata, settings, log in
-        await DVDPipeline(metadata: metadata, settings: settings, log: log).run()
+    /// The production runner: the real encode → move pipeline.
+    static let pipelineRunner: Runner = { metadata, settings, disc, log in
+        await DVDPipeline(metadata: metadata, settings: settings, disc: disc, log: log).run()
     }
 
     // MARK: - Status
@@ -83,13 +85,20 @@ final class JobController {
 
     /// Starts a job unless one is already running.
     ///
-    /// - Returns: `true` if the job was started, `false` if it was refused
-    ///   because another job is in flight. This is the app-level re-entrancy
-    ///   guard that per-view `isProcessing` could never provide.
+    /// - Returns: `true` if the job was started, `false` if it was refused —
+    ///   either because another job is in flight (the app-level re-entrancy
+    ///   guard that per-view `isProcessing` could never provide), or because
+    ///   no disc is mounted (#0014: the encode now reads the disc directly,
+    ///   so there is no job to start without one).
     @discardableResult
     func start(metadata: MovieMetadata, settings: AppSettings) -> Bool {
         guard !isRunning else {
             append("⚠︎ A job is already running — ignoring request to start \(metadata.folderName).")
+            return false
+        }
+
+        guard let disc = insertedDisc?.mountURL else {
+            append("⚠︎ No disc is mounted — insert a DVD before starting.")
             return false
         }
 
@@ -101,7 +110,7 @@ final class JobController {
 
         let run = runner
         task = Task { [weak self] in
-            let outcome = await run(metadata, settings) { line in
+            let outcome = await run(metadata, settings, disc) { line in
                 self?.append(line)
             }
             self?.finish(outcome)

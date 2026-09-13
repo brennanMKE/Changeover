@@ -23,7 +23,9 @@ final class AppSettings {
     /// e.g. /Volumes/MediaSSD/Plex Media/TV Shows
     var plexTVPath: String { "\(plexMediaRoot)/TV Shows" }
 
-    /// Temporary folder where makemkvcon writes the ripped .mkv
+    /// Fallback only — where the optional `makemkvcon` fallback (#0015)
+    /// writes its intermediate `.mkv`. Not used on the happy path since
+    /// #0014: HandBrakeCLI now encodes straight from the disc.
     var workingRipPath: String { "\(plexMediaRoot)/Working/ripping" }
 
     /// Temporary folder where HandBrakeCLI writes the encoded .mp4

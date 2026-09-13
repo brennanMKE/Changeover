@@ -1,0 +1,538 @@
+[17:10:45] Compile-time hardening features are enabled
+[17:10:45] hb_init: starting libhb thread
+[17:10:45] thread 16d8cb000 started ("libhb")
+HandBrake 1.11.2 (2026060700) - Darwin arm64 - https://handbrake.fr
+8 CPUs detected
+Opening /Volumes/Media/test-fixtures/dragon-tattoo...
+[17:10:45] OS: macOS 26.6.2 (25G83)
+[17:10:45] CPU: Apple M1
+[17:10:45]  - logical processor count: 8
+[17:10:45] hb_scan: path=/Volumes/Media/test-fixtures/dragon-tattoo, title_index=0
+disc.c:437: error opening file BDMV/index.bdmv
+disc.c:437: error opening file BDMV/BACKUP/index.bdmv
+[17:10:45] bd: not a bd - trying as a stream/file instead
+libdvdread: Couldn't find device name.
+libdvdnav: Can't read name block. Probably not a DVD-ROM device.
+libdvdread: Couldn't find device name.
+[17:10:45] scan: DVD has 5 title(s)
+[17:10:45] scan: scanning title 1
+[17:10:45] scan: duration is 02:37:58 (9478467 ms)
+[17:10:45] pgc_id: 1, pgn: 1: pgc: 0xaed1e5f40
+[17:10:45] scan: checking audio 1
+[17:10:45] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[17:10:45] scan: checking audio 2
+[17:10:45] scan: id=0x81bd, lang=English (AC3), 3cc=eng ext=0
+[17:10:45] scan: checking audio 3
+[17:10:45] scan: id=0x82bd, lang=English (AC3), 3cc=eng ext=0
+[17:10:45] scan: checking audio 4
+[17:10:45] scan: id=0x83bd, lang=Francais (AC3), 3cc=fra ext=0
+[17:10:45] scan: checking audio 5
+[17:10:45] scan: id=0x84bd, lang=English (AC3), 3cc=eng ext=0
+[17:10:45] scan: checking audio 6
+[17:10:45] scan: audio channel is not active
+[17:10:45] scan: checking audio 7
+[17:10:45] scan: audio channel is not active
+[17:10:45] scan: checking audio 8
+[17:10:45] scan: audio channel is not active
+[17:10:45] scan: checking subtitle 1
+[17:10:45] scan: id=0x20bd, lang=English (Wide Screen) [VOBSUB], 3cc=eng ext=0
+[17:10:45] scan: checking subtitle 2
+[17:10:45] scan: id=0x21bd, lang=English (Wide Screen) [VOBSUB], 3cc=eng ext=0
+[17:10:45] scan: checking subtitle 3
+[17:10:45] scan: id=0x22bd, lang=Francais (Wide Screen) [VOBSUB], 3cc=fra ext=0
+[17:10:45] scan: checking subtitle 4
+[17:10:45] scan: id=0x23bd, lang=español (Wide Screen) [VOBSUB], 3cc=spa ext=0
+[17:10:45] scan: checking subtitle 5
+[17:10:45] scan: id=0x24bd, lang=English (Wide Screen) [VOBSUB], 3cc=eng ext=0
+[17:10:45] scan: checking subtitle 6
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 7
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 8
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 9
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 10
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 11
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 12
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 13
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 14
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 15
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 16
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 17
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 18
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 19
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 20
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 21
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 22
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 23
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 24
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 25
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 26
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 27
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 28
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 29
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 30
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 31
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: checking subtitle 32
+[17:10:45] scan: subtitle channel is not active
+[17:10:45] scan: title 1 has 16 chapters
+[17:10:45] scan: chap 1, 593333 ms
+[17:10:45] scan: chap 2, 731033 ms
+[17:10:45] scan: chap 3, 378767 ms
+[17:10:45] scan: chap 4, 584667 ms
+[17:10:45] scan: chap 5, 589333 ms
+[17:10:45] scan: chap 6, 426900 ms
+[17:10:45] scan: chap 7, 358500 ms
+[17:10:45] scan: chap 8, 495333 ms
+[17:10:45] scan: chap 9, 410200 ms
+[17:10:45] scan: chap 10, 434633 ms
+[17:10:45] scan: chap 11, 561467 ms
+[17:10:45] scan: chap 12, 524800 ms
+[17:10:45] scan: chap 13, 1038166 ms
+[17:10:45] scan: chap 14, 947367 ms
+[17:10:45] scan: chap 15, 512800 ms
+[17:10:45] scan: chap 16, 891166 ms
+[17:10:45] scan: aspect = 16:9
+[17:10:45] scan: scanning title 2
+[17:10:45] scan: duration is 00:00:14 (14834 ms)
+[17:10:45] pgc_id: 1, pgn: 1: pgc: 0xaed1e5f40
+[17:10:45] scan: checking audio 1
+[17:10:45] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[17:10:45] scan: title 2 has 2 chapters
+[17:10:45] scan: chap 1, 13333 ms
+[17:10:45] scan: chap 2, 1500 ms
+[17:10:45] scan: aspect = 16:9
+[17:10:45] scan: scanning title 3
+[17:10:45] scan: duration is 00:00:09 (9500 ms)
+[17:10:45] scan: ignoring title (too short)
+[17:10:45] scan: scanning title 4
+[17:10:45] scan: duration is 00:00:15 (15800 ms)
+[17:10:45] pgc_id: 1, pgn: 1: pgc: 0xaed1e5f40
+[17:10:45] scan: title 4 has 1 chapters
+[17:10:45] scan: chap 1, 15800 ms
+[17:10:45] scan: aspect = 16:9
+[17:10:45] scan: scanning title 5
+[17:10:45] scan: duration is 00:00:29 (29000 ms)
+[17:10:45] pgc_id: 1, pgn: 1: pgc: 0xaed1e5f40
+[17:10:45] scan: title 5 has 2 chapters
+[17:10:45] scan: chap 1, 27333 ms
+[17:10:45] scan: chap 2, 1667 ms
+[17:10:45] scan: aspect = 16:9
+libdvdnav: Suspected RCE Region Protection!!!
+libdvdnav: Suspected RCE Region Protection!!!
+libdvdnav: Suspected RCE Region Protection!!!
+Scanning title 5 of 5, 50.00 %[17:10:46] scan: decoding previews for title 1
+[17:10:46] scan: title angle(s) 1
+[17:10:46] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=448000 English (AC3, 5.1 ch, 448 kbps)
+[17:10:46] scan: audio 0x82bd: ac3, rate=48000Hz, bitrate=448000 English (AC3, 5.1 ch, 448 kbps)
+[17:10:46] scan: audio 0x83bd: ac3, rate=48000Hz, bitrate=448000 Francais (AC3, 5.1 ch, 448 kbps)
+[17:10:46] scan: audio 0x81bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, Dolby Surround, 192 kbps)
+[17:10:46] scan: audio 0x84bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, Dolby Surround, 192 kbps)
+[17:10:46] using bitstream PAR 32:27
+[17:10:46] scan: 10 previews, 720x480, 23.976 fps, autocrop = 62/58/0/2, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[17:10:46] scan: decoding previews for title 2
+[17:10:46] scan: title angle(s) 1
+[17:10:46] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=448000 English (AC3, 5.1 ch, 448 kbps)
+[17:10:46] using bitstream PAR 32:27
+[17:10:46] scan: 10 previews, 720x480, 23.976 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[17:10:46] scan: decoding previews for title 4
+[17:10:46] scan: title angle(s) 1
+Scanning title 3 of 4, preview 4, 80.00 %[17:10:46] using bitstream PAR 32:27
+[17:10:46] scan: 10 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[17:10:46] scan: decoding previews for title 5
+[17:10:46] scan: title angle(s) 1
+[17:10:46] using bitstream PAR 32:27
+[17:10:46] scan: 10 previews, 720x480, 29.970 fps, autocrop = 94/94/154/156, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[17:10:46] libhb: scan thread found 4 valid title(s)
+Searching for main feature title...
+ + Title (0) index 1 has length 9478sec
+Found main feature title 1
++ Using preset: CLI Default
++ title 1:
+  + Main Feature
+  + index 1
+  + duration: 02:37:58
+  + size: 720x480, pixel aspect: 32/27, display aspect: 1.78, 23.976 fps
+  + autocrop: 62/58/0/2
+  + chapters:
+    + 1: duration 00:09:53
+    + 2: duration 00:12:11
+    + 3: duration 00:06:19
+    + 4: duration 00:09:45
+    + 5: duration 00:09:49
+    + 6: duration 00:07:07
+    + 7: duration 00:05:59
+    + 8: duration 00:08:15
+    + 9: duration 00:06:50
+    + 10: duration 00:07:15
+    + 11: duration 00:09:21
+    + 12: duration 00:08:45
+    + 13: duration 00:17:18
+    + 14: duration 00:15:47
+    + 15: duration 00:08:33
+    + 16: duration 00:14:51
+  + audio tracks:
+    + 1, English (AC3, 5.1 ch, 448 kbps) (iso639-2: eng), 48000Hz, 448000bps
+    + 2, English (AC3, 2.0 ch, Dolby Surround, 192 kbps) (iso639-2: eng), 48000Hz, 192000bps
+    + 3, English (AC3, 5.1 ch, 448 kbps) (iso639-2: eng), 48000Hz, 448000bps
+    + 4, Francais (AC3, 5.1 ch, 448 kbps) (iso639-2: fra), 48000Hz, 448000bps
+    + 5, English (AC3, 2.0 ch, Dolby Surround, 192 kbps) (iso639-2: eng), 48000Hz, 192000bps
+  + subtitle tracks:
+    + 1, English (Wide Screen) [VOBSUB]
+    + 2, English (Wide Screen) [VOBSUB]
+    + 3, Francais (Wide Screen) [VOBSUB]
+    + 4, español (Wide Screen) [VOBSUB]
+    + 5, English (Wide Screen) [VOBSUB]
+[17:10:46] Starting work at: Sat Sep 12 17:10:46 2026
+
+[17:10:46] 1 job(s) to process
+[17:10:46] json job:
+{
+    "Audio": {
+        "AudioList": [],
+        "CopyMask": [
+            "copy:aac",
+            "copy:ac3",
+            "copy:eac3",
+            "copy:dtshd",
+            "copy:dts",
+            "copy:mp3",
+            "copy:truehd",
+            "copy:flac"
+        ],
+        "FallbackEncoder": "ca_aac"
+    },
+    "Destination": {
+        "AlignAVStart": false,
+        "ChapterList": [
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 9,
+                    "Seconds": 53,
+                    "Ticks": 53399970
+                },
+                "Name": "Chapter 1"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 12,
+                    "Seconds": 11,
+                    "Ticks": 65792970
+                },
+                "Name": "Chapter 2"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 6,
+                    "Seconds": 19,
+                    "Ticks": 34089030
+                },
+                "Name": "Chapter 3"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 9,
+                    "Seconds": 45,
+                    "Ticks": 52620030
+                },
+                "Name": "Chapter 4"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 9,
+                    "Seconds": 49,
+                    "Ticks": 53039970
+                },
+                "Name": "Chapter 5"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 7,
+                    "Seconds": 7,
+                    "Ticks": 38421000
+                },
+                "Name": "Chapter 6"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 5,
+                    "Seconds": 59,
+                    "Ticks": 32265000
+                },
+                "Name": "Chapter 7"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 8,
+                    "Seconds": 15,
+                    "Ticks": 44579970
+                },
+                "Name": "Chapter 8"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 6,
+                    "Seconds": 50,
+                    "Ticks": 36918000
+                },
+                "Name": "Chapter 9"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 7,
+                    "Seconds": 15,
+                    "Ticks": 39116970
+                },
+                "Name": "Chapter 10"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 9,
+                    "Seconds": 21,
+                    "Ticks": 50532030
+                },
+                "Name": "Chapter 11"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 8,
+                    "Seconds": 45,
+                    "Ticks": 47232000
+                },
+                "Name": "Chapter 12"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 17,
+                    "Seconds": 18,
+                    "Ticks": 93434940
+                },
+                "Name": "Chapter 13"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 15,
+                    "Seconds": 47,
+                    "Ticks": 85263030
+                },
+                "Name": "Chapter 14"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 8,
+                    "Seconds": 33,
+                    "Ticks": 46152000
+                },
+                "Name": "Chapter 15"
+            },
+            {
+                "Duration": {
+                    "Hours": 0,
+                    "Minutes": 14,
+                    "Seconds": 51,
+                    "Ticks": 80204940
+                },
+                "Name": "Chapter 16"
+            }
+        ],
+        "ChapterMarkers": true,
+        "File": "/tmp/mainfeature-probe.mp4",
+        "InlineParameterSets": false,
+        "Mux": "m4v",
+        "Options": {
+            "IpodAtom": false,
+            "Optimize": false
+        }
+    },
+    "Filters": {
+        "FilterList": [
+            {
+                "ID": 11,
+                "Settings": {
+                    "mode": 0
+                }
+            },
+            {
+                "ID": 20,
+                "Settings": {
+                    "crop-bottom": 58,
+                    "crop-left": 0,
+                    "crop-right": 2,
+                    "crop-top": 62,
+                    "height": 360,
+                    "width": 718
+                }
+            }
+        ]
+    },
+    "Metadata": {},
+    "PAR": {
+        "Den": 27,
+        "Num": 32
+    },
+    "SequenceID": 0,
+    "Source": {
+        "Angle": 0,
+        "HWDecode": 0,
+        "KeepDuplicateTitles": false,
+        "Path": "/Volumes/Media/test-fixtures/dragon-tattoo",
+        "Range": {
+            "End": 450000,
+            "Type": "time"
+        },
+        "Title": 1
+    },
+    "Subtitle": {
+        "Search": {
+            "Burn": true,
+            "Default": false,
+            "Enable": false,
+            "Forced": false
+        },
+        "SubtitleList": []
+    },
+    "Video": {
+        "AdapterIndex": -1,
+        "AsyncDepth": 0,
+        "ChromaLocation": 1,
+        "ColorInputFormat": 0,
+        "ColorMatrix": 6,
+        "ColorOutputFormat": 0,
+        "ColorPrimaries": 6,
+        "ColorRange": 1,
+        "ColorTransfer": 1,
+        "Encoder": "x264",
+        "HardwareDecode": 0,
+        "Level": "auto",
+        "MultiPass": false,
+        "Options": "",
+        "PasshtruHDRDynamicMetadata": 6,
+        "Preset": "medium",
+        "Profile": "auto",
+        "Quality": 22.0,
+        "Tune": "",
+        "Turbo": false
+    }
+}
+[17:10:46] Starting Task: Encoding Pass
+[17:10:46] job configuration:
+[17:10:46]  * source
+[17:10:46]    + /Volumes/Media/test-fixtures/dragon-tattoo
+[17:10:46]    + title 1, start 00:00:00.00 stop 00:00:05.00
+[17:10:46]  * destination
+[17:10:46]    + /tmp/mainfeature-probe.mp4
+[17:10:46]    + container: MPEG-4 (libavformat)
+[17:10:46]      + chapter markers
+[17:10:46]  * video track
+[17:10:46]    + decoder: mpeg2video 8-bit (yuv420p)
+[17:10:46]      + bitrate 200 kbps
+[17:10:46]    + filters
+[17:10:46]      + Framerate Shaper (mode=0)
+[17:10:46]        + frame rate: same as source (around 23.976 fps)
+[17:10:46]      + Crop and Scale (width=718:height=360:crop-top=62:crop-bottom=58:crop-left=0:crop-right=2)
+[17:10:46]        + source: 720 * 480, crop (62/58/0/2): 718 * 360, scale: 718 * 360
+[17:10:46]    + Output geometry
+[17:10:46]      + storage dimensions: 718 x 360
+[17:10:46]      + pixel aspect ratio: 32 : 27
+[17:10:46]      + display dimensions: 850 x 360
+[17:10:46]    + encoder: H.264 (libx264)
+[17:10:46]      + preset:  medium
+[17:10:46]      + profile: auto
+[17:10:46]      + level:   auto
+[17:10:46]      + quality: 22.00 (RF)
+[17:10:46]      + color profile: 6-1-6
+[17:10:46]      + color range: tv
+[17:10:46]      + chroma location: left
+libdvdread: Couldn't find device name.
+libdvdnav: Can't read name block. Probably not a DVD-ROM device.
+libdvdread: Couldn't find device name.
+[17:10:46] sync: expecting 143 video frames
+[17:10:46] encx264: min-keyint: 24, keyint: 240
+[17:10:46] encx264: encoding at constant RF 22.000000
+x264 [info]: using SAR=32/27
+x264 [info]: using cpu capabilities: ARMv8 NEON DotProd
+x264 [info]: profile High, level 3.0, 4:2:0, 8-bit
+[17:10:46] sync: first pts video is 0
+[17:10:46] sync: "Chapter 1" (1) at frame 1 time 0
+[17:10:46] sync: reached video pts 450450, exiting early
+[17:10:47] work: average encoding speed for job is 0.000000 fps
+libdvdnav: vm: dvd_read_name failed
+libdvdnav: DVD disk reports itself with Region mask 0x00fe0000. Regions: 01
+libdvdnav: DVD disk reports itself with Region mask 0x00fe0000. Regions: 01
+libdvdnav: DVD disk reports itself with Region mask 0x00fe0000. Regions: 01
+libdvdnav: DVD disk reports itself with Region mask 0x00fe0000. Regions: 01
+libdvdnav: DVD disk reports itself with Region mask 0x00fe0000. Regions: 01
+libdvdnav: DVD disk reports itself with Region mask 0x00fe0000. Regions: 01
+libdvdnav: vm: dvd_read_name failed
+libdvdnav: DVD disk reports itself with Region mask 0x00fe0000. Regions: 01
+libdvdnav: DVD disk reports itself with Region mask 0x00fe0000. Regions: 01
+Encoding: task 1 of 1, 83.22 %[17:10:47] vfr: 120 frames output, 0 dropped
+[17:10:47] vfr: lost time: 0 (0 frames)
+[17:10:47] vfr: gained time: 0 (0 frames) (0 not accounted for)
+[17:10:47] mpeg2video-decoder done: 571 frames, 0 decoder errors
+[17:10:47] sync: got 120 frames, 143 expected
+[17:10:47] sync: framerate min 23.976 fps, max 23.976 fps, avg 23.976 fps
+x264 [info]: frame I:2     Avg QP:10.91  size:  3314
+x264 [info]: frame P:38    Avg QP:16.56  size:  3000
+x264 [info]: frame B:80    Avg QP:17.87  size:   199
+x264 [info]: consecutive B-frames:  8.3%  5.0% 10.0% 76.7%
+x264 [info]: mb I  I16..4: 64.6% 30.4%  5.0%
+x264 [info]: mb P  I16..4:  2.2%  3.2%  0.3%  P16..4: 22.0%  9.6%  6.8%  0.0%  0.0%    skip:56.0%
+x264 [info]: mb B  I16..4:  0.2%  0.0%  0.0%  B16..8: 13.4%  0.1%  0.0%  direct: 0.6%  skip:85.7%  L0:31.4% L1:65.9% BI: 2.7%
+x264 [info]: 8x8 transform intra:42.9% inter:70.3%
+x264 [info]: coded y,uvDC,uvAC intra: 22.7% 24.3% 7.7% inter: 5.5% 7.6% 0.6%
+x264 [info]: i16 v,h,dc,p: 54% 26%  9% 11%
+x264 [info]: i8 v,h,dc,ddl,ddr,vr,hd,vl,hu: 20% 25% 32%  4%  4%  3%  5%  3%  4%
+x264 [info]: i4 v,h,dc,ddl,ddr,vr,hd,vl,hu: 24% 29% 25%  4%  5%  4%  5%  3%  3%
+x264 [info]: i8c dc,h,v,p: 75% 16%  7%  2%
+x264 [info]: Weighted P-Frames: Y:15.8% UV:15.8%
+x264 [info]: ref P L0: 72.7% 15.4%  9.2%  2.7%  0.0%
+x264 [info]: ref B L0: 95.8%  3.3%  0.9%
+x264 [info]: ref B L1: 97.6%  2.4%
+x264 [info]: kb/s:218.27
+[17:10:47] mux: track 0, 120 frames, 136459 bytes, 218.12 kbps, fifo 128
+[17:10:47] Finished work at: Sat Sep 12 17:10:47 2026
+
+[17:10:47] libhb: work result = 0
+
+Encode done!
+HandBrake has exited.
+

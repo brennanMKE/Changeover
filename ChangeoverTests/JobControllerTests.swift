@@ -28,6 +28,13 @@ struct JobControllerTests {
     private static let destination = URL(fileURLWithPath:
         "/Volumes/Plex/Movies/Blade Runner (1982) {tmdb-78}/Blade Runner (1982).mp4")
 
+    /// #0014: `start` refuses to run without a mounted disc, so every test
+    /// that drives a job through `start` needs one set first.
+    private static let testDisc = DiscInsertion(
+        mountURL: URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
+        deviceNode: "disk6",
+        discID: "ceaaceba983071d9a7e28fd6107947b7")
+
     /// A one-shot latch. `open()` before `wait()` is fine — the waiter returns
     /// immediately — so tests don't depend on who gets there first.
     @MainActor
@@ -70,11 +77,12 @@ struct JobControllerTests {
     // MARK: - Outcome is stored on the controller
 
     @Test func succeededOutcomeIsStoredWhenTheJobFinishes() async throws {
-        let controller = JobController(runner: { _, _, log in
+        let controller = JobController(runner: { _, _, _, log in
             log("▶ ripping")
             log("✓ done")
             return .succeeded(destination: Self.destination)
         })
+        controller.insertedDisc = Self.testDisc
 
         #expect(controller.lastOutcome == nil)
         #expect(controller.start(metadata: try Self.metadata(), settings: AppSettings()))
@@ -90,7 +98,8 @@ struct JobControllerTests {
         let failure = JobFailure(stage: .rip,
                                  reason: .toolExited(code: 253),
                                  logTail: ["makemkvcon: bad disc"])
-        let controller = JobController(runner: { _, _, _ in .failed(failure) })
+        let controller = JobController(runner: { _, _, _, _ in .failed(failure) })
+        controller.insertedDisc = Self.testDisc
 
         controller.start(metadata: try Self.metadata(), settings: AppSettings())
         try await waitUntilIdle(controller)
@@ -110,12 +119,13 @@ struct JobControllerTests {
     @Test func secondStartWhileRunningIsRefused() async throws {
         let gate = Gate()
         let runs = RunLog()
-        let controller = JobController(runner: { metadata, _, log in
+        let controller = JobController(runner: { metadata, _, _, log in
             runs.record(metadata)
             log("▶ started \(metadata.title)")
             await gate.wait()
             return .succeeded(destination: Self.destination)
         })
+        controller.insertedDisc = Self.testDisc
 
         let first = try Self.metadata()
         let second = try Self.metadata(id: 50456, title: "Hanna", releaseDate: "2011-03-08")
@@ -148,13 +158,14 @@ struct JobControllerTests {
     @Test func jobKeepsRunningAfterTheStartingScopeGoesAway() async throws {
         let gate = Gate()
         let started = Gate()
-        let controller = JobController(runner: { _, _, log in
+        let controller = JobController(runner: { _, _, _, log in
             log("▶ line 1")
             started.open()
             await gate.wait()
             log("✓ line 2")
             return .succeeded(destination: Self.destination)
         })
+        controller.insertedDisc = Self.testDisc
 
         // Start from a scope that returns immediately, holding nothing.
         func transientCaller() throws {
@@ -175,10 +186,11 @@ struct JobControllerTests {
     // MARK: - Bounded log
 
     @Test func logLinesAreBoundedToTheConfiguredCap() async throws {
-        let controller = JobController(maxLogLines: 5, runner: { _, _, log in
+        let controller = JobController(maxLogLines: 5, runner: { _, _, _, log in
             for index in 1...50 { log("line \(index)") }
             return .succeeded(destination: Self.destination)
         })
+        controller.insertedDisc = Self.testDisc
 
         controller.start(metadata: try Self.metadata(), settings: AppSettings())
         try await waitUntilIdle(controller)
@@ -195,10 +207,11 @@ struct JobControllerTests {
 
     @Test func logIsClearedAtTheStartOfEachJob() async throws {
         var lineToLog = "first job"
-        let controller = JobController(runner: { _, _, log in
+        let controller = JobController(runner: { _, _, _, log in
             log(lineToLog)
             return .succeeded(destination: Self.destination)
         })
+        controller.insertedDisc = Self.testDisc
 
         controller.start(metadata: try Self.metadata(), settings: AppSettings())
         try await waitUntilIdle(controller)
@@ -214,9 +227,10 @@ struct JobControllerTests {
     // MARK: - Job id (input to #0003)
 
     @Test func eachJobGetsAFreshFilesystemSafeID() async throws {
-        let controller = JobController(runner: { _, _, _ in
+        let controller = JobController(runner: { _, _, _, _ in
             .succeeded(destination: Self.destination)
         })
+        controller.insertedDisc = Self.testDisc
 
         #expect(controller.currentJobID == nil)
         controller.start(metadata: try Self.metadata(), settings: AppSettings())
@@ -254,11 +268,12 @@ struct JobControllerTests {
     @Test func statusDescriptionReportsTheRunningJob() async throws {
         let gate = Gate()
         let started = Gate()
-        let controller = JobController(runner: { _, _, _ in
+        let controller = JobController(runner: { _, _, _, _ in
             started.open()
             await gate.wait()
             return .succeeded(destination: Self.destination)
         })
+        controller.insertedDisc = Self.testDisc
 
         #expect(controller.statusDescription == "Idle — insert a DVD to begin")
 
@@ -269,6 +284,48 @@ struct JobControllerTests {
         gate.open()
         try await waitUntilIdle(controller)
         #expect(controller.statusDescription == "Idle — insert a DVD to begin")
+    }
+
+    // MARK: - Disc required (#0014)
+
+    /// The encode now reads the disc directly, so `start` forwards
+    /// `insertedDisc.mountURL` into the runner as its third parameter.
+    @Test func startForwardsTheInsertedDiscToTheRunner() async throws {
+        final class DiscLog {
+            private(set) var discs: [URL] = []
+            func record(_ disc: URL) { discs.append(disc) }
+        }
+        let discLog = DiscLog()
+        let controller = JobController(runner: { _, _, disc, _ in
+            discLog.record(disc)
+            return .succeeded(destination: Self.destination)
+        })
+        controller.insertedDisc = Self.testDisc
+
+        #expect(controller.start(metadata: try Self.metadata(), settings: AppSettings()) == true)
+        try await waitUntilIdle(controller)
+
+        #expect(discLog.discs == [Self.testDisc.mountURL])
+    }
+
+    /// With no disc mounted, `start` refuses exactly like the re-entrancy
+    /// guard does — same `Bool` contract, and the reason is visible in the log.
+    @Test func startRefusesWithNoDiscMounted() async throws {
+        final class RunLog {
+            private(set) var count = 0
+            func record() { count += 1 }
+        }
+        let runs = RunLog()
+        let controller = JobController(runner: { _, _, _, _ in
+            runs.record()
+            return .succeeded(destination: Self.destination)
+        })
+
+        #expect(controller.insertedDisc == nil)
+        #expect(controller.start(metadata: try Self.metadata(), settings: AppSettings()) == false)
+        #expect(controller.isRunning == false)
+        #expect(runs.count == 0)
+        #expect(controller.logLines.contains { $0.contains("No disc is mounted") })
     }
 }
 

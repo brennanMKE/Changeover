@@ -1,9 +1,10 @@
 import Foundation
 
 // Plain value types describing how a job ended. They are constructed inside
-// `nonisolated static` functions (RipController, EncodeController,
-// PlexOrganizer) and read on MainActor, so every type here is explicitly
-// `nonisolated` and `Sendable` — the module default isolation is MainActor.
+// `nonisolated static` functions (EncodeController, PlexOrganizer, and
+// #0015's fallback ripper) and read on MainActor, so every type here is
+// explicitly `nonisolated` and `Sendable` — the module default isolation is
+// MainActor.
 //
 // Deliberately free of presentation: turning a `FailureReason` into a sentence
 // a person reads is #0009's job and needs to be separately testable. Nothing
@@ -14,6 +15,12 @@ import Foundation
 /// The pipeline stage a job reached.
 nonisolated enum JobStage: String, Codable, Sendable {
     case preflight
+    /// Not produced on the happy path since #0014 removed the rip stage —
+    /// HandBrakeCLI now encodes straight from the disc. Kept for #0015's
+    /// MakeMKV fallback, which reports this stage days later, and because
+    /// `FailureReason`/`JobStage` decoding throws on an unknown case key
+    /// (#0007's review), so removing it would be a breaking change for a
+    /// wire decoder (#0060) that has not shipped yet.
     case rip
     case encode
     case organize
@@ -31,7 +38,9 @@ nonisolated enum FailureReason: Codable, Sendable, Equatable {
     case toolLaunchFailed(String)
     /// The tool ran and exited non-zero.
     case toolExited(code: Int32)
-    /// The rip completed but produced no usable title.
+    /// The rip completed but produced no usable title. Not produced on the
+    /// happy path since #0014; kept for #0015's MakeMKV fallback, which
+    /// still needs it.
     case noTitlesProduced
     /// The destination folder could not be created or written to.
     case destinationUnwritable(path: String)
