@@ -1030,4 +1030,95 @@ struct MakeMKVFallbackTests {
         #expect(failure.fallback == nil)
         #expect(!FileManager.default.fileExists(atPath: makemkvArgvLog))
     }
+
+    // MARK: - #0009 §6 tests 14–15: the classifier's reasons drive the fallback
+
+    /// A classified disc-shaped failure (`.discUnreadable`, via the
+    /// confirmed `readError` signature) still falls back — here to an
+    /// unavailable `makemkvcon`, so the presenter's "no fallback was tried"
+    /// sentence must be in the log alongside its headline.
+    @Test func aClassifiedDiscShapedFailureStillFallsBack() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+
+        let handbrakeStub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: handbrakeStub, [
+            "OUTPUT_FIXTURE=\"\(Self.fixturePath("handbrake/synthetic-read-error-large.log"))\"",
+            "EXIT_DIR_INPUT=1",
+        ])
+        settings.handbrakePath = handbrakeStub
+        let missingMakemkvconPath = root.appendingPathComponent("no-such-makemkvcon").path
+        settings.makemkvconPath = missingMakemkvconPath
+
+        var logged: [String] = []
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            log:      { logged.append($0) }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .failed(let failure) = outcome else {
+            Issue.record("expected failure, got \(outcome)")
+            return
+        }
+        #expect(failure.reason == .discUnreadable)
+        #expect(failure.fallback == .unavailable(makemkvconPath: missingMakemkvconPath))
+        #expect(logged.contains { $0.contains("HandBrake couldn't read this disc.") })
+        #expect(logged.contains { $0.contains("MakeMKV isn't installed") && $0.contains("no fallback was tried") })
+    }
+
+    /// A classified **non-disc** failure (`.toolIncompatible`, via C1's
+    /// confirmed `unknown option` capture) must never fall back — the
+    /// makemkvcon stub's `ARGV_LOG` staying absent proves it. This is the
+    /// asymmetry #0009 §2.3 exists for: misclassifying a real bad disc *out*
+    /// of the fallback is the expensive error, so this is the one direction
+    /// a wrong classification would be caught immediately.
+    @Test func aClassifiedNonDiscFailureNeverFallsBack() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+
+        let handbrakeStub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: handbrakeStub, [
+            "OUTPUT_FIXTURE=\"\(Self.fixturePath("handbrake/failure-unrecognized-option-hb1.11.2-exit0.log"))\"",
+            "WRITE_OUTPUT=0",
+        ])
+        settings.handbrakePath = handbrakeStub
+
+        let makemkvStub = try Self.copyStub("stub-makemkvcon.sh", into: root)
+        let makemkvArgvLog = root.appendingPathComponent("mkv-argv.log").path
+        try Self.writeConf(forStubAt: makemkvStub, ["ARGV_LOG=\"\(makemkvArgvLog)\""])
+        settings.makemkvconPath = makemkvStub
+
+        let reliabilityURL = root.appendingPathComponent("reliability.jsonl")
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            log:      { _ in }
+        )
+        pipeline.reliabilityLogURL = reliabilityURL
+
+        let outcome = await pipeline.run()
+
+        guard case .failed(let failure) = outcome else {
+            Issue.record("expected failure, got \(outcome)")
+            return
+        }
+        #expect(failure.reason == .toolIncompatible(detail: "unknown option (--no-such-flag)"))
+        #expect(failure.fallback == nil)
+        #expect(!FileManager.default.fileExists(atPath: makemkvArgvLog))
+
+        let record = try Self.readLastJSONLine(at: reliabilityURL)
+        #expect(record.decision == "notEligible")
+    }
 }
