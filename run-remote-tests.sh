@@ -1,33 +1,34 @@
 #!/usr/bin/env zsh
 #
-# Run Changeover's unit tests on gordon and print a short summary.
+# Run Changeover's unit tests on another Mac over SSH and print a short summary.
 #
-#   ./test-on-gordon.sh                                  # sync, then run all of ChangeoverTests
-#   ./test-on-gordon.sh ProcessRunnerTests/runReturns    # sync, then run one test
-#   ./test-on-gordon.sh --no-sync ProcessRunnerTests/x   # run gordon's copy as-is (falsification)
-#   ./test-on-gordon.sh --sync-only                      # restore gordon's copy from this Mac
-#   ./test-on-gordon.sh --dry-run ProcessRunnerTests/x   # show the selectors, run nothing
+#   ./run-remote-tests.sh gordon                                # sync, then run all of ChangeoverTests
+#   ./run-remote-tests.sh gordon ProcessRunnerTests/someTest    # sync, then run one test
+#   ./run-remote-tests.sh gordon --no-sync ProcessRunnerTests/x # run the host's copy as-is (falsification)
+#   ./run-remote-tests.sh gordon --sync-only                    # restore the host's copy from this Mac
+#   ./run-remote-tests.sh gordon --dry-run ProcessRunnerTests/x # show what would run, run nothing
 #
-# Selectors may omit the "ChangeoverTests/" prefix and the trailing "()".
-# UI tests are refused. The full xcodebuild log is copied to
-# build/gordon-tests/ and never printed.
+# The first argument is the SSH host. The repo is synced to the same path
+# relative to $HOME on that host. Selectors may omit the "ChangeoverTests/"
+# prefix and the trailing "()". UI tests are refused. The full xcodebuild
+# log is copied to build/remote-tests/<host>/ and never printed.
 #
-# Exit status: 0 passed, 1 failed, 2 usage error or gordon busy, 124 timed out.
+# Exit status: 0 passed, 1 failed, 2 usage error or host busy, 124 timed out.
 #
-# Environment: GORDON_HOST (default gordon), TEST_TIMEOUT seconds (default 1500).
+# Environment: TEST_TIMEOUT seconds (default 1500).
 
 set -euo pipefail
 
-HOST="${GORDON_HOST:-gordon}"
-REMOTE_DIR="Developer/brennanMKE/Changeover"
 TIMEOUT="${TEST_TIMEOUT:-1500}"
-SCRIPT_NAME="test-on-gordon.sh"
+SCRIPT_NAME="${0:t}"
 
 # ---------------------------------------------------------------------------
-# Remote half: runs on gordon, invoked by the local half over ssh.
+# Remote half: runs on the test host, invoked by the local half over ssh.
+#   run-remote-tests.sh --remote <repo dir relative to $HOME> [selectors...]
 # ---------------------------------------------------------------------------
 if [[ "${1:-}" == "--remote" ]]; then
-    shift
+    REMOTE_DIR="$2"
+    shift 2
     cd ~/"$REMOTE_DIR"
 
     LOCK=/tmp/changeover-tests.lock
@@ -124,7 +125,22 @@ fi
 # ---------------------------------------------------------------------------
 # Local half: runs on the development Mac.
 # ---------------------------------------------------------------------------
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; }
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then usage; exit 0; fi
+if [[ -z "${1:-}" || "$1" == -* ]]; then
+    echo "Usage: $SCRIPT_NAME <ssh-host> [--no-sync|--sync-only|--dry-run] [Suite/test ...]" >&2
+    exit 2
+fi
+HOST="$1"
+shift
+
 REPO="${0:A:h}"
+if [[ "$REPO" != "$HOME"/* ]]; then
+    echo "The repo must live under \$HOME so it maps to the same path on $HOST." >&2
+    exit 2
+fi
+REMOTE_DIR="${REPO#$HOME/}"
 cd "$REPO"
 
 SYNC=1
@@ -136,15 +152,14 @@ for arg in "$@"; do
         --no-sync)   SYNC=0 ;;
         --sync-only) RUN=0 ;;
         --dry-run)   DRY=1 ;;
-        -h|--help)   sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)   usage; exit 0 ;;
         -*)          echo "Unknown option: $arg" >&2; exit 2 ;;
         *)
             if [[ "$arg" == *UITests* ]]; then
                 echo "Refusing: UI tests never run on a physical Mac (see CLAUDE.md)." >&2
                 exit 2
             fi
-            sel="${arg#ChangeoverTests/}"
-            sel="ChangeoverTests/$sel"
+            sel="ChangeoverTests/${arg#ChangeoverTests/}"
             # Suite/test selectors need the trailing () for Swift Testing.
             if [[ "$sel" == */*/* && "$sel" != *\) ]]; then
                 sel="$sel()"
@@ -157,6 +172,7 @@ done
 if (( DRY )); then
     print -r -- "host:      $HOST:~/$REMOTE_DIR"
     print -r -- "sync:      $([[ $SYNC == 1 ]] && echo yes || echo no)"
+    print -r -- "run:       $([[ $RUN == 1 ]] && echo yes || echo no)"
     if (( ${#selectors} )); then
         for sel in "${selectors[@]}"; do print -r -- "selector:  -only-testing:$sel"; done
     else
@@ -173,17 +189,17 @@ fi
 (( RUN )) || exit 0
 
 set +e
-OUTPUT=$(ssh -n "$HOST" "zsh ~/$REMOTE_DIR/$SCRIPT_NAME --remote ${(j: :)${(q)selectors[@]}}" 2>&1)
+OUTPUT=$(ssh -n "$HOST" "zsh ~/${(q)REMOTE_DIR}/$SCRIPT_NAME --remote ${(q)REMOTE_DIR} ${(j: :)${(q)selectors[@]}}" 2>&1)
 CODE=$?
 set -e
 
-print -r -- "${OUTPUT%%$'\n'LOG=*}" | grep -v '^LOG=' || true
+print -r -- "$OUTPUT" | grep -v '^LOG=' || true
 
 REMOTE_LOG=$(print -r -- "$OUTPUT" | sed -n 's/^LOG=//p' | tail -n 1)
 if [[ -n "$REMOTE_LOG" ]]; then
-    mkdir -p build/gordon-tests
-    if scp -q "$HOST:$REMOTE_LOG" build/gordon-tests/ 2>/dev/null; then
-        echo "full log: build/gordon-tests/${REMOTE_LOG:t}"
+    mkdir -p "build/remote-tests/$HOST"
+    if scp -q "$HOST:$REMOTE_LOG" "build/remote-tests/$HOST/" 2>/dev/null; then
+        echo "full log: build/remote-tests/$HOST/${REMOTE_LOG:t}"
     fi
 fi
 exit "$CODE"

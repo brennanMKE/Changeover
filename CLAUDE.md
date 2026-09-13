@@ -22,18 +22,24 @@ xcodebuild -project Changeover.xcodeproj -scheme Changeover -destination 'platfo
 xcodebuild -project Changeover.xcodeproj -scheme Changeover -destination 'platform=macOS' test '-only-testing:ChangeoverTests/ChangeoverTests/example()'
 ```
 
-### Running tests on gordon: use `./test-on-gordon.sh`
+### Running tests on another Mac: use `./run-remote-tests.sh <host>`
 
-Unit tests run on the gordon Mac mini, never on the development Mac. Don't hand-type `rsync` and `ssh … xcodebuild`; the script does both and prints only a short summary: the result, test counts, up to 30 failure lines and any continuation-leak warnings. The full log is copied to `build/gordon-tests/`. Read it only when the summary isn't enough, and then with `grep`, not whole.
+Unit tests run on a separate Mac over SSH (currently `gordon`), never on the development Mac. Don't hand-type `rsync` and `ssh … xcodebuild`; the script does both. It syncs the repo to the same path under `$HOME` on the host.
+
+It prints only a short summary: the result, test counts, up to 30 failure lines and any continuation-leak warnings. The full log is copied to `build/remote-tests/<host>/`. Read it only when the summary isn't enough, and then with `grep`, not whole.
 
 ```bash
-./test-on-gordon.sh                                   # sync, run all of ChangeoverTests
-./test-on-gordon.sh ProcessRunnerTests/someTest       # sync, run one test ("ChangeoverTests/" and "()" added)
-./test-on-gordon.sh --no-sync ProcessRunnerTests/x    # falsification: run gordon's edited copy as-is
-./test-on-gordon.sh --sync-only                       # restore gordon's copy afterwards (never git checkout there)
+./run-remote-tests.sh gordon                                 # sync, run all of ChangeoverTests
+./run-remote-tests.sh gordon ProcessRunnerTests/someTest     # sync, run one test ("ChangeoverTests/" and "()" added)
+./run-remote-tests.sh gordon --no-sync ProcessRunnerTests/x  # falsification: run the host's edited copy as-is
+./run-remote-tests.sh gordon --sync-only                     # restore the host's copy afterwards (never git checkout there)
 ```
 
-It refuses UI test selectors, refuses to start while another `xcodebuild` is running on gordon, stops runs after `TEST_TIMEOUT` seconds (default 1500, exit 124), and reports a 0-test run as a failure.
+Built-in safeguards:
+- refuses UI test selectors;
+- refuses to start while another `xcodebuild` is running on the host;
+- stops runs after `TEST_TIMEOUT` seconds (default 1500, exit 124);
+- reports a 0-test run as a failure.
 
 > ⚠️ **Swift Testing selectors need the trailing `()`.** `-only-testing:ChangeoverTests/<Suite>/<test>` without it matches nothing, runs **0 tests**, and still prints `** TEST SUCCEEDED **` (verified 2026-09-12). Quote the argument, or the shell rejects the parentheses. Before trusting a targeted run, check the output names the test and reports a non-zero count, e.g. `✔ Test run with 1 test`.
 
