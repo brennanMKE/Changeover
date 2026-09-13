@@ -7,13 +7,15 @@ import Testing
 /// fake `PreflightProbes`; a handful of tests exercise the real filesystem
 /// probes and the real stub-driven `DVDPipeline` end to end.
 ///
-/// **No real HandBrakeCLI `--help` capture exists** (`issues/0008.md`'s plan
-/// calls this "H1") — joe was out of reach for this implementation pass —
-/// so `Preflight.capabilityCheckBlocks` ships `false` and every
-/// `.incompatible` verdict is exercised here as the warning it becomes, per
-/// the plan's own contingency for exactly this case (§4.3). Tests that need
-/// `.incompatible` to actually block pass `capabilityCheckBlocks: true`
-/// explicitly to `Preflight.handbrakeState(path:probes:capabilityCheckBlocks:)`.
+/// **A real HandBrakeCLI `--help` capture exists**: H1
+/// (`ChangeoverTests/Fixtures/handbrake/help-hb1.11.2-exit0.txt`, HandBrakeCLI
+/// 1.11.2 on joe, `issues/0008.md`'s plan §4.3/§8) — so
+/// `Preflight.capabilityCheckBlocks` ships `true`, backed by
+/// `capabilityIsCompatibleAgainstTheRealCaptureH1` and its two removal
+/// variants below. A handful of earlier tests still pass
+/// `capabilityCheckBlocks:` explicitly to
+/// `Preflight.handbrakeState(path:probes:capabilityCheckBlocks:)` to exercise
+/// *both* values of the flag directly, regardless of which one ships.
 struct PreflightTests {
 
     // MARK: - Helpers
@@ -577,6 +579,65 @@ struct PreflightTests {
         #expect(report.blockers.contains(.diskFull))
     }
 
+    // MARK: - 10b. Preflight.resolveCapacity — review fix 1 (network volumes)
+
+    /// The confirmed bug: an SMB mount's important-usage key reads `0`, not
+    /// `nil`, while the plain key reads a real 5.7 TB. Must use the plain
+    /// reading, not block.
+    @Test func resolveCapacityFallsBackToPlainWhenImportantIsZero() {
+        let fiveSevenTB: Int64 = 5_722_004_889_600
+        #expect(Preflight.resolveCapacity(important: 0, plain: fiveSevenTB) == fiveSevenTB)
+    }
+
+    /// A normal local volume: the important-usage key reads a real, lower
+    /// number (it backs off for purgeable space) — prefer it over the plain
+    /// key even though the plain key's number is different.
+    @Test func resolveCapacityPrefersImportantWhenItIsPositive() {
+        let important: Int64 = 200 * 1024 * 1024 * 1024
+        let plain: Int64     = 196 * 1024 * 1024 * 1024
+        #expect(Preflight.resolveCapacity(important: important, plain: plain) == important)
+    }
+
+    /// Both keys unreadable at all → unknown, never a blocker.
+    @Test func resolveCapacityIsNilWhenBothAreNil() {
+        #expect(Preflight.resolveCapacity(important: nil, plain: nil) == nil)
+    }
+
+    /// Both keys agree the volume is genuinely full: `0` blocks. Nothing
+    /// about the network-volume bug means "0 always means unknown" — a real
+    /// full disk must still refuse a job.
+    @Test func resolveCapacityBlocksWhenBothKeysAgreeItIsZero() {
+        #expect(Preflight.resolveCapacity(important: 0, plain: 0) == 0)
+    }
+
+    /// One key reads `0`, the other couldn't be read at all — one probe
+    /// failed, that's not the two keys agreeing the volume is full, so this
+    /// must be unknown, not a confirmed zero.
+    @Test func resolveCapacityIsNilWhenImportantIsZeroAndPlainIsUnreadable() {
+        #expect(Preflight.resolveCapacity(important: 0, plain: nil) == nil)
+    }
+
+    /// The mirror image of the above, for completeness — not in the
+    /// review's list verbatim, but the same reasoning applies symmetrically.
+    @Test func resolveCapacityIsNilWhenPlainIsZeroAndImportantIsUnreadable() {
+        #expect(Preflight.resolveCapacity(important: nil, plain: 0) == nil)
+    }
+
+    /// Integration: P6 still blocks a genuinely low reading that came from
+    /// the *plain* key (the network-volume fallback path), not just from
+    /// the important-usage key.
+    @Test func lowSpaceFromThePlainKeyFallbackStillBlocks() async {
+        // `Self.fakeProbes`' `capacity` fake stands in for
+        // `PreflightProbes.live.availableCapacity`, which already calls
+        // `resolveCapacity` internally — so this exercises `check(_:)`'s own
+        // threshold logic against a value shaped like the fallback path's
+        // output, not `resolveCapacity` a second time.
+        let probes = Self.fakeProbes(fileKind: { _ in .directory }, capacity: { _ in Preflight.resolveCapacity(important: 0, plain: 1 * 1024 * 1024 * 1024) })
+        let input = PreflightInput(handbrakePath: "", makemkvconPath: "", plexMediaRoot: "/root", plexMoviesPath: "/root/Movies", workingEncodePath: "/root/Working/encoding")
+        let report = await Preflight.check(input, probes: probes)
+        #expect(report.blockers.contains(.diskFull))
+    }
+
     // MARK: - 11. The optional tool never blocks
 
     @Test func optionalToolNeverBlocksInAnyState() async {
@@ -799,5 +860,105 @@ struct PreflightTests {
                 #expect(line.hasPrefix("⚠︎"))
             }
         }
+    }
+
+    // MARK: - Review fix 2: synchronous probes must never run on MainActor
+
+    /// Thread-safe recorder for the test below — `PreflightTests.swift`'s
+    /// review note: give it the same lock discipline `HelpLineAccumulator`
+    /// uses, since the probes it records from can run concurrently once
+    /// `check`/`handbrakeState` are correctly off the caller's actor.
+    private final class ThreadRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private(set) var onMainThread: [Bool] = []
+        func record() {
+            lock.lock()
+            onMainThread.append(Thread.isMainThread)
+            lock.unlock()
+        }
+    }
+
+    /// The permanent regression test for review fix 2. Marked `@MainActor`
+    /// deliberately: `ChangeoverTests` does not set
+    /// `SWIFT_DEFAULT_ACTOR_ISOLATION`, so a plain `@Test func` here starts
+    /// off the main thread already and could never catch this — the bug
+    /// only reproduces when the *caller* is MainActor, the way
+    /// `DVDPipeline.run()` (and `SettingsView`'s `.task(id:)`) really are.
+    /// Without `@concurrent` on `Preflight.check`, every entry below reads
+    /// `true`; this must read all `false`.
+    @MainActor
+    @Test func checkNeverRunsItsSynchronousProbesOnTheMainActor() async {
+        let recorder = ThreadRecorder()
+        let probes = PreflightProbes(
+            fileKind: { _ in
+                recorder.record()
+                return .directory
+            },
+            handbrakeHelp: { _ in .lines(Self.goodHelpLines()) },
+            probeWritable: { _ in
+                recorder.record()
+                return .writable
+            },
+            availableCapacity: { _ in
+                recorder.record()
+                return Preflight.minimumFreeBytes * 2
+            }
+        )
+        let input = PreflightInput(
+            handbrakePath:     "/x/HandBrakeCLI",
+            makemkvconPath:    "",
+            plexMediaRoot:     "/root",
+            plexMoviesPath:    "/root/Movies",
+            workingEncodePath: "/root/Working/encoding"
+        )
+
+        _ = await Preflight.check(input, probes: probes)
+
+        #expect(!recorder.onMainThread.isEmpty)
+        #expect(recorder.onMainThread.allSatisfy { $0 == false })
+    }
+
+    /// The same regression, for `handbrakeState` directly — this is the one
+    /// `SettingsView`'s `.task(id:)` calls straight from MainActor, with no
+    /// `check(_:)` in between.
+    @MainActor
+    @Test func handbrakeStateNeverRunsItsSynchronousProbesOnTheMainActor() async {
+        let recorder = ThreadRecorder()
+        let probes = PreflightProbes(
+            fileKind: { _ in
+                recorder.record()
+                return .file(executable: true)
+            },
+            handbrakeHelp: { _ in .lines(Self.goodHelpLines()) },
+            probeWritable: { _ in .writable },
+            availableCapacity: { _ in nil }
+        )
+
+        _ = await Preflight.handbrakeState(path: "/x/HandBrakeCLI", probes: probes)
+
+        #expect(!recorder.onMainThread.isEmpty)
+        #expect(recorder.onMainThread.allSatisfy { $0 == false })
+    }
+
+    // MARK: - Review fix 4: the --help probe must not merge stdout and stderr
+
+    private static let interleavedHelpStubPath: String = {
+        Self.fixturePath("stub-interleaved-help.sh")
+    }()
+
+    /// A required token (`--input`) split across two stdout writes with a
+    /// stderr write in between must still be found as a whole token — proof
+    /// that `runHelpProbe` reads stdout on its own pipe rather than merging
+    /// it with stderr the way `ProcessRunner.run` does for
+    /// `EncodeController`/`MakeMKVRipper`. Falsifying this (temporarily
+    /// pointing `process.standardError` at `stdoutPipe` in `runHelpProbe`)
+    /// must make it fail.
+    @Test func helpProbeFindsATokenSplitAcrossStdoutWritesWithStderrNoiseInBetween() async {
+        let result = await PreflightProbes.live.handbrakeHelp(Self.interleavedHelpStubPath)
+        guard case .lines(let lines) = result else {
+            Issue.record("expected .lines, got \(result)")
+            return
+        }
+        #expect(Preflight.capability(helpLines: lines) == .compatible)
     }
 }

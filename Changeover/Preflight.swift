@@ -150,20 +150,7 @@ nonisolated struct PreflightProbes: Sendable {
             return .file(executable: FileManager.default.isExecutableFile(atPath: path))
         },
         handbrakeHelp: { path in
-            let accumulator = HelpLineAccumulator()
-            let result = await ProcessRunner.run(
-                executablePath: path,
-                arguments:      ["--help"],
-                watchdog:       .absolute(Preflight.helpTimeout)
-            ) { line in
-                accumulator.append(line)
-            }
-            switch result {
-            case .success(let termination):
-                return termination.timedOut ? .timedOut : .lines(accumulator.snapshot())
-            case .failure(let error):
-                return .launchFailed(error.localizedDescription)
-            }
+            await runHelpProbe(executablePath: path, arguments: ["--help"], timeout: Preflight.helpTimeout)
         },
         probeWritable: { path in
             do {
@@ -186,12 +173,170 @@ nonisolated struct PreflightProbes: Sendable {
         },
         availableCapacity: { path in
             let url = URL(fileURLWithPath: path)
-            guard let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]) else {
+            guard let values = try? url.resourceValues(forKeys: [
+                .volumeAvailableCapacityForImportantUsageKey,
+                .volumeAvailableCapacityKey,
+            ]) else {
                 return nil
             }
-            return values.volumeAvailableCapacityForImportantUsage
+            return Preflight.resolveCapacity(
+                important: values.volumeAvailableCapacityForImportantUsage,
+                plain:     values.volumeAvailableCapacity.map { Int64($0) }
+            )
         }
     )
+}
+
+/// #0008 review fix 4: a dedicated, minimal two-pipe runner for the
+/// `--help` probe only — stdout is captured on its own pipe, stderr is
+/// drained on a second pipe and discarded, and the two byte streams are
+/// never merged onto one pipe the way `ProcessRunner.run` merges them for
+/// `EncodeController`/`MakeMKVRipper` (by design, for those: HandBrake's
+/// progress and makemkvcon's robot-mode messages are meant to interleave
+/// with the rest of that tool's output).
+///
+/// **Why this matters here specifically.** The real H1 capture
+/// (`ChangeoverTests/Fixtures/handbrake/help-hb1.11.2-exit0.txt`) shows
+/// libhb's own stderr logging (`HandBrake has exited.`) landing *inside*
+/// a stdout line when the two streams share one pipe — not "between two
+/// lines" (an earlier draft of `issues/0008.md`'s `## Gotchas` said this;
+/// it's wrong and is corrected there now): a byte-level merge can split a
+/// stdout token at any position a scheduling interleaving happens to land
+/// on, including mid-word. `--subtitle` becoming `--sub` + stderr noise +
+/// `title` was confirmed possible at common pipe-buffer-size boundaries.
+/// Nothing required by `requiredHelpTokens()` happened to land on such a
+/// boundary in the 1.11.2 capture, so today's `capabilityCheckBlocks = true`
+/// is safe — but a future HandBrake release reformatting its help text
+/// could put a required token there, and a byte-level split would make
+/// preflight see it as genuinely absent and block every job with a
+/// misleading "It's missing: …" until the parser was patched, which is
+/// exactly the false-positive #0008's asymmetry rule (§4.3) exists to
+/// prevent. Reading stdout on its own pipe removes the possibility
+/// entirely: no stderr byte can ever land inside a stdout token again,
+/// regardless of process scheduling or buffer sizes.
+///
+/// **Shape.** Modeled on `LSDVDIdentity.discID`'s proven concurrent-drain
+/// idea (read while the child runs, don't wait until it exits — a `--help`
+/// transcript is small, but the *principle*, avoiding a read-after-wait
+/// deadlock on a full pipe, applies regardless of size), reimplemented with
+/// `withCheckedContinuation` so it's a real suspension point rather than a
+/// thread-blocking wait: stdout's own EOF is the normal completion signal
+/// (there is no exit-status to wait for — `--help`'s exit code is ignored,
+/// §4.2), and a timeout is the abnormal one. Whichever fires first resumes
+/// the continuation exactly once, guarded by a lock because the two can
+/// race from different queues (the pipe's own reader queue vs.
+/// `DispatchQueue.global`'s timer). Deliberately simpler than
+/// `ProcessRunner`'s `RunCompletionGate`: that type joins *two* signals
+/// (reader EOF *and* process exit) because its callers need the exact exit
+/// status; this only ever needs one.
+nonisolated private func runHelpProbe(
+    executablePath: String,
+    arguments: [String],
+    timeout: TimeInterval
+) async -> HelpProbe {
+    await withCheckedContinuation { (continuation: CheckedContinuation<HelpProbe, Never>) in
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = arguments
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError  = stderrPipe
+
+        let accumulator = HelpLineAccumulator()
+        let splitter     = LineSplitter()
+        let gate         = HelpProbeResumeGate()
+
+        // A `@Sendable` closure, not a nested `func` — this runs from two
+        // different queues (the stdout pipe's own reader queue, and
+        // `DispatchQueue.global`'s timer queue). `gate` owns the watchdog
+        // reference too, so nothing here is a captured `var` shared across
+        // those queues without its own lock.
+        let finish: @Sendable (HelpProbe) -> Void = { result in
+            guard gate.claim() else { return }
+            stdoutPipe.fileHandleForReading.readabilityHandler = nil
+            stderrPipe.fileHandleForReading.readabilityHandler = nil
+            try? stdoutPipe.fileHandleForReading.close()
+            try? stderrPipe.fileHandleForReading.close()
+            continuation.resume(returning: result)
+        }
+
+        stdoutPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else {
+                // EOF: the child closed its stdout — normally because it
+                // exited. This is the only signal this probe needs.
+                handle.readabilityHandler = nil
+                let leftover = splitter.flush().trimmingCharacters(in: .whitespaces)
+                if !leftover.isEmpty { accumulator.append(leftover) }
+                finish(.lines(accumulator.snapshot()))
+                return
+            }
+            for line in splitter.feed(data) {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty else { continue }
+                accumulator.append(trimmed)
+            }
+        }
+
+        // Drained and discarded — never merged onto stdout's byte stream,
+        // and never left unread: an unread, full stderr pipe would block
+        // the child in `write()` forever if it ever wrote enough to fill
+        // the kernel buffer, turning a probe into a hang.
+        stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+            if handle.availableData.isEmpty {
+                handle.readabilityHandler = nil
+            }
+        }
+
+        do {
+            try process.run()
+        } catch {
+            finish(.launchFailed(error.localizedDescription))
+            return
+        }
+
+        let item = DispatchWorkItem { [process] in
+            if process.isRunning {
+                process.terminate()
+            }
+            finish(.timedOut)
+        }
+        gate.setWatchdog(item)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout, execute: item)
+    }
+}
+
+/// Guards `runHelpProbe`'s single resume against a race between its two
+/// possible completion signals — stdout's own EOF (the pipe's reader queue)
+/// and the timeout watchdog (`DispatchQueue.global`'s timer queue) — and
+/// owns the watchdog `DispatchWorkItem` reference so nothing in
+/// `runHelpProbe` is a bare mutable `var` captured across those queues.
+nonisolated private final class HelpProbeResumeGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var claimed = false
+    private var watchdog: DispatchWorkItem?
+
+    func setWatchdog(_ item: DispatchWorkItem) {
+        lock.lock()
+        watchdog = item
+        lock.unlock()
+    }
+
+    /// `true` for the first caller only. Cancels the watchdog inside the
+    /// same locked section, so "resumed from EOF" and "the watchdog fired"
+    /// can never both win.
+    func claim() -> Bool {
+        lock.lock()
+        let first = !claimed
+        if first { claimed = true }
+        let pending = watchdog
+        watchdog = nil
+        lock.unlock()
+        if first { pending?.cancel() }
+        return first
+    }
 }
 
 /// Thread-safe accumulation for `--help` output lines, capped so a
@@ -302,12 +447,67 @@ enum Preflight {
     /// this flag may be `true`. See `## Fix` in `issues/0008.md`.
     nonisolated static let capabilityCheckBlocks: Bool = true
 
+    // MARK: - Capacity (P6), review fix 1
+
+    /// Picks the free-space figure P6 should judge, from the two keys
+    /// `PreflightProbes.live.availableCapacity` reads. Pure, so every case
+    /// below is a plain unit test with no volume to fake.
+    ///
+    /// **Why two keys.** `volumeAvailableCapacityForImportantUsageKey` is
+    /// the one this file always used, and normally the right one — it
+    /// backs off for purgeable space the system might reclaim. On an
+    /// SMB-mounted `/Volumes/Media` (confirmed on cameron, #0008 review),
+    /// it reads **`0`**, not `nil` — `volumeAvailableCapacityKey` on the
+    /// same volume read a real 5.72 TB. A bare `0 < minimumFreeBytes` then
+    /// blocked every job on a 5.7 TB share. `nil` was always treated as
+    /// "unknown, warn, never block" (§9's rule); this network-volume `0` is
+    /// the same kind of "the important-usage probe didn't really answer",
+    /// just spelled differently, so it gets the same treatment: prefer a
+    /// real positive reading from either key, and reserve an actual `0`
+    /// result for when *both* keys agree the volume is genuinely full.
+    ///
+    /// - `important > 0` → `important` (the normal case; already backs off
+    ///   for purgeable space, so preferred whenever it looks real).
+    /// - else `plain > 0` → `plain` (the network-volume case above).
+    /// - else `important == 0 && plain == 0` → `0` — **blocks**. Both keys
+    ///   independently agreeing the volume is full is real signal, and a
+    ///   genuinely full destination volume must still refuse a job; nothing
+    ///   about the network-volume bug generalizes to "0 always means
+    ///   unknown, never full."
+    /// - else → `nil` (unknown → `.capacityUnknown`, never a blocker). Covers
+    ///   both keys unreadable, and the asymmetric case where one key reads
+    ///   `0` and the other couldn't be read at all — that's one probe
+    ///   failing, not confirmation the volume is full, so it must not be
+    ///   treated as the confirmed-full case above.
+    nonisolated static func resolveCapacity(important: Int64?, plain: Int64?) -> Int64? {
+        if let important, important > 0 { return important }
+        if let plain, plain > 0 { return plain }
+        if important == 0, plain == 0 { return 0 }
+        return nil
+    }
+
     // MARK: - The full check
 
     /// Runs every check in order, skipping only what an earlier failure
     /// makes meaningless (P2 without a runnable P1; P4-P6 without an
     /// existing P3 root) — everything else always runs, so a user with two
     /// problems learns about both from one log.
+    ///
+    /// `@concurrent` (review fix 2): with `SWIFT_APPROACHABLE_CONCURRENCY`
+    /// (`NonisolatedNonsendingByDefault`) enabled on this target, a plain
+    /// `nonisolated async` function runs on its *caller's* actor rather than
+    /// hopping off it — so without this attribute, every synchronous probe
+    /// `check` calls (three-plus `stat`s, two `createDirectory`s, two volume
+    /// reads) would run **on MainActor**, since `DVDPipeline.run()` (which
+    /// calls this) is MainActor. Confirmed by the reviewer with a
+    /// `@MainActor`-isolated test recording `Thread.isMainThread` inside
+    /// fake probes: all `true` without this attribute. `@concurrent` forces
+    /// this function onto the global concurrent executor regardless of the
+    /// caller's isolation, matching the plan's §9 promise ("They are
+    /// nonisolated, so the UI isn't blocked") and `CLAUDE.md`'s concurrency
+    /// rules. Every parameter and the return type are already `Sendable`,
+    /// which `@concurrent` requires.
+    @concurrent
     nonisolated static func check(_ input: PreflightInput, probes: PreflightProbes = .live) async -> PreflightReport {
         var blockers: [FailureReason] = []
         var warnings: [PreflightWarning] = []
@@ -417,6 +617,13 @@ enum Preflight {
     /// P1 (a runnable file, not an app bundle) followed by P2 (the `--help`
     /// capability check), for HandBrake only. Settings' live status line
     /// calls this directly.
+    ///
+    /// `@concurrent` for the same reason as `check(_:probes:)` above
+    /// (review fix 2) — and because `SettingsView` calls this directly from
+    /// a `.task(id:)`, which also runs on MainActor by this project's
+    /// default isolation, this one attribute is what keeps three `stat`s
+    /// off the main thread for both call sites at once.
+    @concurrent
     nonisolated static func handbrakeState(
         path: String,
         probes: PreflightProbes = .live,
