@@ -18,9 +18,11 @@ xcodebuild -project Changeover.xcodeproj -scheme Changeover -configuration Debug
 # Run unit tests — THE ONLY ROUTINE TEST COMMAND
 xcodebuild -project Changeover.xcodeproj -scheme Changeover -destination 'platform=macOS' test -only-testing:ChangeoverTests
 
-# Run a single Swift Testing test by name
-xcodebuild -project Changeover.xcodeproj -scheme Changeover -destination 'platform=macOS' test -only-testing:ChangeoverTests/ChangeoverTests/example
+# Run a single Swift Testing test by name — note the trailing () and the quotes
+xcodebuild -project Changeover.xcodeproj -scheme Changeover -destination 'platform=macOS' test '-only-testing:ChangeoverTests/ChangeoverTests/example()'
 ```
+
+> ⚠️ **Swift Testing selectors need the trailing `()`.** `-only-testing:ChangeoverTests/<Suite>/<test>` without it matches nothing, runs **0 tests**, and still prints `** TEST SUCCEEDED **` (verified 2026-09-12). Quote the argument, or the shell rejects the parentheses. Before trusting a targeted run, check the output names the test and reports a non-zero count, e.g. `✔ Test run with 1 test`.
 
 Unit tests in `ChangeoverTests/` use the **Swift Testing** framework (`import Testing`, `@Test`, `#expect`) — not XCTest. UI tests in `ChangeoverUITests/` use XCTest.
 
