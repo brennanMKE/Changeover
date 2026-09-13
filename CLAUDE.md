@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Changeover is a native macOS menu bar app (no Dock icon) that automates the DVD-to-Plex workflow: detect an inserted DVD → search TMDB for the movie → rip with MakeMKV → encode with HandBrake → drop the file into a Plex-ready folder structure. There is no package manager — it is a plain Xcode project with one external runtime dependency on two Homebrew CLI binaries.
+Changeover is a native macOS menu bar app (no Dock icon) that automates the DVD-to-Plex workflow: detect an inserted DVD → search TMDB for the movie → encode straight from the disc with HandBrake → drop the file into a Plex-ready folder structure. There is no package manager — it is a plain Xcode project whose one required external runtime dependency is the Homebrew `HandBrakeCLI` binary. MakeMKV is no longer on the pipeline's path; it is kept only as a planned optional fallback (#0015).
 
 ## Build, run, test
 
@@ -39,20 +39,21 @@ Unit tests in `ChangeoverTests/` use the **Swift Testing** framework (`import Te
 ### Setup required before building
 
 1. Copy `Changeover/Secrets.xcconfig.example` → `Changeover/Secrets.xcconfig` (gitignored) and set `TMDB_API_KEY`. The xcconfig is wired as the project's `baseConfigurationReference`; the key flows in via `INFOPLIST_KEY_TMDB_API_KEY = $(TMDB_API_KEY)`.
-2. Install the CLI tools the app shells out to: `brew install --cask makemkv && brew install handbrake`. Default paths are `/opt/homebrew/bin/makemkvcon` and `/opt/homebrew/bin/HandBrakeCLI` (Apple Silicon); these are user-editable in Settings.
+2. Install the CLI tool the app shells out to: `brew install handbrake` (default path `/opt/homebrew/bin/HandBrakeCLI` on Apple Silicon, user-editable in Settings). `makemkvcon` (`brew install --cask makemkv`) is optional and not currently invoked; its Settings path is kept for the #0015 fallback. `lsdvd` (`brew install lsdvd`) is optional and only strengthens disc identity.
 
 ## Architecture
 
-The pipeline is a linear async flow orchestrated by `DVDPipeline.run()`: **rip → encode → move**, with per-stage guard/abort and a single `log` callback threaded through all stages so progress streams to the UI.
+The pipeline is a linear async flow orchestrated by `DVDPipeline.run()`: **encode → move**. There is no rip stage and no intermediate `.mkv` — HandBrakeCLI reads the disc's mount root directly (#0014). Each stage reports a typed `JobOutcome` / `JobFailure` (#0007), and a single `log` callback is threaded through so progress streams to the UI.
 
 - `AppDelegate.swift` — owns the menu bar `NSStatusItem`, the popover, all `NSWindow` management, the `AppSettings` instance, and wires up `DVDMonitor`. Injects `settings` via `.environment(_:)` into SwiftUI content. Opens Settings automatically on first launch when `!settings.isConfigured`.
-- `DVDMonitor.swift` — listens for `NSWorkspace.didMountNotification`, checks for a `VIDEO_TS` folder, dispatches to MainActor.
-- `DVDPipeline.swift` — orchestrates the three controllers. **Plain `struct` (MainActor), not an `actor`** — captures path strings off `settings` while on MainActor, then passes them as plain parameters into the nonisolated controllers.
-- `RipController.swift` / `EncodeController.swift` — `nonisolated static` functions that shell out to `makemkvcon` and `HandBrakeCLI` via `Process`, streaming stdout line-by-line.
-- `PlexOrganizer.swift` — `nonisolated static func move(...)`; creates `Movies/<folderName>/` and moves the encoded file in.
+- `JobController.swift` — `@Observable`, owned by `AppDelegate` so a running job outlives its window (#0002). Holds bounded `logLines`, `isRunning`, `lastOutcome` and `insertedDisc`; `start(metadata:settings:)` refuses re-entry and refuses when no disc is mounted. Its `Runner` typealias is the seam for driving jobs in tests without a disc or HandBrakeCLI.
+- `DVDMonitor.swift` — a `DiskArbitration` session on a private dispatch queue (#0013). Accepts only genuine optical media (not disk images or network volumes) that contain `VIDEO_TS`, debounces by disc identity (lsdvd's `dvddiscid` when available), reports insertion and removal, and hops to MainActor to notify. The classification logic in `DiscInsertion.swift` is a pure, unit-testable seam.
+- `DVDPipeline.swift` — orchestrates encode → move for one disc (`disc: URL`). **Plain `struct` (MainActor), not an `actor`** — captures path strings off `settings` while on MainActor, then passes them as plain parameters into the nonisolated controllers.
+- `EncodeController.swift` — `nonisolated static` functions that shell out to `HandBrakeCLI` via `Process`, streaming output line-by-line. `arguments(source:title:output:)` is pure so the argument vector is unit-testable; `TitleSelection` (`.mainFeature` / `.index(n)`) makes `--main-feature` and `--title` mutually exclusive. Encoder settings come from `Config`. `RipController` was deleted in #0014 — do not restore it; its `largestMKV` *was* #0003's bug.
+- `PlexOrganizer.swift` — `nonisolated static func move(...) throws(JobFailure) -> URL`; creates `Movies/<folderName>/` and stages the encoded file onto the destination volume before replacing, so a failed re-rip never destroys the existing library copy and cross-volume moves still work (#0012).
 - `AppSettings.swift` — `@Observable`, `UserDefaults`-backed. Single source of truth is `plexMediaRoot`; all working/library paths (`plexMoviesPath`, `workingRipPath`, `workingEncodePath`, …) and the two CLI binary paths are derived/stored here. `isConfigured` gates the rest of the app.
 - `Config.swift` — only encoding constants remain (`videoQuality` RF21, `audioEncoder`). All path config moved to `AppSettings`.
-- `MovieMetadata.swift` — built from a selected `TMDBMovie`; produces `folderName`, `fileName`, `destinationPath`. `tmdbID` is **non-optional**.
+- `MovieMetadata.swift` — built from a selected `TMDBMovie`; produces `folderName` and `fileName`. `tmdbID` is **non-optional**. The title is path-sanitized before it becomes a path component (`/` and `:` become `-`, etc.; #0010).
 - `TMDB/` — `TMDBClient` (search + poster URLs), `TMDBModels`, and `MovieSearchViewModel` (`@Observable`, drives `MetadataEntryView`).
 
 ### Plex naming convention (strict — no exceptions)
@@ -71,8 +72,8 @@ Movies/Title (Year) {tmdb-ID}/Title (Year).mp4
 The project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so **every type and function is `@MainActor` unless it explicitly opts out**. Rules that follow from this:
 
 - SwiftUI views, view models, `AppDelegate`, and `DVDPipeline` need no annotation — they're MainActor for free. Do **not** use the `actor` keyword for a type that has no reason to leave MainActor.
-- The CLI controllers (`RipController`, `EncodeController`, `PlexOrganizer`) and `Config`'s static constants must be **explicitly `nonisolated`** so the long rip/encode work runs off the main actor. Anything they touch (e.g. `Config` statics) must also be `nonisolated`.
-- `DVDMonitor.volumeMounted` is `nonisolated` because `NSWorkspace` calls the `@objc` selector on an arbitrary thread.
+- The CLI controllers (`EncodeController`, `PlexOrganizer`) and `Config`'s static constants must be **explicitly `nonisolated`** so the long rip/encode work runs off the main actor. Anything they touch (e.g. `Config` statics) must also be `nonisolated`.
+- `DVDMonitor`'s DiskArbitration callbacks are `nonisolated` because they arrive on its private dispatch queue; they classify off the main actor and hop back with `Task { @MainActor in … }`.
 - Inside a background `Process` `readabilityHandler`/`terminationHandler`, dispatch log lines back with `Task { @MainActor in log(line) }` so callers can use a plain `(String) -> Void` that mutates `@State` directly.
 
 ## Conventions
