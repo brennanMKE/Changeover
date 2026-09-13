@@ -230,7 +230,17 @@ struct DVDPipeline {
             log:            log
         ) {
         case .failure(let ripFailure):
-            if !MakeMKVRipper.removeJobDirectory(jobDirectory, under: workingRipPath) {
+            // `.destinationUnwritable` is the one rip failure that means this
+            // job never created a fresh `jobDirectory` — either the working
+            // root itself couldn't be created, or (the #0003-shaped
+            // collision case) `jobDirectory` already existed and step (a)
+            // refused to adopt it. Either way, this job did not create
+            // whatever is at that path, so it must never delete it — leave
+            // it for #0004's launch-time sweep — and logging "could not
+            // clean up" here would be spurious, not a real cleanup failure.
+            if case .destinationUnwritable = ripFailure.reason {
+                // Nothing to clean up: never created, never touched.
+            } else if !MakeMKVRipper.removeJobDirectory(jobDirectory, under: workingRipPath) {
                 log("⚠︎ Could not clean up \(jobDirectory)")
             }
             log("✗ FALLBACK FAILED disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) fallback=\(ripFailure.stage.rawValue):\(String(describing: ripFailure.reason))")

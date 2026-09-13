@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import Changeover
@@ -256,6 +257,121 @@ struct MakeMKVFallbackTests {
         #expect(MakeMKVRipper.failureReason(exitStatus: 1, messageCodes: []) == .toolExited(code: 1))
     }
 
+    // MARK: - Race regression (2026-09-12 re-pass, review of e0a96f2)
+    //
+    // `readabilityHandler` runs on the pipe's own private queue;
+    // `terminationHandler` runs on a separate, unrelated queue, and nothing
+    // ordered one against the other. The previous shape resumed only from
+    // `terminationHandler`, calling `readDataToEndOfFile()` there. If the
+    // readability handler had already drained the pipe via `availableData`
+    // but was still splitting that chunk into lines and appending them when
+    // termination was noticed, `readDataToEndOfFile()` found nothing left to
+    // read and the continuation resumed early — with an empty or truncated
+    // transcript. The reviewer reproduced this deterministically with a 30ms
+    // `usleep` inserted between `fh.availableData` and processing it;
+    // `runMakeMKV`'s `readerDelay` parameter is that same seam, exposed for
+    // tests (default a no-op, so production behavior is unaffected).
+    //
+    // `runMakeMKV` is `nonisolated static` (not `private`) specifically so
+    // these tests can call it directly against the stub, the same shape the
+    // reviewer's own bounce prescribed.
+
+    /// The exact reproduction: a 30ms reader delay racing a process that has
+    /// already exited. Before the fix this produced an empty/partial
+    /// transcript; the key-expired fixture's *last* line is `MSG:5021`, so a
+    /// truncated transcript here reproduces precisely the review's
+    /// misclassification — `.toolExited(code: 253)` instead of
+    /// `.activationExpired` — because the classifier never saw the code.
+    @Test func runMakeMKVSurvivesAReaderTerminationRaceAndKeepsTheFinalMSGLine() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let stubPath = try Self.copyStub("stub-makemkvcon.sh", into: root)
+        try Self.writeConf(forStubAt: stubPath, [
+            "INFO_FIXTURE=\"\(Self.fixturePath("makemkvcon/keyexpired-v1.18.3-exit253.txt"))\"",
+            "INFO_EXIT=253",
+        ])
+
+        let result = await MakeMKVRipper.runMakeMKV(
+            executablePath: stubPath,
+            arguments:      MakeMKVRipper.infoArguments(source: "dev:/dev/rdisk6"),
+            readerDelay:    { usleep(30_000) }
+        )
+
+        guard case .success(let value) = result else {
+            Issue.record("expected .success (runMakeMKV reports a non-zero tool exit inside .success; .failure is launch-failure only), got \(result)")
+            return
+        }
+        #expect(value.exitStatus == 253)
+        #expect(value.lines.last?.hasPrefix("MSG:5021") == true)
+
+        let codes = MakeMKVRipper.messageCodes(in: value.lines)
+        #expect(codes.contains(5021))
+        #expect(MakeMKVRipper.failureReason(exitStatus: 253, messageCodes: codes) == .activationExpired)
+    }
+
+    /// Pins the full transcript across repeated runs (the stub is `cat`, so
+    /// 20 runs cost milliseconds): the returned line count must equal the
+    /// fixture's non-empty line count every single time, with no reader
+    /// delay needed to demonstrate the pin holds under ordinary timing too.
+    @Test func runMakeMKVAlwaysReturnsTheFullTranscriptAcrossRepeatedRuns() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let stubPath = try Self.copyStub("stub-makemkvcon.sh", into: root)
+        try Self.writeConf(forStubAt: stubPath, [
+            "INFO_FIXTURE=\"\(Self.fixturePath("makemkvcon/dragon-tattoo-min0.txt"))\"",
+        ])
+
+        let expectedCount = try Self.fixtureLines("makemkvcon/dragon-tattoo-min0.txt")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            .count
+
+        for _ in 0..<20 {
+            let result = await MakeMKVRipper.runMakeMKV(
+                executablePath: stubPath,
+                arguments:      MakeMKVRipper.infoArguments(source: "dev:/dev/rdisk6")
+            )
+            guard case .success(let value) = result else {
+                Issue.record("expected success, got \(result)")
+                continue
+            }
+            #expect(value.exitStatus == 0)
+            #expect(value.lines.count == expectedCount)
+        }
+    }
+
+    /// `super-troopers-2-min0.txt` is 112KB, well past the pipe's ~64KB
+    /// kernel buffer, combined with the reader-delay seam: proves the fix
+    /// neither deadlocks on a large transcript (the failure mode of reading
+    /// only after exit — #0013's bug) nor drops any of it under the race.
+    @Test func runMakeMKVDrainsATranscriptLargerThanThePipeBufferEvenWithADelayedReader() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let stubPath = try Self.copyStub("stub-makemkvcon.sh", into: root)
+        try Self.writeConf(forStubAt: stubPath, [
+            "INFO_FIXTURE=\"\(Self.fixturePath("makemkvcon/super-troopers-2-min0.txt"))\"",
+        ])
+
+        let expectedCount = try Self.fixtureLines("makemkvcon/super-troopers-2-min0.txt")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            .count
+
+        let result = await MakeMKVRipper.runMakeMKV(
+            executablePath: stubPath,
+            arguments:      MakeMKVRipper.infoArguments(source: "dev:/dev/rdisk6"),
+            readerDelay:    { usleep(30_000) }
+        )
+
+        guard case .success(let value) = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        #expect(value.exitStatus == 0)
+        #expect(value.lines.count == expectedCount)
+    }
+
     // MARK: - 6. infoArguments / ripArguments
 
     @Test func infoArgumentsAreExact() {
@@ -410,6 +526,66 @@ struct MakeMKVFallbackTests {
         #expect(!FileManager.default.fileExists(atPath: argvLog))
     }
 
+    /// Reviewer's non-blocking nit (#0015 §5): `DVDPipeline.runFallback`
+    /// called `removeJobDirectory` unconditionally on a rip failure, even
+    /// when the reason was `.destinationUnwritable` — the one path where the
+    /// rip never created anything (the working root itself couldn't be
+    /// created here) and the pipeline must never delete something this job
+    /// did not create. Forces that exact case by planting a plain file at
+    /// `Working/ripping` itself, and asserts no "Could not clean up" line —
+    /// that log line is spurious when there was nothing to clean up.
+    @Test func cleanupIsSkippedWhenTheRipFailedBecauseTheWorkingRootCouldNotBeCreated() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+
+        // `workingRipPath` is `<plexMediaRoot>/Working/ripping`, a sibling of
+        // `workingEncodePath` (`<plexMediaRoot>/Working/encoding`), which the
+        // *primary* HandBrake pass creates first. Blocking `Working` itself
+        // would also block that primary creation, turning the primary
+        // failure into `.destinationUnwritable` (not disc-shaped) before the
+        // fallback is ever considered — so block only `Working/ripping`
+        // itself, as a plain file, leaving `Working` a real directory.
+        // Step (a)'s first `createDirectory(atPath: root...)` call (`root`
+        // being `workingRipPath`) then fails because the destination already
+        // exists and isn't a directory — the *root* creation case, not the
+        // job-directory-already-exists case
+        // `ripFailsWithDestinationUnwritableWhenJobDirectoryAlreadyExists` covers.
+        let workingDir = root.appendingPathComponent("Working")
+        try FileManager.default.createDirectory(at: workingDir, withIntermediateDirectories: true)
+        try Data("not a directory".utf8).write(to: workingDir.appendingPathComponent("ripping"))
+
+        let handbrakeStub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: handbrakeStub, ["EXIT_DIR_INPUT=3", "EXIT_FILE_INPUT=0"])
+        settings.handbrakePath = handbrakeStub
+        settings.makemkvconPath = try Self.copyStub("stub-makemkvcon.sh", into: root)
+
+        var logged: [String] = []
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            log:      { logged.append($0) }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .failed(let failure) = outcome else {
+            Issue.record("expected failure, got \(outcome)")
+            return
+        }
+        guard case .failed(let fallbackStage, let fallbackReason, _) = failure.fallback else {
+            Issue.record("expected a fallback failure, got \(String(describing: failure.fallback))")
+            return
+        }
+        #expect(fallbackStage == .rip)
+        #expect(fallbackReason == .destinationUnwritable(path: settings.workingRipPath))
+        #expect(!logged.contains { $0.contains("Could not clean up") })
+    }
+
     // MARK: - 10-18. DVDPipeline end to end, driven by stubs
 
     @Test func pipelineSucceedsWithHandBrakeAloneAndProbesMakeMKVNever() async throws {
@@ -418,9 +594,31 @@ struct MakeMKVFallbackTests {
 
         let settings = AppSettings()
         settings.plexMediaRoot = root.path
-        settings.handbrakePath = try Self.copyStub("stub-HandBrakeCLI.sh", into: root) // no .conf: STUB_EXIT path, defaults to 0
-        settings.makemkvconPath = try Self.copyStub("stub-makemkvcon.sh", into: root)   // present, but must never run
+
+        // Its own `.conf` (`EXIT_DIR_INPUT=0`), not the process-wide
+        // `STUB_EXIT` path: `EncodeControllerTests
+        // .pipelineFailsAtEncodeStageWhenTheStubToolExitsNonZero` sets
+        // `STUB_EXIT=1` for the whole duration of its own pipeline run, and
+        // Swift Testing runs suites concurrently. If the two overlapped and
+        // this test used the conf-less stub, HandBrake would exit 1 here too
+        // — disc-shaped — and the conf-less makemkvcon stub would print
+        // nothing, giving `.noTitlesProduced` instead of the success this
+        // test asserts. The sidecar `.conf` mechanism exists precisely to
+        // avoid that race; this test must actually use it.
+        let handbrakeStub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: handbrakeStub, ["EXIT_DIR_INPUT=0"])
+        settings.handbrakePath = handbrakeStub
+
+        // makemkvcon is present, but must never run. Give it an ARGV_LOG so
+        // the "never probed" assertion below is not vacuous — with no
+        // `.conf` at all, `ARGV_LOG` is unset and the stub would never write
+        // the log file even if it *were* invoked, so `!fileExists(...)`
+        // could never fail. `toolMissingHandBrakeNeverProbesMakeMKV` already
+        // does this correctly; this copies that shape.
+        let makemkvStub = try Self.copyStub("stub-makemkvcon.sh", into: root)
         let makemkvArgvLog = root.appendingPathComponent("makemkv-argv.log").path
+        try Self.writeConf(forStubAt: makemkvStub, ["ARGV_LOG=\"\(makemkvArgvLog)\""])
+        settings.makemkvconPath = makemkvStub
 
         let logURL = root.appendingPathComponent("reliability.jsonl")
         var pipeline = DVDPipeline(
@@ -437,6 +635,9 @@ struct MakeMKVFallbackTests {
             Issue.record("expected success, got \(outcome)")
             return
         }
+        // Not just "the file doesn't exist" — the stub is configured to
+        // write it on every invocation, so its absence is proof makemkvcon
+        // was never launched, not an artifact of ARGV_LOG being unset.
         #expect(!FileManager.default.fileExists(atPath: makemkvArgvLog))
 
         let record = try Self.readLastJSONLine(at: logURL)

@@ -79,15 +79,13 @@ enum MakeMKVRipper {
         // c. Scan once, choose one title. Never pass --minlength — title
         // indices are assigned after that filter, so an index taken at one
         // threshold and ripped at another would select the wrong title.
-        var scanMessageCodes: Set<Int> = []
+        // Message codes are computed from the returned transcript after the
+        // process ends (see `messageCodes(in:)`), not accumulated in a `var`
+        // mutated from the reader's background thread.
         let scan = await runMakeMKV(
             executablePath: makemkvconPath,
             arguments:      infoArguments(source: source)
-        ) { line in
-            guard let parsed = parseLine(line), parsed.prefix == "MSG",
-                  let code = Int(parsed.fields.first ?? "") else { return }
-            scanMessageCodes.insert(code)
-        }
+        )
 
         let scanExit: Int32
         let scanLines: [String]
@@ -101,7 +99,7 @@ enum MakeMKVRipper {
         }
 
         guard scanExit == 0 else {
-            let reason = failureReason(exitStatus: scanExit, messageCodes: scanMessageCodes)
+            let reason = failureReason(exitStatus: scanExit, messageCodes: messageCodes(in: scanLines))
             Task { @MainActor in log("✗ makemkvcon info exited with status \(scanExit)") }
             return .failure(JobFailure(
                 stage:   .rip,
@@ -130,42 +128,41 @@ enum MakeMKVRipper {
         }
 
         // e. Rip exactly one title. Never `all`, never `--cache=1` (which
-        // would starve the rip).
+        // would starve the rip). `onLine` only forwards MSG text to the log
+        // and fills the bounded tail buffer as lines stream in; message
+        // codes are computed afterward from the full returned transcript
+        // (see `messageCodes(in:)`), never from a `var` mutated by the
+        // handler thread.
         let tail = LogTailBuffer()
-        var ripMessageCodes: Set<Int> = []
         let ripRun = await runMakeMKV(
             executablePath: makemkvconPath,
             arguments:      ripArguments(source: source, titleIndex: chosen.index, outputDirectory: jobDirectory)
         ) { line in
-            guard let parsed = parseLine(line) else { return }
-            switch parsed.prefix {
-            case "MSG":
-                tail.append(line)
-                if let code = Int(parsed.fields.first ?? "") {
-                    ripMessageCodes.insert(code)
-                }
-                if parsed.fields.count >= 4 {
-                    let message = parsed.fields[3]
-                    Task { @MainActor in log(message) }
-                }
-            default:
+            guard let parsed = parseLine(line), parsed.prefix == "MSG" else {
                 // PRGV/PRGC/PRGT and anything else — structured progress is
                 // -Path.md step 6, not this ticket.
-                break
+                return
+            }
+            tail.append(line)
+            if parsed.fields.count >= 4 {
+                let message = parsed.fields[3]
+                Task { @MainActor in log(message) }
             }
         }
 
         let ripExit: Int32
+        let ripLines: [String]
         switch ripRun {
         case .failure(let launchFailure):
             Task { @MainActor in log("✗ Failed to launch makemkvcon: \(launchFailure.reason)") }
             return .failure(launchFailure)
         case .success(let value):
             ripExit = value.exitStatus
+            ripLines = value.lines
         }
 
         guard ripExit == 0 else {
-            let reason = failureReason(exitStatus: ripExit, messageCodes: ripMessageCodes)
+            let reason = failureReason(exitStatus: ripExit, messageCodes: messageCodes(in: ripLines))
             Task { @MainActor in log("✗ makemkvcon mkv exited with status \(ripExit)") }
             return .failure(JobFailure(stage: .rip, reason: reason, logTail: tail.snapshot()))
         }
@@ -352,6 +349,22 @@ enum MakeMKVRipper {
         messageCodes.contains(5021) ? .activationExpired : .toolExited(code: exitStatus)
     }
 
+    /// Every `MSG` code present in a full transcript. Pure and computed
+    /// *after* the process has ended, from `runMakeMKV`'s returned `lines` —
+    /// deliberately not accumulated in a `var` mutated by the readability
+    /// handler's background thread while the process is still running (the
+    /// 2026-09-12 re-pass's fix: `SWIFT_VERSION = 5.0` let that race compile
+    /// silently).
+    nonisolated static func messageCodes(in lines: [String]) -> Set<Int> {
+        var codes: Set<Int> = []
+        for line in lines {
+            guard let parsed = parseLine(line), parsed.prefix == "MSG",
+                  let code = Int(parsed.fields.first ?? "") else { continue }
+            codes.insert(code)
+        }
+        return codes
+    }
+
     /// Removes `path` only if it is a direct child of `root` whose name
     /// starts with `job-`. Never removes `root` itself. Returns `false`
     /// (never throws) for anything it refuses, so the caller can log a
@@ -410,14 +423,58 @@ enum MakeMKVRipper {
 
     /// Runs `makemkvcon`, streaming stdout+stderr through a carry-over line
     /// buffer so a chunk boundary can never split or drop a record
-    /// (#0021 §3, #0024). `onLine` fires once per complete line, in order.
-    /// Resumes exactly once, from `terminationHandler`, after
-    /// `readDataToEndOfFile()` picks up whatever is still buffered — the
-    /// same discipline `EncodeController` uses.
-    nonisolated private static func runMakeMKV(
+    /// (#0021 §3, #0024). `onLine` fires once per complete line, in order,
+    /// synchronously from whichever thread is running the readability
+    /// handler at the time.
+    ///
+    /// **The reader/termination race (2026-09-12 re-pass, review of
+    /// `e0a96f2`).** The previous shape resumed only from
+    /// `terminationHandler`, which called `readDataToEndOfFile()` there.
+    /// `readabilityHandler` runs on the pipe's own private queue;
+    /// `terminationHandler` runs on a separate, unrelated queue, and nothing
+    /// orders one against the other. If the readability handler had already
+    /// drained the pipe via `availableData` but was still splitting that
+    /// chunk into lines and appending them when termination was noticed,
+    /// `readDataToEndOfFile()` found nothing left to read (it had already
+    /// been read) and returned immediately, so the continuation resumed with
+    /// whatever the accumulator held *so far* — empty, or missing the
+    /// transcript's final lines. On a disc HandBrake had already failed on,
+    /// that made the fallback report `.noTitlesProduced` on a disc that had
+    /// titles, and made an expired key surface as a bare
+    /// `.toolExited(code: 253)` because `MSG:5021` never reached the
+    /// transcript the classifier reads.
+    ///
+    /// **The fix.** There is exactly **one** reader: the readability
+    /// handler. Empty `availableData` *is* EOF — the child closed its end of
+    /// the pipe, normally because it exited — and the handler recognizes
+    /// that itself, unregisters, and records "reader done" through
+    /// `RunCompletionGate`. `terminationHandler` never touches the pipe; it
+    /// only records "process done," under the same lock. Whichever of the
+    /// two arrives **second** flushes the line splitter's trailing
+    /// carry-over and resumes the continuation — exactly once, and only
+    /// after both signals have been observed. Reading only ever happens
+    /// inside the readability handler as data becomes available, so a
+    /// transcript larger than the pipe's kernel buffer (~64KB;
+    /// `super-troopers-2-min0.txt` is 112KB) is drained incrementally rather
+    /// than deadlocking the child in `write` — the same fix #0013 made for
+    /// `LSDVDIdentity`, kept here.
+    ///
+    /// A watchdog kills the child if it never terminates within
+    /// `hangTimeout` — a defensive backstop against a genuinely hung
+    /// process. No fixture here approaches it; every stub exits in
+    /// milliseconds.
+    ///
+    /// `readerDelay` is a test-only seam (a no-op by default): a test can
+    /// insert a pause between capturing `availableData` and processing it,
+    /// reproducing the exact interleaving above deterministically, to prove
+    /// the new synchronization survives it regardless of timing — see
+    /// `MakeMKVFallbackTests`.
+    nonisolated static func runMakeMKV(
         executablePath: String,
         arguments:      [String],
-        onLine:         @escaping (String) -> Void
+        hangTimeout:    TimeInterval = 4 * 60 * 60,
+        readerDelay:    @escaping () -> Void = {},
+        onLine:         @escaping (String) -> Void = { _ in }
     ) async -> Result<(exitStatus: Int32, lines: [String]), JobFailure> {
         await withCheckedContinuation { continuation in
             let process = Process()
@@ -431,8 +488,17 @@ enum MakeMKVRipper {
             let splitter = LineSplitter()
             let accumulator = LineAccumulator()
 
+            let gate = RunCompletionGate { exitStatus in
+                let leftover = splitter.flush().trimmingCharacters(in: .whitespaces)
+                if !leftover.isEmpty {
+                    accumulator.append(leftover)
+                    onLine(leftover)
+                }
+                continuation.resume(returning: .success((exitStatus, accumulator.snapshot())))
+            }
+
             func handle(_ data: Data) {
-                guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
+                guard let text = String(data: data, encoding: .utf8) else { return }
                 for line in splitter.feed(text) {
                     let trimmed = line.trimmingCharacters(in: .whitespaces)
                     guard !trimmed.isEmpty else { continue }
@@ -442,23 +508,34 @@ enum MakeMKVRipper {
             }
 
             pipe.fileHandleForReading.readabilityHandler = { fh in
-                handle(fh.availableData)
+                let data = fh.availableData
+                readerDelay()
+                guard !data.isEmpty else {
+                    // Empty availableData is EOF: the child closed its end
+                    // of the pipe. Stop firing and record "reader done."
+                    fh.readabilityHandler = nil
+                    gate.markReaderDone()
+                    return
+                }
+                handle(data)
             }
 
-            process.terminationHandler = { proc in
-                pipe.fileHandleForReading.readabilityHandler = nil
-                handle(pipe.fileHandleForReading.readDataToEndOfFile())
-                let leftover = splitter.flush().trimmingCharacters(in: .whitespaces)
-                if !leftover.isEmpty {
-                    accumulator.append(leftover)
-                    onLine(leftover)
+            let watchdog = DispatchWorkItem {
+                if process.isRunning {
+                    process.terminate()
                 }
-                continuation.resume(returning: .success((proc.terminationStatus, accumulator.snapshot())))
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + hangTimeout, execute: watchdog)
+
+            process.terminationHandler = { proc in
+                watchdog.cancel()
+                gate.markProcessDone(exitStatus: proc.terminationStatus)
             }
 
             do {
                 try process.run()
             } catch {
+                watchdog.cancel()
                 pipe.fileHandleForReading.readabilityHandler = nil
                 continuation.resume(returning: .failure(JobFailure(
                     stage:  .rip,
@@ -466,6 +543,44 @@ enum MakeMKVRipper {
                 )))
             }
         }
+    }
+}
+
+/// Fires its completion exactly once, only after **both**
+/// `markReaderDone()` and `markProcessDone(exitStatus:)` have been called —
+/// whichever call arrives second performs the firing. Locked because the
+/// two calls always happen from different threads (the readability
+/// handler's private queue vs. `Process`'s own termination-handler queue)
+/// with no ordering guarantee between them — that lack of ordering is
+/// exactly the race this type exists to close.
+nonisolated private final class RunCompletionGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var readerDone = false
+    private var processExitStatus: Int32?
+    private var fired = false
+    private let onReady: (Int32) -> Void
+
+    init(onReady: @escaping (Int32) -> Void) {
+        self.onReady = onReady
+    }
+
+    func markReaderDone() {
+        lock.lock()
+        readerDone = true
+        let status = processExitStatus
+        let shouldFire = !fired && status != nil
+        if shouldFire { fired = true }
+        lock.unlock()
+        if shouldFire, let status { onReady(status) }
+    }
+
+    func markProcessDone(exitStatus: Int32) {
+        lock.lock()
+        processExitStatus = exitStatus
+        let shouldFire = !fired && readerDone
+        if shouldFire { fired = true }
+        lock.unlock()
+        if shouldFire { onReady(exitStatus) }
     }
 }
 

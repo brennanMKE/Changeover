@@ -242,12 +242,16 @@ struct EncodeControllerTests {
         #expect(!FileManager.default.fileExists(atPath: encodingDir.path))
 
         var logged: [String] = []
-        let pipeline = DVDPipeline(
+        var pipeline = DVDPipeline(
             metadata: try Self.metadata(),
             settings: settings,
             disc:     URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
             log:      { logged.append($0) }
         )
+        // #0015 re-pass: point at a temp file rather than the real default
+        // (`~/Library/Logs/Changeover/disc-reliability.jsonl`) — this test
+        // must never write to that machine's actual reliability log.
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
 
@@ -273,12 +277,15 @@ struct EncodeControllerTests {
         settings.plexMediaRoot = root.path
         settings.handbrakePath = Self.stubHandBrakePath
 
-        let pipeline = DVDPipeline(
+        var pipeline = DVDPipeline(
             metadata: try Self.metadata(),
             settings: settings,
             disc:     URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
             log:      { _ in }
         )
+        // Same reason as the test above: never write to the real reliability
+        // log during a test run.
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
 
