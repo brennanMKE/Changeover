@@ -9,13 +9,53 @@ enum PlexOrganizer {
     /// Returns the destination the file landed at. Throws a `JobFailure` rather
     /// than swallowing the error — the log stays, it just stops being the only
     /// channel.
+    ///
+    /// #0012 follow-up: `async` + `@concurrent`. `DVDPipeline.run()` is
+    /// MainActor, and the staging `moveItem` below (see the big comment
+    /// further down) can be a real cross-volume copy of the whole encoded
+    /// file — about 1 GB for a typical feature (#0018) — onto an SMB/NAS
+    /// `plexMediaRoot`. `FileManager`'s copy/move calls are plain
+    /// synchronous, blocking work with no `await` of their own to suspend
+    /// on, unlike `EncodeController.encode`'s `Process`, which yields the
+    /// actor for the length of the encode via a checked continuation. With
+    /// `SWIFT_APPROACHABLE_CONCURRENCY` (`NonisolatedNonsendingByDefault`)
+    /// enabled on this target, a plain `nonisolated async` function still
+    /// runs on its *caller's* actor rather than hopping off it — so without
+    /// `@concurrent` this whole body, staging copy included, would run on
+    /// MainActor and freeze the menu bar, the popover and the log view for
+    /// the length of the copy, exactly the bug this pass fixes. `@concurrent`
+    /// forces this function onto the global concurrent executor regardless
+    /// of the caller, matching `Preflight.check`'s identical fix (#0008
+    /// review fix 2) and `CLAUDE.md`'s concurrency rules. Pinned by
+    /// `JobOutcomeTests.moveNeverRunsOnTheMainActor` — falsify by removing
+    /// `@concurrent` and rerunning it.
+    ///
+    /// `log` is `@MainActor`, and every call below `await`s it directly
+    /// rather than the fire-and-forget `Task { @MainActor in … }` wrapper
+    /// `EncodeController`/`MakeMKVRipper` use — those dispatch from
+    /// synchronous `Process` callback contexts that can't `await`; `move` is
+    /// already `async`, so awaiting `log` directly hops to MainActor same as
+    /// CLAUDE.md asks, keeps every line's ordering deterministic, and means
+    /// the existing tests only needed `async`/`await` added at their call
+    /// sites, not rewritten.
+    ///
+    /// `onBegin` is a test-only hook, defaulted to a no-op so no production
+    /// call site changes — the same defaulted-closure-hook shape as
+    /// `EncodeController.encode`'s `readerDelay`. It runs synchronously as
+    /// the very first statement in the body, before any `FileManager` call,
+    /// so a test can record `Thread.isMainThread` there and prove
+    /// `@concurrent` actually moved this work off the caller's actor.
     @discardableResult
+    @concurrent
     nonisolated static func move(
         encodedFile:    String,
         metadata:       MovieMetadata,
         plexMoviesPath: String,
-        log:            (String) -> Void
-    ) throws(JobFailure) -> URL {
+        log:            @MainActor (String) -> Void,
+        onBegin:        @Sendable () -> Void = {}
+    ) async throws(JobFailure) -> URL {
+        onBegin()
+
         let fm = FileManager.default
 
         let folderPath = (plexMoviesPath as NSString)
@@ -29,7 +69,7 @@ enum PlexOrganizer {
             try fm.createDirectory(atPath: folderPath,
                                    withIntermediateDirectories: true)
         } catch {
-            log("✗ ERROR moving file: \(error.localizedDescription)")
+            await log("✗ ERROR moving file: \(error.localizedDescription)")
             throw JobFailure(stage: .organize,
                              reason: reason(for: error, destination: folderPath))
         }
@@ -68,7 +108,7 @@ enum PlexOrganizer {
                                      appropriateFor: destURL,
                                      create: true)
         } catch {
-            log("✗ ERROR moving file: \(error.localizedDescription)")
+            await log("✗ ERROR moving file: \(error.localizedDescription)")
             throw JobFailure(stage: .organize,
                              reason: reason(for: error, destination: folderPath))
         }
@@ -78,7 +118,7 @@ enum PlexOrganizer {
             try fm.moveItem(at: encodedURL, to: stagedURL)
         } catch {
             try? fm.removeItem(at: stagingDir)
-            log("✗ ERROR moving file: \(error.localizedDescription)")
+            await log("✗ ERROR moving file: \(error.localizedDescription)")
             throw JobFailure(stage: .organize,
                              reason: reason(for: error, destination: folderPath))
         }
@@ -94,16 +134,16 @@ enum PlexOrganizer {
                 try fm.moveItem(at: stagedURL, to: encodedURL)
                 try? fm.removeItem(at: stagingDir)
             } catch {
-                log("⚠️ Could not restore encoded file to \(encodedFile); it remains at \(stagedURL.path)")
+                await log("⚠️ Could not restore encoded file to \(encodedFile); it remains at \(stagedURL.path)")
             }
-            log("✗ ERROR moving file: \(replaceError.localizedDescription)")
+            await log("✗ ERROR moving file: \(replaceError.localizedDescription)")
             throw JobFailure(stage: .organize,
                              reason: reason(for: replaceError, destination: folderPath))
         }
 
         try? fm.removeItem(at: stagingDir)
 
-        log("✓ Moved to: \(destPath)")
+        await log("✓ Moved to: \(destPath)")
         return destURL
     }
 

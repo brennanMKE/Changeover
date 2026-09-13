@@ -229,7 +229,7 @@ struct DVDPipeline {
         // Step 2: Move into Plex
         let destination: URL
         do {
-            destination = try PlexOrganizer.move(
+            destination = try await PlexOrganizer.move(
                 encodedFile:    mp4URL.path,
                 metadata:       metadata,
                 plexMoviesPath: plexMoviesPath,
@@ -244,6 +244,21 @@ struct DVDPipeline {
             log("✓ Produced by: MakeMKV fallback, then HandBrake")
         } else {
             log("✓ Produced by: HandBrake, direct from disc")
+        }
+
+        // Step 3: Eject (#0005). Only ever reached on a typed success — the
+        // encode (and, on the fallback path, the rip) has already returned by
+        // this point, so nothing still holds the disc open. A failed eject is
+        // reported but never turns this successful job into a failed one:
+        // the movie is already in Plex, so `outcome` stays `.succeeded`
+        // regardless of what `DiscEjector` reports.
+        switch await DiscEjector.eject(volumeURL: disc) {
+        case .ejected:
+            log("✓ Disc ejected — safe to insert the next one")
+        case .busy(let message):
+            log("⚠︎ \(message)")
+        case .failed(let message):
+            log("⚠︎ \(message)")
         }
 
         log("── Done. Scan your Plex Movies library to pick up the new title.")

@@ -119,7 +119,7 @@ struct JobOutcomeTests {
 
     // MARK: - PlexOrganizer surfaces failures
 
-    @Test func moveReturnsDestinationAndFollowsPlexNaming() throws {
+    @Test func moveReturnsDestinationAndFollowsPlexNaming() async throws {
         let root = try Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -128,7 +128,7 @@ struct JobOutcomeTests {
         try Data("stub".utf8).write(to: encoded)
 
         var logged: [String] = []
-        let destination = try PlexOrganizer.move(
+        let destination = try await PlexOrganizer.move(
             encodedFile:    encoded.path,
             metadata:       try Self.metadata(),
             plexMoviesPath: moviesPath,
@@ -145,7 +145,7 @@ struct JobOutcomeTests {
 
     /// Before #0007 this failure was caught, logged, and then contradicted by
     /// the "Done." line. It must now reach the caller as a value.
-    @Test func moveThrowsWhenDestinationIsUnwritable() throws {
+    @Test func moveThrowsWhenDestinationIsUnwritable() async throws {
         let root = try Self.makeTempDir()
         defer {
             try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
@@ -170,7 +170,7 @@ struct JobOutcomeTests {
         var thrown: JobFailure?
         let metadata = try Self.metadata()
         do {
-            _ = try PlexOrganizer.move(
+            _ = try await PlexOrganizer.move(
                 encodedFile:    encoded.path,
                 metadata:       metadata,
                 plexMoviesPath: movies.path,
@@ -199,7 +199,7 @@ struct JobOutcomeTests {
     /// succeed) while the *source* (working encode) folder is locked down,
     /// which makes the move/replace step itself fail. Pre-populate the
     /// destination with known bytes and assert they survive.
-    @Test func moveLeavesExistingLibraryFileIntactWhenReplacementFails() throws {
+    @Test func moveLeavesExistingLibraryFileIntactWhenReplacementFails() async throws {
         let root = try Self.makeTempDir()
         defer {
             try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
@@ -235,7 +235,7 @@ struct JobOutcomeTests {
         var logged: [String] = []
         var thrown: JobFailure?
         do {
-            _ = try PlexOrganizer.move(
+            _ = try await PlexOrganizer.move(
                 encodedFile:    encoded.path,
                 metadata:       metadata,
                 plexMoviesPath: movies.path,
@@ -262,7 +262,7 @@ struct JobOutcomeTests {
 
     /// The success path must keep working: re-ripping a movie that already
     /// has a library copy replaces it with the new encode.
-    @Test func moveReplacesAnExistingLibraryFileOnSuccess() throws {
+    @Test func moveReplacesAnExistingLibraryFileOnSuccess() async throws {
         let root = try Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -279,7 +279,7 @@ struct JobOutcomeTests {
         try newBytes.write(to: encoded)
 
         var logged: [String] = []
-        let destination = try PlexOrganizer.move(
+        let destination = try await PlexOrganizer.move(
             encodedFile:    encoded.path,
             metadata:       metadata,
             plexMoviesPath: moviesPath,
@@ -302,7 +302,7 @@ struct JobOutcomeTests {
     /// must hold: the pre-existing library file survives, and the encoded
     /// file is moved back to its original location rather than stranded in
     /// a hidden staging directory.
-    @Test func moveRestoresEncodedFileWhenSwapFailsAfterStaging() throws {
+    @Test func moveRestoresEncodedFileWhenSwapFailsAfterStaging() async throws {
         let root = try Self.makeTempDir()
         defer {
             try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
@@ -340,7 +340,7 @@ struct JobOutcomeTests {
         var logged: [String] = []
         var thrown: JobFailure?
         do {
-            _ = try PlexOrganizer.move(
+            _ = try await PlexOrganizer.move(
                 encodedFile:    encoded.path,
                 metadata:       metadata,
                 plexMoviesPath: movies.path,
@@ -363,6 +363,56 @@ struct JobOutcomeTests {
         // itemReplacementDirectory.
         #expect(FileManager.default.fileExists(atPath: encoded.path))
         #expect(try Data(contentsOf: encoded) == newBytes)
+    }
+
+    // MARK: - #0012 follow-up: the move must run off the caller's actor
+
+    /// Thread-safe recorder — same lock discipline as
+    /// `PreflightTests.ThreadRecorder`, in case `onBegin` were ever called
+    /// more than once or from more than one queue.
+    private final class ThreadRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private(set) var onMainThread: [Bool] = []
+        func record() {
+            lock.lock()
+            onMainThread.append(Thread.isMainThread)
+            lock.unlock()
+        }
+    }
+
+    /// The permanent regression test for the #0012 follow-up:
+    /// `DVDPipeline.run()` is MainActor, and `PlexOrganizer.move` stages the
+    /// encoded file onto the destination's volume with a synchronous
+    /// `FileManager.moveItem` that can be a real cross-volume copy of the
+    /// whole encoded file (about 1 GB for a typical feature, #0018) — no
+    /// `await` of its own to suspend on. Marked `@MainActor` deliberately,
+    /// matching `PreflightTests.checkNeverRunsItsSynchronousProbesOnTheMainActor`:
+    /// `ChangeoverTests` does not set `SWIFT_DEFAULT_ACTOR_ISOLATION`, so a
+    /// plain `@Test func` here starts off the main thread already and could
+    /// never catch this — the bug only reproduces when the *caller* is
+    /// MainActor, the way `DVDPipeline.run()` really is. Without
+    /// `@concurrent` on `PlexOrganizer.move`, `onBegin` fires with
+    /// `Thread.isMainThread == true`; this must read `false`.
+    @MainActor
+    @Test func moveNeverRunsOnTheMainActor() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let moviesPath = root.appendingPathComponent("Movies").path
+        let encoded = root.appendingPathComponent("encoded.mp4")
+        try Data("stub".utf8).write(to: encoded)
+
+        let recorder = ThreadRecorder()
+        _ = try await PlexOrganizer.move(
+            encodedFile:    encoded.path,
+            metadata:       try Self.metadata(),
+            plexMoviesPath: moviesPath,
+            log:            { _ in },
+            onBegin:        { recorder.record() }
+        )
+
+        #expect(!recorder.onMainThread.isEmpty)
+        #expect(recorder.onMainThread.allSatisfy { $0 == false })
     }
 
     // MARK: - Log tail
