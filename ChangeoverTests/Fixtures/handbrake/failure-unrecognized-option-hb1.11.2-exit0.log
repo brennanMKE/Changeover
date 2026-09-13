@@ -1,0 +1,6 @@
+[21:05:54] Compile-time hardening features are enabled
+[21:05:54] hb_init: starting libhb thread
+[21:05:54] thread 16b903000 started ("libhb")
+unknown option (--no-such-flag)
+HandBrake has exited.
+

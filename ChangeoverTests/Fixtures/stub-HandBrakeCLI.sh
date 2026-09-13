@@ -23,7 +23,15 @@
 #   WRITE_OUTPUT    — 0 skips writing the placeholder `--output` file
 #                     (default 1, i.e. always write it, same as before)
 #   SLEEP_SECONDS   — sleep this long before exiting, for the inactivity
-#                     watchdog test
+#                     watchdog test. Uses `exec sleep`, which replaces this
+#                     script's process image rather than forking a child: a
+#                     forked child would inherit this process's end of the
+#                     output pipe, and killing only the parent would leave
+#                     the pipe open (no EOF) until the orphaned child's sleep
+#                     finished on its own — precisely the "inherited pipe
+#                     end" risk #0009 §9 calls out. `exec` means there is
+#                     only ever one process, so a signal to it ends the sleep
+#                     immediately and closes the pipe right away.
 #
 # With no "$0.conf" present, behavior is byte for byte what it always was —
 # EncodeControllerTests' STUB_EXIT keeps working unmodified, so it and
@@ -67,7 +75,11 @@ if [ -n "$output" ] && [ "${WRITE_OUTPUT:-1}" != "0" ]; then
 fi
 
 if [ -n "$SLEEP_SECONDS" ]; then
-    sleep "$SLEEP_SECONDS"
+    # `exec` replaces this process rather than forking — see the comment
+    # above. This never returns, so it must be the last thing the script
+    # does; a caller relying on `SLEEP_SECONDS` expects to kill the process
+    # during the sleep, not to see the exit-code logic below run afterward.
+    exec sleep "$SLEEP_SECONDS"
 fi
 
 if [ "$using_conf" = "1" ]; then

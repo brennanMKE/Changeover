@@ -40,14 +40,24 @@ enum FallbackPolicy {
         // HandBrake found nothing to encode on this disc.
         case .noTitlesProduced:
             return true
-        // #0009's "unmatched non-zero exit" is today's `.toolExited`.
-        // Excluding it would make #0009 *shrink* fallback coverage.
+        // #0009's unmatched non-zero exit is today's `.toolExited` — it
+        // never became `.unknown(tail)` as the filing plan once proposed
+        // (#0009 §10.1). `.unknown` is reserved for anomalies Changeover
+        // observes itself (the inactivity watchdog, exit 0 with no output),
+        // each disc-shaped for the same reason `.toolExited` is: retrying
+        // through MakeMKV costs one wasted attempt, not a systematic one.
         case .unknown:
             return true
 
         // A HandBrake installation problem, not a disc problem — MakeMKV's
         // output would be encoded by the same broken HandBrake anyway.
         case .toolMissing, .toolLaunchFailed:
+            return false
+        // HandBrakeCLI rejected Changeover's own arguments (or can't do what
+        // they ask) — every disc would fail the same way, so retrying
+        // through MakeMKV would waste a rip and a second encode on every
+        // single disc until someone notices (#0009 §2.5).
+        case .toolIncompatible:
             return false
         // The rip writes to the same volume, so it would fail the same way,
         // only slower.

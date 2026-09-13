@@ -93,7 +93,7 @@ struct MakeMKVFallbackTests {
 
     @Test func notDiscShapedReasonsAtEncodeStage() {
         let notDiscShaped: [FailureReason] = [
-            .toolMissing(path: "/x"), .toolLaunchFailed("x"),
+            .toolMissing(path: "/x"), .toolLaunchFailed("x"), .toolIncompatible(detail: "x"),
             .destinationUnwritable(path: "/x"), .diskFull,
             .cancelled, .activationExpired,
         ]

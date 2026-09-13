@@ -88,6 +88,13 @@ enum EncodeController {
     /// worth setting. HandBrake prints progress several times a second, so 30
     /// minutes of total silence on the pipe is a hang, not a slow encode.
     ///
+    /// On termination, builds a `HandBrakeFailureClassifier.Input` and
+    /// classifies it (#0009 §2): `nil` is success, a `FailureReason` is a
+    /// failure. `logTail` (#0009 §3) is 40 non-progress lines plus up to 5
+    /// evidence lines (ones the classifier's own `signature(for:outputPath:)`
+    /// matched as they streamed) — re-classifying it reproduces the same
+    /// reason, so a later client can re-derive the evidence line.
+    ///
     /// Returns the encoded MP4 on success, or a `JobFailure` naming the reason —
     /// a launch failure and a non-zero exit are distinct values, not both false.
     nonisolated static func encode(
@@ -101,7 +108,11 @@ enum EncodeController {
     ) async -> Result<URL, JobFailure> {
         Task { @MainActor in log("▶ Starting HandBrakeCLI encode…") }
 
-        let tail = LogTailBuffer()
+        // §3: 40 non-progress lines, plus up to 5 lines the classifier itself
+        // recognizes as a signature, as they stream — never the whole
+        // transcript, which would mean accumulating a 40-minute encode.
+        let tail     = LogTailBuffer(capacity: LogTailBuffer.defaultCapacity)
+        let evidence = LogTailBuffer(capacity: 5)
 
         // Create the output's parent directory at the moment of use —
         // immediately before the child process launches, and the last thing
@@ -130,7 +141,9 @@ enum EncodeController {
             watchdog:       .inactivity(hangTimeout),
             readerDelay:    readerDelay
         ) { line in
-            tail.append(line)
+            if !isProgressOnly(line) {
+                tail.append(line)
+            }
             Task { @MainActor in log(line) }
             // Defensive, evidence-based visibility for G1: a wrong
             // main-feature pick costs a 20-40 minute encode with no way to
@@ -139,6 +152,9 @@ enum EncodeController {
             // extra line.
             if let selected = selectedTitle(fromLogLine: line) {
                 Task { @MainActor in log("▶ HandBrake selected title \(selected)") }
+            }
+            if HandBrakeFailureClassifier.signature(for: line, outputPath: output) != nil {
+                evidence.append(line)
             }
         }
 
@@ -153,28 +169,61 @@ enum EncodeController {
             ))
 
         case .success(let termination):
-            // The watchdog itself stopping the child is a runner fact, not a
-            // tool-reported signature — always reported, whatever #0009's
-            // classifier eventually confirms by capture (§2.1 tier 0).
+            let tailSnapshot     = tail.snapshot()
+            let evidenceSnapshot = evidence.snapshot()
+            // §3: evidence lines not already in the tail, oldest first, then
+            // the tail — at most 45 lines.
+            let combinedTail = evidenceSnapshot.filter { !tailSnapshot.contains($0) } + tailSnapshot
+
+            let outputAttributes = try? FileManager.default.attributesOfItem(atPath: output)
+            let outputSize: Int64 = (outputAttributes?[.size] as? NSNumber)?.int64Value ?? 0
+            let outputIsNonEmpty = outputSize > 0
+
+            let classifierInput = HandBrakeFailureClassifier.Input(
+                termination:       termination,
+                lines:             combinedTail,
+                outputPath:        output,
+                outputIsNonEmpty:  outputIsNonEmpty,
+                availableCapacity: availableCapacity(atPath: outputDir)
+            )
+
+            guard let reason = HandBrakeFailureClassifier.classify(classifierInput) else {
+                return .success(URL(fileURLWithPath: output))
+            }
+
+            // Keep the raw fact in the log — the presenter's headline is
+            // added on top of this in `DVDPipeline.finish(_:)`, never in
+            // place of it (#0009 §4.1).
             if termination.timedOut {
-                let minutes = Int(hangTimeout / 60)
-                let reason = FailureReason.unknown(
-                    "HandBrakeCLI produced no output for \(minutes) minute\(minutes == 1 ? "" : "s") and was stopped"
-                )
-                Task { @MainActor in log("✗ HandBrakeCLI produced no output for \(minutes) minutes and was stopped") }
-                return .failure(JobFailure(stage: .encode, reason: reason, logTail: tail.snapshot()))
+                Task { @MainActor in log("✗ HandBrakeCLI produced no output for \(Int(hangTimeout / 60)) minutes and was stopped") }
+            } else {
+                Task { @MainActor in log("✗ HandBrakeCLI exited with status \(termination.status)") }
             }
-            guard termination.status == 0 else {
-                let status = termination.status
-                Task { @MainActor in log("✗ HandBrakeCLI exited with status \(status)") }
-                return .failure(JobFailure(
-                    stage:   .encode,
-                    reason:  .toolExited(code: status),
-                    logTail: tail.snapshot()
-                ))
-            }
-            return .success(URL(fileURLWithPath: output))
+            return .failure(JobFailure(stage: .encode, reason: reason, logTail: combinedTail))
         }
+    }
+
+    /// A line is progress-only if it starts with one of HandBrake's
+    /// repeating progress prefixes **and** carries none of the timestamped
+    /// log text that interleaving glues onto it (#0009 §3) — HandBrake's
+    /// `\r` progress and `\n` log lines share one pipe with no separator, so
+    /// a genuine log line can arrive glued to a progress fragment
+    /// (`main-feature-dragon-tattoo.log:507`). Progress still reaches the UI
+    /// log; this only decides what's worth keeping in the bounded tail.
+    nonisolated private static func isProgressOnly(_ line: String) -> Bool {
+        let progressPrefixes = ["Encoding: task", "Scanning title", "Muxing:"]
+        guard progressPrefixes.contains(where: line.hasPrefix) else { return false }
+        return !line.contains("] ")
+    }
+
+    /// The output volume's available capacity, read after the process exits
+    /// — the same `volumeAvailableCapacityForImportantUsageKey` read as
+    /// `MakeMKVRipper.availableCapacity`. `nil` (unknown) never trips the
+    /// classifier's capacity probe.
+    nonisolated private static func availableCapacity(atPath path: String) -> Int64? {
+        let url = URL(fileURLWithPath: path)
+        guard let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]) else { return nil }
+        return values.volumeAvailableCapacityForImportantUsage
     }
 
     /// Parses HandBrake's `Found main feature title N` line, emitted once by

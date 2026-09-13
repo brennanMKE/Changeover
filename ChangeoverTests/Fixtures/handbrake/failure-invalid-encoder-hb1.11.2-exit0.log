@@ -1,0 +1,170 @@
+[21:05:54] Compile-time hardening features are enabled
+[21:05:54] hb_init: starting libhb thread
+[21:05:54] thread 16f8bf000 started ("libhb")
+HandBrake 1.11.2 (2026060700) - Darwin arm64 - https://handbrake.fr
+8 CPUs detected
+Opening /Volumes/Media/test-fixtures/dragon-tattoo...
+[21:05:54] OS: macOS 26.6.2 (25G83)
+[21:05:54] CPU: Apple M1
+[21:05:54]  - logical processor count: 8
+[21:05:54] hb_scan: path=/Volumes/Media/test-fixtures/dragon-tattoo, title_index=1
+disc.c:437: error opening file BDMV/index.bdmv
+disc.c:437: error opening file BDMV/BACKUP/index.bdmv
+[21:05:54] bd: not a bd - trying as a stream/file instead
+libdvdread: Couldn't find device name.
+libdvdnav: Can't read name block. Probably not a DVD-ROM device.
+libdvdread: Couldn't find device name.
+[21:05:54] scan: DVD has 5 title(s)
+[21:05:54] scan: scanning title 1
+[21:05:54] scan: duration is 02:37:58 (9478467 ms)
+[21:05:54] pgc_id: 1, pgn: 1: pgc: 0x9ced99f40
+[21:05:54] scan: checking audio 1
+[21:05:54] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[21:05:54] scan: checking audio 2
+[21:05:54] scan: id=0x81bd, lang=English (AC3), 3cc=eng ext=0
+[21:05:54] scan: checking audio 3
+[21:05:54] scan: id=0x82bd, lang=English (AC3), 3cc=eng ext=0
+[21:05:54] scan: checking audio 4
+[21:05:54] scan: id=0x83bd, lang=Francais (AC3), 3cc=fra ext=0
+[21:05:54] scan: checking audio 5
+[21:05:54] scan: id=0x84bd, lang=English (AC3), 3cc=eng ext=0
+[21:05:54] scan: checking audio 6
+[21:05:54] scan: audio channel is not active
+[21:05:54] scan: checking audio 7
+[21:05:54] scan: audio channel is not active
+[21:05:54] scan: checking audio 8
+[21:05:54] scan: audio channel is not active
+[21:05:54] scan: checking subtitle 1
+[21:05:54] scan: id=0x20bd, lang=English (Wide Screen) [VOBSUB], 3cc=eng ext=0
+[21:05:54] scan: checking subtitle 2
+[21:05:54] scan: id=0x21bd, lang=English (Wide Screen) [VOBSUB], 3cc=eng ext=0
+[21:05:54] scan: checking subtitle 3
+[21:05:54] scan: id=0x22bd, lang=Francais (Wide Screen) [VOBSUB], 3cc=fra ext=0
+[21:05:54] scan: checking subtitle 4
+[21:05:54] scan: id=0x23bd, lang=español (Wide Screen) [VOBSUB], 3cc=spa ext=0
+[21:05:54] scan: checking subtitle 5
+[21:05:54] scan: id=0x24bd, lang=English (Wide Screen) [VOBSUB], 3cc=eng ext=0
+[21:05:54] scan: checking subtitle 6
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 7
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 8
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 9
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 10
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 11
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 12
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 13
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 14
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 15
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 16
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 17
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 18
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 19
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 20
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 21
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 22
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 23
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 24
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 25
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 26
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 27
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 28
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 29
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 30
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 31
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: checking subtitle 32
+[21:05:54] scan: subtitle channel is not active
+[21:05:54] scan: title 1 has 16 chapters
+[21:05:54] scan: chap 1, 593333 ms
+[21:05:54] scan: chap 2, 731033 ms
+[21:05:54] scan: chap 3, 378767 ms
+[21:05:54] scan: chap 4, 584667 ms
+[21:05:54] scan: chap 5, 589333 ms
+[21:05:54] scan: chap 6, 426900 ms
+[21:05:54] scan: chap 7, 358500 ms
+[21:05:54] scan: chap 8, 495333 ms
+[21:05:54] scan: chap 9, 410200 ms
+[21:05:54] scan: chap 10, 434633 ms
+[21:05:54] scan: chap 11, 561467 ms
+[21:05:54] scan: chap 12, 524800 ms
+[21:05:54] scan: chap 13, 1038166 ms
+[21:05:54] scan: chap 14, 947367 ms
+[21:05:54] scan: chap 15, 512800 ms
+[21:05:54] scan: chap 16, 891166 ms
+[21:05:54] scan: aspect = 16:9
+[21:05:54] scan: decoding previews for title 1
+[21:05:54] scan: title angle(s) 1
+[21:05:54] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=448000 English (AC3, 5.1 ch, 448 kbps)
+[21:05:54] scan: audio 0x82bd: ac3, rate=48000Hz, bitrate=448000 English (AC3, 5.1 ch, 448 kbps)
+[21:05:54] scan: audio 0x83bd: ac3, rate=48000Hz, bitrate=448000 Francais (AC3, 5.1 ch, 448 kbps)
+[21:05:54] scan: audio 0x81bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, Dolby Surround, 192 kbps)
+[21:05:54] scan: audio 0x84bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, Dolby Surround, 192 kbps)
+[21:05:54] using bitstream PAR 32:27
+[21:05:54] scan: 10 previews, 720x480, 23.976 fps, autocrop = 62/58/0/2, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[21:05:54] libhb: scan thread found 1 valid title(s)
++ Using preset: CLI Default
++ title 1:
+  + index 1
+  + duration: 02:37:58
+  + size: 720x480, pixel aspect: 32/27, display aspect: 1.78, 23.976 fps
+  + autocrop: 62/58/0/2
+  + chapters:
+    + 1: duration 00:09:53
+    + 2: duration 00:12:11
+    + 3: duration 00:06:19
+    + 4: duration 00:09:45
+    + 5: duration 00:09:49
+    + 6: duration 00:07:07
+    + 7: duration 00:05:59
+    + 8: duration 00:08:15
+    + 9: duration 00:06:50
+    + 10: duration 00:07:15
+    + 11: duration 00:09:21
+    + 12: duration 00:08:45
+    + 13: duration 00:17:18
+    + 14: duration 00:15:47
+    + 15: duration 00:08:33
+    + 16: duration 00:14:51
+  + audio tracks:
+    + 1, English (AC3, 5.1 ch, 448 kbps) (iso639-2: eng), 48000Hz, 448000bps
+    + 2, English (AC3, 2.0 ch, Dolby Surround, 192 kbps) (iso639-2: eng), 48000Hz, 192000bps
+    + 3, English (AC3, 5.1 ch, 448 kbps) (iso639-2: eng), 48000Hz, 448000bps
+    + 4, Francais (AC3, 5.1 ch, 448 kbps) (iso639-2: fra), 48000Hz, 448000bps
+    + 5, English (AC3, 2.0 ch, Dolby Surround, 192 kbps) (iso639-2: eng), 48000Hz, 192000bps
+  + subtitle tracks:
+    + 1, English (Wide Screen) [VOBSUB]
+    + 2, English (Wide Screen) [VOBSUB]
+    + 3, Francais (Wide Screen) [VOBSUB]
+    + 4, español (Wide Screen) [VOBSUB]
+    + 5, English (Wide Screen) [VOBSUB]
+ERROR: Invalid video encoder (bogus265)
+Failed to initialize job
+HandBrake has exited.
+libdvdnav: vm: dvd_read_name failed
+libdvdnav: DVD disk reports itself with Region mask 0x00fe0000. Regions: 01
+libdvdnav: DVD disk reports itself with Region mask 0x00fe0000. Regions: 01
+

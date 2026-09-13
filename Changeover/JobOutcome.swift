@@ -36,6 +36,15 @@ nonisolated enum FailureReason: Codable, Sendable, Equatable {
     case toolMissing(path: String)
     /// `Process.run()` threw — the tool exists but could not be launched.
     case toolLaunchFailed(String)
+    /// HandBrakeCLI rejected the options Changeover passes it, or otherwise
+    /// can't do what Changeover asks regardless of the disc — an unrecognized
+    /// flag or an unsupported encoder are the realistic triggers, most likely
+    /// after a `brew upgrade handbrake` renames or drops one (#0009 §2.5).
+    /// Not disc-shaped: retrying through the MakeMKV fallback would fail the
+    /// same way on every disc until someone notices. `detail` is a labelled
+    /// associated value (not `_0`) so a future decoder (#0060) can present it
+    /// without guessing what it means.
+    case toolIncompatible(detail: String)
     /// The tool ran and exited non-zero.
     case toolExited(code: Int32)
     /// The rip completed but produced no usable title. Not produced on the

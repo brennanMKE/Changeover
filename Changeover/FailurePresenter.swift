@@ -1,0 +1,164 @@
+import Foundation
+
+/// A person-readable rendering of a `JobFailure` (#0009 §4). Pure,
+/// `nonisolated`, no SwiftUI — this is the layer `JobOutcome.swift`'s header
+/// comment reserves for presentation, kept separately testable from the
+/// machine-readable `FailureReason`.
+///
+/// **Never render `String(describing: reason)`.** That stays in the
+/// machine-readable `FALLBACK …` log lines and the reliability-log JSONL
+/// record, which keep their exact shape — this type is the only place a
+/// `FailureReason` becomes a sentence a person reads.
+nonisolated struct FailureMessage: Sendable, Equatable {
+    /// One sentence: what happened.
+    let headline: String
+    /// Ordered: what to do, the fallback sentence, "HandBrake said: “…”".
+    let details: [String]
+}
+
+nonisolated enum FailurePresenter {
+
+    /// The full message for a failure: `headline(for:stage:)` plus every
+    /// applicable detail, in order — a first-detail sentence from the table
+    /// below, the CSS/read-error refinement, the fallback sentence, then a
+    /// quoted evidence line.
+    nonisolated static func message(for failure: JobFailure) -> FailureMessage {
+        var resolvedHeadline = headline(for: failure.reason, stage: failure.stage)
+        var details: [String] = []
+
+        // §2.5: a signal death with no textual match stays `.toolExited`,
+        // same as any other unmatched non-zero exit — but it reads better as
+        // "stopped unexpectedly" than "exited with status" when the tail's
+        // last line isn't HandBrake's own normal sign-off.
+        if case .toolExited(let code) = failure.reason,
+           failure.stage == .encode,
+           failure.logTail.last != "HandBrake has exited." {
+            resolvedHeadline = "HandBrakeCLI stopped unexpectedly (signal \(code))."
+        }
+
+        switch failure.reason {
+        case .toolMissing:
+            details.append("Install it with `brew install handbrake`, or set its path in Settings.")
+        case .toolLaunchFailed:
+            details.append("Check that the path in Settings points at the HandBrakeCLI program.")
+        case .toolIncompatible(let detail):
+            details.append("Update HandBrake with `brew upgrade handbrake`. It said: \u{201C}\(detail)\u{201D}")
+        case .toolExited:
+            details.append("Its last lines of output are in the log above.")
+        case .destinationUnwritable:
+            details.append("Check that the drive is connected and that you can write to that folder.")
+        case .diskFull:
+            details.append("Free up space, then start the disc again.")
+        case .activationExpired:
+            details.append("Open MakeMKV.app, enter the current beta key, then try again.")
+        case .discUnreadable:
+            details.append("Clean the disc and try again.")
+        case .noTitlesProduced, .cancelled, .unknown:
+            break
+        }
+
+        // CSS variants (§4): refine both the headline and the detail when
+        // the classifier's own evidence names which CSS failure it was.
+        // `outputPath` is intentionally empty here — `JobFailure` doesn't
+        // carry it, and `outputOpenFailed` is the only signature that needs
+        // it to be safely anchored, so it's excluded from presentation
+        // evidence below rather than risk a false anchor on an empty string.
+        if failure.reason == .discUnreadable,
+           let cssMatch = HandBrakeFailureClassifier.evidence(in: failure.logTail, for: .discUnreadable, outputPath: "") {
+            switch cssMatch.id {
+            case .cssKeyFailure:
+                resolvedHeadline = "HandBrake couldn't unlock this disc's copy protection."
+                if containsRawDeviceFallbackContext(failure.logTail) {
+                    details.append("libdvdcss can't open the drive directly, and its slower fallback didn't work for this disc.")
+                }
+            case .cssUnavailable:
+                details.append("libdvdcss isn't available to HandBrake. Install it with `brew install libdvdcss`.")
+            default:
+                break
+            }
+        }
+
+        // Fallback sentence (#0015): only ever set on the top-level
+        // `.encode` failure.
+        if let fallback = failure.fallback {
+            switch fallback {
+            case .unavailable(let path):
+                details.append("MakeMKV isn't installed at \(path), so no fallback was tried. Installing it (`brew install --cask makemkv`) lets Changeover retry discs like this.")
+            case .failed(let stage, let reason, _):
+                details.append("The MakeMKV fallback was tried and also failed: " + headline(for: reason, stage: stage))
+            }
+        }
+
+        // Evidence: quote HandBrake's own words only when they're genuinely
+        // what produced this reason — never a line that didn't. Skipped for
+        // `.destinationUnwritable`, the one signature that needs the real
+        // output path to be safely anchored (see the comment above).
+        if !isDestinationUnwritable(failure.reason),
+           let evidence = HandBrakeFailureClassifier.evidence(in: failure.logTail, for: failure.reason, outputPath: "") {
+            details.append("HandBrake said: \u{201C}\(evidence.line)\u{201D}")
+        }
+
+        return FailureMessage(headline: resolvedHeadline, details: details)
+    }
+
+    /// One sentence naming what happened, with no reference to `logTail` or
+    /// the fallback — the pure per-reason rendering `message(for:)` refines.
+    nonisolated static func headline(for reason: FailureReason, stage: JobStage) -> String {
+        switch reason {
+        case .toolMissing(let path):
+            let name = (path as NSString).lastPathComponent
+            return "\(name) isn't installed at \(path)."
+        case .toolLaunchFailed(let message):
+            return "\(toolName(for: stage)) couldn't be started: \(message)"
+        case .toolIncompatible:
+            return "This \(toolName(for: stage)) doesn't accept the options Changeover uses."
+        case .toolExited(let code):
+            return "\(toolName(for: stage)) stopped with exit status \(code), for a reason Changeover doesn't recognise."
+        case .noTitlesProduced:
+            return stage == .rip
+                ? "MakeMKV found no usable title on this disc."
+                : "HandBrake found no title it could encode on this disc."
+        case .destinationUnwritable(let path):
+            return "Changeover can't write to \(path)."
+        case .diskFull:
+            return "The drive holding your Plex library is full."
+        case .activationExpired:
+            return "MakeMKV's registration key has expired."
+        case .discUnreadable:
+            return "HandBrake couldn't read this disc."
+        case .cancelled:
+            return "\(toolName(for: stage)) was stopped before it finished."
+        case .unknown(let detail):
+            return "Something went wrong: \(detail)"
+        }
+    }
+
+    // MARK: - Helpers
+
+    nonisolated private static func toolName(for stage: JobStage) -> String {
+        switch stage {
+        case .rip:
+            return "makemkvcon"
+        case .encode, .preflight:
+            return "HandBrakeCLI"
+        case .organize:
+            return "Changeover"
+        }
+    }
+
+    nonisolated private static func isDestinationUnwritable(_ reason: FailureReason) -> Bool {
+        if case .destinationUnwritable = reason { return true }
+        return false
+    }
+
+    /// The libdvdcss raw-device fallback's context lines (#0009's
+    /// Re-triage): they appear on *every* real-disc run, successful ones
+    /// included, so they're never a signature on their own — only used here
+    /// to explain a genuine `cssKeyFailure` match.
+    nonisolated private static func containsRawDeviceFallbackContext(_ lines: [String]) -> Bool {
+        lines.contains { line in
+            line.contains("Attempting to retrieve all CSS keys")
+                || (line.contains("Could not open") && line.contains("libdvdcss"))
+        }
+    }
+}

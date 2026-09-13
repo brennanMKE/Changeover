@@ -5,17 +5,16 @@ import Testing
 /// Covers #0009 §1: the shared `ProcessRunner` extracted from
 /// `MakeMKVRipper.runMakeMKV`, and `EncodeController`'s migration onto it.
 ///
-/// These are Commit A's tests (#0009 §6, §7 — "Runner and drain regression",
-/// tests 1–4). Test 4, "the extraction is behaviour-preserving," is not a new
-/// test here — it's `MakeMKVFallbackTests`' existing 45 tests (including the
-/// three `runMakeMKV…` race regressions) passing **unmodified**, which is
+/// These are #0009 §6's "Runner and drain regression" tests 1–4. Test 2 was
+/// introduced in commit A asserting the pre-classifier shape
+/// (`.toolExited(code: 1)`) and updated here, in commit B, to
+/// `.discUnreadable` now that `HandBrakeFailureClassifier` is wired into
+/// `EncodeController` — matching the plan's final wording; the drain
+/// mechanics it actually pins (the trailing lines surviving the reader race)
+/// are unchanged. Test 4, "the extraction is behaviour-preserving," is not a
+/// new test here — it's `MakeMKVFallbackTests`' existing 45 tests (including
+/// the three `runMakeMKV…` race regressions) passing **unmodified**, which is
 /// checked by running the full suite, not by adding code.
-///
-/// At Commit A, `EncodeController` has no classifier yet (that's #0009's
-/// Commit B) — a non-zero exit is still `.toolExited(code:)`. Test 2 below
-/// therefore asserts the Commit-A-shape reason; Commit B updates this same
-/// assertion to `.discUnreadable` once `HandBrakeFailureClassifier` is wired
-/// into `EncodeController`, matching the plan's final wording.
 ///
 /// `.serialized` for the same reason as `EncodeControllerTests` and
 /// `MakeMKVFallbackTests`: consistency with the suite convention, even though
@@ -142,13 +141,14 @@ struct ProcessRunnerTests {
                 Issue.record("iteration \(iteration): expected failure, got \(result)")
                 continue
             }
-            // Commit A shape: no classifier yet, so this is still
-            // `.toolExited`. Commit B updates this line to `.discUnreadable`
-            // once the classifier is wired in — dropping the trailing output
-            // would otherwise silently turn back into `.toolExited(code: 1)`
-            // with no failure at all, which is why this pin matters.
-            #expect(failure.reason == .toolExited(code: 1), "iteration \(iteration)")
+            // Dropping the trailing output turns this back into
+            // `.toolExited(code: 1)` with the evidence line missing — the
+            // classifier only sees `.discUnreadable` because the fix keeps
+            // the fixture's final "Unrecoverable Read Error" and
+            // "HandBrake has exited." lines in `logTail`.
+            #expect(failure.reason == .discUnreadable, "iteration \(iteration)")
             #expect(failure.logTail.last == "HandBrake has exited.", "iteration \(iteration)")
+            #expect(failure.logTail.contains { $0.contains("Unrecoverable Read Error") }, "iteration \(iteration)")
         }
     }
 

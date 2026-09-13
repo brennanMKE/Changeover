@@ -84,6 +84,18 @@ struct DVDPipeline {
         var fallbackRecord: DiscReliabilityLog.StageReason?
 
         func finish(_ outcome: JobOutcome) -> JobOutcome {
+            // #0009 §4.1: the presenter's rendering of *any* failure, right
+            // before it's recorded — this is what replaces a bare exit code
+            // with an actual explanation. Every `FALLBACK …` line above stays
+            // byte for byte; this only adds to what's already been logged.
+            if let failure = outcome.failure {
+                let message = FailurePresenter.message(for: failure)
+                log("✗ " + message.headline)
+                for detail in message.details {
+                    log("   " + detail)
+                }
+            }
+
             let record = DiscReliabilityLog.Record(
                 date:           ISO8601DateFormatter().string(from: Date()),
                 volumeName:     volumeName,
@@ -137,7 +149,8 @@ struct DVDPipeline {
             switch decision {
             case .notEligible:
                 decisionRecord = "notEligible"
-                log("✗ Encoding failed. Aborting.")
+                // #0009: `finish(_:)` now says this better than a fixed
+                // string ever could — no replacement line needed here.
                 return finish(.failed(primaryFailure))
 
             case .unavailable(let path):

@@ -1,0 +1,27 @@
+[21:08:21] Compile-time hardening features are enabled
+[21:08:21] hb_init: starting libhb thread
+[21:08:21] thread 16b277000 started ("libhb")
+HandBrake 1.11.2 (2026060700) - Darwin arm64 - https://handbrake.fr
+8 CPUs detected
+Opening /tmp/chov-capture.K58D/empty...
+[21:08:21] OS: macOS 26.6.2 (25G83)
+[21:08:21] CPU: Apple M1
+[21:08:21]  - logical processor count: 8
+[21:08:21] hb_scan: path=/tmp/chov-capture.K58D/empty, title_index=0
+disc.c:437: error opening file BDMV/index.bdmv
+disc.c:437: error opening file BDMV/BACKUP/index.bdmv
+[21:08:21] bd: not a bd - trying as a stream/file instead
+libdvdread: Couldn't find device name.
+libdvdread: DVDOpenFilePath:findDVDFile /VIDEO_TS/VIDEO_TS.IFO failed
+libdvdread: Can't open file VIDEO_TS.IFO
+libdvdread: DVDOpenFilePath:findDVDFile /VIDEO_TS/VIDEO_TS.BUP failed
+libdvdread: Can't open file VIDEO_TS.BUP
+libdvdnav: vm: vm: failed to read VIDEO_TS.IFO
+[21:08:21] dvd: not a dvd - trying as a stream/file instead
+[21:08:21] Excluding 0 file extension(s) from scan. 
+[21:08:21] hb_stream_open: open /tmp/chov-capture.K58D/empty failed
+[21:08:21] scan: unrecognized file type
+[21:08:21] libhb: scan thread found 0 valid title(s)
+No title found.
+HandBrake has exited.
+

@@ -19,6 +19,7 @@ struct MetadataEntryView: View {
             resultsList
             Divider()
             folderPreview
+            failureBanner
             logArea
             actionBar
         }
@@ -88,6 +89,32 @@ struct MetadataEntryView: View {
             .padding(.horizontal)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Failure banner (#0009 §4.2)
+
+    /// The 130-point log below scrolls the actual explanation out of view by
+    /// the time a job fails — this is the answer: the tested pure function's
+    /// output, shown once, right where the user is already looking. No logic
+    /// beyond the `if let` — the text itself is `FailurePresenter`'s job.
+    @ViewBuilder
+    private var failureBanner: some View {
+        if let failure = jobs.lastOutcome?.failure {
+            let message = FailurePresenter.message(for: failure)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(message.headline)
+                    .font(.headline)
+                    .foregroundStyle(.red)
+                ForEach(message.details, id: \.self) { detail in
+                    Text(detail)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal)
+            .padding(.top, 4)
         }
     }
 

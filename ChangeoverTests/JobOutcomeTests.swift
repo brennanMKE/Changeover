@@ -102,6 +102,7 @@ struct JobOutcomeTests {
         for reason: FailureReason in [
             .toolMissing(path: "/opt/homebrew/bin/makemkvcon"),
             .toolLaunchFailed("launch path not accessible"),
+            .toolIncompatible(detail: "unrecognized option `--no-such-flag'"),
             .toolExited(code: 253),
             .noTitlesProduced,
             .destinationUnwritable(path: "/tmp"),
