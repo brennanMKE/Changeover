@@ -221,12 +221,11 @@ cross-check.
 
 ### Newly worth filing
 
-- **Plex compatibility of the direct-encode output.** The MP4 carries a
-  `bin_data` VOBSUB stream and a VFR `120/1` container timebase. Given
-  `check_mp4_compatibility.sh` and
-  `diagnosing_mp_4_files_for_plex_apple_tv.md` already exist in
-  `/Volumes/Media/Plex`, this has bitten before. Test file is at
-  `/tmp/fargo-direct.mp4` on joe.
+- **Plex compatibility of the direct-encode output.** The MP4 carries a VFR
+  `120/1` container timebase and a `bin_data` stream. (Corrected 2026-09-12: the
+  `bin_data` stream is the chapter text track from `--markers`, not VOBSUB, and the
+  existing library already has both. Filed as #0017, whose remaining open item is
+  HEVC direct play.) Test file is at `/tmp/fargo-direct.mp4` on joe.
 - **Subtitle variant collapsing.** HandBrake lists 12 subtitle entries for Fargo
   where there are 6 logical tracks — each in Wide Screen and Letterbox. Phase
   2's selection UI needs to collapse the pairs.

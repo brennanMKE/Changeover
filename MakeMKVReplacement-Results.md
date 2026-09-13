@@ -170,11 +170,11 @@ aside is the rule.
 - Container timebase reports `r_frame_rate=120/1` — an artifact of VFR
   (Framerate Shaper mode=0), not a real 120 fps. Consider whether CFR output is
   preferable for Plex/Apple TV.
-- A `bin_data` stream (index 3) is present — the VOBSUB track from
-  `--subtitle scan`. **VOBSUB in MP4 is poorly supported.** Given
-  `check_mp4_compatibility.sh` and `diagnosing_mp_4_files_for_plex_apple_tv.md`
-  already exist in `/Volumes/Media/Plex`, this has bitten before. Verify playback
-  before trusting the output.
+- A `bin_data` stream (index 3) is present. **Corrected 2026-09-12:** this is
+  not a VOBSUB subtitle track. It is the QuickTime chapter text track written by
+  `--markers` (`codec_tag_string=text`, one frame per chapter), and the existing
+  Fargo library file Plex already serves carries the same kind of track. Not a
+  compatibility risk — see #0017.
 
 **Subtitle count discrepancy resolved.** HandBrake's 12 vs lsdvd's 6 vs MakeMKV's
 3 is six *logical* subtitles each in two variants:
@@ -298,9 +298,10 @@ It must tolerate arbitrary non-JSON lines anywhere in the stream and locate the
   is the R9 Play All case and the malformed-IFO (BUP offset) case. Needs a swap.
 - **Broader disc reliability**, especially the §5 raw-device fallback. Best
   gathered incrementally per §9 rather than as an 11-hour sweep.
-- **Plex playback of the output** — the VFR timebase and the `bin_data` VOBSUB
-  track (§6). The file exists at `/tmp/fargo-direct.mp4` on joe and can be
-  tested directly.
+- **Plex playback of the output** — the VFR timebase (§6), which the existing
+  library also has. (The `bin_data` stream once listed here is the chapter track,
+  not VOBSUB — see §6.) The file exists at `/tmp/fargo-direct.mp4` on joe and
+  can be tested directly.
 - **Bad-sector behavior.** Findings §9 notes MakeMKV has `io_ErrorRetryCount` /
   `io_IgnoreReadErrors`; HandBrake's equivalent is uncharacterized. A corrupt
   rip still produces a file, so spot-check playback, not exit codes.
