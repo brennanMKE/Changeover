@@ -25,7 +25,9 @@ struct FailurePresenterTests {
 
     @Test func everyReasonGivesANonEmptyHeadlineWithNoLeakedSyntax() {
         for reason in Self.sampleReasons {
-            for stage: JobStage in [.encode, .rip] {
+            // #0008: preflight joins the sweep — every reason a preflight
+            // report can hold must still headline cleanly.
+            for stage: JobStage in [.encode, .rip, .preflight] {
                 let headline = FailurePresenter.headline(for: reason, stage: stage)
                 #expect(!headline.isEmpty, "\(reason) at \(stage)")
                 #expect(!headline.contains("(code:"), "\(reason) at \(stage): \(headline)")

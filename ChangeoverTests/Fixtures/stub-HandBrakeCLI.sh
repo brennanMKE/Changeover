@@ -33,17 +33,95 @@
 #                     only ever one process, so a signal to it ends the sleep
 #                     immediately and closes the pipe right away.
 #
-# With no "$0.conf" present, behavior is byte for byte what it always was —
-# EncodeControllerTests' STUB_EXIT keeps working unmodified, so it and
-# MakeMKVFallbackTests/ProcessRunnerTests (which use their own per-test copy +
-# sidecar file) can run concurrently under Swift Testing without racing a
-# shared env var.
+# #0008 extends the same sidecar mechanism for `PreflightTests` and every
+# stub-driven pipeline test: when invoked as `--help` (Preflight's P2
+# capability check), this script never falls through to any of the above —
+# it answers immediately, before the ARGV_LOG append, so preflight's own
+# invocation never shows up in a test's argv log (`hbLines.count == 2`-style
+# assertions in MakeMKVFallbackTests must keep counting only the real encode
+# calls). It also always exits 0, ignoring STUB_EXIT/EXIT_DIR_INPUT/
+# EXIT_FILE_INPUT, because a `.conf` written to make the *encode* invocation
+# fail must never also make the `--help` probe fail:
+#   HELP_FIXTURE    — a file to `cat` verbatim as the --help transcript. When
+#                     unset (the common case — no real HandBrakeCLI --help
+#                     capture exists yet, see issues/0008.md's `## Fix`),
+#                     prints the embedded SYNTHETIC transcript below instead.
+#
+# With no "$0.conf" present, behavior is byte for byte what it always was
+# except for the new --help branch — EncodeControllerTests' STUB_EXIT keeps
+# working unmodified, so it and MakeMKVFallbackTests/ProcessRunnerTests
+# (which use their own per-test copy + sidecar file) can run concurrently
+# under Swift Testing without racing a shared env var.
 
 conf="$0.conf"
 using_conf=0
 if [ -f "$conf" ]; then
     . "$conf"
     using_conf=1
+fi
+
+if [ "$1" = "--help" ]; then
+    if [ -n "$HELP_FIXTURE" ] && [ -f "$HELP_FIXTURE" ]; then
+        cat "$HELP_FIXTURE"
+    else
+        # SYNTHETIC help, not a capture. Kept in sync with
+        # Preflight.requiredHelpTokens() by PreflightTests' stub-sync test —
+        # every long flag EncodeController.arguments() passes appears here as
+        # its own whitespace-separated token, Config.videoEncoder ("x265")
+        # appears as a standalone token under --encoder, and the block has
+        # well over 20 distinct "--"-prefixed tokens so it clears the
+        # recognition gate.
+        cat <<'HELP_EOF'
+Usage: HandBrakeCLI [options] -i <device> -o <file>
+
+General options ---------------------------------------------------------
+   -h, --help              Print help
+       --version           Print version
+   -v, --verbose <string>  Be verbose
+
+Source options -----------------------------------------------------------
+   -i, --input <string>    Set input device
+   -t, --title <number>    Select a title to encode
+       --main-feature      Detect and select the main feature title
+   -c, --chapters <string> Select chapters (e.g. "1-3")
+       --min-duration <number>  Set the minimum title duration (seconds)
+       --scan              Scan only
+
+Output options ------------------------------------------------------------
+   -o, --output <string>   Set output file name
+   -f, --format <string>   Set output format: av_mp4, av_mkv
+   -m, --markers           Add chapter markers
+       --optimize          Optimize mp4 files for HTTP streaming
+
+Video options --------------------------------------------------------------
+   -e, --encoder <string>  Select video encoder: x265 (default), x264, mpeg4
+       --encoder-preset <string>  Encoder preset: ultrafast..placebo, slow default
+       --encoder-profile <string>  Encoder profile
+       --encoder-level <string>  Encoder level
+   -q, --quality <number>  Set video quality
+   -b, --vb <number>       Set video bitrate
+   -2, --two-pass          Use two-pass encoding
+   -r, --rate <number>     Set video framerate
+
+Audio options --------------------------------------------------------------
+   -E, --aencoder <string> Audio encoder(s): copy, av_aac, copy:aac
+   -B, --ab <number>       Set audio bitrate(s)
+   -6, --mixdown <string>  Format(s) for audio down/up-mix
+   -R, --arate <number>    Set audio track(s) sample rate(s)
+
+Picture settings ------------------------------------------------------------
+       --width <number>    Set picture width
+       --height <number>   Set picture height
+       --crop <T:B:L:R>    Set cropping values
+       --loose-crop        Always crop to a multiple of the modulus
+       --deinterlace       Deinterlace video with FFmpeg yadif filter
+       --decomb            Deinterlace video with decomb, only if needed
+       --detelecine        Detelecine video with FFmpeg
+       --rotate            Rotate the video
+       --grayscale         Grayscale encoding
+HELP_EOF
+    fi
+    exit 0
 fi
 
 if [ -n "$ARGV_LOG" ]; then

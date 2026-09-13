@@ -4,6 +4,14 @@ import AppKit
 struct SettingsView: View {
     @Bindable var settings: AppSettings
 
+    // #0008: live tool state, driven by `.task(id:)` below rather than
+    // computed in `body` — a truthful answer needs the async `--help` probe,
+    // which has no place running on every view redraw.
+    @State private var handbrakeState: ToolState?
+    @State private var makemkvconState: ToolState?
+    @State private var lsdvdInstalled = false
+    @State private var detectNote: [ToolLocator.Tool: String] = [:]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Changeover Settings")
@@ -36,12 +44,17 @@ struct SettingsView: View {
             // CLI Tools
             GroupBox("CLI Tools") {
                 VStack(alignment: .leading, spacing: 10) {
-                    cliRow(label: "HandBrakeCLI", path: $settings.handbrakePath)
-                    cliRow(label: "makemkvcon", path: $settings.makemkvconPath)
-                    Text("Optional. Used only as a fallback when HandBrake can't read a disc. Changeover works without it.")
+                    cliRow(tool: .handbrake, requirement: "Required", path: $settings.handbrakePath, state: handbrakeState)
+                    cliRow(tool: .makemkvcon, requirement: "Optional", path: $settings.makemkvconPath, state: makemkvconState)
+                    Text("makemkvcon is optional. Used only as a fallback when HandBrake can't read a disc. Changeover works without it.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    Text(lsdvdInstalled
+                         ? "lsdvd: installed (used to identify discs)"
+                         : "lsdvd: not installed (optional)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(6)
             }
@@ -74,6 +87,27 @@ struct SettingsView: View {
         }
         .padding()
         .frame(width: 460)
+        // #0008 §6.2: a 400ms debounce so typing a path doesn't spawn a
+        // `--help` process per keystroke; re-runs on appear and on every
+        // path change, including one written by Detect. A cancelled task may
+        // leave one `--help` process running for up to `Preflight.helpTimeout`
+        // seconds — harmless.
+        .task(id: settings.handbrakePath) {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            handbrakeState = await Preflight.handbrakeState(path: settings.handbrakePath)
+        }
+        .task(id: settings.makemkvconPath) {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            makemkvconState = Preflight.optionalToolState(path: settings.makemkvconPath)
+        }
+        .task {
+            lsdvdInstalled = LSDVDIdentity.defaultCandidatePaths.contains { path in
+                if case .file(executable: true) = PreflightProbes.live.fileKind(path) { return true }
+                return false
+            }
+        }
     }
 
     // MARK: - Helpers
@@ -93,14 +127,68 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private func cliRow(label: String, path: Binding<String>) -> some View {
-        HStack {
-            Text(label)
-                .frame(width: 90, alignment: .trailing)
-            TextField("/opt/homebrew/bin/…", text: path)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(.caption, design: .monospaced))
-            Button("Detect") { detect(binding: path) }
+    private func cliRow(tool: ToolLocator.Tool, requirement: String, path: Binding<String>, state: ToolState?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(tool.name)
+                    .frame(width: 90, alignment: .trailing)
+                TextField("/opt/homebrew/bin/…", text: path)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.caption, design: .monospaced))
+                    .onChange(of: path.wrappedValue) { detectNote[tool] = nil }
+                Button("Detect") { detect(tool, into: path) }
+            }
+            HStack(spacing: 4) {
+                Text(requirement)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 90, alignment: .trailing)
+                statusLine(for: tool, state: state)
+                    .font(.caption2)
+                Spacer()
+            }
+            if let note = detectNote[tool] {
+                Text(note)
+                    .font(.caption2)
+                    .foregroundStyle(tool == .handbrake ? .red : .secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 94)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func statusLine(for tool: ToolLocator.Tool, state: ToolState?) -> some View {
+        switch state {
+        case nil:
+            Text("Checking…").foregroundStyle(.secondary)
+        case .ready:
+            if tool == .handbrake {
+                Text("✓ Ready").foregroundStyle(.green)
+            } else {
+                Text("Installed, fallback available").foregroundStyle(.secondary)
+            }
+        case .notSet:
+            if tool == .handbrake {
+                Text("No path set").foregroundStyle(.red)
+            } else {
+                Text("Not installed, fallback unavailable (not required)").foregroundStyle(.secondary)
+            }
+        case .notFound, .notExecutable:
+            if tool == .handbrake {
+                Text("Not found").foregroundStyle(.red)
+            } else {
+                Text("Not installed, fallback unavailable (not required)").foregroundStyle(.secondary)
+            }
+        case .insideAppBundle:
+            Text("That's the HandBrake app, not HandBrakeCLI").foregroundStyle(.red)
+        case .incompatible(let missing):
+            Text("Missing: \(missing.joined(separator: ", "))").foregroundStyle(.red)
+        case .unverified(let detail):
+            Text("Couldn't verify: \(detail)").foregroundStyle(.orange)
+        case .launchFailed(let message):
+            Text("Couldn't launch: \(message)").foregroundStyle(.red)
         }
     }
 
@@ -119,14 +207,40 @@ struct SettingsView: View {
         settings.persist()
     }
 
-    private func detect(binding: Binding<String>) {
-        let name = (binding.wrappedValue as NSString).lastPathComponent
-        let candidates = [
-            "/opt/homebrew/bin/\(name)",
-            "/usr/local/bin/\(name)",
-        ]
-        if let found = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) {
+    /// #0008: replaces the old `detect(binding:)`, which searched for
+    /// `binding.wrappedValue.lastPathComponent` — with an empty field that's
+    /// `""`, so the candidate `"/opt/homebrew/bin/"` (a directory) satisfied
+    /// `fileExists` and got written into the path. This always searches for
+    /// `tool`'s own canonical name, never text out of the field, and leaves
+    /// the path alone (with a visible note) when nothing is found instead of
+    /// silently doing nothing.
+    private func detect(_ tool: ToolLocator.Tool, into binding: Binding<String>) {
+        guard let found = ToolLocator.locate(tool, fileKind: PreflightProbes.live.fileKind) else {
+            let dirs = candidateDirectories(tool).joined(separator: " or ")
+            detectNote[tool] = "\(tool.name) wasn't found in \(dirs). Install it with `\(installHint(tool))`, or type its path."
+            return
+        }
+        if found == binding.wrappedValue {
+            detectNote[tool] = "Already set to the detected path."
+        } else {
+            detectNote[tool] = nil
             binding.wrappedValue = found
+        }
+    }
+
+    private func candidateDirectories(_ tool: ToolLocator.Tool) -> [String] {
+        var dirs: [String] = []
+        for candidate in tool.candidates {
+            let dir = (candidate as NSString).deletingLastPathComponent
+            if !dirs.contains(dir) { dirs.append(dir) }
+        }
+        return dirs
+    }
+
+    private func installHint(_ tool: ToolLocator.Tool) -> String {
+        switch tool {
+        case .handbrake:  return "brew install handbrake"
+        case .makemkvcon: return "brew install --cask makemkv"
         }
     }
 

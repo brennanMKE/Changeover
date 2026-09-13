@@ -62,6 +62,7 @@ struct DVDPipeline {
         let makemkvconPath    = settings.makemkvconPath
         let workingEncodePath = settings.workingEncodePath
         let workingRipPath    = settings.workingRipPath
+        let plexMediaRoot     = settings.plexMediaRoot
         let plexMoviesPath    = settings.plexMoviesPath
         let volumeName        = disc.lastPathComponent
         let logURL            = reliabilityLogURL
@@ -115,6 +116,39 @@ struct DVDPipeline {
             return outcome
         }
 
+        // #0008: preflight — check HandBrake, the Plex destinations and free
+        // space before anything touches the disc. Runs here (async, off
+        // JobController.start's synchronous refusal) rather than in
+        // JobController.start, so a bad path fails through the same
+        // JobOutcome/FailurePresenter/reliability-log channel as any other
+        // failure, and JobController.Runner's contract never changes.
+        let preflightReport = await Preflight.check(PreflightInput(
+            handbrakePath:     handbrakePath,
+            makemkvconPath:    makemkvconPath,
+            plexMediaRoot:     plexMediaRoot,
+            plexMoviesPath:    plexMoviesPath,
+            workingEncodePath: workingEncodePath
+        ))
+        for warning in preflightReport.warnings {
+            log(FailurePresenter.line(for: warning))
+        }
+        if let preflightFailure = preflightReport.failure {
+            if case .diskFull = preflightFailure.reason, let lowSpace = preflightReport.lowSpace {
+                let availableText = ByteCountFormatter.string(fromByteCount: lowSpace.available, countStyle: .file)
+                let neededText    = ByteCountFormatter.string(fromByteCount: Preflight.minimumFreeBytes, countStyle: .file)
+                log("✗ Free space: \(availableText) on \(lowSpace.path) (needs \(neededText))")
+            }
+            for extraBlocker in preflightReport.blockers.dropFirst() {
+                log("✗ Also: " + FailurePresenter.headline(for: extraBlocker, stage: .preflight))
+            }
+            primaryRecord = DiscReliabilityLog.StageReason(
+                stage:  preflightFailure.stage,
+                reason: String(describing: preflightFailure.reason)
+            )
+            return finish(.failed(preflightFailure))
+        }
+        log("✓ Preflight passed")
+
         // Step 1: Encode, straight from the disc's VIDEO_TS — no rip stage
         // on the happy path.
         let mp4URL: URL
@@ -138,7 +172,12 @@ struct DVDPipeline {
             let decision = FallbackPolicy.decide(
                 primary:        primaryFailure,
                 makemkvconPath: makemkvconPath,
-                isExecutable:   { FileManager.default.isExecutableFile(atPath: $0) },
+                // #0008: a directory (or anything else `isExecutableFile`
+                // alone would misjudge) at `makemkvconPath` now yields
+                // `.notExecutable` → not `.ready`, so the fallback reports
+                // `.unavailable` instead of attempting a launch that would
+                // just fail.
+                isExecutable:   { Preflight.optionalToolState(path: $0) == .ready },
                 discStillPresent: {
                     FileManager.default.fileExists(
                         atPath: (discPath as NSString).appendingPathComponent("VIDEO_TS")

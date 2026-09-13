@@ -37,18 +37,53 @@ nonisolated enum FailurePresenter {
         }
 
         switch failure.reason {
-        case .toolMissing:
-            details.append("Install it with `brew install handbrake`, or set its path in Settings.")
+        case .toolMissing(let path):
+            // #0008: at `.preflight` the wording names the exact path (or
+            // says plainly that none is set) rather than the generic
+            // #0009 line, and points at Detect.
+            if failure.stage == .preflight {
+                details.append("Install it with `brew install handbrake` (the formula, not the cask), then use Detect in Settings.")
+                if !path.isEmpty {
+                    details.append("Or choose its path in Settings.")
+                }
+            } else {
+                details.append("Install it with `brew install handbrake`, or set its path in Settings.")
+            }
         case .toolLaunchFailed:
             details.append("Check that the path in Settings points at the HandBrakeCLI program.")
         case .toolIncompatible(let detail):
-            details.append("Update HandBrake with `brew upgrade handbrake`. It said: \u{201C}\(detail)\u{201D}")
+            // #0008: at `.preflight` HandBrake said nothing — Changeover's
+            // own `--help` check found this — so #0009's "It said: …"
+            // wording (which quotes HandBrake) would be a lie here.
+            if failure.stage == .preflight {
+                if detail.hasSuffix("is inside an app bundle") {
+                    details.append("That's the HandBrake app. Changeover needs the separate HandBrakeCLI command (`brew install handbrake`).")
+                } else {
+                    details.append("It's missing: \(detail).")
+                    details.append("Install or update Homebrew's build with `brew install handbrake` or `brew upgrade handbrake`.")
+                }
+            } else {
+                details.append("Update HandBrake with `brew upgrade handbrake`. It said: \u{201C}\(detail)\u{201D}")
+            }
         case .toolExited:
             details.append("Its last lines of output are in the log above.")
-        case .destinationUnwritable:
-            details.append("Check that the drive is connected and that you can write to that folder.")
+        case .destinationUnwritable(let path):
+            // #0008: at `.preflight`, the Plex media root itself (neither
+            // "Movies" nor "encoding") gets the "is the drive connected"
+            // wording; the Movies/encoding subfolders keep #0009's generic
+            // wording.
+            if failure.stage == .preflight, !isMoviesOrEncodingPath(path) {
+                details.append("Check that the drive is connected, or choose the folder again in Settings.")
+            } else {
+                details.append("Check that the drive is connected and that you can write to that folder.")
+            }
         case .diskFull:
-            details.append("Free up space, then start the disc again.")
+            if failure.stage == .preflight {
+                let needed = ByteCountFormatter.string(fromByteCount: Preflight.minimumFreeBytes, countStyle: .file)
+                details.append("Changeover needs at least \(needed) free on the drive holding your Plex library.")
+            } else {
+                details.append("Free up space, then start the disc again.")
+            }
         case .activationExpired:
             details.append("Open MakeMKV.app, enter the current beta key, then try again.")
         case .discUnreadable:
@@ -106,11 +141,22 @@ nonisolated enum FailurePresenter {
     nonisolated static func headline(for reason: FailureReason, stage: JobStage) -> String {
         switch reason {
         case .toolMissing(let path):
+            // #0008: at `.preflight` the tool name is always the literal
+            // "HandBrakeCLI" — never `path.lastPathComponent`, which would
+            // be "" for an unset path or the typo itself for a bad one.
+            if stage == .preflight {
+                return path.isEmpty
+                    ? "No HandBrakeCLI path is set."
+                    : "HandBrakeCLI isn't at \(path)."
+            }
             let name = (path as NSString).lastPathComponent
             return "\(name) isn't installed at \(path)."
         case .toolLaunchFailed(let message):
             return "\(toolName(for: stage)) couldn't be started: \(message)"
         case .toolIncompatible:
+            if stage == .preflight {
+                return "This HandBrakeCLI can't run Changeover's encode."
+            }
             return "This \(toolName(for: stage)) doesn't accept the options Changeover uses."
         case .toolExited(let code):
             return "\(toolName(for: stage)) stopped with exit status \(code), for a reason Changeover doesn't recognise."
@@ -119,8 +165,17 @@ nonisolated enum FailurePresenter {
                 ? "MakeMKV found no usable title on this disc."
                 : "HandBrake found no title it could encode on this disc."
         case .destinationUnwritable(let path):
+            // #0008: at `.preflight` the Plex media root itself gets its own
+            // wording; the Movies/encoding subfolders keep #0009's generic
+            // one (see `message(for:)`'s matching detail line).
+            if stage == .preflight, !isMoviesOrEncodingPath(path) {
+                return "Your Plex media folder isn't available: \(path)."
+            }
             return "Changeover can't write to \(path)."
         case .diskFull:
+            if stage == .preflight {
+                return "There isn't enough free space to start this disc."
+            }
             return "The drive holding your Plex library is full."
         case .activationExpired:
             return "MakeMKV's registration key has expired."
@@ -149,6 +204,37 @@ nonisolated enum FailurePresenter {
     nonisolated private static func isDestinationUnwritable(_ reason: FailureReason) -> Bool {
         if case .destinationUnwritable = reason { return true }
         return false
+    }
+
+    /// `true` for `plexMoviesPath`/`workingEncodePath` (last component
+    /// "Movies" or "encoding"); `false` for the Plex media root itself or
+    /// anything else. Used only to pick preflight's wording — see
+    /// `message(for:)` and `headline(for:stage:)`.
+    nonisolated private static func isMoviesOrEncodingPath(_ path: String) -> Bool {
+        let last = (path as NSString).lastPathComponent
+        return last == "Movies" || last == "encoding"
+    }
+
+    // MARK: - Warnings (#0008)
+
+    /// One log line for a preflight warning — informational, never a
+    /// blocker. `.fallbackUnavailable` uses the neutral `▶` prefix, never
+    /// `⚠︎`: a machine with no MakeMKV installed is a fully supported
+    /// configuration (#0015), not a problem.
+    nonisolated static func line(for warning: PreflightWarning) -> String {
+        switch warning {
+        case .fallbackUnavailable(let path):
+            return "▶ MakeMKV isn't installed at \(path). That's fine: it's only a fallback for discs HandBrake can't read."
+        case .fallbackMayLackSpace(let bytes):
+            let formatted = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+            return "⚠︎ Only \(formatted) free. If HandBrake can't read this disc, the MakeMKV fallback may not have room."
+        case .handbrakeUnverified(let detail):
+            return "⚠︎ Couldn't confirm HandBrakeCLI supports Changeover's options (\(detail)). Continuing."
+        case .capacityUnknown(let path):
+            return "⚠︎ Couldn't read free space for \(path). Not checked."
+        case .probeFileNotRemoved(let path):
+            return "⚠︎ Left a small test file behind: \(path)"
+        }
     }
 
     /// The libdvdcss raw-device fallback's context lines (#0009's

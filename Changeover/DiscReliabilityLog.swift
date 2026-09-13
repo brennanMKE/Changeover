@@ -25,6 +25,13 @@ enum DiscReliabilityLog {
         let movie: String
         /// `"handbrake"` | `"makemkvFallback"` | `nil` (no file was produced).
         let producedBy: String?
+        /// A preflight failure (#0008) is also recorded here, with
+        /// `primary.stage == "preflight"`, `decision == nil` and
+        /// `fallback == nil` — the disc was never touched, so there is
+        /// nothing to decide a fallback about. A reliability analysis that
+        /// filters on `primary.stage` should account for this: these records
+        /// say something about the *machine's setup*, not about the disc
+        /// named in `movie`/`volumeName`.
         let primary: StageReason?
         /// `"notEligible"` | `"unavailable"` | `"attempted"` | `nil`.
         let decision: String?

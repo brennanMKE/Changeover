@@ -14,6 +14,8 @@ import Foundation
 
 /// The pipeline stage a job reached.
 nonisolated enum JobStage: String, Codable, Sendable {
+    /// Produced by `DVDPipeline.run()`'s preflight (#0008) — before
+    /// HandBrakeCLI is ever launched or the disc is otherwise touched.
     case preflight
     /// Not produced on the happy path since #0014 removed the rip stage —
     /// HandBrakeCLI now encodes straight from the disc. Kept for #0015's
@@ -28,9 +30,10 @@ nonisolated enum JobStage: String, Codable, Sendable {
 
 // MARK: - Reason
 
-/// Machine-readable reason a job failed. Cases are added by #0008 (preflight)
-/// and #0009 (failure classification); only the ones the pipeline can produce
-/// today are constructed anywhere.
+/// Machine-readable reason a job failed. Cases were added by #0009 (failure
+/// classification); #0008 (preflight) adds none — every preflight blocker
+/// maps onto one of the cases already here (see `Preflight`'s file header
+/// and `issues/0008.md` §5's mapping table).
 nonisolated enum FailureReason: Codable, Sendable, Equatable {
     /// The CLI tool is not present (or not executable) at the configured path.
     case toolMissing(path: String)
