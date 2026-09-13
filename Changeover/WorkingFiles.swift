@@ -153,6 +153,182 @@ nonisolated enum WorkingFiles {
         return jobDirectory
     }
 
+    // MARK: - Job marker
+
+    /// The marker file's name inside an encode job directory (#0004 §3).
+    /// Rip job directories carry no marker — a `.mkv` is never the only copy
+    /// of anything.
+    static let markerName = ".changeover-job"
+
+    enum JobMarkerState: String, Codable, Sendable, CaseIterable {
+        case encoding
+        case encoded
+        case kept
+    }
+
+    /// The small JSON document at `<jobDirectory>/.changeover-job`. The
+    /// `movie` field makes the sweep's reminder line readable (#0004 §3).
+    nonisolated struct JobMarker: Codable, Equatable, Sendable {
+        let state: JobMarkerState
+        let movie: String
+    }
+
+    enum MarkerRead: Equatable, Sendable {
+        case marker(JobMarker)
+        case unreadable
+    }
+
+    /// Pure: an unknown `state` string is `.unreadable`, never a default
+    /// state (#0004 §3) — a marker the app can't vouch for must never
+    /// authorize a deletion.
+    nonisolated static func parseMarker(_ data: Data) -> MarkerRead {
+        guard let marker = try? JSONDecoder().decode(JobMarker.self, from: data) else {
+            return .unreadable
+        }
+        return .marker(marker)
+    }
+
+    nonisolated static func readMarker(inJobDirectory jobDirectory: String) -> MarkerRead {
+        let path = (jobDirectory as NSString).appendingPathComponent(markerName)
+        guard let data = FileManager.default.contents(atPath: path), !data.isEmpty else {
+            return .unreadable
+        }
+        return parseMarker(data)
+    }
+
+    /// Writes the marker atomically. Returns `false` on any failure — the
+    /// caller decides which safe side to land on (#0004 §3): a failed
+    /// `encoding` write leaves no marker (the sweep never auto-deletes a
+    /// directory without one), and a failed `encoded`/`kept` write is
+    /// followed by `deleteMarker` so a stale `encoding` marker can never sit
+    /// in front of a complete `.mp4`.
+    @concurrent
+    nonisolated static func writeMarker(_ marker: JobMarker, inJobDirectory jobDirectory: String) async -> Bool {
+        let path = (jobDirectory as NSString).appendingPathComponent(markerName)
+        guard let data = try? JSONEncoder().encode(marker) else { return false }
+        do {
+            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Removes the marker. `true` also when there was no marker to remove —
+    /// the caller only needs to know whether a stale marker is gone. `false`
+    /// means a removal error the caller must log with the job directory path.
+    @concurrent
+    nonisolated static func deleteMarker(inJobDirectory jobDirectory: String) async -> Bool {
+        let path = (jobDirectory as NSString).appendingPathComponent(markerName)
+        do {
+            try FileManager.default.removeItem(atPath: path)
+            return true
+        } catch {
+            let nsError = error as NSError
+            if nsError.domain == NSCocoaErrorDomain, nsError.code == NSFileNoSuchFileError {
+                return true
+            }
+            return false
+        }
+    }
+
+    // MARK: - Disposition
+
+    /// What `finish(_:)` should do with the job directory, decided purely
+    /// from the typed outcome (#0004 §1's table). Exhaustive over `JobStage`
+    /// with **no `default`**, so a future stage is a compile error until
+    /// someone decides.
+    enum Disposition: Equatable, Sendable {
+        case removeJobDirectory
+        case keepJobDirectory
+        case nothingCreated
+    }
+
+    nonisolated static func disposition(
+        for outcome: JobOutcome,
+        jobDirectoryCreated: Bool
+    ) -> Disposition {
+        guard jobDirectoryCreated else { return .nothingCreated }
+        guard let failure = outcome.failure else {
+            // .succeeded — the .mp4 has already been moved into the library.
+            return .removeJobDirectory
+        }
+        switch failure.stage {
+        case .preflight:
+            // The job directory is created after preflight, so none exists.
+            return .nothingCreated
+        case .rip, .encode:
+            // A partial or fallback-failed encode is unplayable and nothing
+            // in the app can use it; the disc is still the source.
+            return .removeJobDirectory
+        case .organize:
+            // The working .mp4 is the only copy (#0012) — never delete it.
+            return .keepJobDirectory
+        }
+    }
+
+    /// What `dispose` did. `keptAmbiguousContent` is the succeeded-job case
+    /// where the directory still holds something besides the marker — kept
+    /// and logged, never deleted (#0004 §1).
+    enum DisposeOutcome: Equatable, Sendable {
+        case nothingToDo
+        case keptAmbiguousContent(names: [String])
+        case removed
+        case refused(RefusalReason)
+        case failed(String)
+    }
+
+    /// Executes a disposition: the one place a job's own working directory
+    /// is deleted at the end of a run. Never throws, never changes the
+    /// outcome — the caller logs whatever comes back (#0004 §6).
+    ///
+    /// `jobDirectoryCreated` is the pipeline's own tracked flag, not a
+    /// filesystem probe: a refused `createJobDirectory` can leave a
+    /// pre-existing directory on disk that this job did **not** create and
+    /// must never delete (#0004 §2).
+    ///
+    /// `remover` is the pipeline's test seam (`DVDPipeline.removeJobDirectory`),
+    /// defaulted to the real guard chain so production needs no parameter.
+    @concurrent
+    nonisolated static func dispose(
+        outcome: JobOutcome,
+        jobDirectoryCreated: Bool,
+        jobDirectory: String,
+        under root: String,
+        forbidding moviesPath: String,
+        remover: @escaping @Sendable (String, String, String) -> RemovalResult = {
+            WorkingFiles.removeJobDirectory($0, under: $1, forbidding: $2)
+        }
+    ) async -> DisposeOutcome {
+        guard jobDirectoryCreated else { return .nothingToDo }
+        switch disposition(for: outcome, jobDirectoryCreated: true) {
+        case .nothingCreated, .keepJobDirectory:
+            return .nothingToDo
+        case .removeJobDirectory:
+            break
+        }
+
+        // A succeeded job's directory must hold nothing except the marker —
+        // the .mp4 has already been moved. Anything else is ambiguous: keep
+        // it and let the caller log a warning (#0004 §1).
+        if outcome.failure == nil {
+            let children = (try? FileManager.default.contentsOfDirectory(atPath: jobDirectory)) ?? []
+            let unexpected = children.filter { $0 != markerName }.sorted()
+            if !unexpected.isEmpty {
+                return .keptAmbiguousContent(names: unexpected)
+            }
+        }
+
+        switch remover(jobDirectory, root, moviesPath) {
+        case .removed:
+            return .removed
+        case .refused(let reason):
+            return .refused(reason)
+        case .failed(let message):
+            return .failed(message)
+        }
+    }
+
     // MARK: - Guards (shared by both removal entry points)
 
     /// Checks 1–6 of #0004 §6, in order, without deleting anything. Returns

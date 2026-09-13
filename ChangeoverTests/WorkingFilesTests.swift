@@ -233,4 +233,74 @@ struct WorkingFilesTests {
         #expect(FileManager.default.fileExists(atPath: jobDirectory, isDirectory: &isDirectory))
         #expect(isDirectory.boolValue)
     }
+
+    // MARK: - T3. disposition follows the outcome table
+
+    /// Parameterised over #0004 §1's table. The `.organize → keep` row is
+    /// the safety-critical one: the working `.mp4` is the only copy (#0012).
+    @Test(arguments: [
+        (JobOutcome.succeeded(destination: URL(fileURLWithPath: "/tmp/movies/Movie (Year)/Movie (Year).mp4")), true, WorkingFiles.Disposition.removeJobDirectory),
+        (JobOutcome.failed(JobFailure(stage: .encode, reason: .toolExited(code: 1))), true, WorkingFiles.Disposition.removeJobDirectory),
+        (JobOutcome.failed(JobFailure(stage: .encode, reason: .toolExited(code: 1), fallback: .failed(stage: .rip, reason: .activationExpired, logTail: []))), true, WorkingFiles.Disposition.removeJobDirectory),
+        (JobOutcome.failed(JobFailure(stage: .rip, reason: .noTitlesProduced)), true, WorkingFiles.Disposition.removeJobDirectory),
+        (JobOutcome.failed(JobFailure(stage: .organize, reason: .destinationUnwritable(path: "/tmp/movies"))), true, WorkingFiles.Disposition.keepJobDirectory),
+        (JobOutcome.failed(JobFailure(stage: .preflight, reason: .toolMissing(path: "/x"))), true, WorkingFiles.Disposition.nothingCreated),
+        (JobOutcome.succeeded(destination: URL(fileURLWithPath: "/tmp/movies/Movie (Year)/Movie (Year).mp4")), false, WorkingFiles.Disposition.nothingCreated),
+        (JobOutcome.failed(JobFailure(stage: .encode, reason: .toolExited(code: 1))), false, WorkingFiles.Disposition.nothingCreated),
+        (JobOutcome.failed(JobFailure(stage: .encode, reason: .destinationUnwritable(path: "/tmp/working/job-x"))), false, WorkingFiles.Disposition.nothingCreated),
+        (JobOutcome.failed(JobFailure(stage: .organize, reason: .destinationUnwritable(path: "/tmp/movies"))), false, WorkingFiles.Disposition.nothingCreated),
+        (JobOutcome.failed(JobFailure(stage: .preflight, reason: .toolMissing(path: "/x"))), false, WorkingFiles.Disposition.nothingCreated),
+    ])
+    func dispositionFollowsTheOutcomeTable(
+        _ outcome: JobOutcome,
+        _ jobDirectoryCreated: Bool,
+        _ expected: WorkingFiles.Disposition
+    ) {
+        #expect(WorkingFiles.disposition(for: outcome, jobDirectoryCreated: jobDirectoryCreated) == expected)
+    }
+
+    // MARK: - T4. marker round-trip; garbage is unreadable
+
+    @Test func markerRoundTripsEveryState() throws {
+        for state in WorkingFiles.JobMarkerState.allCases {
+            let marker = WorkingFiles.JobMarker(state: state, movie: "Blade Runner (1982) {tmdb-78}")
+            let data = try JSONEncoder().encode(marker)
+            guard case .marker(let parsed) = WorkingFiles.parseMarker(data) else {
+                Issue.record("marker with state \(state) did not round-trip")
+                continue
+            }
+            #expect(parsed == marker)
+        }
+    }
+
+    @Test func markerGarbageIsUnreadableNeverADefaultState() throws {
+        let garbage: [Data] = [
+            Data(),
+            Data("".utf8),
+            Data("{".utf8),
+            Data(#"{"state":"bogus","movie":"x"}"#.utf8),
+            Data(#"{"state":"encoding"}"#.utf8), // missing the movie field
+            Data("not json at all".utf8),
+        ]
+        for data in garbage {
+            #expect(WorkingFiles.parseMarker(data) == .unreadable, "garbage parsed as a marker: \(String(decoding: data, as: UTF8.self))")
+        }
+    }
+
+    @Test func readMarkerReportsUnreadableWhenThereIsNoMarker() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let job = try Self.makeJobDir(in: root)
+
+        #expect(WorkingFiles.readMarker(inJobDirectory: job.path) == .unreadable)
+
+        let marker = WorkingFiles.JobMarker(state: .encoding, movie: "Blade Runner (1982) {tmdb-78}")
+        let written = await WorkingFiles.writeMarker(marker, inJobDirectory: job.path)
+        #expect(written)
+        #expect(WorkingFiles.readMarker(inJobDirectory: job.path) == .marker(marker))
+
+        let deleted = await WorkingFiles.deleteMarker(inJobDirectory: job.path)
+        #expect(deleted)
+        #expect(WorkingFiles.readMarker(inJobDirectory: job.path) == .unreadable)
+    }
 }
