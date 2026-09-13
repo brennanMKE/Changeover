@@ -32,6 +32,37 @@ Crash report: `~/Library/Logs/DiagnosticReports/Batty-2026-09-12-170611.ips`
 - No Batty frames on the faulting thread. Batty does not link XCTest.
   `XCTAutomationSupport` was loaded from `/System/Library/PrivateFrameworks` by the system.
 
+## Second UI test run after the crash
+
+The crash killed the orchestrating Claude session, which was running inside
+Batty, and stopped its two background subagents mid-task: the #0014
+implementer and a #0013 reviewer. After the session was restarted, both were
+resumed. Their resume messages restated their original briefs. At that point
+the cause of the crash was not yet known, so neither message forbade UI tests.
+
+| Time (PDT) | Event |
+|---|---|
+| 17:10:40 | The resumed #0014 implementer runs the same bare `xcodebuild ... test` as its baseline check. The run holds 61 tests: the 58 `ChangeoverTests` plus the 3 `ChangeoverUITests`, so XCUITest starts a second time. It completes without crashing anything, and no new crash reports are written. |
+| before 17:17 | The orchestrator sends both running subagents a stop message restricting them to `-only-testing:ChangeoverTests`. |
+| 17:17:11 | `CLAUDE.md` rule committed (`af8f426`), together with this doc. |
+| 17:19:45 | Hard stop committed (`1d9ebe6`): the `Changeover` scheme's Test action now contains only `ChangeoverTests`. |
+
+Every test run from 17:16 onward was unit-only. The #0014 implementer's final
+report confirmed its baseline check had been the bare `test`.
+
+### Contributing causes
+
+- `CLAUDE.md` listed the bare command as the way to run all tests (rule 4 below).
+- The orchestrator had normalised UI test runs earlier the same day. Its #0002
+  brief told the implementer that UI tests "CAN run on this machine" and to run
+  them at least once. The #0011 brief said they "also run here if you want
+  them". The Phase 1 review brief listed `-only-testing:ChangeoverUITests` as a
+  command to use. The #0002 implementer's and reviewer's UI test runs completed
+  without incident, so subagents were following a precedent the orchestrator had
+  set.
+- A resumed agent carries on with its original brief. A safety rule learned
+  while an agent is stopped must go into the resume message itself.
+
 ## Why a Changeover test can kill a different app
 
 XCUITest doesn't stay inside the app under test. When a UI test session starts,
@@ -75,6 +106,20 @@ down any app they have open.
 5. **Optional hard stop.** Remove `ChangeoverUITests` from the `Changeover`
    scheme's Test action, or move it to a separate `Changeover UI Tests`
    scheme. Then a bare `test` physically can't start XCUITest.
+
+## Status of the prevention rules
+
+As of 2026-09-12:
+
+- **Rule 1:** applied. Every subagent brief since the stop message restricts the test command to `-only-testing:ChangeoverTests`.
+- **Rule 2:** applied. Recorded in `CLAUDE.md` and in the orchestrator's persistent memory, so later sessions carry it too.
+- **Rule 3:** gordon, an idle Mac mini, is the candidate for any approved run. It isn't set up yet: Automation Mode on gordon needs the user's authentication, and the repo isn't checked out there.
+- **Rule 4:** done in `af8f426`.
+- **Rule 5:** done in `1d9ebe6`. The UI tests moved to a separate `Changeover UI Tests` scheme. A `build-for-testing` run, which executes no tests, confirmed that the `Changeover` scheme's `.xctestrun` lists only `ChangeoverTests`.
+
+The three `ChangeoverUITests` are unmodified Xcode template tests that assert
+nothing, so every one of these runs carried all of the risk and none of the
+verification value.
 
 ## Batty side
 
