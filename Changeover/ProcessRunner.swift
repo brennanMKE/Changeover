@@ -70,12 +70,34 @@ nonisolated enum ProcessRunner {
     /// `readerDelay` is a test-only seam (a no-op by default): a test can
     /// insert a pause between capturing `availableData` and processing it, to
     /// reproduce the exact race above deterministically regardless of timing.
+    ///
+    /// **`hardCeilingGrace` (#0009, 2026-09-12): a last-resort backstop, added
+    /// after a real 58-minute hang on gordon.** A `SWIFT TASK CONTINUATION
+    /// MISUSE: run(executablePath:arguments:watchdog:readerDelay:onLine:)
+    /// leaked its continuation without resuming it` was observed during
+    /// `ProcessRunnerTests/encodeSurvivesTheReaderTerminationRaceAndKeepsTheFinalLine()`
+    /// (20 iterations of `EncodeController.encode` with a 30ms `readerDelay`
+    /// against a >64KB fixture). Despite comparing this function line by line
+    /// against `MakeMKVRipper.runMakeMKV`'s reviewed original (`git show
+    /// 6143729^:Changeover/MakeMKVRipper.swift`) — the reader/gate/termination
+    /// sequencing is unchanged — **the exact leaking path has not been
+    /// conclusively identified**; see `issues/0009.md` `## Gotchas` for what
+    /// was ruled in and out. Rather than ship a mechanism that can still hang
+    /// the calling task forever if some interaction is missed, this adds a
+    /// hard ceiling — `watchdog`'s own bound plus `hardCeilingGrace` — after
+    /// which the gate is forced to fire with a synthetic `Termination`
+    /// (`timedOut: true`) regardless of whether the reader or the process
+    /// ever separately reported completion. This is a backstop, not a
+    /// substitute for finding the real cause: it can leave an unreaped
+    /// process or an orphaned pipe behind, but it guarantees the *caller*
+    /// is never the one left hanging.
     nonisolated static func run(
-        executablePath: String,
-        arguments:      [String],
-        watchdog:       Watchdog,
-        readerDelay:    @escaping () -> Void = {},
-        onLine:         @escaping (String) -> Void
+        executablePath:   String,
+        arguments:        [String],
+        watchdog:         Watchdog,
+        readerDelay:      @escaping () -> Void = {},
+        hardCeilingGrace: TimeInterval = 60,
+        onLine:           @escaping (String) -> Void
     ) async -> Result<Termination, Error> {
         await withCheckedContinuation { continuation in
             let process = Process()
@@ -94,6 +116,11 @@ nonisolated enum ProcessRunner {
                 if !leftover.isEmpty {
                     onLine(leftover)
                 }
+                // Best-effort cleanup, whichever path fired: never rely on
+                // deinit alone to close these across a tight loop of calls.
+                pipe.fileHandleForReading.readabilityHandler = nil
+                try? pipe.fileHandleForReading.close()
+                try? pipe.fileHandleForWriting.close()
                 continuation.resume(returning: .success(termination))
             }
 
@@ -147,6 +174,35 @@ nonisolated enum ProcessRunner {
                 timer.resume()
             }
 
+            // The hard ceiling: `watchdog`'s own bound plus a grace period.
+            // Deliberately **never canceled** — only ever scheduled once,
+            // and `forceExpire`/`process.terminate()` are no-ops if the gate
+            // or the process are already done by the time it fires, so
+            // there's nothing to race by leaving it armed. (An earlier
+            // version canceled this from inside `gate`'s `onReady`, which
+            // needed `gate`'s closure to capture the work item itself — a
+            // retain cycle. Not canceling it removes the need for that
+            // capture entirely, at the cost of one harmless pending
+            // DispatchWorkItem per call until it fires as a no-op.) This is
+            // what turns an unidentified leak into a bounded, reported
+            // failure instead of a silent hang, including when the process
+            // has already exited but the reader never sees EOF.
+            let watchdogBound: TimeInterval
+            switch watchdog {
+            case .absolute(let t):    watchdogBound = t
+            case .inactivity(let t):  watchdogBound = t
+            }
+            let ceilingItem = DispatchWorkItem {
+                if process.isRunning {
+                    process.terminate()
+                }
+                gate.forceExpire(with: Termination(status: -1, uncaughtSignal: false, timedOut: true))
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(
+                deadline: .now() + watchdogBound + hardCeilingGrace,
+                execute:  ceilingItem
+            )
+
             process.terminationHandler = { proc in
                 absoluteWorkItem?.cancel()
                 inactivityTimer?.cancel()
@@ -163,6 +219,7 @@ nonisolated enum ProcessRunner {
             } catch {
                 absoluteWorkItem?.cancel()
                 inactivityTimer?.cancel()
+                ceilingItem.cancel()
                 pipe.fileHandleForReading.readabilityHandler = nil
                 continuation.resume(returning: .failure(error))
             }
@@ -206,6 +263,24 @@ nonisolated final class RunCompletionGate: @unchecked Sendable {
         if shouldFire { fired = true }
         lock.unlock()
         if shouldFire { onReady(termination) }
+    }
+
+    /// Fires with `termination` if — and only if — nothing has fired yet,
+    /// regardless of whether either `markReaderDone()` or
+    /// `markProcessDone(_:)` has been called. The hard-ceiling backstop
+    /// (#0009, 2026-09-12): whatever the still-unidentified path is that can
+    /// leave one of the two signals unrecorded, this guarantees the gate
+    /// still fires exactly once, eventually, rather than never. Returns
+    /// `true` only when this call is the one that fired it, so a caller can
+    /// tell a genuine backstop firing from a no-op.
+    @discardableResult
+    func forceExpire(with termination: ProcessRunner.Termination) -> Bool {
+        lock.lock()
+        let shouldFire = !fired
+        if shouldFire { fired = true }
+        lock.unlock()
+        if shouldFire { onReady(termination) }
+        return shouldFire
     }
 }
 
@@ -280,7 +355,7 @@ nonisolated final class LineSplitter: @unchecked Sendable {
 nonisolated private final class WatchdogState: @unchecked Sendable {
     private let lock = NSLock()
     private var lastActivity = DispatchTime.now()
-    private(set) var timedOut = false
+    private var timedOutFlag = false
 
     func recordActivity() {
         lock.lock()
@@ -301,7 +376,19 @@ nonisolated private final class WatchdogState: @unchecked Sendable {
 
     func markTimedOut() {
         lock.lock()
-        timedOut = true
+        timedOutFlag = true
         lock.unlock()
+    }
+
+    /// Was previously `private(set) var timedOut`, read directly as a
+    /// property from `terminationHandler` with no lock — a genuine data race
+    /// (found 2026-09-12 while investigating a leaked-continuation hang; see
+    /// `issues/0009.md` `## Gotchas`). Not confirmed as the cause of that
+    /// hang, but a real bug regardless: nothing guaranteed the reading
+    /// thread would observe `markTimedOut()`'s write.
+    var timedOut: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return timedOutFlag
     }
 }

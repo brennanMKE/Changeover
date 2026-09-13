@@ -98,13 +98,14 @@ enum EncodeController {
     /// Returns the encoded MP4 on success, or a `JobFailure` naming the reason —
     /// a launch failure and a non-zero exit are distinct values, not both false.
     nonisolated static func encode(
-        source:        String,
-        title:         TitleSelection,
-        output:        String,
-        handbrakePath: String,
-        hangTimeout:   TimeInterval = 30 * 60,
-        readerDelay:   @escaping () -> Void = {},
-        log:           @escaping @MainActor (String) -> Void
+        source:           String,
+        title:            TitleSelection,
+        output:           String,
+        handbrakePath:    String,
+        hangTimeout:      TimeInterval = 30 * 60,
+        readerDelay:      @escaping () -> Void = {},
+        hardCeilingGrace: TimeInterval = 60,
+        log:              @escaping @MainActor (String) -> Void
     ) async -> Result<URL, JobFailure> {
         Task { @MainActor in log("▶ Starting HandBrakeCLI encode…") }
 
@@ -136,10 +137,11 @@ enum EncodeController {
         }
 
         let result = await ProcessRunner.run(
-            executablePath: handbrakePath,
-            arguments:      arguments(source: source, title: title, output: output),
-            watchdog:       .inactivity(hangTimeout),
-            readerDelay:    readerDelay
+            executablePath:   handbrakePath,
+            arguments:        arguments(source: source, title: title, output: output),
+            watchdog:         .inactivity(hangTimeout),
+            readerDelay:      readerDelay,
+            hardCeilingGrace: hardCeilingGrace
         ) { line in
             if !isProgressOnly(line) {
                 tail.append(line)

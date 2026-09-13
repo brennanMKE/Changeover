@@ -186,4 +186,92 @@ struct ProcessRunnerTests {
         }
         #expect(message.contains("no output"))
     }
+
+    // MARK: - 4. The hard-ceiling backstop (#0009, 2026-09-12)
+    //
+    // A `SWIFT TASK CONTINUATION MISUSE: run(executablePath:arguments:watchdog:readerDelay:onLine:)
+    // leaked its continuation without resuming it` was observed on gordon
+    // during `encodeSurvivesTheReaderTerminationRaceAndKeepsTheFinalLine()`
+    // above (20 iterations, 30ms `readerDelay`, a >64KB fixture) — a genuine
+    // ~58-minute hang at 0% CPU. Line-by-line comparison against
+    // `MakeMKVRipper.runMakeMKV`'s reviewed original (`git show
+    // 6143729^:Changeover/MakeMKVRipper.swift`) found the reader/gate/
+    // termination sequencing unchanged, so **the exact leaking path is not
+    // confirmed** — see `issues/0009.md` `## Gotchas` for what was
+    // considered. These tests don't reproduce that exact interleaving
+    // (nothing here has managed to, deterministically, yet); they instead
+    // pin the backstop `ProcessRunner.run` now has regardless of *why* the
+    // gate might fail to fire on its own: `RunCompletionGate.forceExpire`
+    // fires at most once even when raced against a normal completion, and
+    // `run(...)` returns within its watchdog bound plus a small
+    // `hardCeilingGrace` even when the reader can never see EOF at all — one
+    // of the leak candidates the coordinator named directly.
+
+    /// Whichever arrives first — a normal completion or a forced expiry —
+    /// wins, and the other is a no-op. This is the gate's core guarantee,
+    /// extended to three-way arbitration rather than the original's two-way.
+    @Test func runCompletionGateFiresAtMostOnceAcrossNormalAndForcedCompletion() {
+        var deliveries: [ProcessRunner.Termination] = []
+        let lock = NSLock()
+        let gate = RunCompletionGate { termination in
+            lock.lock()
+            deliveries.append(termination)
+            lock.unlock()
+        }
+
+        let normal = ProcessRunner.Termination(status: 0, uncaughtSignal: false, timedOut: false)
+        let forced = ProcessRunner.Termination(status: -1, uncaughtSignal: false, timedOut: true)
+
+        // Normal completion first: forceExpire afterward must be a no-op.
+        gate.markReaderDone()
+        gate.markProcessDone(normal)
+        let forcedAfterNormalFired = gate.forceExpire(with: forced)
+        #expect(!forcedAfterNormalFired)
+        #expect(deliveries == [normal])
+
+        // A fresh gate, forced expiry first: the normal signals arriving
+        // afterward (e.g. a slow reader finally catching up) must not
+        // deliver a second time.
+        var deliveries2: [ProcessRunner.Termination] = []
+        let gate2 = RunCompletionGate { termination in
+            lock.lock()
+            deliveries2.append(termination)
+            lock.unlock()
+        }
+        let forcedFirst = gate2.forceExpire(with: forced)
+        #expect(forcedFirst)
+        gate2.markReaderDone()
+        gate2.markProcessDone(normal)
+        #expect(deliveries2 == [forced])
+    }
+
+    /// Reproduces, deterministically and without any fixture, "the reader
+    /// never sees EOF" — one of the coordinator's named leak candidates: a
+    /// `/bin/sh -c` command backgrounds a detached `sleep`, inheriting the
+    /// pipe's write end, then the *tracked* process exits immediately.
+    /// `terminationHandler` fires almost at once; `markReaderDone()` would
+    /// not, on its own, until the orphaned `sleep` also exits 30 seconds
+    /// later — so without the hard-ceiling backstop this call would take
+    /// ~30s. With a 1-second `hardCeilingGrace` it must return in a few
+    /// seconds instead, `timedOut: true`, proving `run(...)` cannot be left
+    /// hanging by an orphan holding the pipe open, regardless of whether
+    /// that's the actual gordon leak's mechanism.
+    @Test func runReturnsWithinTheHardCeilingWhenAnOrphanKeepsThePipeOpen() async throws {
+        let start = Date()
+        let result = await ProcessRunner.run(
+            executablePath:   "/bin/sh",
+            arguments:        ["-c", "( sleep 30 & ); exit 0"],
+            watchdog:         .inactivity(1),
+            hardCeilingGrace: 1,
+            onLine:           { _ in }
+        )
+        let elapsed = Date().timeIntervalSince(start)
+        #expect(elapsed < 10, "took \(elapsed)s — the hard ceiling should bound this to a few seconds, not the orphan's 30s sleep")
+
+        guard case .success(let termination) = result else {
+            Issue.record("expected a synthetic success from the hard ceiling, got \(result)")
+            return
+        }
+        #expect(termination.timedOut)
+    }
 }
