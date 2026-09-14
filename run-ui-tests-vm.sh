@@ -6,8 +6,9 @@
 # deleted afterwards. The golden image is only ever cloned, never run.
 #
 # Per run:
-#   1. Preflight: Tart present, golden image present, disk free, LM Studio
-#      models unloaded (its loaded models got a clone OOM-killed once), stale
+#   1. Preflight: Tart present, golden image present, disk free, memory
+#      requested through the generic memory-signal protocol when the host is
+#      short (the machine's observer frees what it can), stale
 #      `changeover-uitest-*` clones swept.
 #   2. Export a clean snapshot: `git archive HEAD` — never the live working
 #      copy — plus the gitignored `Changeover/Secrets.xcconfig`.
@@ -43,6 +44,20 @@ cleanup() {
   local rc=$?
   trap - EXIT
   log "Cleaning up (exit $rc)"
+  # memory-signal release: tell the observer this run is done with any
+  # memory it freed. Best effort — never affects the exit code.
+  if [[ -n "${MEMORY_REQUEST_ID:-}" ]]; then
+    /usr/bin/python3 - "${MEMORY_COORD_DIR:-}" "$MEMORY_REQUEST_ID" <<'PY' 2>/dev/null || true
+import json, os, sys, datetime
+dir, rid = sys.argv[1:3]
+if not dir:
+    raise SystemExit(0)
+os.makedirs(os.path.join(dir, "release"), exist_ok=True)
+doc = {"id": rid, "released": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+with open(os.path.join(dir, "release", rid + ".json"), "w") as f:
+    json.dump(doc, f, indent=2)
+PY
+  fi
   tart stop "$CLONE" >/dev/null 2>&1 || true
   tart delete "$CLONE" >/dev/null 2>&1 || true
   rm -rf "$EXPORT"
@@ -60,16 +75,90 @@ tart list | grep -q "$GOLDEN" || fail "Golden image '$GOLDEN' not found"
 free_kb=$(df -k / | awk 'NR == 2 { print $4 }')
 (( free_kb / 1024 / 1024 >= 20 )) || fail "Only $((free_kb / 1024 / 1024)) GiB free on / — need at least 20 GiB"
 
-# LM Studio's loaded models do not show in process RSS but got a clone
-# OOM-killed once (tart-ui-test-vm.md, Known limits). Refuse to run with
-# models loaded unless overridden.
-if [[ -x "$HOME/.lmstudio/bin/lms" ]]; then
-  if lms_ps="$("$HOME/.lmstudio/bin/lms" ps 2>/dev/null)"; then
-    if print -r -- "$lms_ps" | grep -qE 'IDLE|LOADED|PROCESSING'; then
-      print -r -- "$lms_ps" | tail -n +2
-      fail "LM Studio has models loaded (~24 GB, invisible to RSS). Unload them first: ~/.lmstudio/bin/lms unload --all — and record the unload in ~/Developer/Homelab/cameron/lm-studio-memory.md (the coordination ledger)"
+# --- Memory (generic memory-signal protocol) -------------------------------
+# The guest needs its RAM plus host build headroom. This script states the
+# need through the memory-signal protocol and waits for this machine's
+# observer to free memory; what the observer does (unload cached AI models,
+# drop caches, ask the user) is configured on the machine, never here.
+# See PROTOCOL.md in the protocol's home for the wire format.
+
+# Keep in sync with the golden image's memory (`tart set --memory`).
+typeset -g GUEST_MEM_MB=12288
+
+memory_available_bytes() {
+  local page free inactive purgeable
+  page=$(sysctl -n vm.pagesize)
+  free=$(vm_stat | awk '/Pages free/ {gsub("\\.","",$3); print $3}')
+  inactive=$(vm_stat | awk '/Pages inactive/ {gsub("\\.","",$3); print $3}')
+  purgeable=$(vm_stat | awk '/Pages purgeable/ {gsub("\\.","",$3); print $3}')
+  print -r -- $(( (free + inactive + purgeable) * page ))
+}
+
+# 0 = a live observer owns the spool (heartbeat fresh), 1 = none.
+memory_observer_live() {
+  local dir hb now mtime
+  dir="${MEMORY_COORDINATION_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/memory-coordination}"
+  hb="$dir/heartbeat"
+  [[ -f "$hb" ]] || return 1
+  now=$(date +%s)
+  mtime=$(stat -f %m "$hb" 2>/dev/null) || return 1
+  (( now - mtime <= 15 ))
+}
+
+# Emits a request and polls for ready/failed. 0 ready, 3 failed, 4 timeout
+# or no observer. Sets MEMORY_REQUEST_ID for the release in cleanup.
+memory_request_and_wait() {
+  local need_bytes=$1 reason=$2 timeout=${3:-120}
+  local dir id req deadline
+  dir="${MEMORY_COORDINATION_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/memory-coordination}"
+  id="run-ui-tests-vm-$$-$(date +%s)"
+  req="$dir/requests/$id.json"
+  MEMORY_REQUEST_ID="$id"
+  MEMORY_COORD_DIR="$dir"
+
+  memory_observer_live || { MEMORY_REQUEST_ID=""; return 4; }
+
+  mkdir -p "$dir/requests" "$dir/ready" "$dir/failed" "$dir/release"
+  /usr/bin/python3 - "$req" "$id" "$need_bytes" "$reason" "$$" <<'PY'
+import json, os, sys, datetime
+path, rid, need, reason, pid = sys.argv[1:6]
+doc = {
+    "id": rid,
+    "resource": "memory",
+    "bytes": int(need),
+    "requester": "run-ui-tests-vm",
+    "reason": reason,
+    "pid": int(pid),
+    "created": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+}
+with open(path, "w") as f:
+    json.dump(doc, f, indent=2)
+    f.write("\n")
+PY
+
+  deadline=$(( SECONDS + timeout ))
+  while (( SECONDS < deadline )); do
+    [[ -f "$dir/ready/$id.json" ]] && return 0
+    if [[ -f "$dir/failed/$id.json" ]]; then
+      /usr/bin/python3 -c 'import json,sys; print("memory-signal failed:", json.load(open(sys.argv[1])).get("reason","?"))' "$dir/failed/$id.json" >&2
+      return 3
     fi
-  fi
+    sleep 2
+  done
+  return 4
+}
+
+need_bytes=$(( (GUEST_MEM_MB + 4096) * 1024 * 1024 ))
+avail_bytes=$(memory_available_bytes)
+if (( avail_bytes < need_bytes )); then
+  log "Host memory short ($(( avail_bytes / 1073741824 )) GiB of $(( need_bytes / 1073741824 )) GiB) — requesting via the memory-signal protocol"
+  set +e
+  memory_request_and_wait "$need_bytes" "Tart VM UI-test run needs guest RAM plus build headroom" 120
+  mem_rc=$?
+  set -e
+  (( mem_rc == 0 )) || fail "Memory request not fulfilled (rc=$mem_rc). Free memory, or set up a memory-signal observer (MEMORY_COORDINATION_DIR=${MEMORY_COORDINATION_DIR:-$HOME/.local/state/memory-coordination})"
+  avail_bytes=$(memory_available_bytes)
+  (( avail_bytes >= need_bytes )) || fail "Observer signaled ready but memory is still short ($(( avail_bytes / 1073741824 )) GiB of $(( need_bytes / 1073741824 )) GiB)"
 fi
 
 # A SIGKILL (e.g. the OOM above) skips this script's trap, so sweep any
