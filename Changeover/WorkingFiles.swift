@@ -176,6 +176,10 @@ nonisolated enum WorkingFiles {
     enum MarkerRead: Equatable, Sendable {
         case marker(JobMarker)
         case unreadable
+        /// No marker file exists — distinct from one that exists but can't
+        /// be trusted. The sweep never auto-deletes a `.missing` or
+        /// `.unreadable` directory (#0004 §4).
+        case missing
     }
 
     /// Pure: an unknown `state` string is `.unreadable`, never a default
@@ -190,6 +194,11 @@ nonisolated enum WorkingFiles {
 
     nonisolated static func readMarker(inJobDirectory jobDirectory: String) -> MarkerRead {
         let path = (jobDirectory as NSString).appendingPathComponent(markerName)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            return .missing
+        }
         guard let data = FileManager.default.contents(atPath: path), !data.isEmpty else {
             return .unreadable
         }
@@ -432,5 +441,298 @@ nonisolated enum WorkingFiles {
         guard let resolved = realpath(path, nil) else { return nil }
         defer { free(resolved) }
         return String(cString: resolved)
+    }
+
+    // MARK: - Stale sweep (#0004 §4)
+
+    /// How long an `encoding` job directory (or a rip job directory) can sit
+    /// untouched before the sweep deletes it. The longest realistic job is
+    /// about 3 h; 24 h is an eightfold margin. `encoded` and `kept`
+    /// directories never expire.
+    static let staleAfter: TimeInterval = 24 * 60 * 60
+
+    struct SweepInput: Sendable {
+        let plexMediaRoot: String
+        let workingEncodePath: String
+        let workingRipPath: String
+        let plexMoviesPath: String
+        let staleAfter: TimeInterval
+    }
+
+    /// One direct child of a working root, fully described — everything
+    /// `sweepDecision` needs, and nothing else.
+    struct SweepEntry: Sendable {
+        enum Root: Sendable {
+            case encode
+            case rip
+        }
+
+        let name: String
+        let kind: EntryKind
+        let marker: MarkerRead
+        /// The newest `lstat` mtime of the directory, its marker and its
+        /// direct children; `nil` if unreadable.
+        let newestModification: Date?
+        let hasContentBesidesMarker: Bool
+    }
+
+    enum KeptReason: Equatable, Sendable {
+        /// A regular `.mp4` directly in the encode root — an older build's
+        /// loose encode. Reported, never deleted.
+        case legacyLooseFile
+        /// A job-shaped directory with no readable marker. Ambiguous, so kept.
+        case unrecognised
+        /// The app died between encode success and the move finishing. The
+        /// `.mp4` inside is complete — never deleted.
+        case encodedNeverMoved
+        /// The move into Plex failed; the `.mp4` inside is the only copy
+        /// (#0012). Never deleted.
+        case keptAfterFailedMove
+    }
+
+    enum SweepDecision: Equatable, Sendable {
+        case delete
+        case report(KeptReason)
+        case leave
+    }
+
+    /// Pure and exhaustive: what to do with one sweep entry. The tables are
+    /// #0004 §4's, one per root. `now` is injected so tests can backdate
+    /// mtimes instead of sleeping.
+    nonisolated static func sweepDecision(
+        for entry: SweepEntry,
+        in root: SweepEntry.Root,
+        now: Date,
+        staleAfter: TimeInterval
+    ) -> SweepDecision {
+        switch root {
+        case .encode:
+            return encodeSweepDecision(for: entry, now: now, staleAfter: staleAfter)
+        case .rip:
+            return ripSweepDecision(for: entry, now: now, staleAfter: staleAfter)
+        }
+    }
+
+    private static func encodeSweepDecision(
+        for entry: SweepEntry,
+        now: Date,
+        staleAfter: TimeInterval
+    ) -> SweepDecision {
+        let jobShaped = isJobID(entry.name)
+        if !jobShaped {
+            // Legacy loose files are reported, never deleted; anything else
+            // that isn't ours (user files, `.DS_Store`, preflight probes)
+            // is left entirely alone.
+            if entry.kind == .file, (entry.name as NSString).pathExtension.lowercased() == "mp4" {
+                return .report(.legacyLooseFile)
+            }
+            return .leave
+        }
+        guard entry.kind == .directory else {
+            // A job-shaped symlink, file or other — never touched.
+            return .leave
+        }
+        switch entry.marker {
+        case .missing, .unreadable:
+            // Ambiguous — keep and report.
+            return .report(.unrecognised)
+        case .marker(let marker):
+            switch marker.state {
+            case .encoding:
+                guard let newest = entry.newestModification else { return .leave }
+                let age = now.timeIntervalSince(newest)
+                guard age >= 0 else { return .leave } // an mtime in the future
+                return age >= staleAfter ? .delete : .leave
+            case .encoded:
+                // The app died between encode success and the move finishing.
+                return .report(.encodedNeverMoved)
+            case .kept:
+                return entry.hasContentBesidesMarker
+                    ? .report(.keptAfterFailedMove)
+                    : .delete // the user already moved the .mp4 out
+            }
+        }
+    }
+
+    private static func ripSweepDecision(
+        for entry: SweepEntry,
+        now: Date,
+        staleAfter: TimeInterval
+    ) -> SweepDecision {
+        guard isJobID(entry.name), entry.kind == .directory else {
+            return .leave
+        }
+        guard let newest = entry.newestModification else { return .leave }
+        let age = now.timeIntervalSince(newest)
+        guard age >= 0 else { return .leave }
+        return age >= staleAfter ? .delete : .leave
+    }
+
+    struct SweepReport: Equatable, Sendable {
+        struct KeptEntry: Equatable, Sendable {
+            let path: String
+            let reason: KeptReason
+            let movie: String?
+        }
+
+        struct FailedEntry: Equatable, Sendable {
+            let path: String
+            let message: String
+        }
+
+        var removed: [String] = []
+        var kept: [KeptEntry] = []
+        var failed: [FailedEntry] = []
+        var refusal: String?
+
+        var isEmpty: Bool {
+            removed.isEmpty && kept.isEmpty && failed.isEmpty && refusal == nil
+        }
+    }
+
+    /// Sweeps stale working folders: first thing in `DVDPipeline.run()`,
+    /// before preflight, so reclaimed space counts toward P6's free-space
+    /// blocker (#0004 §4). Never throws, never creates anything, never
+    /// recurses, never follows a symlink, and never deletes anything the
+    /// decision tables don't name — every deletion goes back through
+    /// `removeJobDirectory`, which re-checks everything at delete time
+    /// (the entry was examined earlier; that gap is a TOCTOU).
+    ///
+    /// `onBegin` is a test-only hook (the `PlexOrganizer.move` shape) so
+    /// T13 can prove the sweep never runs on the main actor.
+    @concurrent
+    nonisolated static func sweep(
+        _ input: SweepInput,
+        now: Date = Date(),
+        onBegin: @Sendable () -> Void = {}
+    ) async -> SweepReport {
+        onBegin()
+        var report = SweepReport()
+
+        // Whole-sweep guard: no root configured — the derived paths would
+        // begin `/Working/…`. No log line, no-op.
+        guard !input.plexMediaRoot.isEmpty else { return report }
+
+        for (rootKind, rootPath) in [(SweepEntry.Root.encode, input.workingEncodePath),
+                                     (SweepEntry.Root.rip, input.workingRipPath)] {
+            // Whole-sweep guard: the root must resolve somewhere real.
+            // `realpath` follows symlinks — deliberately, because a root
+            // that resolves into the Movies library is refused outright,
+            // symlink or not (T12).
+            guard let realRoot = canonicalPath(rootPath), realRoot != "/" else {
+                if kind(of: rootPath) != nil {
+                    // An existing root that resolves to nothing safe.
+                    report.refusal = "working root \(rootPath) is not a safe root"
+                    return report
+                }
+                continue
+            }
+            if !input.plexMoviesPath.isEmpty,
+               rootsOverlap(realRoot, input.plexMoviesPath) {
+                report.refusal = "working root \(rootPath) overlaps the Movies library"
+                return report
+            }
+            // Whole-sweep guard per root: must be an existing real directory
+            // (`lstat`, never following symlinks). A symlinked root is
+            // skipped — never cleaned through — and a missing root is never
+            // created.
+            guard let rootEntryKind = kind(of: rootPath), rootEntryKind == .directory else {
+                continue
+            }
+
+            let children: [String]
+            do {
+                children = try FileManager.default.contentsOfDirectory(atPath: rootPath).sorted()
+            } catch {
+                report.failed.append(.init(path: rootPath, message: error.localizedDescription))
+                continue
+            }
+
+            for child in children {
+                let childPath = (rootPath as NSString).appendingPathComponent(child)
+                let entry = sweepEntry(at: childPath, name: child, root: rootKind)
+                let decision = sweepDecision(for: entry, in: rootKind, now: now, staleAfter: input.staleAfter)
+                switch decision {
+                case .leave:
+                    continue
+                case .report(let reason):
+                    report.kept.append(.init(
+                        path: childPath,
+                        reason: reason,
+                        movie: markerMovie(entry.marker)
+                    ))
+                case .delete:
+                    switch removeJobDirectory(childPath, under: rootPath, forbidding: input.plexMoviesPath) {
+                    case .removed:
+                        report.removed.append(childPath)
+                    case .refused(let reason):
+                        report.failed.append(.init(path: childPath, message: "refused: \(reason)"))
+                    case .failed(let message):
+                        report.failed.append(.init(path: childPath, message: message))
+                    }
+                }
+            }
+        }
+
+        return report
+    }
+
+    /// Builds a `SweepEntry` for one direct child. Direct children only —
+    /// no recursion, no symlink-following (`lstat` reports the entry
+    /// itself).
+    private static func sweepEntry(at path: String, name: String, root: SweepEntry.Root) -> SweepEntry {
+        let entryKind = kind(of: path) ?? .other
+        let marker: MarkerRead
+        switch (root, entryKind) {
+        case (.encode, .directory):
+            marker = readMarker(inJobDirectory: path)
+        case (.rip, .directory):
+            // Rip job directories carry no marker — a `.mkv` is never the
+            // only copy of anything (#0004 §3).
+            marker = .missing
+        case (_, .directory):
+            marker = .missing
+        default:
+            marker = .missing
+        }
+
+        var newest: Date?
+        var hasContentBesidesMarker = false
+        if entryKind == .directory {
+            newest = modificationDate(of: path)
+            let children = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
+            for child in children {
+                let childPath = (path as NSString).appendingPathComponent(child)
+                if let childDate = modificationDate(of: childPath) {
+                    if newest == nil || childDate > newest! { newest = childDate }
+                }
+                if child != markerName {
+                    hasContentBesidesMarker = true
+                }
+            }
+            if let markerDate = modificationDate(of: (path as NSString).appendingPathComponent(markerName)) {
+                if newest == nil || markerDate > newest! { newest = markerDate }
+            }
+        } else {
+            newest = modificationDate(of: path)
+        }
+
+        return SweepEntry(
+            name: name,
+            kind: entryKind,
+            marker: marker,
+            newestModification: newest,
+            hasContentBesidesMarker: hasContentBesidesMarker
+        )
+    }
+
+    private static func markerMovie(_ marker: MarkerRead) -> String? {
+        if case .marker(let marker) = marker { return marker.movie }
+        return nil
+    }
+
+    private static func modificationDate(of path: String) -> Date? {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: path)
+        return attributes?[.modificationDate] as? Date
     }
 }

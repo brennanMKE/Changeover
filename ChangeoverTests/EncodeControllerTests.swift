@@ -101,6 +101,17 @@ struct EncodeControllerTests {
             .sorted()
     }
 
+    private static func backdate(_ path: String, to date: Date) throws {
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+        if exists && isDirectory.boolValue {
+            for child in try FileManager.default.contentsOfDirectory(atPath: path) {
+                try backdate((path as NSString).appendingPathComponent(child), to: date)
+            }
+        }
+        try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: path)
+    }
+
     // MARK: - arguments(source:title:output:) — pure, no disc, no HandBrake
 
     @Test func argumentsForMainFeature() {
@@ -544,6 +555,9 @@ struct EncodeControllerTests {
         let firstJobID = try #require(firstLog.compactMap { $0.hasPrefix("▶ Job ") ? $0 : nil }.first)
         let secondJobID = try #require(secondLog.compactMap { $0.hasPrefix("▶ Job ") ? $0 : nil }.first)
         #expect(firstJobID != secondJobID)
+        // The sweep's reminder: the user learns about the kept file at
+        // every later job until they deal with it (#0004 §5).
+        #expect(secondLog.contains { $0.contains("Kept from an earlier job") && $0.contains(keptDir) })
     }
 
     /// T19: a cleanup failure is logged and never changes the outcome — the
@@ -578,5 +592,46 @@ struct EncodeControllerTests {
 
         let record = try Self.readLastJSONLine(at: root.appendingPathComponent("reliability.jsonl"))
         #expect(record.outcome == "succeeded")
+    }
+
+    /// T18: the sweep runs before preflight, so a stale job directory is
+    /// reclaimed even when the job then fails at preflight — and the
+    /// reclaimed space counts toward P6's free-space blocker.
+    @Test func pipelineSweepsBeforePreflight() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        settings.handbrakePath = root.appendingPathComponent("no-such-handbrake").path
+
+        // Plant a stale (25 h) `encoding` job directory.
+        let encodeRoot = URL(fileURLWithPath: settings.workingEncodePath)
+        try FileManager.default.createDirectory(at: encodeRoot, withIntermediateDirectories: true)
+        let stale = encodeRoot.appendingPathComponent("job-20240101-000000-aaaa")
+        try FileManager.default.createDirectory(at: stale, withIntermediateDirectories: false)
+        try JSONEncoder()
+            .encode(WorkingFiles.JobMarker(state: .encoding, movie: "Stale Movie (2001)"))
+            .write(to: stale.appendingPathComponent(WorkingFiles.markerName))
+        try Self.backdate(stale.path, to: Date().addingTimeInterval(-25 * 60 * 60))
+
+        var logged: [String] = []
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            log:      { logged.append($0) }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .failed(let failure) = outcome else {
+            Issue.record("expected a preflight failure, got \(outcome)")
+            return
+        }
+        #expect(failure.stage == .preflight)
+        #expect(!FileManager.default.fileExists(atPath: stale.path))
+        #expect(logged.contains { $0.contains("Removed stale working folder") })
     }
 }
