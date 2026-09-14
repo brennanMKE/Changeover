@@ -52,9 +52,10 @@ nonisolated struct DiscTitle: Codable, Hashable, Sendable, Identifiable {
     var chapterCount: Int
     /// Explicit width — this crosses the wire in Phase 4.
     var sizeBytes: Int64
-    /// Attribute 27, e.g. "B1_t00.mkv". NOT unique across scans of the same
-    /// disc at different `--minlength` values (#0028) — a hint, not an id.
-    var outputFileName: String
+    /// MakeMKV attribute 27, e.g. "B1_t00.mkv". NOT unique across scans of
+    /// the same disc at different `--minlength` values (#0028) — a hint, not
+    /// an id. `nil` from a HandBrake scan, which reports no output filename.
+    var outputFileName: String?
     /// Attribute 16. Always `nil` on DVDs — kept for Blu-ray later; nothing
     /// may be designed around it.
     var sourceFileName: String?
@@ -62,6 +63,9 @@ nonisolated struct DiscTitle: Codable, Hashable, Sendable, Identifiable {
     var streams: [DiscStream]
     /// #0025's heuristic reads and writes this.
     var suggestedRole: Role
+
+    /// Angles on this title (HandBrake `AngleCount`). `nil` = not reported.
+    var angleCount: Int?
 
     /// #0016 consumes exactly these two fields for the deinterlace decision.
     /// `nil` means the scan did not report them — `DeinterlaceDecision.decide`
@@ -74,7 +78,7 @@ nonisolated struct DiscTitle: Codable, Hashable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case index, durationSeconds, chapterCount, sizeBytes, outputFileName
         case sourceFileName, segmentCount, streams, suggestedRole
-        case frameRate, interlaceDetected
+        case frameRate, interlaceDetected, angleCount
     }
 
     init(
@@ -82,13 +86,14 @@ nonisolated struct DiscTitle: Codable, Hashable, Sendable, Identifiable {
         durationSeconds: Int,
         chapterCount: Int,
         sizeBytes: Int64,
-        outputFileName: String,
+        outputFileName: String?,
         sourceFileName: String? = nil,
         segmentCount: Int? = nil,
         streams: [DiscStream] = [],
         suggestedRole: Role = .ignore,
         frameRate: Double? = nil,
-        interlaceDetected: Bool? = nil
+        interlaceDetected: Bool? = nil,
+        angleCount: Int? = nil
     ) {
         self.index = index
         self.durationSeconds = durationSeconds
@@ -101,6 +106,7 @@ nonisolated struct DiscTitle: Codable, Hashable, Sendable, Identifiable {
         self.suggestedRole = suggestedRole
         self.frameRate = frameRate
         self.interlaceDetected = interlaceDetected
+        self.angleCount = angleCount
     }
 
     /// Lenient decode: a payload from an older host without the #0016 fields
@@ -111,13 +117,14 @@ nonisolated struct DiscTitle: Codable, Hashable, Sendable, Identifiable {
         durationSeconds = try container.decode(Int.self, forKey: .durationSeconds)
         chapterCount = try container.decode(Int.self, forKey: .chapterCount)
         sizeBytes = try container.decode(Int64.self, forKey: .sizeBytes)
-        outputFileName = try container.decode(String.self, forKey: .outputFileName)
+        outputFileName = try container.decodeIfPresent(String.self, forKey: .outputFileName)
         sourceFileName = try container.decodeIfPresent(String.self, forKey: .sourceFileName)
         segmentCount = try container.decodeIfPresent(Int.self, forKey: .segmentCount)
         streams = try container.decodeIfPresent([DiscStream].self, forKey: .streams) ?? []
         suggestedRole = try container.decode(Role.self, forKey: .suggestedRole)
         frameRate = try container.decodeIfPresent(Double.self, forKey: .frameRate)
         interlaceDetected = try container.decodeIfPresent(Bool.self, forKey: .interlaceDetected)
+        angleCount = try container.decodeIfPresent(Int.self, forKey: .angleCount)
     }
 }
 
