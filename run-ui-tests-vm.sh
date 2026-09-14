@@ -67,7 +67,7 @@ if [[ -x "$HOME/.lmstudio/bin/lms" ]]; then
   if lms_ps="$("$HOME/.lmstudio/bin/lms" ps 2>/dev/null)"; then
     if print -r -- "$lms_ps" | grep -qE 'IDLE|LOADED|PROCESSING'; then
       print -r -- "$lms_ps" | tail -n +2
-      fail "LM Studio has models loaded (~24 GB, invisible to RSS). Unload them first: ~/.lmstudio/bin/lms unload --all"
+      fail "LM Studio has models loaded (~24 GB, invisible to RSS). Unload them first: ~/.lmstudio/bin/lms unload --all — and record the unload in ~/Developer/Homelab/cameron/lm-studio-memory.md (the coordination ledger)"
     fi
   fi
 fi
