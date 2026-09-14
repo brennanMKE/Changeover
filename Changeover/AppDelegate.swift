@@ -150,6 +150,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     // MARK: - Login item
 
     private func registerLoginItem() {
+        // #0019: only a build installed in /Applications may register, and a
+        // test host (every app-hosted unit-test run) must never touch
+        // SMAppService at all — a registration here made macOS relaunch a
+        // DerivedData build at every future login.
+        guard LoginItemPolicy.shouldRegister(
+            environment: ProcessInfo.processInfo.environment,
+            bundleURL: Bundle.main.bundleURL
+        ) else {
+            return
+        }
         if #available(macOS 13.0, *) {
             try? SMAppService.mainApp.register()
         }
