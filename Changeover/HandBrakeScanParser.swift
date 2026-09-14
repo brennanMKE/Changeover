@@ -111,16 +111,33 @@ nonisolated enum HandBrakeScanParser {
 
     // MARK: - JSON extraction
 
-    /// Parses the payload after the marker. `nil` when the section never
-    /// arrived or is not decodable — a scan whose JSON is missing is a nil
-    /// result, not a crash (#0024 classifies that).
+    /// Parses the payload after the marker. The JSON document is extracted
+    /// by brace-matching from its first `{`, so a straggler diagnostics line
+    /// after the payload (stdout and stderr are merged in `ProcessRunner`)
+    /// cannot corrupt it. `nil` when the section never arrived or is not
+    /// decodable — a scan whose JSON is missing is a nil result, not a
+    /// crash (#0024 classifies that).
     nonisolated static func parseTitleSet(_ text: some StringProtocol) -> [String: Any]? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return nil
+        guard let open = trimmed.firstIndex(of: "{") else { return nil }
+        var depth = 0
+        var index = open
+        while index < trimmed.endIndex {
+            if trimmed[index] == "{" { depth += 1 }
+            if trimmed[index] == "}" {
+                depth -= 1
+                if depth == 0 {
+                    let document = String(trimmed[open...index])
+                    guard let data = document.data(using: .utf8),
+                          let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                        return nil
+                    }
+                    return object
+                }
+            }
+            index = trimmed.index(after: index)
         }
-        return object
+        return nil
     }
 
     nonisolated static func mainFeature(fromJSON json: [String: Any]) -> Int? {

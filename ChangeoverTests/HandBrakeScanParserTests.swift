@@ -201,6 +201,16 @@ struct HandBrakeScanParserTests {
         #expect(title.streams.first { $0.index == 2 }?.variant == "Letterbox")
     }
 
+    /// A straggler diagnostics line after the JSON payload (stdout and
+    /// stderr are merged in ProcessRunner) must not corrupt the parse —
+    /// the document is brace-matched, not "everything after the marker".
+    @Test func trailingNoiseAfterTheJSONPayloadIsIgnored() {
+        let text = #"JSON Title Set: {"MainFeature": 1, "TitleList": [{"Index": 1, "Duration": {"Hours": 0, "Minutes": 0, "Seconds": 5}}]}"# + "\nERROR: a straggler diagnostic line arrived after the payload"
+        let output = Self.parse(text)
+        #expect(output.mainFeatureIndex == 1)
+        #expect(output.disc.titles.count == 1)
+    }
+
     // MARK: - splitVariant
 
     @Test func splitVariantStripsParentheticalAndCodecTag() {

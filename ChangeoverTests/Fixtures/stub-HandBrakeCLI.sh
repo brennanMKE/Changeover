@@ -142,6 +142,21 @@ if [ -n "$ARGV_LOG" ]; then
     echo "$@" >> "$ARGV_LOG"
 fi
 
+# #0024 extends the sidecar mechanism for DiscScannerTests: when the
+# invocation is a scan (--scan present) and SCAN_FIXTURE names a file, the
+# fixture is catted verbatim (raw scan stdout, noise included) and the
+# process exits SCAN_EXIT (default 0). Encode invocations are unaffected —
+# they fall through to the behaviour below — and the --help branch above
+# still answers first, so preflight's probe never sees a scan fixture.
+case "$*" in
+    *--scan*)
+        if [ -n "$SCAN_FIXTURE" ] && [ -f "$SCAN_FIXTURE" ]; then
+            cat "$SCAN_FIXTURE"
+        fi
+        exit "${SCAN_EXIT:-0}"
+        ;;
+esac
+
 echo "Scanning title 1 of 1..."
 echo "Encoding: task 1 of 1, 50.00 %"
 
