@@ -160,6 +160,43 @@ struct DVDPipeline {
             return outcome
         }
 
+        // #0004 §4: the sweep's report, capped at 5 lines per category so a
+        // neglected working folder can't flood the log. None of these lines
+        // can fail the job.
+        func logSweepReport(_ report: WorkingFiles.SweepReport) {
+            if let refusal = report.refusal {
+                log("⚠︎ Working-folder sweep refused: \(refusal)")
+            }
+            for path in report.removed.prefix(5) {
+                log("✓ Removed stale working folder \(path)")
+            }
+            if report.removed.count > 5 {
+                log("   …and \(report.removed.count - 5) more removed")
+            }
+            for kept in report.kept.prefix(5) {
+                let movieText = kept.movie.map { " (\($0))" } ?? ""
+                switch kept.reason {
+                case .keptAfterFailedMove:
+                    log("⚠︎ Kept from an earlier job: \(kept.path)\(movieText). The move into Plex failed. Move the .mp4 into Plex by hand, then delete the folder.")
+                case .encodedNeverMoved:
+                    log("⚠︎ Kept from an earlier job: \(kept.path)\(movieText). Its encode finished but it was never moved into Plex.")
+                case .unrecognised:
+                    log("⚠︎ Left alone: \(kept.path) — a job folder with no readable marker. Nothing was deleted.")
+                case .legacyLooseFile:
+                    log("⚠︎ Left alone: \(kept.path) — an older build's loose encode. Nothing was deleted.")
+                }
+            }
+            if report.kept.count > 5 {
+                log("   …and \(report.kept.count - 5) more kept")
+            }
+            for failed in report.failed.prefix(5) {
+                log("⚠︎ Could not remove \(failed.path): \(failed.message)")
+            }
+            if report.failed.count > 5 {
+                log("   …and \(report.failed.count - 5) more could not be removed")
+            }
+        }
+
         // #0004 §3: advance the job marker. A failed write must land on the
         // safe side: an `encoding` failure just logs (a fresh directory with
         // no marker is never auto-deleted by the sweep); a failed
@@ -181,6 +218,21 @@ struct DVDPipeline {
                 log("⚠︎ Could not remove \(jobDirectory)/.changeover-job either")
             }
         }
+
+        // #0004 §4: sweep stale working folders before preflight, so
+        // reclaimed space counts toward P6's free-space blocker. It runs
+        // here rather than at launch: the volume holding `plexMediaRoot` is
+        // often not mounted yet at login, `JobController` clears the log at
+        // the start of each job (a launch report would be wiped unread),
+        // and leftovers only matter when the next job needs the space.
+        let sweepReport = await WorkingFiles.sweep(WorkingFiles.SweepInput(
+            plexMediaRoot:     plexMediaRoot,
+            workingEncodePath: workingEncodePath,
+            workingRipPath:    workingRipPath,
+            plexMoviesPath:    plexMoviesPath,
+            staleAfter:        WorkingFiles.staleAfter
+        ))
+        logSweepReport(sweepReport)
 
         // #0008: preflight — check HandBrake, the Plex destinations and free
         // space before anything touches the disc. Runs here (async, off
