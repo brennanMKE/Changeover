@@ -127,6 +127,41 @@ struct DiscRemovedDuringJobPipelineTests {
         #expect(record.decision == nil)
     }
 
+    /// #0052 review: a job that succeeded keeps its own decision even when
+    /// the flag is set (a removal during `.organizing`/`.extras`). A success
+    /// is never counted as a disc failure, and overwriting the decision
+    /// would erase a fallback's `"attempted"`.
+    @Test func discRemovedNeverOverridesASucceededJobsDecision() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        let stub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0"])
+        settings.handbrakePath = stub
+
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            log:      { _ in }
+        )
+        pipeline.eject = PipelineTestSupport.fakeEject
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+        pipeline.discRemoved = { true }
+
+        let outcome = await pipeline.run()
+
+        guard case .succeeded = outcome else {
+            Issue.record("expected success, got \(outcome)")
+            return
+        }
+        let record = try Self.readLastJSONLine(at: root.appendingPathComponent("reliability.jsonl"))
+        #expect(record.outcome == "succeeded")
+        #expect(record.decision == nil)
+    }
+
     /// A real cancel mid-encode (the shape `task?.cancel()` from
     /// `JobController.removeDisc()` actually produces) sets `decisionRecord`
     /// to `"cancelled"` at boundary 2 before `finish(_:)` ever runs. With

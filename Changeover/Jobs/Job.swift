@@ -72,6 +72,14 @@ final class Job {
     /// without widening the wire shape at all.
     private(set) var discRemovedDuringJob = false
 
+    /// #0052 review — set by `JobController.JobContext.eject` right before
+    /// the #0005 automatic end-of-job eject. From then on the disc leaving
+    /// the drive is this job's own doing, not a pull: every disc read is
+    /// already done, so `JobController.removeDisc()` must neither flag nor
+    /// cancel the job when DiskArbitration's removal callback lands before
+    /// the job's `Task` has finished.
+    private(set) var automaticEjectStarted = false
+
     init(id: JobID, metadata: MovieMetadata, disc: URL, log: JobLog, startDate: Date = Date(), request: RipRequest? = nil) {
         self.id = id
         self.metadata = metadata
@@ -124,6 +132,11 @@ final class Job {
     /// about *this* job). Idempotent: a second call (e.g. `removeDisc()`
     /// firing again before the job's `Task` has actually finished) neither
     /// re-flags nor re-logs.
+    /// #0052 review — see `automaticEjectStarted`.
+    func beginAutomaticEject() {
+        automaticEjectStarted = true
+    }
+
     func markDiscRemoved() {
         guard !discRemovedDuringJob else { return }
         discRemovedDuringJob = true

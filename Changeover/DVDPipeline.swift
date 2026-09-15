@@ -215,7 +215,12 @@ struct DVDPipeline {
             // `Task.isCancelled` checks) — a disc pulled mid-job is a
             // distinct fact from a plain user cancel, and reliability
             // analysis must filter out both, never conflate them.
-            if discRemoved() {
+            //
+            // #0052 review: only for a job that did not succeed. A success
+            // is never counted as a disc failure, and overwriting its
+            // decision would erase a fallback's `"attempted"`, which #0015's
+            // demotion decision reads.
+            if outcome.failure != nil, discRemoved() {
                 decisionRecord = "discRemoved"
             }
 

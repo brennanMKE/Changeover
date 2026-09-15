@@ -576,7 +576,10 @@ final class JobController {
             // same `ejector` seam as the manual one, and its outcome is
             // applied to controller state — a partial eject here leaves the
             // same dead mount path a manual one does.
-            eject: { [weak self, ejectVolume = ejector] url in
+            eject: { [weak self, job, ejectVolume = ejector] url in
+                // #0052 review: marked before ejecting, so the removal this
+                // eject causes is never mistaken for the disc being pulled.
+                job.beginAutomaticEject()
                 let outcome = await ejectVolume(url)
                 self?.applyAutomaticEject(outcome, volumeURL: url)
                 return outcome
@@ -894,7 +897,10 @@ final class JobController {
     func removeDisc() {
         scanTask?.cancel()
         scanTask = nil
-        if let current {
+        // #0052 review: a removal after the job's own automatic eject began
+        // is that eject landing (DiskArbitration's callback can arrive
+        // before the job's `Task` finishes), not a pull — leave the job be.
+        if let current, !current.automaticEjectStarted {
             current.markDiscRemoved()
             task?.cancel()
         }

@@ -239,6 +239,67 @@ struct DiscRemovedDuringJobTests {
         } == true)
     }
 
+    // MARK: - The job's own automatic eject is not a pull (#0052 review)
+
+    /// Holds the controller for the fake runner/ejector below (both are
+    /// built before the controller exists) and what the runner observed.
+    private final class EjectRaceProbe {
+        var controller: JobController?
+        var cancelledAfterEject = true
+        var discRemovedSeenByPipeline = true
+    }
+
+    /// #0052 review: the #0005 automatic eject is itself a removal, and
+    /// DiskArbitration's removal callback can reach `removeDisc()` while the
+    /// job's `Task` is still running — during the eject, or after it returns
+    /// but before `finish`. That must not cancel the job, flag it, log the
+    /// "Disc removed" milestone, or let the pipeline override the
+    /// reliability decision: the job succeeded, and the app ejected the disc.
+    @Test func removalFromTheJobsOwnAutomaticEjectLeavesASuccessfulJobAlone() async throws {
+        let probe = EjectRaceProbe()
+        let controller = JobController(
+            runner: { context, _ in
+                context.phase(.encoding)
+                context.phase(.organizing)
+                _ = await context.eject(context.disc)
+                // A second removal callback, after the eject returned and
+                // before the job's `Task` ends.
+                probe.controller?.removeDisc()
+                await Task.yield()
+                probe.cancelledAfterEject = Task.isCancelled
+                probe.discRemovedSeenByPipeline = context.discRemoved()
+                return .succeeded(destination: Self.destination)
+            },
+            ejector: { _ in
+                // DiskArbitration's removal landing mid-eject.
+                probe.controller?.removeDisc()
+                return .ejected
+            }
+        )
+        probe.controller = controller
+        Self.mount(controller, disc: Self.testDisc)
+
+        #expect(controller.start(request: Self.request(try Self.metadata()), settings: AppSettings()))
+        let job = try #require(controller.current)
+        try await waitUntilIdle(controller)
+
+        #expect(controller.lastOutcome == .succeeded(destination: Self.destination))
+        #expect(job.state.phase == .succeeded)
+        #expect(!job.discRemovedDuringJob)
+        #expect(!probe.cancelledAfterEject, "the job's own eject must not cancel its Task")
+        #expect(!probe.discRemovedSeenByPipeline, "the reliability decision must not be overridden")
+        #expect(!job.log.displayLines.contains { $0.text.contains("Disc removed while the job was running") })
+
+        let presentation = JobPresentation.make(for: job.snapshot, discRemovedDuringJob: job.discRemovedDuringJob)
+        #expect(presentation.label != "Disc removed")
+        #expect(presentation.tone == .success)
+        let message = JobNotifier.message(for: job.metadata, outcome: try #require(job.outcome), discRemovedDuringJob: job.discRemovedDuringJob)
+        #expect(message.title.hasSuffix("is ready"))
+
+        // The removal still clears the controller's disc state.
+        #expect(controller.insertedDisc == nil)
+    }
+
     // MARK: - Retry once the disc is re-inserted
 
     /// #0048's `retryDecision` already requires the same disc back in the
