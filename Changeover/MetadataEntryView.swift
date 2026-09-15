@@ -11,10 +11,12 @@ struct MetadataEntryView: View {
     @State private var selectedID: Int?
     @State private var searchTask: Task<Void, Never>?
     /// The disc `selectedID`/`vm.selectedMovie` were chosen for — #0034. Set
-    /// alongside the selection, `nil` while nothing is selected. Compared
-    /// against `jobs.insertedDisc` on every insertion so a *different* disc
-    /// clears a stale selection instead of letting Start file the new disc
-    /// under the previous movie's name (see `SelectionReset`).
+    /// alongside the selection (or bound to the first disc inserted after a
+    /// selection made with no disc in the drive), `nil` while nothing is
+    /// selected. Reconciled against `jobs.insertedDisc` on every insertion
+    /// and when a job stops, so a *different* disc clears a stale selection
+    /// instead of letting Start file the new disc under the previous movie's
+    /// name (see `SelectionReset`).
     @State private var selectionDisc: DiscInsertion?
 
     var body: some View {
@@ -34,10 +36,24 @@ struct MetadataEntryView: View {
             vm.select(movieID: id, apiKey: settings.tmdbAPIKey)
             selectionDisc = id != nil ? jobs.insertedDisc : nil
         }
-        .onChange(of: jobs.insertedDisc) { _, newDisc in
-            guard SelectionReset.shouldReset(previousDisc: selectionDisc, newDisc: newDisc, isRunning: jobs.isRunning) else {
-                return
-            }
+        .onChange(of: jobs.insertedDisc) { reconcileSelection() }
+        .onChange(of: jobs.isRunning) { reconcileSelection() }
+    }
+
+    /// #0034: applies `SelectionReset.reconcile`. Runs from `onChange`
+    /// actions, never from `body`, so mutating state here is safe.
+    private func reconcileSelection() {
+        switch SelectionReset.reconcile(
+            selectionDisc: selectionDisc,
+            hasSelection: selectedID != nil,
+            currentDisc: jobs.insertedDisc,
+            isRunning: jobs.isRunning
+        ) {
+        case .keep:
+            break
+        case .bind(let disc):
+            selectionDisc = disc
+        case .reset:
             vm.resetForNewDisc()
             selectedID = nil
             selectionDisc = nil

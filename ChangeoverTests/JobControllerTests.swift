@@ -13,7 +13,9 @@ struct JobControllerTests {
     // MARK: - Helpers
 
     /// MovieMetadata is built from a TMDBMovie, so decode one rather than
-    /// widening the production initializer just for tests.
+    /// widening the production initializer just for tests. Bound to
+    /// `testDisc`, the disc these tests mount, because `start` refuses
+    /// metadata with no `selectionDisc` (#0034).
     private static func metadata(
         id: Int = 78,
         title: String = "Blade Runner",
@@ -22,7 +24,7 @@ struct JobControllerTests {
         let json = """
         {"id": \(id), "title": "\(title)", "release_date": "\(releaseDate)", "poster_path": null}
         """.data(using: .utf8)!
-        return MovieMetadata(from: try JSONDecoder().decode(TMDBMovie.self, from: json))
+        return MovieMetadata(from: try JSONDecoder().decode(TMDBMovie.self, from: json), selectionDisc: testDisc)
     }
 
     /// Raw decode, for tests that need a `TMDBMovie` to build their own
@@ -391,17 +393,62 @@ struct JobControllerTests {
         try await waitUntilIdle(controller)
     }
 
-    /// Back-compat: `MovieMetadata` built with no `selectionDisc` at all
-    /// (every other test in this file, and any call site that predates
-    /// #0034) must not retroactively start being refused.
-    @Test func startAcceptsMetadataWithNoSelectionDiscAttached() async throws {
-        let controller = JobController(runner: { _, _, _, _ in
-            .succeeded(destination: Self.destination)
+    /// Fails closed: metadata that isn't bound to any disc is refused, so a
+    /// call site that forgets to bind the selection can't reopen #0034.
+    @Test func startRefusesMetadataWithNoSelectionDiscAttached() async throws {
+        let runs = RunLog()
+        let controller = JobController(runner: { metadata, _, _, _ in
+            runs.record(metadata)
+            return .succeeded(destination: Self.destination)
         })
         controller.insertedDisc = Self.testDisc
 
-        #expect(controller.start(metadata: try Self.metadata(), settings: AppSettings()) == true)
+        let unbound = MovieMetadata(from: try Self.decodeMovie())
+        #expect(controller.start(metadata: unbound, settings: AppSettings()) == false)
+        #expect(controller.isRunning == false)
+        #expect(runs.starts.isEmpty)
+        #expect(controller.logLines.contains { $0.contains("isn't tied to a disc") })
+    }
+
+    /// No lsdvd and no volume name, so the disc has no identity. The movie
+    /// was chosen on this very insertion, so Start must still work. A
+    /// "unknown is never a match" rule on its own locked such discs out.
+    @Test func startAcceptsAnUnknownIdentityDiscForTheInsertionItWasSelectedOn() async throws {
+        let controller = JobController(runner: { _, _, _, _ in
+            .succeeded(destination: Self.destination)
+        })
+        let unidentified = DiscInsertion(
+            mountURL: URL(fileURLWithPath: "/Volumes/Untitled"),
+            deviceNode: "disk6",
+            discID: nil)
+        controller.insertedDisc = unidentified
+
+        let metadata = MovieMetadata(from: try Self.decodeMovie(), selectionDisc: unidentified)
+        #expect(controller.start(metadata: metadata, settings: AppSettings()) == true)
         try await waitUntilIdle(controller)
+    }
+
+    /// An unidentifiable disc swapped for another that mounts at the same
+    /// path and device node is still a different insertion, so it's refused.
+    @Test func startRefusesAnUnknownIdentityLookalikeFromAnotherInsertion() async throws {
+        let runs = RunLog()
+        let controller = JobController(runner: { metadata, _, _, _ in
+            runs.record(metadata)
+            return .succeeded(destination: Self.destination)
+        })
+        let selectedOn = DiscInsertion(
+            mountURL: URL(fileURLWithPath: "/Volumes/Untitled"),
+            deviceNode: "disk6",
+            discID: nil)
+        controller.insertedDisc = DiscInsertion(
+            mountURL: URL(fileURLWithPath: "/Volumes/Untitled"),
+            deviceNode: "disk6",
+            discID: nil)
+
+        let metadata = MovieMetadata(from: try Self.decodeMovie(), selectionDisc: selectedOn)
+        #expect(controller.start(metadata: metadata, settings: AppSettings()) == false)
+        #expect(runs.starts.isEmpty)
+        #expect(controller.logLines.contains { $0.contains("different disc") })
     }
 }
 

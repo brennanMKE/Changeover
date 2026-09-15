@@ -106,16 +106,19 @@ final class JobController {
         // than the one actually in the drive, refuse — this is the failsafe
         // for the data-loss bug (a stale selection filing the new disc under
         // the previous movie's name and overwriting it in Plex), in case the
-        // UI-level reset in `MetadataEntryView` didn't run. `metadata`
-        // carrying no `selectionDisc` at all skips the check (back-compat
-        // for call sites/tests that predate #0034); once it does carry one,
-        // `sameDisc` requires a *known, matching* identity on both sides — an
-        // unresolvable identity is treated as a mismatch, same conservative
-        // stance `OpticalDiscClassifier` takes elsewhere ("unprovable is not
-        // proof of same"), so this failsafe never waves through a start it
-        // can't actually vouch for.
-        if let selectionDisc = metadata.selectionDisc,
-           !SelectionReset.sameDisc(selectionDisc, currentDisc) {
+        // UI-level reset in `MetadataEntryView` didn't run.
+        //
+        // Fails closed: metadata with no `selectionDisc` is refused rather
+        // than waved through, so a future call site that forgets to bind the
+        // selection to a disc can't reopen the bug. `sameDisc` matches a
+        // known identity (lsdvd or the no-lsdvd fallback) or the exact
+        // insertion the selection was made on, so a disc with no resolvable
+        // identity can still be started.
+        guard let selectionDisc = metadata.selectionDisc else {
+            append("⚠︎ \(metadata.title) isn't tied to a disc — choose the movie again with the disc in the drive.")
+            return false
+        }
+        if !SelectionReset.sameDisc(selectionDisc, currentDisc) {
             append("⚠︎ \(metadata.title) was selected for a different disc — insert that disc again, or choose a movie for the disc that's in the drive now.")
             return false
         }

@@ -20,6 +20,14 @@ nonisolated struct DiscInsertion: Equatable, Sendable {
     /// neither could be computed. `nil` means "identity unknown", not
     /// "no disc" — see `OpticalDiscClassifier.classify`.
     let discID: String?
+    /// Minted once per insertion event (#0034), so two insertions are never
+    /// equal even when every other field matches — e.g. two discs with no
+    /// resolvable identity mounting at the same path and device node. Lets
+    /// `SelectionReset.sameDisc` recognise the exact insertion a selection
+    /// was made on without `discID`, and makes `onChange(of: insertedDisc)`
+    /// fire for every new insertion even when SwiftUI coalesces the removal
+    /// in between.
+    let insertionID = UUID()
 }
 
 /// Outcome of classifying one DiskArbitration disk-appeared (or
