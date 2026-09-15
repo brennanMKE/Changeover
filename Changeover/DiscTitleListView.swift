@@ -128,13 +128,18 @@ struct DiscTitleListView: View {
 
         // #0031 Step B — the extras opt-in is the same table, in its fourth
         // mode: an "Extra" checkbox per row, off by default, with a running
-        // duration total. Shown whenever the table itself is on screen
-        // (`.single`'s "Not this one?" disclosure counts) — extras never
-        // gate Start, so this is purely informational until the user checks
-        // a box.
-        let extrasPlan = jobs.selectedExtrasPlan
-        if !extrasPlan.items.isEmpty {
-            extrasSummary(extrasPlan)
+        // duration total. Extras never gate Start, so this is purely
+        // informational until the user checks a box.
+        //
+        // #0038: on `.single`, `confirmationRow` already renders its own
+        // "Extras: …" line (the whole point being it's reachable without
+        // going through "Not this one?" first) — showing this summary too
+        // would say the same thing twice.
+        if !isSingleOutcome(outcome) {
+            let extrasPlan = jobs.selectedExtrasPlan
+            if !extrasPlan.items.isEmpty {
+                extrasSummary(extrasPlan)
+            }
         }
 
         // #0032: the verdict is for the title that will actually be encoded
@@ -151,19 +156,35 @@ struct DiscTitleListView: View {
 
     private func confirmationRow(index: Int, disc: DiscInfo) -> some View {
         let title = disc.titles.first { $0.index == index }
+        let extrasPlan = jobs.selectedExtrasPlan
         return VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text("Main feature")
                     .font(.headline)
                 if let title {
-                    Text("— Title \(index) · \(DiscTitleFormatting.duration(title.durationSeconds)) · \(title.chapterCount) chapters · \(DiscTitleFormatting.size(title.sizeBytes))")
+                    Text("— \(DiscTitleFormatting.confirmationDetail(index: index, title: title))")
                         .font(.system(.body, design: .monospaced))
                 }
                 Spacer()
-                Button(showFullTable ? "Hide titles" : "Not this one?") {
+                Button(showFullTable ? "Hide titles" : "Show all titles") {
                     showFullTable.toggle()
                 }
                 .buttonStyle(.link)
+            }
+            // #0038: extras must be reachable without first disagreeing with
+            // the detected feature — "Not this one?" said the opposite of
+            // what someone who wants a featurette means. This line and its
+            // link are the primary way in; "Show all titles" above still
+            // opens the same table for anyone who wants to see everything.
+            HStack(spacing: 4) {
+                Text(DiscTitleFormatting.extrasStatusLine(extrasPlan))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button(extrasPlan.items.isEmpty ? "Choose…" : "Change…") {
+                    showFullTable = true
+                }
+                .buttonStyle(.link)
+                .font(.caption)
             }
         }
     }
@@ -215,6 +236,14 @@ struct DiscTitleListView: View {
         seconds >= 0 ? "+\(seconds)" : "\(seconds)"
     }
 
+    /// #0038: `.single` renders its own extras line inline in
+    /// `confirmationRow`; the `extrasSummary` shown after the switch is only
+    /// for `.playAll`/`.none`, which have no confirmation row to carry it.
+    private func isSingleOutcome(_ outcome: DiscTitleHeuristic.Outcome) -> Bool {
+        if case .single = outcome { return true }
+        return false
+    }
+
     // MARK: - Full title table (the 0-candidate and Play All fallback; the
     // "Not this one?" disclosure for `.single`)
 
@@ -242,7 +271,7 @@ struct DiscTitleListView: View {
             Text("\(title.chapterCount) ch")
                 .font(.system(.body, design: .monospaced))
                 .frame(width: 44, alignment: .trailing)
-            Text(DiscTitleFormatting.size(title.sizeBytes))
+            Text(DiscTitleFormatting.size(title.sizeBytes) ?? "—")
                 .font(.system(.body, design: .monospaced))
                 .frame(width: 72, alignment: .trailing)
             Text(DiscTitleFormatting.streamSummary(for: title))

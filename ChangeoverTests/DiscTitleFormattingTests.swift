@@ -141,9 +141,54 @@ struct DiscTitleFormattingTests {
         #expect(message == "This looks like a TV season disc — 3 titles of about 0 minutes that together match the length of title 5.")
     }
 
-    // MARK: - size (smoke test only — ByteCountFormatter itself isn't ours to verify)
+    // MARK: - size (#0038 — 0 = unknown per HandBrakeScanParser's documented
+    // contract; must never reach ByteCountFormatter and render "Zero KB")
 
-    @Test func sizeProducesANonEmptyString() {
-        #expect(!DiscTitleFormatting.size(6_300_000_000).isEmpty)
+    @Test func sizeOfZeroIsNilNotZeroKB() {
+        #expect(DiscTitleFormatting.size(0) == nil)
+    }
+
+    @Test func sizeOfANegativeByteCountIsAlsoNil() {
+        #expect(DiscTitleFormatting.size(-1) == nil)
+    }
+
+    @Test func sizeOfARealByteCountProducesANonEmptyString() {
+        // Smoke test only — ByteCountFormatter's exact rendering isn't ours
+        // to verify.
+        #expect(!(DiscTitleFormatting.size(6_795_724_800) ?? "").isEmpty)
+    }
+
+    // MARK: - confirmationDetail (#0038)
+
+    @Test func confirmationDetailOmitsTheSizeSegmentWhenSizeIsUnknown() {
+        let title = DiscTitle(index: 3, durationSeconds: 6645, chapterCount: 21, sizeBytes: 0, outputFileName: nil)
+        #expect(DiscTitleFormatting.confirmationDetail(index: 3, title: title) == "Title 3 · 1:50:45 · 21 chapters")
+    }
+
+    @Test func confirmationDetailAppendsTheSizeSegmentWhenSizeIsKnown() {
+        let title = DiscTitle(index: 3, durationSeconds: 6645, chapterCount: 21, sizeBytes: 6_795_724_800, outputFileName: nil)
+        let detail = DiscTitleFormatting.confirmationDetail(index: 3, title: title)
+        #expect(detail.hasPrefix("Title 3 · 1:50:45 · 21 chapters · "))
+        #expect(detail != "Title 3 · 1:50:45 · 21 chapters")
+    }
+
+    @Test func confirmationDetailTreatsANegativeSizeAsUnknownToo() {
+        let title = DiscTitle(index: 1, durationSeconds: 60, chapterCount: 1, sizeBytes: -1, outputFileName: nil)
+        #expect(DiscTitleFormatting.confirmationDetail(index: 1, title: title) == "Title 1 · 0:01:00 · 1 chapters")
+    }
+
+    // MARK: - extrasStatusLine (#0038)
+
+    @Test func extrasStatusLineReadsNoneWhenThePlanIsEmpty() {
+        #expect(DiscTitleFormatting.extrasStatusLine(ExtrasPlan()) == "Extras: none")
+    }
+
+    @Test func extrasStatusLineReportsCountAndRunningDurationTotal() {
+        let plan = ExtrasPlan(items: [
+            ExtrasPlan.Item(titleIndex: 5, durationSeconds: 1_200, frameRate: nil, interlaceDetected: nil),
+            ExtrasPlan.Item(titleIndex: 7, durationSeconds: 1_690, frameRate: nil, interlaceDetected: nil),
+        ])
+        // 1200 + 1690 = 2890s = 0:48:10.
+        #expect(DiscTitleFormatting.extrasStatusLine(plan) == "Extras: 2 · 0:48:10")
     }
 }

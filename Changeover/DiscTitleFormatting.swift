@@ -14,9 +14,39 @@ nonisolated enum DiscTitleFormatting {
         return String(format: "%d:%02d:%02d", hours, minutes, remainingSeconds)
     }
 
-    /// `ByteCountFormatter` in file style, e.g. "6.3 GB".
-    static func size(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    /// `ByteCountFormatter` in file style, e.g. "6.3 GB" — `nil` when the
+    /// scan reported no size. `HandBrakeScanParser` sets `sizeBytes: 0` and
+    /// documents `0 = unknown` (`HandBrakeScanParser.swift`); handing `0`
+    /// straight to `ByteCountFormatter` renders "Zero KB", a stated-but-false
+    /// value (#0038). Any non-positive byte count is treated as unknown.
+    static func size(_ bytes: Int64) -> String? {
+        guard bytes > 0 else { return nil }
+        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    /// The confirmation row's detail string, e.g. "Title 3 · 1:50:45 · 21
+    /// chapters", or with a known size, "Title 3 · 1:50:45 · 21 chapters ·
+    /// 6.8 GB" (#0038). The size segment is omitted entirely — never shown
+    /// as "Zero KB" — when `size(_:)` returns `nil`.
+    static func confirmationDetail(index: Int, title: DiscTitle) -> String {
+        var segments = [
+            "Title \(index)",
+            duration(title.durationSeconds),
+            "\(title.chapterCount) chapters",
+        ]
+        if let sizeText = size(title.sizeBytes) {
+            segments.append(sizeText)
+        }
+        return segments.joined(separator: " · ")
+    }
+
+    /// The `.single` confirmation row's extras line (#0038): "Extras: none"
+    /// until something is ticked, then "Extras: N · H:MM:SS" — the running
+    /// total from the same `ExtrasPlan` the pipeline will actually encode,
+    /// not a raw count of table rows.
+    static func extrasStatusLine(_ plan: ExtrasPlan) -> String {
+        guard !plan.items.isEmpty else { return "Extras: none" }
+        return "Extras: \(plan.items.count) · \(duration(plan.totalDurationSeconds))"
     }
 
     /// "2 audio (eng, spa) · 1 sub" — must survive a title where **no**
