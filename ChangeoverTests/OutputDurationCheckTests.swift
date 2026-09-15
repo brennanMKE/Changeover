@@ -2,6 +2,7 @@ import AVFoundation
 import CoreVideo
 import Darwin
 import Foundation
+import Synchronization
 import Testing
 @testable import Changeover
 
@@ -113,7 +114,9 @@ struct OutputDurationCheckTests {
             memset(base, 0, CVPixelBufferGetDataSize(buffer))
         }
         CVPixelBufferUnlockBaseAddress(buffer, [])
-        adaptor.append(buffer, withPresentationTime: .zero)
+        guard input.isReadyForMoreMediaData, adaptor.append(buffer, withPresentationTime: .zero) else {
+            throw OutputDurationCheck.UnreadableDuration(description: "AVAssetWriter did not accept the test fixture's frame: \(String(describing: writer.error))")
+        }
 
         // Pins the movie's duration to exactly 1s, independent of the
         // single frame's own (zero) duration.
@@ -170,6 +173,18 @@ struct OutputDurationCheckTests {
         return disc
     }
 
+    private static func fixturePath(_ relative: String) -> String {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/\(relative)")
+            .path
+    }
+
+    private static func argvLines(at path: String) -> [String] {
+        guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return [] }
+        return text.split(separator: "\n").map(String.init)
+    }
+
     private static func jobDirectories(under dir: URL) throws -> [String] {
         guard FileManager.default.fileExists(atPath: dir.path) else { return [] }
         return try FileManager.default.contentsOfDirectory(atPath: dir.path)
@@ -185,24 +200,23 @@ struct OutputDurationCheckTests {
 
     // MARK: - Pipeline: a short output fails at .encode and never reaches the library
 
-    @Test func aShortOutputFailsTheJobAndNeverReachesTheLibrary() async throws {
+    @Test func aShortOutputWithNoMakeMKVFailsTheJobAndNeverReachesTheLibrary() async throws {
         let root = try Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: root) }
 
         let settings = AppSettings()
         settings.plexMediaRoot = root.path
         let stub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
-        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0"])
+        let handbrakeArgvLog = root.appendingPathComponent("hb-argv.log").path
+        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0", "ARGV_LOG=\"\(handbrakeArgvLog)\""])
         settings.handbrakePath = stub
 
-        // The fallback must never be attempted — this failure happens after
-        // the primary encode already succeeded, so it can never reach
-        // `FallbackPolicy`. Point `makemkvconPath` at a stub with its own
-        // argv log so a real invocation would be caught.
-        let makemkvStub = try Self.copyStub("stub-makemkvcon.sh", into: root)
-        let makemkvArgvLog = root.appendingPathComponent("mkv-argv.log").path
-        try Self.writeConf(forStubAt: makemkvStub, ["ARGV_LOG=\"\(makemkvArgvLog)\""])
-        settings.makemkvconPath = makemkvStub
+        // #0037 review: a short primary output is a disc-shaped encode
+        // failure, so `FallbackPolicy` sees it. With no makemkvcon installed
+        // that is `.unavailable`: no second attempt, and the user is told
+        // MakeMKV could retry discs like this.
+        let missingMakeMKV = root.appendingPathComponent("no-such-makemkvcon").path
+        settings.makemkvconPath = missingMakeMKV
 
         // Hanna, per the ticket's own evidence: scanned 6,645s, 20 minutes
         // (1,200s) short — well beyond the 132s tolerance for this length.
@@ -248,12 +262,163 @@ struct OutputDurationCheckTests {
         #expect(!FileManager.default.fileExists(atPath: movieFolder.path))
 
         // #0004: an `.encode`-stage failure's job directory is disposed of,
-        // same as any other failed encode — the partial is unplayable and
-        // the disc is still the source, so nothing is kept around it.
+        // same as any other failed encode — the short file is not the movie
+        // and the disc is still the source — and the user is told so.
         #expect(try Self.jobDirectories(under: URL(fileURLWithPath: settings.workingEncodePath)).isEmpty)
+        #expect(detail.contains("discarded"))
+        #expect(detail.contains("Any copy already in Plex is untouched"))
 
-        // The MakeMKV fallback was never attempted.
-        #expect(!FileManager.default.fileExists(atPath: makemkvArgvLog))
+        // No fallback was possible, and it says why; HandBrake ran once.
+        #expect(failure.fallback == .unavailable(makemkvconPath: missingMakeMKV))
+        #expect(Self.argvLines(at: handbrakeArgvLog).count == 1)
+        #expect(FailurePresenter.message(for: failure).details.contains { $0.contains("MakeMKV isn't installed") })
+    }
+
+    // MARK: - Pipeline: a short primary output goes through the MakeMKV fallback
+
+    /// Dragon Tattoo's makemkvcon `info` fixture: title 0 runs 9,471 s, so a
+    /// `featureDurationSeconds` of 9,471 matches it uniquely (#0035).
+    private static func fallbackPipeline(
+        root: URL,
+        measure: @escaping @Sendable (URL) async throws -> Int,
+        log: @escaping @MainActor (String) -> Void = { _ in }
+    ) throws -> (pipeline: DVDPipeline, settings: AppSettings, handbrakeArgvLog: String, makemkvArgvLog: String) {
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+
+        let handbrakeStub = try copyStub("stub-HandBrakeCLI.sh", into: root)
+        let handbrakeArgvLog = root.appendingPathComponent("hb-argv.log").path
+        try writeConf(forStubAt: handbrakeStub, [
+            "EXIT_DIR_INPUT=0", "EXIT_FILE_INPUT=0", "ARGV_LOG=\"\(handbrakeArgvLog)\"",
+        ])
+        settings.handbrakePath = handbrakeStub
+
+        let makemkvStub = try copyStub("stub-makemkvcon.sh", into: root)
+        let makemkvArgvLog = root.appendingPathComponent("mkv-argv.log").path
+        try writeConf(forStubAt: makemkvStub, [
+            "INFO_FIXTURE=\"\(fixturePath("makemkvcon/dragon-tattoo-min0.txt"))\"",
+            "MKV_FILES=1", "MKV_NAME=\"ripped.mkv\"", "ARGV_LOG=\"\(makemkvArgvLog)\"",
+        ])
+        settings.makemkvconPath = makemkvStub
+
+        var pipeline = DVDPipeline(
+            metadata: try metadata(),
+            settings: settings,
+            disc:     try makeFakeDisc(in: root),
+            selection: EncodeSelection(
+                title: .index(0), audio: .sourceDefault, fallbackAudio: .sourceDefault,
+                filter: .none, featureDurationSeconds: 9471
+            ),
+            log:      log,
+            measureDuration: measure
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+        return (pipeline, settings, handbrakeArgvLog, makemkvArgvLog)
+    }
+
+    @Test func aShortPrimaryOutputIsRetriedThroughTheFallbackAndTheWholeResultIsFiled() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // First measurement (HandBrake straight from the disc) is 20 minutes
+        // short; the second (the fallback's re-encode of the .mkv) is whole.
+        let calls = Mutex(0)
+        let setup = try Self.fallbackPipeline(root: root, measure: { _ in
+            let call = calls.withLock { $0 += 1; return $0 }
+            return call == 1 ? 9471 - 1200 : 9471
+        })
+
+        let outcome = await setup.pipeline.run()
+
+        guard case .succeeded(let destination) = outcome else {
+            Issue.record("expected the fallback's whole output to be filed, got \(outcome)")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: destination.path))
+        #expect(calls.withLock { $0 } == 2)
+        #expect(Self.argvLines(at: setup.handbrakeArgvLog).count == 2)
+        #expect(Self.argvLines(at: setup.makemkvArgvLog).count == 2) // info + mkv, once
+        #expect(try Self.jobDirectories(under: URL(fileURLWithPath: setup.settings.workingEncodePath)).isEmpty)
+        #expect(try Self.jobDirectories(under: URL(fileURLWithPath: setup.settings.workingRipPath)).isEmpty)
+    }
+
+    @Test func aShortFallbackOutputFailsWithoutASecondFallbackAndNeverReachesTheLibrary() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let calls = Mutex(0)
+        let setup = try Self.fallbackPipeline(root: root, measure: { _ in
+            calls.withLock { $0 += 1 }
+            return 9471 - 1200
+        })
+
+        let outcome = await setup.pipeline.run()
+
+        guard case .failed(let failure) = outcome else {
+            Issue.record("expected failure when the fallback's output is short too, got \(outcome)")
+            return
+        }
+        // The primary short output is the headline; the fallback's short
+        // output is recorded as its own encode-stage failure.
+        #expect(failure.stage == .encode)
+        guard case .unknown(let detail) = failure.reason,
+              case .failed(let fallbackStage, .unknown(let fallbackDetail), _) = failure.fallback else {
+            Issue.record("expected .unknown with a failed fallback, got \(failure)")
+            return
+        }
+        #expect(detail.contains("discarded"))
+        #expect(fallbackStage == .encode)
+        #expect(fallbackDetail.contains("discarded"))
+
+        // Measured exactly twice, HandBrake twice, makemkvcon info + mkv once:
+        // no loop.
+        #expect(calls.withLock { $0 } == 2)
+        #expect(Self.argvLines(at: setup.handbrakeArgvLog).count == 2)
+        #expect(Self.argvLines(at: setup.makemkvArgvLog).count == 2)
+
+        let movieFolder = URL(fileURLWithPath: setup.settings.plexMoviesPath).appendingPathComponent(try Self.metadata().folderName)
+        #expect(!FileManager.default.fileExists(atPath: movieFolder.path))
+        #expect(try Self.jobDirectories(under: URL(fileURLWithPath: setup.settings.workingEncodePath)).isEmpty)
+        #expect(try Self.jobDirectories(under: URL(fileURLWithPath: setup.settings.workingRipPath)).isEmpty)
+    }
+
+    // MARK: - Pipeline: the real measurer on a file that isn't media fails strictly
+
+    @Test func anUnmeasurableOutputFailsTheJobWithTheRealMeasurer() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        let stub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0"])
+        settings.handbrakePath = stub
+        settings.makemkvconPath = root.appendingPathComponent("no-such-makemkvcon").path
+
+        // The stub's `--output` is a line of text named `.mp4`. The default
+        // `measureDuration` (real AVFoundation) must not let it through.
+        let metadata = try Self.metadata()
+        var pipeline = DVDPipeline(
+            metadata: metadata,
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            selection: EncodeSelection(
+                title: .index(1), audio: .sourceDefault, fallbackAudio: .sourceDefault,
+                filter: .none, featureDurationSeconds: 6645
+            ),
+            log:      { _ in }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .failed(let failure) = outcome, case .unknown = failure.reason else {
+            Issue.record("expected a strict .unknown failure for an unmeasurable output, got \(outcome)")
+            return
+        }
+        #expect(failure.stage == .encode)
+        let movieFolder = URL(fileURLWithPath: settings.plexMoviesPath).appendingPathComponent(metadata.folderName)
+        #expect(!FileManager.default.fileExists(atPath: movieFolder.path))
     }
 
     // MARK: - Pipeline: an output within tolerance succeeds as before

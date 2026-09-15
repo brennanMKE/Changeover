@@ -266,6 +266,35 @@ struct DVDPipeline {
             return verdict
         }
 
+        // #0037: the feature's check, run on whichever `.mp4` is about to be
+        // filed (the primary encode's, then the fallback's). `nil` means
+        // the file may proceed. `selection.featureDurationSeconds` is `nil`
+        // only for `.phase1` (no scan ever happened); production always sets
+        // it via `EncodeSelection.make(request:disc:)`. Never guess a
+        // duration: with no scan number, skip the check.
+        //
+        // A failure is `.encode`-stage, so `WorkingFiles.disposition` removes
+        // the job directory: the short file is not the movie, and the disc
+        // is still the source. The sentence says so, because the user sees
+        // it as "Something went wrong: …".
+        func featureDurationFailure(_ url: URL) async -> JobFailure? {
+            guard let expectedSeconds = selection.featureDurationSeconds else {
+                log("Output duration not checked — no scan duration")
+                return nil
+            }
+            let reason: String
+            switch await checkDuration(url, expectedSeconds: expectedSeconds, label: "Output") {
+            case .consistent, .long:
+                return nil
+            case .short(let delta):
+                let actualSeconds = expectedSeconds + delta
+                reason = "The encoded file runs \(DiscTitleFormatting.duration(actualSeconds)) but the scan said this title runs \(DiscTitleFormatting.duration(expectedSeconds)), so it was discarded, not filed. Any copy already in Plex is untouched."
+            case .none:
+                reason = "The encoded file's duration could not be read, so it was discarded, not filed. Any copy already in Plex is untouched."
+            }
+            return JobFailure(stage: .encode, reason: .unknown(reason))
+        }
+
         // #0004 §4: sweep stale working folders before preflight, so
         // reclaimed space counts toward P6's free-space blocker. It runs
         // here rather than at launch: the volume holding `plexMediaRoot` is
@@ -346,8 +375,7 @@ struct DVDPipeline {
 
         // Step 1: Encode, straight from the disc's VIDEO_TS — no rip stage
         // on the happy path.
-        let mp4URL: URL
-        switch await EncodeController.encode(
+        var primaryResult = await EncodeController.encode(
             source:        discPath,
             title:         selection.title,
             output:        mp4Path,
@@ -355,7 +383,24 @@ struct DVDPipeline {
             filter:        deinterlaceFilter,
             audio:         selection.audio,
             log:           log
-        ) {
+        )
+
+        // #0037 review: an exit-0 encode that is materially shorter than the
+        // scan (or can't be measured) is a primary encode failure, decided
+        // *before* `FallbackPolicy` sees the result. A disc read error is
+        // exactly what MakeMKV's read recovery exists for, and a manual retry
+        // would only repeat HandBrake's read of the same disc. `.unknown` at
+        // `.encode` is already disc-shaped ("exit 0 with no output" is the
+        // same anomaly, whole rather than partial). The fallback's own output
+        // is checked once more below and never goes back through the policy,
+        // so a short file can neither loop nor be moved.
+        if case .success(let url) = primaryResult,
+           let durationFailure = await featureDurationFailure(url) {
+            primaryResult = .failure(durationFailure)
+        }
+
+        let mp4URL: URL
+        switch primaryResult {
         case .success(let url):
             mp4URL = url
             producedBy = .handbrake
@@ -439,40 +484,30 @@ struct DVDPipeline {
                     fallbackRecord = runFailure.record
                     return await finish(.failed(runFailure.failure))
                 case .success(let url):
+                    // #0037: the fallback's second encode gets the same
+                    // check, once. A short result here ends the job — it is
+                    // never handed back to `FallbackPolicy` — with the
+                    // original failure as the headline, the same shape as
+                    // `runFallback`'s own failures.
+                    if let durationFailure = await featureDurationFailure(url) {
+                        log("✗ FALLBACK FAILED disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) fallback=\(durationFailure.stage.rawValue):\(String(describing: durationFailure.reason))")
+                        fallbackRecord = DiscReliabilityLog.StageReason(
+                            stage:  durationFailure.stage,
+                            reason: String(describing: durationFailure.reason)
+                        )
+                        return await finish(.failed(JobFailure(
+                            stage:    primaryFailure.stage,
+                            reason:   primaryFailure.reason,
+                            logTail:  primaryFailure.logTail,
+                            fallback: .failed(stage: durationFailure.stage, reason: durationFailure.reason, logTail: [])
+                        )))
+                    }
                     mp4URL = url
                     producedBy = .makemkvFallback
                 }
             }
         }
         log("✓ Encode complete: \(mp4URL.path)")
-
-        // #0037: verify the encoded file's duration against the scan before
-        // the marker advances to `.encoded` and the file becomes eligible
-        // to move — the one thing standing between a disc read error's
-        // short exit-0 encode and #0012's staged replace silently
-        // overwriting a good library copy. This runs after the primary/
-        // fallback switch above has already returned, so a duration failure
-        // here can never trigger `FallbackPolicy` a second time.
-        //
-        // `selection.featureDurationSeconds` is `nil` only for `.phase1`
-        // (no scan ever happened) — production always sets it via
-        // `EncodeSelection.make(request:disc:)`. Never guess a duration:
-        // with no scan number to compare against, skip the check entirely.
-        if let expectedSeconds = selection.featureDurationSeconds {
-            switch await checkDuration(mp4URL, expectedSeconds: expectedSeconds, label: "Output") {
-            case .consistent, .long:
-                break
-            case .short(let delta):
-                let actualSeconds = expectedSeconds + delta
-                let reason = "The encoded file runs \(DiscTitleFormatting.duration(actualSeconds)) but the scan said this title runs \(DiscTitleFormatting.duration(expectedSeconds)), so it was not filed"
-                return await finish(.failed(JobFailure(stage: .encode, reason: .unknown(reason))))
-            case .none:
-                let reason = "The encoded file's duration could not be read, so it was not filed"
-                return await finish(.failed(JobFailure(stage: .encode, reason: .unknown(reason))))
-            }
-        } else {
-            log("Output duration not checked — no scan duration")
-        }
 
         // #0004 §3: mark the directory `encoded` before the move, so the
         // sweep can always tell a complete, unmoved `.mp4` from a stale
