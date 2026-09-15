@@ -1,6 +1,18 @@
 import Foundation
 import Observation
 
+/// #0032 — where the runtime lookup for the currently selected movie
+/// stands. `nonisolated` and declared at file scope, not nested in the
+/// (MainActor) view model below, so `RuntimeCrossCheck` — itself
+/// `nonisolated` — can take it as a plain value with no actor-isolation
+/// crossing.
+nonisolated enum RuntimeLookup: Equatable, Sendable {
+    case idle
+    case loading(movieID: Int)
+    case loaded(movieID: Int, runtimeMinutes: Int)
+    case unavailable(movieID: Int, reason: RuntimeCrossCheck.NotRunReason)
+}
+
 @MainActor
 @Observable
 final class MovieSearchViewModel {
@@ -10,7 +22,12 @@ final class MovieSearchViewModel {
     var errorMessage: String?
     var selectedMovie: TMDBMovie?
 
+    /// #0032: the runtime lookup for `selectedMovie`. Read-only from the
+    /// outside — `select(movieID:apiKey:)` is the only way to change it.
+    private(set) var runtimeLookup: RuntimeLookup = .idle
+
     private let client: TMDBClient
+    private var runtimeTask: Task<Void, Never>?
 
     init(client: TMDBClient = TMDBClient()) {
         self.client = client
@@ -19,6 +36,9 @@ final class MovieSearchViewModel {
     // MARK: - Search
 
     func search(apiKey: String) async {
+        runtimeTask?.cancel()
+        runtimeTask = nil
+        runtimeLookup = .idle
         errorMessage  = nil
         selectedMovie = nil
         isLoading     = true
@@ -30,6 +50,48 @@ final class MovieSearchViewModel {
             results = []
             errorMessage = (error as? LocalizedError)?.errorDescription
                         ?? error.localizedDescription
+        }
+    }
+
+    // MARK: - Selection + runtime lookup (#0032)
+
+    /// Selects `movieID` from `results` (or clears the selection when `nil`)
+    /// and kicks off a lazy, per-session-cached `/movie/{id}` fetch for its
+    /// runtime. A stale response — from a reselect that lands after a newer
+    /// one, or after `search` clears the selection — is dropped: it never
+    /// overwrites a different movie's state.
+    func select(movieID: Int?, apiKey: String) {
+        runtimeTask?.cancel()
+        runtimeTask = nil
+
+        guard let movieID else {
+            selectedMovie = nil
+            runtimeLookup = .idle
+            return
+        }
+
+        selectedMovie = results.first { $0.id == movieID }
+        runtimeLookup = .loading(movieID: movieID)
+
+        runtimeTask = Task { [weak self, client] in
+            let lookup: RuntimeLookup
+            do {
+                let details = try await client.movieDetails(id: movieID, apiKey: apiKey)
+                if let minutes = details.runtimeMinutes {
+                    lookup = .loaded(movieID: movieID, runtimeMinutes: minutes)
+                } else {
+                    lookup = .unavailable(movieID: movieID, reason: .noRuntimeOnTMDB)
+                }
+            } catch is CancellationError {
+                return
+            } catch TMDBError.missingAPIKey {
+                lookup = .unavailable(movieID: movieID, reason: .missingAPIKey)
+            } catch {
+                lookup = .unavailable(movieID: movieID, reason: .lookupFailed(error.localizedDescription))
+            }
+
+            guard let self, !Task.isCancelled, self.selectedMovie?.id == movieID else { return }
+            self.runtimeLookup = lookup
         }
     }
 

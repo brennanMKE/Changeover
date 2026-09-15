@@ -36,6 +36,24 @@ struct TMDBMovie: Codable, Identifiable {
     }
 }
 
+// MARK: - Movie details (#0032)
+
+/// `GET /movie/{id}` — fetched lazily, only after a search result is
+/// selected, never for every search row. See `RuntimeCrossCheck` for what
+/// the runtime is used for and its limits.
+nonisolated struct TMDBMovieDetails: Decodable, Equatable, Sendable {
+    let id:      Int
+    let title:   String?
+    /// Minutes. TMDB sends `null` for films it has no runtime for, and `0`
+    /// on some sparse entries; both mean "unknown". A missing key decodes
+    /// to `nil` too.
+    let runtime: Int?
+
+    /// `nil` unless TMDB reported a positive runtime — collapses `null`,
+    /// `0`, and "key absent" to the one "unknown" case callers need.
+    var runtimeMinutes: Int? { runtime.flatMap { $0 > 0 ? $0 : nil } }
+}
+
 // MARK: - Errors
 
 enum TMDBError: Error, LocalizedError {

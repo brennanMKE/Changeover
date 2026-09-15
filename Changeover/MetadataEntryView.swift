@@ -25,7 +25,7 @@ struct MetadataEntryView: View {
         }
         .frame(width: 480)
         .onChange(of: selectedID) { _, id in
-            vm.selectedMovie = vm.results.first { $0.id == id }
+            vm.select(movieID: id, apiKey: settings.tmdbAPIKey)
         }
     }
 
@@ -85,10 +85,47 @@ struct MetadataEntryView: View {
                 Text(meta.fileName)
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
+                if let caption = runtimeCaption {
+                    Text(caption)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// #0032's only UI: a one-line status for the runtime cross-check. Must
+    /// never read like a pass when the check did not run — `.unavailable`
+    /// always says "will not run", never silently mirrors `.loaded`'s text.
+    private var runtimeCaption: String? {
+        switch vm.runtimeLookup {
+        case .idle:
+            return nil
+        case .loading:
+            return "Checking TMDB runtime…"
+        case .loaded(_, let minutes):
+            return "TMDB runtime \(Self.formatRuntime(minutes))"
+        case .unavailable(_, let reason):
+            return "Runtime cross-check will not run — \(Self.runtimeNotRunText(reason))"
+        }
+    }
+
+    private static func formatRuntime(_ minutes: Int) -> String {
+        let hours = minutes / 60
+        let remaining = minutes % 60
+        return hours > 0 ? "\(hours)h \(remaining)m" : "\(remaining)m"
+    }
+
+    private static func runtimeNotRunText(_ reason: RuntimeCrossCheck.NotRunReason) -> String {
+        switch reason {
+        case .missingAPIKey:        return "TMDB API key is not configured."
+        case .pending:               return "waiting on TMDB."
+        case .lookupFailed(let msg): return msg
+        case .noRuntimeOnTMDB:       return "TMDB has no runtime for this title."
+        case .noFeatureTitle:        return "no disc feature title yet."
         }
     }
 
