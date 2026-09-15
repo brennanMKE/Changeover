@@ -444,8 +444,8 @@ final class JobController {
         return true
     }
 
-    /// The user's explicit choice of feature title — the "Not this one?"
-    /// disclosure's table, or the full picker shown for `.playAll`/`.none`.
+    /// The user's explicit choice of feature title — the "Show all titles"
+    /// disclosure's table (#0038), or the full picker shown for `.playAll`/`.none`.
     /// Clears `mismatchAcknowledgement`: a different title has a different
     /// duration, so a prior runtime-mismatch confirmation no longer applies.
     /// Recomputes `selectedAudioTrackNumbers` from `AudioTrackOptions

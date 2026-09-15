@@ -5,8 +5,8 @@ import SwiftUI
 /// and the three `DiscTitleHeuristic.Outcome` cases, each a genuinely
 /// different product per the Plan:
 ///
-/// - `.single` — a one-line confirmation, table collapsed behind
-///   "Not this one?".
+/// - `.single` — a one-line confirmation with an "Extras: …" line, table
+///   collapsed behind "Show all titles" / "Choose…" (#0038).
 /// - `.playAll` — an honest refusal naming the episode cluster it found;
 ///   nothing is preselected, but the table is still there to override.
 /// - `.none` — the full table, nothing preselected, with a plain statement
@@ -245,7 +245,7 @@ struct DiscTitleListView: View {
     }
 
     // MARK: - Full title table (the 0-candidate and Play All fallback; the
-    // "Not this one?" disclosure for `.single`)
+    // "Show all titles" disclosure for `.single`)
 
     private func titleTable(_ disc: DiscInfo, badgeIndex: Int?) -> some View {
         let selection = Binding<Int?>(
