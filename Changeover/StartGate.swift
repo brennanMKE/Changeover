@@ -49,6 +49,7 @@ nonisolated enum StartGate {
         hasDisc: Bool,
         scanState: ScanState,
         selectedTitleIndex: Int?,
+        selectedAudioTrackNumbers: [Int],
         runtimeLookup: RuntimeLookup,
         mismatchAcknowledgement: MismatchAcknowledgement?
     ) -> Bool {
@@ -57,6 +58,12 @@ nonisolated enum StartGate {
         guard case .scanned(let result) = scanState else { return false }
         guard let index = selectedTitleIndex,
               let title = result.disc.titles.first(where: { $0.index == index }) else {
+            return false
+        }
+
+        // #0027 review: an empty pick on a title with audio would encode the
+        // disc's first track while the picker shows nothing checked.
+        if AudioTrackOptions.isSelectionMissingAudio(title, selected: selectedAudioTrackNumbers) {
             return false
         }
 

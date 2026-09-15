@@ -174,6 +174,19 @@ struct SubtitleGroupingTests {
         #expect(total == streams.count)
     }
 
+    /// #0027 review: the bucket key goes through `LanguageCode.normalize`,
+    /// so a `fre` stream and a `fra` stream from the same logical track pair
+    /// across variants instead of splitting into two rows.
+    @Test func syntheticBibliographicAndTerminologicCodesBucketTogether() {
+        let streams = [
+            stream(1, languageCode: "fre", variant: "Wide Screen"),
+            stream(2, languageCode: "fra", variant: "Letterbox"),
+        ]
+        let groups = SubtitleGrouping.groups(for: title(streams))
+        #expect(groups.count == 1)
+        #expect(groups.first?.languageCode == "fra")
+    }
+
     @Test func groupsForATitleWithNoSubtitlesIsEmpty() {
         let groups = SubtitleGrouping.groups(for: title([]))
         #expect(groups.isEmpty)

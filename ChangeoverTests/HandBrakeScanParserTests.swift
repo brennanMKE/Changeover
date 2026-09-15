@@ -113,6 +113,21 @@ struct HandBrakeScanParserTests {
         #expect(cc608.isTextSubtitle)
     }
 
+    /// #0027 review: audio and subtitles both go through
+    /// `LanguageCode.normalize`, so untagged audio reads `nil` (not `"und"`)
+    /// and a bibliographic code reads as HandBrake's terminologic one.
+    @Test func audioAndSubtitleLanguageCodesNormalizeAlike() {
+        let entries: [[String: Any]] = [
+            ["TrackNumber": 1, "LanguageCode": "und"],
+            ["TrackNumber": 2, "LanguageCode": ""],
+            ["TrackNumber": 3, "LanguageCode": "FRE"],
+            ["TrackNumber": 4, "LanguageCode": "eng"],
+        ]
+        let expected: [String?] = [nil, nil, "fra", "eng"]
+        #expect(HandBrakeScanParser.audioStreams(from: entries).map(\.languageCode) == expected)
+        #expect(HandBrakeScanParser.subtitleStreams(from: entries).map(\.languageCode) == expected)
+    }
+
     // MARK: - Noise tolerance
 
     /// The real capture's shape: Version + Progress blocks and libdvdnav

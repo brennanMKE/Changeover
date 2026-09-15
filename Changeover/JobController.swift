@@ -226,6 +226,14 @@ final class JobController {
             append("⚠︎ The selected title or audio tracks don't match the current disc scan — rescan and choose again before starting.")
             return false
         }
+        // #0027 review: `make` accepts an empty track list, which HandBrake
+        // would turn into "first track only" while the picker shows nothing
+        // checked. Refuse it on a title that has audio.
+        if let title = scan.disc.titles.first(where: { $0.index == request.featureTitleIndex }),
+           AudioTrackOptions.isSelectionMissingAudio(title, selected: request.audioTrackNumbers) {
+            append("⚠︎ No audio track selected — choose at least one audio track before starting.")
+            return false
+        }
 
         let disc = currentDisc.mountURL
 

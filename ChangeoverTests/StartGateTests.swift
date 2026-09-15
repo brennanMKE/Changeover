@@ -27,6 +27,7 @@ struct StartGateTests {
         hasDisc: Bool = true,
         scanState: ScanState,
         selectedTitleIndex: Int?,
+        selectedAudioTrackNumbers: [Int] = [],
         runtimeLookup: RuntimeLookup = .idle,
         mismatchAcknowledgement: MismatchAcknowledgement? = nil
     ) -> Bool {
@@ -36,9 +37,28 @@ struct StartGateTests {
             hasDisc: hasDisc,
             scanState: scanState,
             selectedTitleIndex: selectedTitleIndex,
+            selectedAudioTrackNumbers: selectedAudioTrackNumbers,
             runtimeLookup: runtimeLookup,
             mismatchAcknowledgement: mismatchAcknowledgement
         )
+    }
+
+    // MARK: - Audio selection (#0027 review)
+
+    private func titleWithAudio(_ index: Int) -> DiscTitle {
+        DiscTitle(index: index, durationSeconds: 6000, chapterCount: 10, sizeBytes: 0, outputFileName: nil,
+                  streams: [DiscStream(index: 1, kind: .audio, codecId: "A_AC3", languageCode: "eng")])
+    }
+
+    /// An empty pick would encode the disc's first track while the picker
+    /// shows nothing checked, so Start stays disabled.
+    @Test func refusesAnEmptyAudioSelectionOnATitleWithAudio() {
+        #expect(canStart(scanState: scanned([titleWithAudio(1)]), selectedTitleIndex: 1,
+                         selectedAudioTrackNumbers: [],
+                         runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB)) == false)
+        #expect(canStart(scanState: scanned([titleWithAudio(1)]), selectedTitleIndex: 1,
+                         selectedAudioTrackNumbers: [1],
+                         runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB)) == true)
     }
 
     // MARK: - The base requirements

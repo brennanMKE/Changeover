@@ -15,7 +15,13 @@ nonisolated struct EncodeSelection: Equatable, Sendable {
     /// the disc's own.
     var audio: EncodeController.AudioSelection
     /// #0015's MakeMKV fallback re-encodes a ripped `.mkv`, whose track
-    /// numbers don't match the disc's — this selects by language instead.
+    /// numbers don't match the disc's. `make` always sets `.sourceDefault`
+    /// (#0027 review): `.languages` depends on HandBrake reusing one
+    /// `--aencoder` entry for every `--audio-lang-list` match, which #0029
+    /// left unverified on real HandBrake. It would also drop the AAC stereo
+    /// copy #0017 verified on Apple TV. The fallback already ignores a
+    /// hand-picked title (#0035), so it keeps its verified pre-#0027 audio
+    /// until the joe check passes.
     var fallbackAudio: EncodeController.AudioSelection
     var filter: DeinterlaceFilter
 
@@ -54,28 +60,9 @@ nonisolated struct EncodeSelection: Equatable, Sendable {
 
         let audio = EncodeController.AudioSelection.tracks(request.audioTrackNumbers)
 
-        // #0015's MakeMKV-fallback `.mkv` renumbers its tracks, so the
-        // fallback selects by language instead. Any selected track that is
-        // untagged means the language preference can't be trusted for this
-        // title at all (the same whole-title rule #0027's picker applies),
-        // so every track is kept on the fallback rather than a partial or
-        // wrong language list.
-        var normalizedCodes: [String] = []
-        var seenCodes = Set<String>()
-        var anyUntagged = false
-        for trackNumber in request.audioTrackNumbers {
-            let stream = audioByIndex[trackNumber]
-            guard let code = LanguageCode.normalize(stream?.languageCode) else {
-                anyUntagged = true
-                continue
-            }
-            if seenCodes.insert(code).inserted {
-                normalizedCodes.append(code)
-            }
-        }
-        let fallbackAudio: EncodeController.AudioSelection = anyUntagged
-            ? .languages([])
-            : .languages(normalizedCodes)
+        // See `fallbackAudio`'s doc comment: the fallback keeps HandBrake's
+        // default audio until `.languages` is verified on joe.
+        let fallbackAudio: EncodeController.AudioSelection = .sourceDefault
 
         let filter = DeinterlaceDecision.decide(
             frameRate:         title.frameRate,

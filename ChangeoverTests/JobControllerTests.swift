@@ -784,6 +784,32 @@ struct JobControllerScanTests {
         #expect(controller.logLines.contains { $0.contains("don't match the current disc scan") })
     }
 
+    /// #0027 review: an empty track list resolves in `EncodeSelection.make`,
+    /// but on a title with audio it would encode the first track while the
+    /// picker shows nothing checked. `start` refuses it and never runs the
+    /// runner.
+    @Test func startRefusesAnEmptyAudioSelectionOnATitleWithAudio() async throws {
+        final class RunCount { var value = 0 }
+        let runs = RunCount()
+        let controller = JobController(runner: { _, _, _, _, _ in
+            runs.value += 1
+            return .succeeded(destination: URL(fileURLWithPath: "/x"))
+        })
+        controller.insertedDisc = Self.testDisc
+        let scannedTitle = DiscTitle(
+            index: 1, durationSeconds: 6645, chapterCount: 21, sizeBytes: 6_300_000_000, outputFileName: nil,
+            streams: [DiscStream(index: 1, kind: .audio, codecId: "A_AC3", languageCode: "eng")]
+        )
+        controller.scanState = .scanned(DiscScanner.Result(
+            disc: DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [scannedTitle]),
+            mainFeatureIndex: 1, warnings: []))
+
+        #expect(controller.start(request: try Self.request(selectionDisc: Self.testDisc, audioTrackNumbers: []), settings: AppSettings()) == false)
+        #expect(controller.isRunning == false)
+        #expect(runs.value == 0)
+        #expect(controller.logLines.contains { $0.contains("No audio track selected") })
+    }
+
     @Test func startPassesTheResolvedSelectionToTheRunner() async throws {
         final class SelectionLog {
             private(set) var selections: [EncodeSelection] = []

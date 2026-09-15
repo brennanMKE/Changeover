@@ -199,7 +199,7 @@ nonisolated enum HandBrakeScanParser {
                 index: track,
                 kind: .audio,
                 codecId: json["CodecName"] as? String ?? "",
-                languageCode: json["LanguageCode"] as? String,
+                languageCode: LanguageCode.normalize(json["LanguageCode"] as? String),
                 languageName: json["Language"] as? String,
                 displayName: json["Description"] as? String,
                 bitrate: number(json["BitRate"]).map { String($0.intValue) },
@@ -226,7 +226,7 @@ nonisolated enum HandBrakeScanParser {
                 index: track,
                 kind: .subtitle,
                 codecId: json["SourceName"] as? String ?? "",
-                languageCode: normalizedLanguageCode(json["LanguageCode"] as? String),
+                languageCode: LanguageCode.normalize(json["LanguageCode"] as? String),
                 languageName: clean,
                 displayName: language,
                 variant: variant,
@@ -252,16 +252,6 @@ nonisolated enum HandBrakeScanParser {
         return (clean.trimmingCharacters(in: .whitespaces), variant)
     }
 
-    /// `"und"` and `""` mean untagged. `DiscStream.languageCode`'s contract
-    /// is `nil` for untagged, never a string (#0022) — HandBrake's own scan
-    /// writes `"und"` verbatim (title 4's CC608 stream in
-    /// `dragon-tattoo-title0-min1.json`), which contradicted that contract
-    /// until this normalization (#0033). Subtitle-side only: #0027 does the
-    /// same for `audioStreams`.
-    private static func normalizedLanguageCode(_ code: String?) -> String? {
-        guard let code, code != "", code.lowercased() != "und" else { return nil }
-        return code
-    }
 
     private static func variant(fromAttributes attributes: [String: Any]?) -> String? {
         guard let attributes else { return nil }

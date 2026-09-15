@@ -280,6 +280,7 @@ struct MetadataEntryView: View {
                 hasDisc:             jobs.insertedDisc != nil,
                 scanState:           jobs.scanState,
                 selectedTitleIndex:  jobs.selectedTitleIndex,
+                selectedAudioTrackNumbers: jobs.selectedAudioTrackNumbers,
                 runtimeLookup:       vm.runtimeLookup,
                 mismatchAcknowledgement: jobs.mismatchAcknowledgement
             ))

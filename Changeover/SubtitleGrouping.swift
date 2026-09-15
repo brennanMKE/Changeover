@@ -105,7 +105,7 @@ nonisolated enum SubtitleGrouping {
         let selectedTrackNumber = ordered.first { $0.variant == preferredVariant }?.index
             ?? ordered.map(\.index).min()!
         return SubtitleGroup(
-            languageCode: first.languageCode,
+            languageCode: LanguageCode.normalize(first.languageCode),
             languageName: first.languageName,
             isForced: first.isForced,
             isCommentary: first.isCommentary,
@@ -123,7 +123,9 @@ nonisolated enum SubtitleGrouping {
         var codecId: String
 
         init(stream: DiscStream) {
-            languageCode = stream.languageCode
+            // #0027 review: normalized like audio, so `fre`/`fra` and
+            // `und`/nil bucket together whatever produced the stream.
+            languageCode = LanguageCode.normalize(stream.languageCode)
             languageName = stream.languageName
             isForced = stream.isForced
             isCommentary = stream.isCommentary

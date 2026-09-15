@@ -52,7 +52,7 @@ nonisolated enum DiscTitleFormatting {
         var seen = Set<String>()
         var result: [String] = []
         for stream in streams {
-            guard let code = stream.languageCode, !code.isEmpty, seen.insert(code).inserted else { continue }
+            guard let code = LanguageCode.normalize(stream.languageCode), seen.insert(code).inserted else { continue }
             result.append(code)
         }
         return result

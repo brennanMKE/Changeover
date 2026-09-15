@@ -133,6 +133,67 @@ nonisolated enum AudioTrackOptions {
         return []
     }
 
+    /// #0027 review: true when `title` has audio but `selected` is empty.
+    ///
+    /// An empty `RipRequest.audioTrackNumbers` becomes `.tracks([])`, which
+    /// `EncodeController.audioArguments` turns into `.sourceDefault`, so
+    /// HandBrake would encode the disc's first track while every checkbox in
+    /// the picker shows unchecked. `StartGate` and `JobController.start` both
+    /// refuse this state, so the output always matches what the picker shows.
+    nonisolated static func isSelectionMissingAudio(_ title: DiscTitle, selected: [Int]) -> Bool {
+        selected.isEmpty && title.streams.contains { $0.kind == .audio }
+    }
+
+    /// The selection after the user toggles `trackNumber`, in the order
+    /// `options` lists the tracks (disc order).
+    ///
+    /// Order matters: the first selected track is the one that gets the AAC
+    /// stereo copy (#0029). Appending in click order would let unchecking and
+    /// re-checking English move French into that slot with nothing on screen
+    /// to show it.
+    nonisolated static func toggling(
+        _ selected: [Int],
+        trackNumber: Int,
+        isOn: Bool,
+        options: [AudioTrackOption]
+    ) -> [Int] {
+        var set = Set(selected)
+        if isOn { set.insert(trackNumber) } else { set.remove(trackNumber) }
+        return options.map(\.trackNumber).filter(set.contains)
+    }
+
+    /// The one caption under the Audio heading, or `nil` when the selection
+    /// needs no explanation. It explains why the tracks that start selected
+    /// were chosen, and warns when nothing is selected.
+    nonisolated static func notice(
+        options: [AudioTrackOption],
+        preferred: [String],
+        untagged: Bool,
+        selected: [Int]
+    ) -> String? {
+        if options.isEmpty {
+            return "No audio tracks reported for this title."
+        }
+        if selected.isEmpty {
+            return "No audio track selected. Choose at least one to start."
+        }
+        if untagged {
+            return "This disc does not tag its audio languages, so every non-commentary track starts selected."
+        }
+        let normalizedPreferred = preferred.compactMap(LanguageCode.normalize)
+        let matchesPreference = options.contains { option in
+            guard !option.isCommentary, let code = option.languageCode else { return false }
+            return normalizedPreferred.contains(code)
+        }
+        if !matchesPreference {
+            if normalizedPreferred.isEmpty {
+                return "No preferred audio languages are set, so the first track starts selected."
+            }
+            return "None of your preferred languages (\(normalizedPreferred.joined(separator: ", "))) is on this title, so the first track starts selected."
+        }
+        return nil
+    }
+
     private struct MergeKey: Hashable {
         var languageCode: String
         var codecId: String

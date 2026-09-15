@@ -29,9 +29,9 @@ struct EncodeSelectionTests {
 
         #expect(selection.title == .index(1))
         #expect(selection.audio == .tracks([1, 4]))
-        // Track 1 is eng, track 4 is fra — normalized, deduplicated, in
-        // first-occurrence order.
-        #expect(selection.fallbackAudio == .languages(["eng", "fra"]))
+        // #0027 review: the MakeMKV fallback keeps its verified default audio
+        // until `.languages` is checked on real HandBrake.
+        #expect(selection.fallbackAudio == .sourceDefault)
         // The fixture's title 1 is ~23.976 fps, not interlaced — no filter.
         let scannedTitle = try #require(disc.titles.first { $0.index == 1 })
         #expect(selection.filter == DeinterlaceDecision.decide(
@@ -56,9 +56,9 @@ struct EncodeSelectionTests {
     }
 
     @Test func makeAcceptsAnEmptyAudioTrackListAndFallsBackDownstream() throws {
-        // Not a rejection case: `EncodeController.AudioSelection.tracks([])`
-        // itself falls back to `.sourceDefault` — `make` doesn't need to
-        // special-case emptiness, it just has nothing to reject.
+        // `make` only checks that indices resolve. An empty pick on a title
+        // with audio is refused by `StartGate` and `JobController.start`
+        // (#0027 review), not here.
         let disc = try Self.fixtureDisc()
         let request = RipRequest(metadata: Self.metadata(), featureTitleIndex: 1, audioTrackNumbers: [])
 
@@ -66,10 +66,9 @@ struct EncodeSelectionTests {
         #expect(selection.audio == .tracks([]))
     }
 
-    /// A selected untagged track means the language preference can't be
-    /// trusted for the fallback re-encode either — every track is kept
-    /// rather than a partial or wrong language list.
-    @Test func makeFallsBackToEveryLanguageWhenAnySelectedTrackIsUntagged() throws {
+    /// #0027 review: whatever tracks are selected, tagged or not, the MakeMKV
+    /// fallback gets `.sourceDefault`, never an unverified `.languages` list.
+    @Test func makeGivesTheFallbackSourceDefaultEvenForUntaggedTracks() throws {
         let title = DiscTitle(
             index: 0, durationSeconds: 100, chapterCount: 1, sizeBytes: 0, outputFileName: nil,
             streams: [
@@ -81,7 +80,8 @@ struct EncodeSelectionTests {
         let request = RipRequest(metadata: Self.metadata(), featureTitleIndex: 0, audioTrackNumbers: [1, 2])
 
         let selection = try #require(EncodeSelection.make(request: request, disc: disc))
-        #expect(selection.fallbackAudio == .languages([]))
+        #expect(selection.audio == .tracks([1, 2]))
+        #expect(selection.fallbackAudio == .sourceDefault)
     }
 
     @Test func phase1MatchesTodaysDefaultBehaviourByteForByte() {

@@ -153,4 +153,53 @@ struct AudioTrackOptionsTests {
         #expect(stream.isCommentary == false)
         #expect(stream.isForced == true)
     }
+
+    // MARK: - #0027 review: the selection matches what the picker shows
+
+    @Test func anEmptySelectionIsMissingAudioOnlyWhenTheTitleHasAudio() {
+        #expect(AudioTrackOptions.isSelectionMissingAudio(title([audioStream(1)]), selected: []) == true)
+        #expect(AudioTrackOptions.isSelectionMissingAudio(title([audioStream(1)]), selected: [1]) == false)
+        #expect(AudioTrackOptions.isSelectionMissingAudio(title([]), selected: []) == false)
+    }
+
+    /// Unchecking English then checking it again must not move French into
+    /// the first slot (the one that gets the AAC stereo copy).
+    @Test func togglingKeepsTheSelectionInDiscOrder() throws {
+        let disc = try Self.fixtureDisc()
+        let title1 = try #require(disc.titles.first { $0.index == 1 })
+        let options = AudioTrackOptions.options(for: title1)
+
+        var selected = [1, 4]
+        selected = AudioTrackOptions.toggling(selected, trackNumber: 1, isOn: false, options: options)
+        #expect(selected == [4])
+        selected = AudioTrackOptions.toggling(selected, trackNumber: 1, isOn: true, options: options)
+        #expect(selected == [1, 4])
+        selected = AudioTrackOptions.toggling(selected, trackNumber: 2, isOn: true, options: options)
+        #expect(selected == [1, 2, 4])
+    }
+
+    @Test func noticeDescribesTheActualSelection() throws {
+        let disc = try Self.fixtureDisc()
+        let title1 = try #require(disc.titles.first { $0.index == 1 })
+        let options = AudioTrackOptions.options(for: title1)
+
+        #expect(AudioTrackOptions.notice(options: options, preferred: ["eng"], untagged: false, selected: [1]) == nil)
+        #expect(AudioTrackOptions.notice(options: options, preferred: ["eng"], untagged: false, selected: [])?
+            .contains("No audio track selected") == true)
+        #expect(AudioTrackOptions.notice(options: options, preferred: ["spa"], untagged: false, selected: [1])?
+            .contains("None of your preferred languages (spa)") == true)
+        #expect(AudioTrackOptions.notice(options: options, preferred: [], untagged: false, selected: [1])?
+            .contains("No preferred audio languages") == true)
+        #expect(AudioTrackOptions.notice(options: [], preferred: ["eng"], untagged: false, selected: [])
+            == "No audio tracks reported for this title.")
+
+        let untagged = title([
+            audioStream(1, languageCode: nil, displayName: "DD Surround 5.1"),
+            audioStream(2, languageCode: nil, displayName: "DD Surround 5.1"),
+        ])
+        let untaggedOptions = AudioTrackOptions.options(for: untagged)
+        let caption = try #require(AudioTrackOptions.notice(options: untaggedOptions, preferred: ["eng"], untagged: true, selected: [1, 2]))
+        #expect(caption.contains("does not tag its audio languages"))
+        #expect(!caption.contains("keeping all tracks"))
+    }
 }

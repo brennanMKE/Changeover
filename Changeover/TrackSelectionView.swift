@@ -39,12 +39,13 @@ struct TrackSelectionView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Audio")
                 .font(.headline)
-            if isUntagged {
-                Text("This disc does not tag its audio languages — keeping all tracks.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else if audioOptions.isEmpty {
-                Text("No audio tracks reported for this title.")
+            if let notice = AudioTrackOptions.notice(
+                options: audioOptions,
+                preferred: settings.preferredAudioLanguages,
+                untagged: isUntagged,
+                selected: jobs.selectedAudioTrackNumbers
+            ) {
+                Text(notice)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -61,13 +62,12 @@ struct TrackSelectionView: View {
         Binding(
             get: { jobs.selectedAudioTrackNumbers.contains(option.trackNumber) },
             set: { isOn in
-                if isOn {
-                    if !jobs.selectedAudioTrackNumbers.contains(option.trackNumber) {
-                        jobs.selectedAudioTrackNumbers.append(option.trackNumber)
-                    }
-                } else {
-                    jobs.selectedAudioTrackNumbers.removeAll { $0 == option.trackNumber }
-                }
+                jobs.selectedAudioTrackNumbers = AudioTrackOptions.toggling(
+                    jobs.selectedAudioTrackNumbers,
+                    trackNumber: option.trackNumber,
+                    isOn: isOn,
+                    options: audioOptions
+                )
             }
         )
     }

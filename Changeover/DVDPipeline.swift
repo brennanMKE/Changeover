@@ -379,6 +379,9 @@ struct DVDPipeline {
                     log("⚠︎ Could not remove the partial encode at \(mp4Path)")
                 }
 
+                if selection.audio != selection.fallbackAudio {
+                    log("⚠︎ The MakeMKV fallback does not carry over the audio tracks chosen for this disc; it keeps HandBrake's default audio (#0035).")
+                }
                 switch await runFallback(
                     primaryFailure: primaryFailure,
                     discPath:       discPath,
@@ -493,11 +496,10 @@ struct DVDPipeline {
         // its longest title. That can differ from a title the user picked by
         // hand — mapping the pick across by duration is a follow-up.
         //
-        // `fallbackAudio` DOES reach here (#0027/#0029's refresh): the
-        // ripped `.mkv`'s track numbers don't match the disc's, so
-        // `EncodeSelection.make` builds this as a `.languages(...)`
-        // selection rather than the disc-relative `.tracks(...)` the
-        // primary encode uses.
+        // `fallbackAudio` is `.sourceDefault` from `EncodeSelection.make`
+        // (#0027 review): the `.mkv`'s track numbers don't match the disc's,
+        // and `.languages` is unverified on real HandBrake. `run()` logs
+        // that the chosen tracks are not carried over.
         switch await MakeMKVRipper.rip(
             discMountPath:  discPath,
             jobDirectory:   jobDirectory,
