@@ -618,9 +618,9 @@ struct JobControllerPhaseWiringTests {
     /// their own.
     @Test func theRunnerReceivesTheSameIDCurrentJobIDExposes() async throws {
         var receivedID: JobID?
-        let controller = JobController(runner: { _, _, _, _, _, _, jobID, reportPhase in
-            receivedID = jobID
-            return fakeSuccess(reportPhase, destination: Self.destination)
+        let controller = JobController(runner: { context, _ in
+            receivedID = context.id
+            return fakeSuccess(context, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -634,9 +634,9 @@ struct JobControllerPhaseWiringTests {
     // MARK: - Phase reporting
 
     @Test func validPhaseReportsAreAppliedInOrder() async throws {
-        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in
-            reportPhase(.encoding)
-            reportPhase(.organizing)
+        let controller = JobController(runner: { context, _ in
+            context.phase(.encoding)
+            context.phase(.organizing)
             return .succeeded(destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
@@ -654,10 +654,10 @@ struct JobControllerPhaseWiringTests {
     /// rather than jumping ahead — and a later, legal report still applies
     /// normally. Never a crash.
     @Test func anInvalidMidJobReportIsLoggedAndDropped() async throws {
-        let controller = JobController(runner: { _, _, _, _, _, log, _, reportPhase in
-            reportPhase(.organizing) // illegal: starting → organizing
-            log("checkpoint")
-            reportPhase(.encoding)   // legal: starting → encoding
+        let controller = JobController(runner: { context, _ in
+            context.phase(.organizing) // illegal: starting → organizing
+            context.log("checkpoint")
+            context.phase(.encoding)   // legal: starting → encoding
             return .succeeded(destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
@@ -689,7 +689,7 @@ struct JobControllerPhaseWiringTests {
     /// `currentJobState` stays at `.starting` — while `isRunning`,
     /// `lastOutcome` and the sleep assertion behave exactly as for any job.
     @Test func aSuccessWithNoPhaseReportsIsLoggedNotApplied() async throws {
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in
+        let controller = JobController(runner: { _, _ in
             .succeeded(destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
@@ -706,7 +706,7 @@ struct JobControllerPhaseWiringTests {
     /// silent terminal transition — no phase report is owed.
     @Test func aFailureWithNoPhaseReportsLandsInFailedSilently() async throws {
         let failure = JobFailure(stage: .preflight, reason: .toolMissing(path: "/nope"))
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in .failed(failure) })
+        let controller = JobController(runner: { _, _ in .failed(failure) })
         Self.mount(controller, disc: Self.testDisc)
 
         controller.start(request: Self.request(try Self.metadata()), settings: AppSettings())
@@ -717,10 +717,10 @@ struct JobControllerPhaseWiringTests {
     }
 
     @Test func aJobWithExtrasEndsSucceededFromExtras() async throws {
-        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in
-            reportPhase(.encoding)
-            reportPhase(.organizing)
-            reportPhase(.extras)
+        let controller = JobController(runner: { context, _ in
+            context.phase(.encoding)
+            context.phase(.organizing)
+            context.phase(.extras)
             return .succeeded(destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
@@ -733,8 +733,8 @@ struct JobControllerPhaseWiringTests {
     }
 
     @Test func startResetsCurrentJobStateToInitialForEachNewJob() async throws {
-        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in
-            reportPhase(.encoding)
+        let controller = JobController(runner: { context, _ in
+            context.phase(.encoding)
             return .failed(JobFailure(stage: .encode, reason: .toolExited(code: 1)))
         })
         Self.mount(controller, disc: Self.testDisc)

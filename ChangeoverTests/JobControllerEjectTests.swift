@@ -108,10 +108,10 @@ struct JobControllerEjectTests {
     @Test func ejectDiscRefusesWhileAJobIsRunning() async throws {
         let gate = Gate()
         let ejector = FakeEjector()
-        let controller = JobController(runner: { _, _, _, _, _, log, _, reportPhase in
-            log("▶ working")
+        let controller = JobController(runner: { context, _ in
+            context.log("▶ working")
             await gate.wait()
-            return fakeSuccess(reportPhase, destination: Self.destination)
+            return fakeSuccess(context, destination: Self.destination)
         }, ejector: { url in await ejector.eject(url) })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -237,9 +237,9 @@ struct JobControllerEjectTests {
         let ejector = FakeEjector()
         let scans = ScanCounter()
         let controller = JobController(
-            runner: { _, _, _, _, _, _, _, reportPhase in
+            runner: { context, _ in
                 Issue.record("the runner must not be invoked while ejecting")
-                return fakeSuccess(reportPhase, destination: Self.destination)
+                return fakeSuccess(context, destination: Self.destination)
             },
             scanRunner: { _, _, _, _, _ in
                 scans.calls += 1
@@ -278,9 +278,9 @@ struct JobControllerEjectTests {
     @Test func aSuccessfulEjectKeepsStartRefusedUntilTheRemovalLands() async throws {
         let ejector = FakeEjector()
         let controller = JobController(
-            runner: { _, _, _, _, _, _, _, reportPhase in
+            runner: { context, _ in
                 Issue.record("the runner must not be invoked on an ejected disc")
-                return fakeSuccess(reportPhase, destination: Self.destination)
+                return fakeSuccess(context, destination: Self.destination)
             },
             ejector: { url in await ejector.eject(url) })
         Self.mount(controller, disc: Self.testDisc)

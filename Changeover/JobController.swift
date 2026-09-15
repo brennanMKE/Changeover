@@ -39,38 +39,45 @@ nonisolated enum ScanState: Equatable, Sendable {
 @Observable
 final class JobController {
 
+    /// #0042 — everything a `Runner` needs about the job it's running,
+    /// replacing the old `Runner`'s 8 positional parameters (`RipRequest`,
+    /// `EncodeSelection`, `ExtrasPlan`, `AppSettings`, `URL`, a log closure,
+    /// a `JobID`, a phase-report closure). `AppSettings` stays a separate
+    /// `Runner` parameter — everything here is specific to *this* job;
+    /// settings are shared across every job.
+    ///
+    /// `log`/`phase` are bound directly to this job's own `Job` instance by
+    /// `start` (see `Job.advance(to:)`/`Job.log`) — never routed through
+    /// `JobController`'s own `current` lookup — so a late report arriving
+    /// after this job is no longer `current` still lands on the right job.
+    struct JobContext {
+        /// The one id for this job, minted once by `start` and threaded
+        /// through to `DVDPipeline` (#0041) so the working directory, the
+        /// `▶ Job` log line, and the notification identifier are all the
+        /// same value.
+        let id: JobID
+        let metadata: MovieMetadata
+        /// The disc's mount root (#0014) — always set; `start` refuses to
+        /// run without one, so a runner never sees a nil disc.
+        let disc: URL
+        /// #0027 — resolved from the `RipRequest` against the scan
+        /// `JobController` was holding when `start` accepted it, so a
+        /// runner never sees an index or track number that doesn't belong
+        /// to the live scan.
+        let selection: EncodeSelection
+        /// #0031 Step B — resolved the same way; an empty plan is the
+        /// default and a valid job.
+        let extras: ExtrasPlan
+        let log: @MainActor (String) -> Void
+        /// Called as `DVDPipeline` crosses `.encoding`/`.fallback`/
+        /// `.organizing`/`.extras` — validated by `Job.advance(to:)` before
+        /// ever touching this job's `state`.
+        let phase: @MainActor (JobPhase) -> Void
+    }
+
     /// The unit of work a job performs, injectable so tests can drive the
     /// controller without `makemkvcon`, `HandBrakeCLI`, or a physical disc.
-    ///
-    /// The `URL` is the disc's mount root (#0014) — `start(request:settings:)`
-    /// refuses to run without one, so the runner never sees a nil disc. The
-    /// `EncodeSelection` (#0027) is resolved from the `RipRequest` against
-    /// the scan `JobController` is currently holding — `start` refuses to
-    /// run unless `EncodeSelection.make(request:disc:)` succeeds, so the
-    /// runner never sees an index or track number that doesn't belong to
-    /// the live scan. The `ExtrasPlan` (#0031 Step B) is resolved the same
-    /// way, against the same scan — an empty plan is the default and a
-    /// valid job.
-    ///
-    /// #0041 added the last two parameters:
-    /// - `JobID` — the one id for this job, minted once by `start` and
-    ///   threaded through to `DVDPipeline` so the working directory, the
-    ///   `▶ Job` log line, and the notification identifier are all the same
-    ///   value instead of two independently-minted strings.
-    /// - the phase-report closure — `DVDPipeline` calls it as it crosses
-    ///   `.encoding`/`.fallback`/`.organizing`/`.extras`; `start` binds it to
-    ///   `applyPhase`, which validates the report against `JobState
-    ///   .advancing(to:)` before ever touching `currentJobState`.
-    typealias Runner = @MainActor (
-        RipRequest,
-        EncodeSelection,
-        ExtrasPlan,
-        AppSettings,
-        URL,
-        @escaping @MainActor (String) -> Void,
-        JobID,
-        @escaping @MainActor (JobPhase) -> Void
-    ) async -> JobOutcome
+    typealias Runner = @MainActor (JobContext, AppSettings) async -> JobOutcome
 
     /// The unit of work a disc scan performs, injectable for the same reason
     /// `Runner` is: tests drive it with a canned `DiscScanner.Outcome`
@@ -95,26 +102,66 @@ final class JobController {
     /// .defaultCapacity`, which now owns the number.
     static let defaultMaxLogLines = JobLog.defaultCapacity
 
+    /// #0042 — how many finished jobs `history` keeps at once, oldest
+    /// pruned first. Smaller than the superseded `JobQueue` plan's 50: each
+    /// retained `Job` keeps its own #0043 `JobLog` (up to 2,000 lines) in
+    /// memory, and nothing has needed more than a handful of recent jobs
+    /// yet.
+    static let defaultHistoryLimit = 20
+
     // MARK: - Observable state
 
-    /// #0043 — the current (or most recently finished) job's log.
+    /// #0042 — the job currently running, or `nil` when idle. The single
+    /// source of truth `isRunning`/`currentMetadata`/`currentJobID`/
+    /// `currentJobState`/`currentLog` are all derived from, together with
+    /// `history` below.
+    private(set) var current: Job?
+
+    /// #0042 — finished jobs, oldest first, pruned to `historyLimit`. A
+    /// job's own `Job.state` is never forced terminal by pruning or by
+    /// anything else here — see `finish(_:)` and `Job.finish(with:)`.
+    private(set) var history: [Job] = []
+
+    /// #0042: derived from `current`, so `withObservationTracking` fires on
+    /// the assignment itself — no cached bit to drift out of sync with the
+    /// job that's actually running.
+    var isRunning: Bool { current != nil }
+
+    /// The job actually running, or (once it's finished) the most recent
+    /// one — never reset to `nil` after a job finishes, matching the
+    /// pre-#0042 behaviour of the property this replaces.
+    var currentMetadata: MovieMetadata? { (current ?? history.last)?.metadata }
+
+    /// Filesystem-safe id for the current (or most recent) job. #0003 uses
+    /// this to name the per-job working directory.
+    var currentJobID: String? { (current ?? history.last)?.id.rawValue }
+
+    /// Terminal state of the most recent finished job, `nil` while one runs.
+    /// Reads `Job.outcome` (the runner's actual return value), not
+    /// `Job.state.outcome` — see `Job.outcome`'s doc comment for why those
+    /// can diverge.
+    var lastOutcome: JobOutcome? { current == nil ? history.last?.outcome : nil }
+
+    /// #0041 — the validated phase state machine for the current (or most
+    /// recently finished) job, mirroring `currentJobID`/`lastOutcome`: `nil`
+    /// only before the first job of the app's lifetime, and left at its
+    /// last value after a job finishes rather than reset to `nil`.
+    /// `DVDPipeline` reports phase changes through the `JobContext`'s
+    /// phase-report closure, bound directly to that job's own
+    /// `Job.advance(to:)` — an out-of-order or otherwise illegal report is
+    /// logged (into that job's own log) and dropped, never applied and
+    /// never a crash.
+    var currentJobState: JobState? { (current ?? history.last)?.state }
+
+    /// #0043 — the current (or most recently finished) job's log, or a
+    /// controller-level log for anything that happens with no job running
+    /// (a refused `start`/`ejectDisc`, disc-scan output) — see
+    /// `controllerLog`'s doc comment for why that traffic is never appended
+    /// to a *finished* job's log.
     ///
-    /// Unlike `currentJobID`/`lastOutcome`, this is never `nil`: before the
-    /// first job of the app's lifetime it's a plain, not-yet-retained
-    /// `JobLog` that catches whatever `append` writes before any job has
-    /// successfully started (a refused `start`/`ejectDisc` call, disc-scan
-    /// output). The moment `start` actually starts a job, this is replaced
-    /// — never cleared in place — with a fresh `JobLog` minted by
-    /// `logStore.makeLog(for:)` and keyed to that job's `JobID`. The
-    /// previous value (a finished job's log, or the pre-first-job catch-all)
-    /// is not destroyed: if it came from `logStore`, it's still reachable
-    /// there by its own `JobID` until `maxJobs` evicts it — the fix for
-    /// this ticket's headline bug, "a finished job's log is gone the moment
-    /// the next one starts."
-    ///
-    /// New code (the log view, #0042/#0048) should read this directly for
-    /// stable `LogLine` identity and milestone/progress classification.
-    private(set) var currentLog: JobLog
+    /// New code (the log view, #0048) should read this directly for stable
+    /// `LogLine` identity and milestone/progress classification.
+    var currentLog: JobLog { (current ?? history.last)?.log ?? controllerLog }
     /// Back-compat surface: every existing reader of `logLines: [String]`
     /// (call sites and tests predating #0043) keeps working unchanged. It
     /// mirrors `currentLog.displayLines` — the same rows the log area
@@ -122,22 +169,6 @@ final class JobController {
     /// here, ahead of the surviving window, and the latest progress update
     /// appears once (#0043 review).
     var logLines: [String] { currentLog.displayLines.map(\.text) }
-    private(set) var isRunning = false
-    private(set) var currentMetadata: MovieMetadata?
-    /// Filesystem-safe id for the current (or most recent) job. #0003 uses this
-    /// to name the per-job working directory.
-    private(set) var currentJobID: String?
-    /// Terminal state of the most recent finished job, `nil` while one runs.
-    private(set) var lastOutcome: JobOutcome?
-    /// #0041 — the validated phase state machine for the current (or most
-    /// recently finished) job, mirroring `currentJobID`/`lastOutcome`: `nil`
-    /// only before the first job of the app's lifetime, and left at its
-    /// terminal value after a job finishes rather than reset to `nil`.
-    /// `DVDPipeline` reports phase changes through the `Runner`'s
-    /// phase-report closure, which `start` binds to `applyPhase` — an
-    /// out-of-order or otherwise illegal report is logged and dropped, never
-    /// applied and never a crash.
-    private(set) var currentJobState: JobState?
 
     /// The disc currently in the drive, written by `DVDMonitor` — mount URL,
     /// device node, and identity, not just a bare `URL` (#0013). #0005 reads
@@ -199,11 +230,21 @@ final class JobController {
 
     // MARK: - Private
 
-    /// #0043 — retains each started job's `JobLog`, keyed by `JobID`, so a
-    /// finished job's log survives past the next `start()`. Bounded to the
-    /// most recent few jobs, per this ticket's scope; the full session
-    /// history view is #0042/#0048's.
-    private let logStore: JobLogStore
+    /// #0042 — where between-job traffic goes: disc-scan output and any
+    /// refusal logged while `current == nil` (`ejectDisc`'s "no disc"
+    /// message, `startScan`'s progress, `start`'s own guards when nothing is
+    /// running). Deliberately **not** a finished job's `JobLog` — the #0043
+    /// review found that pre-#0042 `currentLog` stayed pointed at the last
+    /// job's log between jobs, so the next disc's scan lines and any
+    /// refusal landed inside that finished job's retained log. `append(_:)`
+    /// below is the single place this distinction is made: while `current`
+    /// is set, a line goes to that job's own log (even a refusal logged
+    /// mid-job, e.g. "already running" — it's about that job); once
+    /// `current` is `nil`, every line goes here instead, never to
+    /// `history.last`.
+    private let controllerLog: JobLog
+    private let logCapacity: Int
+    private let historyLimit: Int
     private let runner: Runner
     private let scanRunner: ScanRunner
     /// #0047 — held for the duration of a job so the Mac doesn't idle-sleep
@@ -224,50 +265,68 @@ final class JobController {
 
     init(
         maxLogLines: Int = JobController.defaultMaxLogLines,
-        maxRetainedJobLogs: Int = 10,
+        historyLimit: Int = JobController.defaultHistoryLimit,
         runner: Runner? = nil,
         scanRunner: ScanRunner? = nil,
         sleepAssertion: SleepAssertion = ProcessInfoSleepAssertion(),
         ejector: Ejector? = nil
     ) {
-        let capacity = max(1, maxLogLines)
-        self.logStore = JobLogStore(maxJobs: maxRetainedJobLogs, logCapacity: capacity)
-        // The pre-first-job catch-all — see `currentLog`'s doc comment.
-        // Not retained in `logStore`: it isn't tied to any `JobID`, and
-        // `start` replaces it the same way it replaces any prior job's log.
-        self.currentLog = JobLog(capacity: capacity)
+        self.logCapacity = max(1, maxLogLines)
+        self.historyLimit = max(0, historyLimit)
+        self.controllerLog = JobLog(capacity: logCapacity)
         self.runner = runner ?? JobController.pipelineRunner
         self.scanRunner = scanRunner ?? JobController.defaultScanRunner
         self.sleepAssertion = sleepAssertion
         self.ejector = ejector ?? JobController.defaultEjector
     }
 
+    /// #0042 — the running job, or a job still in `history`, by its `JobID`.
+    /// `nil` if `jobID` never named a real job, or it's since been pruned
+    /// past `historyLimit`.
+    func job(id: JobID) -> Job? {
+        if let current, current.id == id { return current }
+        return history.first { $0.id == id }
+    }
+
     /// #0043 — retrieves a retained job's log by its raw `JobID` string, for
-    /// a future history view (#0042/#0048) or a test proving retention.
-    /// `nil` if `jobID` never named a real job, or its log has since been
-    /// evicted by `maxRetainedJobLogs`.
+    /// a future history view (#0048) or a test proving retention. `nil` if
+    /// `jobID` never named a real job, or it's since been pruned.
     func retainedLog(forJobID rawJobID: String) -> JobLog? {
         guard let jobID = JobID(rawValue: rawJobID) else { return nil }
-        return logStore.log(for: jobID)
+        return job(id: jobID)?.log
+    }
+
+    /// #0042 — every job, current then history, oldest first: the shape
+    /// #0060's Phase 4 `subscribe` handshake replies with.
+    var snapshots: [JobSnapshot] {
+        var result = history.map(\.snapshot)
+        if let current { result.append(current.snapshot) }
+        return result
+    }
+
+    /// #0042 — drops every finished job (and its retained log). Never
+    /// touches `current`: an in-flight job has no cancel yet (#0046).
+    func clearHistory() {
+        history.removeAll()
     }
 
     /// The production runner: the real encode → move pipeline. Stays a
     /// plain, context-free `static let` (no `self` capture) — the same
     /// reason `defaultScanRunner`/`defaultEjector` are static — so `init`
     /// never has to worry about ordering a self-capturing closure against
-    /// Swift's two-phase initialization. Both new #0041 parameters (`jobID`,
-    /// the phase-report closure) are threaded straight through to
-    /// `DVDPipeline`, exactly as `log` already was.
-    static let pipelineRunner: Runner = { request, selection, extras, settings, disc, log, jobID, reportPhase in
+    /// Swift's two-phase initialization. `context`'s fields are threaded
+    /// straight through to `DVDPipeline`, exactly as each used to be passed
+    /// positionally.
+    static let pipelineRunner: Runner = { context, settings in
         await DVDPipeline(
-            metadata:    request.metadata,
+            metadata:    context.metadata,
             settings:    settings,
-            disc:        disc,
-            jobID:       jobID,
-            selection:   selection,
-            extras:      extras,
-            log:         log,
-            reportPhase: reportPhase
+            disc:        context.disc,
+            jobID:       context.id,
+            selection:   context.selection,
+            extras:      context.extras,
+            log:         context.log,
+            reportPhase: context.phase
         ).run()
     }
 
@@ -390,33 +449,37 @@ final class JobController {
         // extras failure) releases it.
         sleepAssertion.begin(reason: "Changeover: encoding \(request.metadata.baseName)")
 
-        isRunning = true
-        currentMetadata = request.metadata
         // #0041: one id, minted once, threaded to the runner (and so to
-        // `DVDPipeline`) instead of each minting its own. `currentJobID`
-        // stays a plain `String` — every existing reader of it is unaffected
-        // — but its value is now always `jobID.rawValue`, the exact string
+        // `DVDPipeline`) instead of each minting its own — the exact string
         // `DVDPipeline` names its working directory and `▶ Job` log line
         // after, and that `JobNotifier` uses as the notification identifier.
         let jobID = JobID.make()
-        currentJobID = jobID.rawValue
-        currentJobState = .initial
-        lastOutcome = nil
-        // #0043: a fresh `JobLog` per job, retained in `logStore` under
-        // `jobID` — never a wipe-in-place. Whatever `currentLog` pointed at
-        // before (the previous job's log, or the pre-first-job catch-all)
-        // is left exactly as it was; only this controller's *current*
-        // pointer moves.
-        currentLog = logStore.makeLog(for: jobID)
+        // #0042: one `Job` per job, holding its own fresh `JobLog` — never a
+        // wipe-in-place of some shared buffer. Setting `current` here is
+        // what makes `isRunning`/`currentJobID`/`currentJobState`/
+        // `currentMetadata`/`currentLog`/`lastOutcome` all reflect this job,
+        // synchronously, before the `Task` below ever runs.
+        let job = Job(id: jobID, metadata: request.metadata, disc: disc, log: JobLog(capacity: logCapacity))
+        current = job
+
+        // #0042: `log`/`phase` are bound directly to `job`, not routed
+        // through `self`/`append` — a report arriving after this job is no
+        // longer `current` (it shouldn't, with #0040 option A's one job at a
+        // time, but the seam is written defensively) still lands on the
+        // right job's own state and log, never on whatever job replaced it.
+        let context = JobContext(
+            id: jobID,
+            metadata: request.metadata,
+            disc: disc,
+            selection: selection,
+            extras: extrasPlan,
+            log: { [job] line in job.log.append(line) },
+            phase: { [job] phase in job.advance(to: phase) }
+        )
 
         let run = runner
         task = Task { [weak self] in
-            let outcome = await run(
-                request, selection, extrasPlan, settings, disc,
-                { line in self?.append(line) },
-                jobID,
-                { phase in self?.applyPhase(phase) }
-            )
+            let outcome = await run(context, settings)
             self?.finish(outcome)
             // #0006: fires on both outcomes, after DVDPipeline has already
             // ejected the disc on success — "done" means the disc is out.
@@ -642,60 +705,47 @@ final class JobController {
 
     // MARK: - Internals
 
+    /// #0042 — the single terminal transition: moves `current` into
+    /// `history`, in the same relative order of side effects the pre-#0042
+    /// `finish` had.
+    ///
+    /// `sleepAssertion.end()` stays unconditional and idempotent — released
+    /// on every terminal path (success, failure, fallback, extras failure),
+    /// once per `finish(_:)` call — and is never gated on, or repeated by,
+    /// history pruning below: pruning only ever drops a `Job` that already
+    /// went through here.
+    ///
+    /// `Job.finish(with:)` maps `outcome` onto `.succeeded`/`.failed`/
+    /// `.cancelled`, validated against the same table every mid-job
+    /// `Job.advance(to:)` report is. The `Runner` contract is that it
+    /// reports the phases it crosses before returning (the real
+    /// `DVDPipeline` does, pinned by `DVDPipelinePhaseReportingTests`, and
+    /// test fakes do via `fakeSuccess`). An outcome that can't follow the
+    /// last reported phase — e.g. `.succeeded` while still `.starting` —
+    /// breaks that contract, so `Job.finish(with:)` logs it into the job's
+    /// own log rather than applying it: `state` stays at the last valid
+    /// phase, visibly, rather than being forged into a terminal one. Never a
+    /// crash, and never a gate on `sleepAssertion.end()` above — `outcome`
+    /// itself is still recorded on the job either way (`Job.outcome`), so
+    /// `lastOutcome` always reflects what the runner actually returned.
     private func finish(_ outcome: JobOutcome) {
-        lastOutcome = outcome
-        isRunning = false
+        guard let job = current else { return }
         task = nil
-        // #0047: unconditional and idempotent — releases whatever `start`
-        // took, on every terminal path (success, failure, fallback, extras
-        // failure), with no leak if something upstream ever called `finish`
-        // twice. This stays the single, unconditional exit point for the
-        // sleep assertion; the #0041 phase-state update below is purely
-        // informational bookkeeping alongside it, never a gate on it.
         sleepAssertion.end()
-
-        // #0041: the single terminal transition — maps `outcome` onto
-        // `.succeeded`/`.failed`/`.cancelled`, validated against the same
-        // table every mid-job `applyPhase` report is. The `Runner` contract
-        // is that it reports the phases it crosses before returning (the real
-        // `DVDPipeline` does, pinned by `DVDPipelinePhaseReportingTests`, and
-        // test fakes do via `fakeSuccess`). An outcome that can't follow the
-        // last reported phase — e.g. `.succeeded` while still `.starting` —
-        // breaks that contract, so it is logged, never applied: the state
-        // stays at the last valid phase, visibly, rather than being forged
-        // into a terminal one. Never a crash, and never a gate on
-        // `sleepAssertion.end()` above.
-        if let state = currentJobState {
-            if let next = state.finishing(with: outcome) {
-                currentJobState = next
-            } else {
-                let target = JobState.terminalPhase(for: outcome)
-                append("⚠︎ Ignored invalid phase transition \(state.phase.rawValue) → \(target.rawValue) at the end of the job")
-            }
+        job.finish(with: outcome)
+        current = nil
+        history.append(job)
+        if history.count > historyLimit {
+            history.removeFirst(history.count - historyLimit)
         }
-    }
-
-    /// #0041 — applies one mid-job phase report from the running job's
-    /// `DVDPipeline` (via the `Runner`'s phase-report closure), validated
-    /// against `JobState.advancing(to:)`. An invalid or out-of-order report
-    /// — no job running, or an edge the state machine doesn't allow from
-    /// wherever `currentJobState` currently is — is logged and dropped:
-    /// this must never crash and must never let a bogus report desync
-    /// `currentJobState` from what actually happened.
-    private func applyPhase(_ phase: JobPhase) {
-        guard let state = currentJobState else {
-            append("⚠︎ Ignored phase report \(phase.rawValue) — no job is running")
-            return
-        }
-        guard let next = state.advancing(to: phase) else {
-            append("⚠︎ Ignored invalid phase transition \(state.phase.rawValue) → \(phase.rawValue)")
-            return
-        }
-        currentJobState = next
     }
 
     private func append(_ line: String) {
-        currentLog.append(line)
+        if let current {
+            current.log.append(line)
+        } else {
+            controllerLog.append(line)
+        }
     }
 
     /// Sortable, unique and safe to use as a directory name — #0003 names the
