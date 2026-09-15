@@ -51,6 +51,20 @@ struct StatusMenuView: View {
             .disabled(ejectDecision != .eject)
             .help(ejectDecision.refusalReason ?? "Unmount and eject the disc.")
 
+            // #0046: disabled whenever there is no running job to cancel, or
+            // it's in `organizing` (the Plex move — too short and unsafe to
+            // interrupt) or already terminal. `CancelPolicy` is the single
+            // source of truth `JobController.cancel(id:)` re-checks before
+            // acting, so a state change between render and tap is still
+            // refused (and logged) there.
+            if let cancelID = jobs.current?.id {
+                MenuRow("Cancel Job", systemImage: "xmark.circle") {
+                    jobs.cancel(id: cancelID)
+                }
+                .disabled(cancelDecision != .cancel)
+                .help(cancelDecision.refusalReason ?? "Stop the running job.")
+            }
+
             MenuRow("Settings…", systemImage: "gearshape") {
                 guard let appDelegate = AppDelegate.shared else {
                     print("Warning: AppDelegate.shared is not defined")
@@ -79,6 +93,18 @@ struct StatusMenuView: View {
             isEjecting: jobs.isEjecting,
             hasDisc: jobs.insertedDisc != nil
         )
+    }
+
+    /// #0046 — mirrors `JobController.cancel(id:)`'s own re-check, so the
+    /// row's enabled state and the action it performs never disagree.
+    /// `current`, not the `currentJobID`/`currentJobState` fallbacks that
+    /// deliberately keep naming the *last* job once idle (#0042) — this row
+    /// only exists while `current` itself is set.
+    private var cancelDecision: CancelPolicy.Decision {
+        guard let current = jobs.current else {
+            return .refuse(reason: "no job is running")
+        }
+        return CancelPolicy.decide(requestedID: current.id, currentID: current.id, phase: current.state.phase)
     }
 
     /// Job state is app-level now (#0002), so the popover can report the running

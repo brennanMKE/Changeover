@@ -23,3 +23,27 @@ func fakeSuccess(_ context: JobController.JobContext, destination: URL) -> JobOu
     context.phase(.organizing)
     return .succeeded(destination: destination)
 }
+
+/// #0046 — a fake `JobController.Runner` that reports `phase`, then blocks
+/// until its own `Task` is actually cancelled (polling `Task.isCancelled`,
+/// since there is no real subprocess suspension point to hang a
+/// cancellation handler off), and returns the same shape a real cancelled
+/// `DVDPipeline.run()` does: a `.failed` outcome whose reason is
+/// `.cancelled`. `FallbackPolicy.isDiscShaped` already excludes `.cancelled`
+/// (`FallbackPolicy.swift`), so nothing about the fallback needs to be
+/// re-proven here — this exists to exercise `JobController.cancel(id:)`'s
+/// own wiring (the phase check, `task?.cancel()`, `finish` moving the job
+/// into `history` and releasing the sleep assertion), not `DVDPipeline`'s
+/// internals, which get their own direct coverage.
+///
+/// Never returns on its own — a test that starts a job with this runner and
+/// never calls `cancel(id:)` will hang forever, same as any other test that
+/// parks a fake runner on a `Gate` it never opens.
+@MainActor
+func fakeCancel(_ context: JobController.JobContext, phase: JobPhase = .encoding, stage: JobStage = .encode) async -> JobOutcome {
+    context.phase(phase)
+    while !Task.isCancelled {
+        await Task.yield()
+    }
+    return .failed(JobFailure(stage: stage, reason: .cancelled))
+}

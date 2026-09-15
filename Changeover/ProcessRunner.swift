@@ -95,6 +95,15 @@ nonisolated enum ProcessRunner {
         /// gate's own grace period (`hardCeilingGrace`) expired waiting for
         /// the other side to confirm — see `RunCompletionGate`.
         let timedOut: Bool
+        /// #0046 — `true` when the calling `Task` was cancelled (a real user
+        /// cancel, `JobController.cancel(id:)`), whether or not that cancel
+        /// is what actually stopped the child. Internal bookkeeping, not
+        /// wire format: `HandBrakeFailureClassifier`/`MakeMKVRipper` read it
+        /// *before* any exit-code or line-based classification, so a cancel
+        /// can never be misread as a disc-shaped failure and trigger the
+        /// MakeMKV fallback. Defaulted so every pre-existing construction
+        /// site (tests included) compiles unchanged.
+        var cancelled: Bool = false
     }
 
     /// Runs `executablePath` with `arguments`, merging stdout and stderr onto
@@ -131,6 +140,24 @@ nonisolated enum ProcessRunner {
     /// launch**, which silently killed any encode running past that point —
     /// a 40-minute real HandBrake encode with a 30-minute inactivity bound,
     /// for example. That version never shipped past review.
+    /// #0046 — cancellation. `run` is wrapped in `withTaskCancellationHandler`
+    /// so a real user cancel (`JobController.cancel(id:)` → `Task.cancel()`
+    /// on the job's own `Task`, which every `await` from here down shares)
+    /// reaches the child process. `onCancel` runs on an arbitrary thread —
+    /// possibly before `process` even exists, possibly concurrently with
+    /// `process.run()` — and **never resumes the continuation itself**.
+    /// Resumption stays exclusively with `RunCompletionGate`, whose inputs
+    /// are still just `markProcessDone` (from `terminationHandler`, which
+    /// reads the cancellation flag once the process actually exits) and
+    /// `markReaderDone` (at EOF) — so there is still exactly one resume by
+    /// construction, simpler than a `resumeOnce` flag guarded by its own
+    /// lock.
+    ///
+    /// `cancel()` sends `SIGTERM` — never `SIGINT` (C5, `issues/0040.md`'s
+    /// #0046 refresh: HandBrakeCLI 1.11.2 lets SIGINT wind down and mux a
+    /// partial file) and never `SIGKILL` (a killed `HandBrakeCLI` can leave
+    /// a partial `.mp4` a later run mistakes for finished output — cleanup
+    /// is `WorkingFiles.disposition`'s job, not the signal's).
     nonisolated static func run(
         executablePath:   String,
         arguments:        [String],
@@ -139,7 +166,9 @@ nonisolated enum ProcessRunner {
         hardCeilingGrace: TimeInterval = 10,
         onLine:           @escaping (String) -> Void
     ) async -> Result<Termination, Error> {
-        await withCheckedContinuation { continuation in
+        let cancellation = RunCancellation()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: executablePath)
             process.arguments = arguments
@@ -234,13 +263,36 @@ nonisolated enum ProcessRunner {
                 let termination = Termination(
                     status:         proc.terminationStatus,
                     uncaughtSignal: proc.terminationReason == .uncaughtSignal,
-                    timedOut:       watchdogState.timedOut
+                    timedOut:       watchdogState.timedOut,
+                    cancelled:      cancellation.isCancelled
                 )
                 gate.markProcessDone(termination)
             }
 
+            // #0046: attach before either the pre-launch check below or
+            // `process.run()` itself, so a cancel racing in from another
+            // thread — before, during, or immediately after launch — always
+            // has a `Process` to act on.
+            cancellation.attach(process)
+
+            if cancellation.isCancelled {
+                // Cancelled before ever launching. `terminationHandler` will
+                // never fire (the process never runs), so resume through the
+                // same single path everything else uses — `RunCompletionGate`
+                // — rather than a second, ad hoc resume site.
+                gate.forceExpire(with: Termination(status: -1, uncaughtSignal: false, timedOut: false, cancelled: true))
+                return
+            }
+
             do {
                 try process.run()
+                // Closes the cancel-during-launch race: a cancel that arrived
+                // after the check above but before `run()` actually started
+                // the child couldn't `terminate()` a not-yet-running process,
+                // so re-check now that it is one.
+                if cancellation.isCancelled {
+                    cancellation.terminateIfRunning()
+                }
             } catch {
                 absoluteWorkItem?.cancel()
                 absoluteWorkItem = nil
@@ -260,7 +312,72 @@ nonisolated enum ProcessRunner {
                 gate.abandon()
                 continuation.resume(returning: .failure(error))
             }
+            }
+        } onCancel: {
+            cancellation.cancel()
         }
+    }
+}
+
+/// #0046 — the one genuinely off-actor type this ticket adds: cancellation
+/// state for a single `ProcessRunner.run` call, written from
+/// `withTaskCancellationHandler`'s `onCancel`, which Swift documents as
+/// running on an arbitrary executor and possibly concurrently with the
+/// `operation` closure it accompanies. `@unchecked Sendable` behind an
+/// `NSLock`, the same shape `RunCompletionGate`/`WatchdogState` already use
+/// for the same reason.
+///
+/// `cancel()` never resumes `run`'s continuation — see `run`'s doc comment.
+/// It only records the flag and, if a process is already attached and
+/// running, sends it `SIGTERM`. Everything else (the pre-launch skip, the
+/// post-launch re-check) lives in `run` itself, which is the only place that
+/// knows whether the process has been launched yet.
+nonisolated final class RunCancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelledFlag = false
+    private var process: Process?
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelledFlag
+    }
+
+    /// Called once, before the pre-launch cancellation check and before
+    /// `process.run()`, so `cancel()` — which may already be racing in from
+    /// another thread — always has something to terminate once the process
+    /// is actually running.
+    func attach(_ process: Process) {
+        lock.lock()
+        self.process = process
+        lock.unlock()
+    }
+
+    /// `onCancel`'s body: records the flag, then sends `SIGTERM` if a
+    /// process is attached and currently running. If the process hasn't
+    /// launched yet (or has already exited), this is a no-op beyond
+    /// recording the flag — `run`'s own pre-launch and post-launch checks
+    /// are what act on those cases.
+    func cancel() {
+        lock.lock()
+        cancelledFlag = true
+        let attached = process
+        lock.unlock()
+        Self.terminateIfRunning(attached)
+    }
+
+    /// The post-`process.run()` half of the cancel-during-launch race — see
+    /// `run`'s comment at its call site.
+    func terminateIfRunning() {
+        lock.lock()
+        let attached = process
+        lock.unlock()
+        Self.terminateIfRunning(attached)
+    }
+
+    private static func terminateIfRunning(_ process: Process?) {
+        guard let process, process.isRunning else { return }
+        process.terminate()
     }
 }
 
@@ -430,8 +547,8 @@ nonisolated final class RunCompletionGate: @unchecked Sendable {
             // reported one — this only means the *reader* never caught up,
             // not that the process itself misbehaved.
             let synthetic = pending.map {
-                ProcessRunner.Termination(status: $0.status, uncaughtSignal: $0.uncaughtSignal, timedOut: true)
-            } ?? ProcessRunner.Termination(status: -1, uncaughtSignal: false, timedOut: true)
+                ProcessRunner.Termination(status: $0.status, uncaughtSignal: $0.uncaughtSignal, timedOut: true, cancelled: $0.cancelled)
+            } ?? ProcessRunner.Termination(status: -1, uncaughtSignal: false, timedOut: true, cancelled: false)
             fire(with: synthetic)
         }
         lock.lock()

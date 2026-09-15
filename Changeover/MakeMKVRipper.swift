@@ -107,6 +107,17 @@ enum MakeMKVRipper {
         case .success(let value):
             scanExit = value.exitStatus
             scanLines = value.lines
+            // #0046: checked before any exit-code classification — a
+            // cancelled scan must never read as a disc failure (or, on a
+            // reused key-expired-shaped exit code, as an activation
+            // failure). This can only happen when a cancel arrived after
+            // `DVDPipeline`'s own pre-fallback boundary check but before (or
+            // during) this scan — belt and suspenders with that check, not
+            // a substitute for it.
+            if value.cancelled {
+                Task { @MainActor in log("⚠︎ Cancelled during the MakeMKV scan.") }
+                return .failure(JobFailure(stage: .rip, reason: .cancelled, logTail: Array(scanLines.suffix(LogTailBuffer.defaultCapacity))))
+            }
         }
 
         guard scanExit == 0 else {
@@ -197,6 +208,11 @@ enum MakeMKVRipper {
         case .success(let value):
             ripExit = value.exitStatus
             ripLines = value.lines
+            // #0046 — same reasoning as the scan step above.
+            if value.cancelled {
+                Task { @MainActor in log("⚠︎ Cancelled during the MakeMKV rip.") }
+                return .failure(JobFailure(stage: .rip, reason: .cancelled, logTail: tail.snapshot()))
+            }
         }
 
         guard ripExit == 0 else {
@@ -489,7 +505,7 @@ enum MakeMKVRipper {
         hangTimeout:    TimeInterval = 4 * 60 * 60,
         readerDelay:    @escaping () -> Void = {},
         onLine:         @escaping (String) -> Void = { _ in }
-    ) async -> Result<(exitStatus: Int32, lines: [String]), JobFailure> {
+    ) async -> Result<(exitStatus: Int32, lines: [String], cancelled: Bool), JobFailure> {
         let accumulator = LineAccumulator()
 
         let result = await ProcessRunner.run(
@@ -504,7 +520,11 @@ enum MakeMKVRipper {
 
         switch result {
         case .success(let termination):
-            return .success((termination.status, accumulator.snapshot()))
+            // #0046: `cancelled` travels with the tuple, not folded into a
+            // `JobFailure` here — `rip(...)`'s two call sites are what know
+            // whether a cancelled scan/rip should produce `.rip`'s stage,
+            // and what log line to print, so the decision stays there.
+            return .success((termination.status, accumulator.snapshot(), termination.cancelled))
         case .failure(let error):
             return .failure(JobFailure(
                 stage:  .rip,

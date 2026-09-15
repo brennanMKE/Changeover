@@ -83,6 +83,10 @@ struct DiscTitleListView: View {
             return "The disc scan failed (HandBrakeCLI exited with status \(code))."
         case .jsonMissing:
             return "The disc scan did not complete — no title information came back."
+        case .cancelled:
+            // #0046: not reachable today (no scan-cancel UI exists yet), but
+            // exhaustive so a future one doesn't have to revisit this file.
+            return "The scan was cancelled."
         }
     }
 

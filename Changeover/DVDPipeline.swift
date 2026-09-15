@@ -323,6 +323,26 @@ struct DVDPipeline {
             return JobFailure(stage: .encode, reason: .unknown(reason))
         }
 
+        // #0046: a real user cancel (`JobController.cancel(id:)` →
+        // `Task.cancel()` on this job's own `Task`) reaches a running
+        // subprocess directly, through `ProcessRunner`'s own
+        // `withTaskCancellationHandler` — see `EncodeController.encode`'s
+        // classified result. What that can't catch is a cancel that lands
+        // in one of the gaps *between* subprocesses, where nothing is
+        // suspended inside `ProcessRunner.run` for its cancellation handler
+        // to act on. `run()` checks `Task.isCancelled` explicitly at the
+        // three such gaps that matter — never inside `PlexOrganizer.move`
+        // itself (#0012's stage-then-replace must finish once started; that
+        // is `organizing`'s whole reason for having no outgoing `cancelled`
+        // edge, #0041) — and reports the same `stage: .encode` a
+        // directory-creation failure at the same point already does, so the
+        // reliability log and `WorkingFiles.disposition`'s `.encode`-stage
+        // cleanup both treat it identically to any other encode-stage
+        // failure.
+        func cancelledDuringEncode() -> JobFailure {
+            JobFailure(stage: .encode, reason: .cancelled)
+        }
+
         // #0004 §4: sweep stale working folders before preflight, so
         // reclaimed space counts toward P6's free-space blocker. It runs
         // here rather than at launch: the volume holding `plexMediaRoot` is
@@ -379,6 +399,15 @@ struct DVDPipeline {
         // itself.
         let deinterlaceFilter = selection.filter
         log("▶ Deinterlace: filter=\(deinterlaceFilter)")
+
+        // #0046 boundary 1: before anything is created for this job. A
+        // cancel requested this early (still `.starting`) never launches
+        // HandBrakeCLI at all.
+        if Task.isCancelled {
+            let failure = cancelledDuringEncode()
+            primaryRecord = DiscReliabilityLog.StageReason(stage: failure.stage, reason: String(describing: failure.reason))
+            return await finish(.failed(failure))
+        }
 
         // #0004 §7 step 4: create this job's encode directory — fresh, never
         // adopted — and mark it `encoding` before HandBrake launches. On a
@@ -474,6 +503,22 @@ struct DVDPipeline {
                 )))
 
             case .attempt:
+                // #0046 boundary 2: checked before touching anything the
+                // fallback attempt itself would (the partial-encode
+                // cleanup, the rip job directory, `makemkvcon`) — a cancel
+                // here must end the job as `.cancelled`, never start ripping
+                // with MakeMKV to satisfy a request to stop.
+                //
+                // Belt and suspenders with `MakeMKVRipper.rip`'s own
+                // cancelled-termination check: this boundary is what keeps a
+                // cancel that arrives right here from ever creating a rip
+                // job directory at all, rather than creating one and
+                // immediately failing it.
+                if Task.isCancelled {
+                    decisionRecord = "cancelled"
+                    return await finish(.failed(cancelledDuringEncode()))
+                }
+
                 decisionRecord = "attempted"
                 log("⚠︎ FALLBACK disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) makemkvcon=\(makemkvconPath) → ripping with MakeMKV")
 
@@ -538,6 +583,17 @@ struct DVDPipeline {
             }
         }
         log("✓ Encode complete: \(mp4URL.path)")
+
+        // #0046 boundary 3: the encode (primary or fallback) already
+        // returned — nothing is running — so a cancel requested in this gap
+        // would otherwise go unnoticed until the next subprocess, which for
+        // a feature with no extras is never. Still `.encoding` here
+        // (`reportPhase(.organizing)` hasn't run yet), so `encoding →
+        // cancelled` is legal. Never checked past this point: the move
+        // itself must finish once started (#0012, #0041).
+        if Task.isCancelled {
+            return await finish(.failed(cancelledDuringEncode()))
+        }
 
         // #0004 §3: mark the directory `encoded` before the move, so the
         // sweep can always tell a complete, unmoved `.mp4` from a stale
@@ -609,7 +665,20 @@ struct DVDPipeline {
             reportPhase(.extras)
 
             var succeededExtras = 0
-            for item in extras.items {
+            extrasLoop: for (index, item) in extras.items.enumerated() {
+                // #0046: a cancel requested between extras — nothing running
+                // for `ProcessRunner`'s own cancellation handling to catch —
+                // stops the remaining ones here. Per the #0046 handoff
+                // (orchestrator decision): the feature is already filed in
+                // Plex, so the job still ends `.succeeded` (`extras →
+                // succeeded` is a legal edge, #0041; there is no `extras →
+                // cancelled` edge) — it just stops encoding more of them.
+                if Task.isCancelled {
+                    let remaining = extras.items.count - index
+                    log("⚠︎ Cancelled — skipping the remaining \(remaining) extra(s). The feature is already in Plex.")
+                    break extrasLoop
+                }
+
                 let extraFilter = DeinterlaceDecision.decide(
                     frameRate:         item.frameRate,
                     interlaceDetected: item.interlaceDetected
@@ -633,7 +702,6 @@ struct DVDPipeline {
                     log:           log
                 ) {
                 case .failure(let extraFailure):
-                    log("✗ Extra title \(item.titleIndex) failed to encode: \(String(describing: extraFailure.reason)) — skipping")
                     switch WorkingFiles.removeFile(
                         extraOutput,
                         inJobDirectory: jobDirectory,
@@ -645,6 +713,17 @@ struct DVDPipeline {
                     case .refused, .failed:
                         log("⚠︎ Could not remove the partial extra at \(extraOutput)")
                     }
+
+                    // #0046: this extra's own `HandBrakeCLI` was killed by
+                    // the same cancel — stop here rather than logging a
+                    // generic failure and moving on to the next extra.
+                    if extraFailure.reason == .cancelled {
+                        let remainingAfterThis = extras.items.count - index - 1
+                        log("⚠︎ Cancelled during extra title \(item.titleIndex) — skipping the remaining \(remainingAfterThis) extra(s). The feature is already in Plex.")
+                        break extrasLoop
+                    }
+
+                    log("✗ Extra title \(item.titleIndex) failed to encode: \(String(describing: extraFailure.reason)) — skipping")
 
                 case .success(let extraURL):
                     // #0037: the same check as the feature, log-only — a
@@ -796,6 +875,23 @@ struct DVDPipeline {
             } else if !MakeMKVRipper.removeJobDirectory(jobDirectory, under: workingRipPath) {
                 log("⚠︎ Could not clean up \(jobDirectory)")
             }
+            // #0046: a cancelled rip must surface as `.cancelled` at the
+            // *top* level, not masked behind `primaryFailure.reason` — that
+            // top-level reason is what `JobState.finishing(with:)` reads to
+            // pick the job's terminal phase, and a cancel here has to land
+            // on `.cancelled`, not `.failed`. `.fallback` still carries the
+            // real detail (stage `.rip`, reason `.cancelled`) for the log.
+            if ripFailure.reason == .cancelled {
+                log("⚠︎ Cancelled during the MakeMKV fallback rip.")
+                let combined = JobFailure(
+                    stage:    primaryFailure.stage,
+                    reason:   .cancelled,
+                    logTail:  primaryFailure.logTail,
+                    fallback: .failed(stage: ripFailure.stage, reason: .cancelled, logTail: ripFailure.logTail)
+                )
+                let record = DiscReliabilityLog.StageReason(stage: ripFailure.stage, reason: String(describing: FailureReason.cancelled))
+                return .failure(FallbackRunFailure(failure: combined, record: record))
+            }
             log("✗ FALLBACK FAILED disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) fallback=\(ripFailure.stage.rawValue):\(String(describing: ripFailure.reason))")
             let combined = JobFailure(
                 stage:    primaryFailure.stage,
@@ -838,6 +934,20 @@ struct DVDPipeline {
 
             switch secondResult {
             case .failure(let encodeFailure):
+                // #0046 — same reasoning as the rip-failure branch above: a
+                // cancelled second (fallback) encode must surface as
+                // `.cancelled` at the top level.
+                if encodeFailure.reason == .cancelled {
+                    log("⚠︎ Cancelled during the MakeMKV fallback's re-encode.")
+                    let combined = JobFailure(
+                        stage:    primaryFailure.stage,
+                        reason:   .cancelled,
+                        logTail:  primaryFailure.logTail,
+                        fallback: .failed(stage: encodeFailure.stage, reason: .cancelled, logTail: encodeFailure.logTail)
+                    )
+                    let record = DiscReliabilityLog.StageReason(stage: encodeFailure.stage, reason: String(describing: FailureReason.cancelled))
+                    return .failure(FallbackRunFailure(failure: combined, record: record))
+                }
                 log("✗ FALLBACK FAILED disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) fallback=\(encodeFailure.stage.rawValue):\(String(describing: encodeFailure.reason))")
                 let combined = JobFailure(
                     stage:    primaryFailure.stage,

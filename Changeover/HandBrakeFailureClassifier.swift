@@ -100,10 +100,22 @@ nonisolated enum HandBrakeFailureClassifier {
     /// produced a file** (§2.4) — that's what lets an incidental `ERROR:`
     /// line in an otherwise-successful run stay a success.
     nonisolated static func classify(_ input: Input) -> FailureReason? {
+        // #0046 Tier −1: a real user cancel, checked before anything else —
+        // including the watchdog timeout below. `ProcessRunner` sends
+        // HandBrakeCLI `SIGTERM` on cancel, and C5 (`issues/0040.md`'s
+        // #0046 refresh) showed that kills it with **no output at all**, so
+        // an unclassified `.toolExited(code: 143)` would otherwise be
+        // disc-shaped and trigger the MakeMKV fallback on a plain user
+        // cancel. Checking `termination.cancelled` first — a runner-level
+        // fact, never inferred from the transcript — closes that.
+        if input.termination.cancelled {
+            return .cancelled
+        }
+
         // Tier 0: the watchdog itself stopping the child is a runner fact,
-        // not a tool-reported signature. Checked first so a cancel-looking
-        // line HandBrake prints after being killed can never be read as the
-        // user's own cancellation (§2.2).
+        // not a tool-reported signature. Checked first (after the cancel
+        // check above) so a cancel-looking line HandBrake prints after being
+        // killed can never be read as the user's own cancellation (§2.2).
         if input.termination.timedOut {
             return .unknown("HandBrakeCLI produced no output for 30 minutes and was stopped")
         }

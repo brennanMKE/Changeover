@@ -55,6 +55,14 @@ nonisolated enum DiscScanner {
         /// Exit 0 but no `JSON Title Set:` — the incomplete scan that
         /// reports success. Never reported as an empty title list.
         case jsonMissing
+        /// #0046 — the calling `Task` was cancelled. Scanner-local, like the
+        /// rest of this enum: nothing in this pass wires a cancel button to
+        /// a running scan (`JobController.startScan` still launches its own
+        /// untracked `Task`, unchanged), but `ProcessRunner.run` is shared
+        /// infrastructure and reports a real cancellation here the same way
+        /// it does for `EncodeController`/`MakeMKVRipper`, so a future
+        /// scan-cancel doesn't have to touch this file again.
+        case cancelled
     }
 
     enum Outcome: Equatable, Sendable {
@@ -112,6 +120,9 @@ nonisolated enum DiscScanner {
             return .failure(.toolMissing(path: handbrakePath))
 
         case .success(let termination):
+            guard !termination.cancelled else {
+                return .failure(.cancelled)
+            }
             guard termination.status == 0 else {
                 // The exit status is the verdict — the text never decides.
                 return .failure(.toolExited(code: termination.status))

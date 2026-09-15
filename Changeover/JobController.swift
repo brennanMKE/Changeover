@@ -31,11 +31,12 @@ nonisolated enum ScanState: Equatable, Sendable {
 /// type is `@MainActor` for free and has no reason to leave the main actor —
 /// the long-running work happens inside the `nonisolated` CLI controllers.
 ///
-/// There is intentionally **no `cancel()`**. Cancelling the Swift `Task` would
-/// not kill the child `HandBrakeCLI` process — the encode would keep running
-/// with the UI claiming it had stopped. A real cancel needs
-/// `Process.terminate()` plumbed through `EncodeController`, which is out of
-/// scope here; shipping a button that lies is worse than shipping no button.
+/// `cancel(id:)` (#0046) is real: `Task.cancel()` on the job's `Task`
+/// reaches `ProcessRunner.run`'s own `withTaskCancellationHandler`, which
+/// sends the running `HandBrakeCLI`/`makemkvcon` child `SIGTERM` — so
+/// cancelling the Swift `Task` really does stop the child process, not just
+/// the UI's idea of it. See `cancel(id:)`'s doc comment and
+/// `Changeover/Jobs/CancelPolicy.swift` for which phases can be cancelled.
 @Observable
 final class JobController {
 
@@ -567,6 +568,42 @@ final class JobController {
             isEjecting = false
             append("⚠︎ \(message)")
             return false
+        }
+    }
+
+    // MARK: - Cancel (#0046)
+
+    /// A real cancel for the currently running job — a status-menu or
+    /// metadata-window "Cancel" action reaches here. Refuses (logging a
+    /// line, matching every other refusal in this type) unless `id` names
+    /// `current` and its phase is neither `.organizing` nor terminal
+    /// (`CancelPolicy.decide`).
+    ///
+    /// On `.cancel`, calls `task?.cancel()`. Cancellation reaches
+    /// `ProcessRunner` because every `await` from the runner down is in the
+    /// same `Task`, with no unstructured hop — see `ProcessRunner.run`'s
+    /// `withTaskCancellationHandler`. This method does **not** touch
+    /// `current`/`history`/`sleepAssertion` itself: the job ends the same
+    /// way every job does, through `finish(_:)`, once the runner's `await`
+    /// actually returns a `.cancelled`-reasoned outcome — so a cancel is
+    /// indistinguishable, downstream, from any other terminal outcome.
+    ///
+    /// A repeated cancel on the same still-running job is harmless:
+    /// `Task.cancel()` is idempotent, and `CancelPolicy.decide` keeps
+    /// returning `.cancel` until the job actually finishes. A cancel after
+    /// the job has finished (`current` is `nil`, or holds a different job)
+    /// is refused, not silently ignored.
+    ///
+    /// - Returns: `true` only when `task?.cancel()` was actually called.
+    @discardableResult
+    func cancel(id: JobID) -> Bool {
+        switch CancelPolicy.decide(requestedID: id, currentID: current?.id, phase: current?.state.phase) {
+        case .refuse(let reason):
+            append("⚠︎ Cancel refused: \(reason).")
+            return false
+        case .cancel:
+            task?.cancel()
+            return true
         }
     }
 

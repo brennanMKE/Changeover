@@ -20,8 +20,8 @@ struct HandBrakeFailureClassifierTests {
         return raw.components(separatedBy: .newlines)
     }
 
-    private static func termination(status: Int32, timedOut: Bool = false, uncaughtSignal: Bool = false) -> ProcessRunner.Termination {
-        ProcessRunner.Termination(status: status, uncaughtSignal: uncaughtSignal, timedOut: timedOut)
+    private static func termination(status: Int32, timedOut: Bool = false, uncaughtSignal: Bool = false, cancelled: Bool = false) -> ProcessRunner.Termination {
+        ProcessRunner.Termination(status: status, uncaughtSignal: uncaughtSignal, timedOut: timedOut, cancelled: cancelled)
     }
 
     /// The §2.1/§5 raw-device libdvdcss fallback lines — context only, never
@@ -129,6 +129,55 @@ struct HandBrakeFailureClassifierTests {
             Issue.record("expected .toolIncompatible")
             return
         }
+    }
+
+    // MARK: - 6a. #0046: a real cancel, checked before everything else
+
+    /// C5's real capture: SIGTERM kills HandBrakeCLI with no cancel-shaped
+    /// text at all (`issues/0040.md`'s #0046 refresh). Fed through with
+    /// `termination.cancelled == true` — the runner-level fact `Process
+    /// Runner` now records — must classify as `.cancelled`, not the
+    /// `.toolExited(code: 143)` `everyCapturedFixtureClassifiesAsExpected`
+    /// above pins for the *uncancelled* reading of the same transcript.
+    @Test func cancelledTerminationWithTheExit143FixtureGivesCancelled() throws {
+        let lines = try Self.fixtureLines("failure-encode-canceled-term-hb1.11.2-exit143.log")
+        let input = HandBrakeFailureClassifier.Input(
+            termination: Self.termination(status: 143, cancelled: true),
+            lines: lines,
+            outputPath: "",
+            outputIsNonEmpty: false,
+            availableCapacity: nil
+        )
+        #expect(HandBrakeFailureClassifier.classify(input) == .cancelled)
+    }
+
+    /// `cancelled` is checked before `timedOut` — a termination can't
+    /// plausibly carry both in production (a watchdog-killed process was
+    /// never cancelled by the user), but the ordering itself is the
+    /// contract: a cancel must never be reinterpreted as a hang.
+    @Test func cancelledBeatsTimedOut() {
+        let input = HandBrakeFailureClassifier.Input(
+            termination: Self.termination(status: 15, timedOut: true, cancelled: true),
+            lines: [],
+            outputPath: "",
+            outputIsNonEmpty: false,
+            availableCapacity: nil
+        )
+        #expect(HandBrakeFailureClassifier.classify(input) == .cancelled)
+    }
+
+    /// Disc-shaped signatures in the tail — exactly what would otherwise
+    /// send this through `FallbackPolicy` to the MakeMKV fallback — must
+    /// never override a real cancel.
+    @Test func discShapedLinesInTheTailDoNotOverrideCancelled() {
+        let input = HandBrakeFailureClassifier.Input(
+            termination: Self.termination(status: 143, cancelled: true),
+            lines: ["Error cracking CSS key", "No title found.", "No space left on device"],
+            outputPath: "",
+            outputIsNonEmpty: false,
+            availableCapacity: nil
+        )
+        #expect(HandBrakeFailureClassifier.classify(input) == .cancelled)
     }
 
     @Test func watchdogTimeoutBeatsAnyLineIncludingCssKeyFailure() {

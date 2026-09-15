@@ -358,4 +358,122 @@ struct ProcessRunnerTests {
         #expect(termination.status == 0, "should prefer the process's real exit status")
         #expect(termination.timedOut, "but still flag that the reader never confirmed")
     }
+
+    // MARK: - 5. Cancellation (#0046)
+    //
+    // These are the falsification targets named in `issues/0046.md`: a
+    // cancel must never trigger the MakeMKV fallback (proven downstream, in
+    // `HandBrakeFailureClassifierTests`/`MakeMKVFallbackTests`/
+    // `DVDPipelineCancellationTests`, which all depend on `cancelled`
+    // actually being set here), and a cancel must release whatever assertion
+    // or resource the caller was holding (proven in
+    // `JobCancellationTests.releaseOnCancelReleasesTheSleepAssertion`).
+
+    /// Cancelling `/bin/sleep 30` shortly after launch must return within
+    /// about a second — not wait out the full 30s — with `cancelled == true`.
+    /// `/bin/sleep` writes nothing to its pipe, so EOF and process exit land
+    /// together; returning promptly is itself the proof the child is no
+    /// longer running, the same way `aLongHealthyRunIsNeverBoundedByThe
+    /// GracePeriod`/`runReturnsWithinTheHardCeilingWhenAnOrphanKeepsThePipe
+    /// Open` above use elapsed time rather than `pgrep`.
+    @Test func cancellingARunningSleepReturnsPromptlyAndMarksCancelled() async throws {
+        let start = Date()
+        let task = Task {
+            await ProcessRunner.run(
+                executablePath: "/bin/sleep",
+                arguments:      ["30"],
+                watchdog:       .inactivity(60),
+                onLine:         { _ in }
+            )
+        }
+        // Give the child a moment to actually be running before cancelling —
+        // this test is about cancelling *mid-sleep*, not the separate
+        // before-launch race the next test covers.
+        try await Task.sleep(nanoseconds: 300_000_000)
+        task.cancel()
+        let result = await task.value
+        let elapsed = Date().timeIntervalSince(start)
+        #expect(elapsed < 5, "took \(elapsed)s — a cancel should stop a 30s sleep almost immediately, not wait it out (proves the process is no longer running)")
+
+        guard case .success(let termination) = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        #expect(termination.cancelled)
+    }
+
+    /// Cancelling before the child ever launches — `task.cancel()` called
+    /// synchronously, with no intervening `await`, right after the `Task` is
+    /// created — must never run it at all: a stub that only `touch`es a
+    /// marker file is used so "never launched" is directly observable,
+    /// rather than inferred from elapsed time.
+    @Test func cancellingBeforeLaunchNeverRunsTheProcess() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marker = root.appendingPathComponent("marker").path
+        let script = root.appendingPathComponent("touch-marker.sh")
+        try "#!/bin/sh\ntouch \"\(marker)\"\n".write(toFile: script.path, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+
+        let task = Task {
+            await ProcessRunner.run(
+                executablePath: script.path,
+                arguments:      [],
+                watchdog:       .inactivity(60),
+                onLine:         { _ in }
+            )
+        }
+        task.cancel()
+        let result = await task.value
+
+        guard case .success(let termination) = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        #expect(termination.cancelled)
+        #expect(!FileManager.default.fileExists(atPath: marker), "the marker exists, so the script ran despite being cancelled before launch")
+    }
+
+    /// A natural exit (never cancelled) must report `cancelled == false` —
+    /// the field's default, and the case every existing test above already
+    /// exercises implicitly; asserted explicitly here so a regression that
+    /// always set `cancelled: true` fails loudly.
+    @Test func aNaturalExitReportsCancelledFalse() async throws {
+        let result = await ProcessRunner.run(
+            executablePath: "/bin/sh",
+            arguments:      ["-c", "exit 0"],
+            watchdog:       .inactivity(60),
+            onLine:         { _ in }
+        )
+        guard case .success(let termination) = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        #expect(!termination.cancelled)
+        #expect(termination.status == 0)
+    }
+
+    /// A second `cancel()` on the same `Task` — `Task.cancel()` is
+    /// documented idempotent — must not crash, hang, or double-resume the
+    /// continuation.
+    @Test func aRepeatedCancelIsHarmless() async throws {
+        let task = Task {
+            await ProcessRunner.run(
+                executablePath: "/bin/sleep",
+                arguments:      ["10"],
+                watchdog:       .inactivity(60),
+                onLine:         { _ in }
+            )
+        }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        task.cancel()
+        task.cancel()
+        let result = await task.value
+
+        guard case .success(let termination) = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        #expect(termination.cancelled)
+    }
 }
