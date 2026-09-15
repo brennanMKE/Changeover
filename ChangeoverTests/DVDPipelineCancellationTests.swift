@@ -121,4 +121,135 @@ struct DVDPipelineCancellationTests {
         #expect(!FileManager.default.fileExists(atPath: makemkvArgvLog), "makemkvcon must never be invoked on a cancel")
         #expect(!FileManager.default.fileExists(atPath: jobDirectory), "the job's working directory must be cleaned up on a cancel, the same as any other .encode-stage failure")
     }
+
+    // MARK: - #0046 review: cancel during #0037's duration check
+
+    /// A cancel that lands after HandBrakeCLI exits 0, while the duration
+    /// check runs, makes that check fail ("could not be read"). With no
+    /// makemkvcon installed, `FallbackPolicy` says `.unavailable`, and the
+    /// job used to end `.failed` with that misleading reason. It must end
+    /// `.cancelled`. The measurer cancels its own task, then throws, as
+    /// `AVURLAsset.load` does on a cancelled task.
+    @Test func aCancelDuringTheDurationCheckEndsCancelledEvenWithNoMakeMKV() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        let handbrakeStub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: handbrakeStub, ["EXIT_DIR_INPUT=0"])
+        settings.handbrakePath = handbrakeStub
+        settings.makemkvconPath = root.appendingPathComponent("no-such-makemkvcon").path
+
+        var pipeline = DVDPipeline(
+            metadata:  try Self.metadata(),
+            settings:  settings,
+            disc:      try Self.makeFakeDisc(in: root),
+            selection: EncodeSelection(title: .index(1), audio: .sourceDefault, fallbackAudio: .sourceDefault, filter: .none, featureDurationSeconds: 6_000),
+            log:       { _ in },
+            measureDuration: { _ in
+                withUnsafeCurrentTask { $0?.cancel() }
+                throw CancellationError()
+            }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+        let jobDirectory = (settings.workingEncodePath as NSString).appendingPathComponent(pipeline.jobID.rawValue)
+
+        let task = Task { await pipeline.run() }
+        let outcome = await task.value
+
+        guard case .failed(let failure) = outcome else {
+            Issue.record("expected failure, got \(outcome)")
+            return
+        }
+        #expect(failure.reason == .cancelled)
+        #expect(failure.fallback == nil, "a cancel must not be reported as a fallback that was unavailable")
+        #expect(!FileManager.default.fileExists(atPath: jobDirectory))
+        let filed = (try? FileManager.default.contentsOfDirectory(atPath: settings.plexMoviesPath)) ?? []
+        #expect(filed.isEmpty, "nothing may be filed in Plex on a cancel: \(filed)")
+    }
+
+    // MARK: - #0046 review: cancel during extras
+
+    private final class LogBox {
+        var lines: [String] = []
+    }
+
+    /// Orchestrator decision: a cancel during extras ends the job
+    /// `.succeeded` (the feature is already in Plex). The in-flight extra's
+    /// partial is removed, the remaining extras are skipped with one log
+    /// line, and nothing more is filed under Clips. The stub sleeps only for
+    /// `--title 2`, after writing its partial output, so the cancel lands
+    /// mid-extra.
+    @Test func aCancelDuringExtrasSkipsTheRestRemovesThePartialAndStillSucceeds() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        let handbrakeStub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: handbrakeStub, [
+            "EXIT_DIR_INPUT=0",
+            "case \" $* \" in *\" --title 2 \"*) SLEEP_SECONDS=30 ;; esac",
+        ])
+        settings.handbrakePath = handbrakeStub
+
+        let items: [ExtrasPlan.Item] = [
+            ExtrasPlan.Item(titleIndex: 2, durationSeconds: 300, frameRate: nil, interlaceDetected: nil),
+            ExtrasPlan.Item(titleIndex: 3, durationSeconds: 400, frameRate: nil, interlaceDetected: nil),
+        ]
+        let box = LogBox()
+        let metadata = try Self.metadata()
+        var pipeline = DVDPipeline(
+            metadata:  metadata,
+            settings:  settings,
+            disc:      try Self.makeFakeDisc(in: root),
+            selection: EncodeSelection(title: .index(1), audio: .sourceDefault, fallbackAudio: .sourceDefault, filter: .none),
+            extras:    ExtrasPlan(items: items),
+            log:       { box.lines.append($0) },
+            measureDuration: { url in
+                url.lastPathComponent.hasSuffix(" - t03.mp4") ? 400 : 300
+            }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let start = Date()
+        let task = Task { await pipeline.run() }
+
+        // Wait for extra title 2's partial output: the stub writes it just
+        // before `exec sleep`.
+        let workingEncode = URL(fileURLWithPath: settings.workingEncodePath)
+        func partialExists() -> Bool {
+            guard let e = FileManager.default.enumerator(atPath: workingEncode.path) else { return false }
+            return e.contains { ($0 as? String)?.hasSuffix(" - t02.mp4") == true }
+        }
+        var polls = 0
+        while !partialExists() && polls < 1_000 {
+            try await Task.sleep(nanoseconds: 10_000_000)
+            polls += 1
+        }
+        try #require(partialExists(), "extra title 2 never started")
+
+        task.cancel()
+        let outcome = await task.value
+        #expect(Date().timeIntervalSince(start) < 20, "the cancel must stop the 30 s extra, not wait it out")
+
+        guard case .succeeded(let destination) = outcome else {
+            Issue.record("expected the job to succeed (the feature is already in Plex), got \(outcome)")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: destination.path))
+
+        let clipsFolder = URL(fileURLWithPath: settings.clipsPath).appendingPathComponent(metadata.folderName)
+        let clips = (try? FileManager.default.contentsOfDirectory(atPath: clipsFolder.path)) ?? []
+        #expect(clips.filter { $0.hasSuffix(".mp4") }.isEmpty, "no extra may be filed after a cancel: \(clips)")
+
+        let leftovers = (try? FileManager.default.contentsOfDirectory(atPath: workingEncode.path))?.filter { $0.hasPrefix("job-") } ?? []
+        #expect(leftovers.isEmpty, "the in-flight extra's partial must be removed and the job directory disposed")
+
+        #expect(box.lines.filter { $0.contains("Cancelled during extra title 2 — skipping the remaining 1 extra(s)") }.count == 1)
+        #expect(!box.lines.contains { $0.contains("Extra title 2 failed to encode") })
+        #expect(!box.lines.contains { $0.contains("Cancelled — skipping the remaining") }, "one skip line, not two")
+        #expect(box.lines.contains { $0.hasPrefix("✓ Extras: 0 of 2") })
+    }
 }

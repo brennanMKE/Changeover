@@ -476,4 +476,59 @@ struct ProcessRunnerTests {
         }
         #expect(termination.cancelled)
     }
+
+    // MARK: - 6. SIGKILL escalation (#0046 review)
+    //
+    // A child that ignores SIGTERM. `trap '' TERM` survives `exec`, so the
+    // single `sleep` process ignores SIGTERM and only SIGKILL ends it. Before
+    // the escalation, both of these waited out the whole sleep.
+
+    private static let ignoresSIGTERM = ["-c", "trap '' TERM; exec /bin/sleep 20"]
+
+    @Test func aCancelledChildThatIgnoresSIGTERMIsKilledAfterTheGrace() async throws {
+        let start = Date()
+        let task = Task {
+            await ProcessRunner.run(
+                executablePath: "/bin/sh",
+                arguments:      Self.ignoresSIGTERM,
+                watchdog:       .inactivity(60),
+                killGrace:      0.5,
+                onLine:         { _ in }
+            )
+        }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        task.cancel()
+        let result = await task.value
+        let elapsed = Date().timeIntervalSince(start)
+        #expect(elapsed < 8, "took \(elapsed)s: a SIGTERM-ignoring child must be killed after killGrace, not waited out")
+
+        guard case .success(let termination) = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        #expect(termination.cancelled)
+        #expect(termination.uncaughtSignal)
+        #expect(termination.status == SIGKILL)
+    }
+
+    @Test func aWatchdogStopOfAChildThatIgnoresSIGTERMIsKilledAfterTheGrace() async throws {
+        let start = Date()
+        let result = await ProcessRunner.run(
+            executablePath: "/bin/sh",
+            arguments:      Self.ignoresSIGTERM,
+            watchdog:       .inactivity(0.3),
+            killGrace:      0.5,
+            onLine:         { _ in }
+        )
+        let elapsed = Date().timeIntervalSince(start)
+        #expect(elapsed < 8, "took \(elapsed)s: a watchdog stop must escalate to SIGKILL")
+
+        guard case .success(let termination) = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        #expect(termination.timedOut)
+        #expect(!termination.cancelled)
+        #expect(termination.status == SIGKILL)
+    }
 }

@@ -153,20 +153,30 @@ nonisolated enum ProcessRunner {
     /// construction, simpler than a `resumeOnce` flag guarded by its own
     /// lock.
     ///
-    /// `cancel()` sends `SIGTERM` — never `SIGINT` (C5, `issues/0040.md`'s
-    /// #0046 refresh: HandBrakeCLI 1.11.2 lets SIGINT wind down and mux a
-    /// partial file) and never `SIGKILL` (a killed `HandBrakeCLI` can leave
-    /// a partial `.mp4` a later run mistakes for finished output — cleanup
-    /// is `WorkingFiles.disposition`'s job, not the signal's).
+    /// `cancel()` sends `SIGTERM` first — never `SIGINT` (C5,
+    /// `issues/0040.md`'s #0046 refresh: HandBrakeCLI 1.11.2 lets SIGINT
+    /// wind down and mux a partial file). **#0046 review:** if the child is
+    /// still running `killGrace` seconds later, it gets `SIGKILL`. The same
+    /// escalation applies when a watchdog stops a child. Without it, a child
+    /// that catches or ignores `SIGTERM` never exits: `terminationHandler`
+    /// never fires, the gate never arms its grace period, and the job holds
+    /// the app forever with Cancel already pressed. The refresh's objection
+    /// to `SIGKILL` (a partial `.mp4` mistaken for finished output) does not
+    /// apply: `SIGTERM` leaves an equally partial file (C5), and every
+    /// cancelled or timed-out job's directory is removed by
+    /// `WorkingFiles.disposition`. A child blocked in uninterruptible disc
+    /// I/O takes neither signal until the kernel's read returns, so that
+    /// case stays bounded by the drive's own I/O timeout.
     nonisolated static func run(
         executablePath:   String,
         arguments:        [String],
         watchdog:         Watchdog,
         readerDelay:      @escaping () -> Void = {},
         hardCeilingGrace: TimeInterval = 10,
+        killGrace:        TimeInterval = 10,
         onLine:           @escaping (String) -> Void
     ) async -> Result<Termination, Error> {
-        let cancellation = RunCancellation()
+        let cancellation = RunCancellation(killGrace: killGrace)
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
             let process = Process()
@@ -237,7 +247,7 @@ nonisolated enum ProcessRunner {
                 let item = DispatchWorkItem {
                     if process.isRunning {
                         watchdogState.markTimedOut()
-                        process.terminate()
+                        cancellation.stop(process)
                     }
                 }
                 absoluteWorkItem = item
@@ -251,7 +261,7 @@ nonisolated enum ProcessRunner {
                 timer.setEventHandler {
                     guard process.isRunning, watchdogState.isIdle(atLeast: threshold) else { return }
                     watchdogState.markTimedOut()
-                    process.terminate()
+                    cancellation.stop(process)
                 }
                 inactivityTimer = timer
                 timer.resume()
@@ -260,6 +270,7 @@ nonisolated enum ProcessRunner {
             process.terminationHandler = { proc in
                 absoluteWorkItem?.cancel()
                 inactivityTimer?.cancel()
+                cancellation.processExited()
                 let termination = Termination(
                     status:         proc.terminationStatus,
                     uncaughtSignal: proc.terminationReason == .uncaughtSignal,
@@ -329,13 +340,21 @@ nonisolated enum ProcessRunner {
 ///
 /// `cancel()` never resumes `run`'s continuation — see `run`'s doc comment.
 /// It only records the flag and, if a process is already attached and
-/// running, sends it `SIGTERM`. Everything else (the pre-launch skip, the
-/// post-launch re-check) lives in `run` itself, which is the only place that
-/// knows whether the process has been launched yet.
+/// running, stops it (`stop(_:)`: `SIGTERM`, then `SIGKILL` after
+/// `killGrace`). Everything else (the pre-launch skip, the post-launch
+/// re-check) lives in `run` itself, which is the only place that knows
+/// whether the process has been launched yet.
 nonisolated final class RunCancellation: @unchecked Sendable {
     private let lock = NSLock()
+    private let killGrace: TimeInterval
     private var cancelledFlag = false
     private var process: Process?
+    private var exited = false
+    private var escalation: DispatchWorkItem?
+
+    init(killGrace: TimeInterval = 10) {
+        self.killGrace = killGrace
+    }
 
     var isCancelled: Bool {
         lock.lock()
@@ -363,7 +382,7 @@ nonisolated final class RunCancellation: @unchecked Sendable {
         cancelledFlag = true
         let attached = process
         lock.unlock()
-        Self.terminateIfRunning(attached)
+        if let attached { stop(attached) }
     }
 
     /// The post-`process.run()` half of the cancel-during-launch race — see
@@ -372,12 +391,46 @@ nonisolated final class RunCancellation: @unchecked Sendable {
         lock.lock()
         let attached = process
         lock.unlock()
-        Self.terminateIfRunning(attached)
+        if let attached { stop(attached) }
     }
 
-    private static func terminateIfRunning(_ process: Process?) {
-        guard let process, process.isRunning else { return }
+    /// #0046 review: `SIGTERM` now and, if the child is still running
+    /// `killGrace` seconds later, `SIGKILL`. Used for a cancel and for both
+    /// watchdogs. Safe to call repeatedly (the inactivity timer re-fires
+    /// every check interval): only the first call schedules the escalation.
+    func stop(_ process: Process) {
+        guard process.isRunning else { return }
         process.terminate()
+
+        lock.lock()
+        guard escalation == nil, !exited else {
+            lock.unlock()
+            return
+        }
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            let alreadyExited = self.exited
+            self.lock.unlock()
+            guard !alreadyExited, process.isRunning else { return }
+            kill(process.processIdentifier, SIGKILL)
+        }
+        escalation = item
+        lock.unlock()
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + killGrace, execute: item)
+    }
+
+    /// Called from `terminationHandler`. Disarms a pending `SIGKILL` so it
+    /// can never reach a reused pid, and drops the references that would
+    /// otherwise keep `process ↔ cancellation` alive.
+    func processExited() {
+        lock.lock()
+        exited = true
+        let item = escalation
+        escalation = nil
+        process = nil
+        lock.unlock()
+        item?.cancel()
     }
 }
 

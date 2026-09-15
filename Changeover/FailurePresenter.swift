@@ -119,6 +119,9 @@ nonisolated enum FailurePresenter {
             switch fallback {
             case .unavailable(let path):
                 details.append("MakeMKV isn't installed at \(path), so no fallback was tried. Installing it (`brew install --cask makemkv`) lets Changeover retry discs like this.")
+            case .failed(_, .cancelled, _):
+                // #0046 review: a cancel during the fallback is not a second failure.
+                details.append("The job was cancelled while the MakeMKV fallback was running.")
             case .failed(let stage, let reason, _):
                 details.append("The MakeMKV fallback was tried and also failed: " + headline(for: reason, stage: stage))
             }
@@ -182,7 +185,10 @@ nonisolated enum FailurePresenter {
         case .discUnreadable:
             return "HandBrake couldn't read this disc."
         case .cancelled:
-            return "\(toolName(for: stage)) was stopped before it finished."
+            // #0046 review: stage-agnostic. A cancel during the MakeMKV
+            // fallback reports the primary `.encode` stage, so naming the
+            // tool here said "HandBrakeCLI" while makemkvcon was running.
+            return "The job was cancelled before it finished."
         case .unknown(let detail):
             return "Something went wrong: \(detail)"
         }

@@ -129,6 +129,14 @@ enum JobNotifier {
                 "\(metadata.title) (\(metadata.year)) is ready",
                 "Encoded and moved into Plex. The disc has been ejected."
             )
+        case .failed(let failure) where failure.reason == .cancelled:
+            // #0046 review: a cancel is the user's own request, not a
+            // failure. It only ever ends a job before `organizing`, so
+            // nothing new reached Plex, and a failed job is never ejected.
+            return (
+                "\(metadata.title) (\(metadata.year)) was cancelled",
+                "Changeover stopped the job before it finished. Nothing new was filed in Plex, and the disc is still in the drive."
+            )
         case .failed(let failure):
             return (
                 "Changeover couldn't finish \(metadata.title)",

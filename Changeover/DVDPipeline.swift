@@ -469,6 +469,22 @@ struct DVDPipeline {
                 reason: String(describing: primaryFailure.reason)
             )
 
+            // #0046 boundary 2, moved here by the #0046 review: checked
+            // before `FallbackPolicy` decides anything, not only on
+            // `.attempt`. A cancel can reach the primary result without a
+            // cancelled termination: it lands just as HandBrakeCLI exits 0,
+            // and #0037's duration check (`AVURLAsset.load` honours task
+            // cancellation) then reports "duration could not be read". That
+            // `.unknown` is disc-shaped, so with no makemkvcon installed
+            // (`.unavailable`) or the disc gone (`.notEligible`) the job used
+            // to end `.failed` with a misleading reason. It never starts
+            // ripping with MakeMKV or creates a rip job directory either.
+            if Task.isCancelled {
+                decisionRecord = "cancelled"
+                primaryRecord = DiscReliabilityLog.StageReason(stage: .encode, reason: String(describing: FailureReason.cancelled))
+                return await finish(.failed(primaryFailure.reason == .cancelled ? primaryFailure : cancelledDuringEncode()))
+            }
+
             let decision = FallbackPolicy.decide(
                 primary:        primaryFailure,
                 makemkvconPath: makemkvconPath,
@@ -503,22 +519,7 @@ struct DVDPipeline {
                 )))
 
             case .attempt:
-                // #0046 boundary 2: checked before touching anything the
-                // fallback attempt itself would (the partial-encode
-                // cleanup, the rip job directory, `makemkvcon`) — a cancel
-                // here must end the job as `.cancelled`, never start ripping
-                // with MakeMKV to satisfy a request to stop.
-                //
-                // Belt and suspenders with `MakeMKVRipper.rip`'s own
-                // cancelled-termination check: this boundary is what keeps a
-                // cancel that arrives right here from ever creating a rip
-                // job directory at all, rather than creating one and
-                // immediately failing it.
-                if Task.isCancelled {
-                    decisionRecord = "cancelled"
-                    return await finish(.failed(cancelledDuringEncode()))
-                }
-
+                // #0046 boundary 2 is checked above, before the decision.
                 decisionRecord = "attempted"
                 log("⚠︎ FALLBACK disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) makemkvcon=\(makemkvconPath) → ripping with MakeMKV")
 
@@ -564,7 +565,15 @@ struct DVDPipeline {
                     // never handed back to `FallbackPolicy` — with the
                     // original failure as the headline, the same shape as
                     // `runFallback`'s own failures.
-                    if let durationFailure = await featureDurationFailure(url) {
+                    let durationFailure = await featureDurationFailure(url)
+                    // #0046 review: the same cancelled-duration-check hazard
+                    // as boundary 2 above. A cancel here is `.cancelled`,
+                    // never a fallback failure behind the primary reason.
+                    if Task.isCancelled {
+                        fallbackRecord = DiscReliabilityLog.StageReason(stage: .encode, reason: String(describing: FailureReason.cancelled))
+                        return await finish(.failed(cancelledDuringEncode()))
+                    }
+                    if let durationFailure {
                         log("✗ FALLBACK FAILED disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) fallback=\(durationFailure.stage.rawValue):\(String(describing: durationFailure.reason))")
                         fallbackRecord = DiscReliabilityLog.StageReason(
                             stage:  durationFailure.stage,

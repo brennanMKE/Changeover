@@ -88,6 +88,17 @@ struct JobNotifierTests {
         #expect(body == FailurePresenter.message(for: failure).headline)
     }
 
+    /// #0046 review: a user cancel is not reported as "couldn't finish".
+    @Test func cancelMessageSaysCancelledNotFailed() throws {
+        let failure = JobFailure(stage: .encode, reason: .cancelled)
+        let (title, body) = JobNotifier.message(for: try Self.metadata(), outcome: .failed(failure))
+
+        #expect(title == "Blade Runner (1982) was cancelled")
+        #expect(!title.contains("couldn't finish"))
+        #expect(body.contains("Nothing new was filed in Plex"))
+        #expect(!body.contains("HandBrakeCLI"))
+    }
+
     /// The reason must never leak through as `String(describing:)` — a
     /// person, not a machine, reads this banner (#0009).
     @Test func failureMessageNeverUsesTheRawMachineReadableReason() throws {

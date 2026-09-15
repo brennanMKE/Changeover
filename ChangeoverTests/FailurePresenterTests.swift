@@ -71,6 +71,21 @@ struct FailurePresenterTests {
         #expect(message.details.contains { $0.contains("MakeMKV fallback was tried and also failed") })
     }
 
+    /// #0046 review: a cancel during the fallback names no tool and is not
+    /// reported as a second failure.
+    @Test func aCancelDuringTheFallbackIsNotReportedAsASecondFailure() {
+        let failure = JobFailure(
+            stage:    .encode,
+            reason:   .cancelled,
+            logTail:  [],
+            fallback: .failed(stage: .rip, reason: .cancelled, logTail: [])
+        )
+        let message = FailurePresenter.message(for: failure)
+        #expect(message.headline == "The job was cancelled before it finished.")
+        #expect(!message.details.contains { $0.contains("also failed") })
+        #expect(message.details.contains { $0.contains("cancelled while the MakeMKV fallback was running") })
+    }
+
     @Test func handBrakeFailedWithNoFallbackAvailableMessage() {
         let failure = JobFailure(
             stage:    .encode,
