@@ -41,8 +41,9 @@ nonisolated enum DiscTitleHeuristic {
     /// enormous measured gap and are not tuning parameters — do not expose
     /// them as settings. Evidence (issues/0025.md's fixture table): Brooklyn
     /// Nine-Nine's eight episodes (20:55–22:45) sum to exactly the Play All
-    /// title's 10,398 s (0.0% error); the nearest movie disc, Hornets'
-    /// Nest, misses by 87.6%.
+    /// title's 10,398 s (0.0% error); the nearest movie disc, Super
+    /// Troopers 2, misses by 80.4%. `DiscTitleHeuristicTests` asserts this
+    /// against the committed makemkvcon captures.
     static let playAllEpisodeSimilarityPercent = 15
     static let playAllDurationTolerancePercent = 2
     /// Guard pool membership: decoys under five minutes never count toward
@@ -103,9 +104,9 @@ nonisolated enum DiscTitleHeuristic {
     ///
     /// The clustering step is load-bearing and its negative result is on
     /// record: summing *all* other titles instead does not work — Super
-    /// Troopers 2's non-feature titles reach 0.905 of its feature's
-    /// duration, one bonus featurette away from a false positive at any
-    /// loose tolerance. Requiring the titles to be similar to each other is
+    /// Troopers 2's non-feature titles (all 34, decoys included) reach 0.905
+    /// of its feature's duration, one bonus featurette away from a false
+    /// positive at any loose tolerance. Requiring the titles to be similar to each other is
     /// what separates "eight episodes" from "a trailer, a featurette and a
     /// deleted scene". Do not simplify this away; there is a test.
     nonisolated static func playAllEpisodes(
