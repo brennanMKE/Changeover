@@ -152,8 +152,12 @@ struct MovieSearchViewModelRuntimeTests {
         #expect(vm.runtimeLookup == .loaded(movieID: 2, runtimeMinutes: 42))
 
         gate.open()   // let the stale id-1 lookup finish; it must not overwrite id 2
-        await Task.yield()
-        await Task.yield()
+        // Two bare yields did not guarantee the stale response had resolved, so
+        // the assertions below could pass without the guard ever being reached.
+        // Await the same coalesced in-flight id-1 request instead, then give the
+        // superseded view-model task ample turns on the main actor to resume.
+        _ = try await client.movieDetails(id: 1, apiKey: "KEY")
+        for _ in 0..<1_000 { await Task.yield() }
         #expect(vm.selectedMovie?.id == 2)
         #expect(vm.runtimeLookup == .loaded(movieID: 2, runtimeMinutes: 42))
     }
