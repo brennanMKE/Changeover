@@ -43,6 +43,18 @@ struct DVDPipeline {
     /// HandBrakeCLI is pointed at with `--input`. Supplied by `DVDMonitor`
     /// via `JobController.insertedDisc.mountURL`.
     let disc: URL
+    /// #0041 — the one id for this job, minted once by `JobController.start`
+    /// and threaded through here instead of this type minting its own (which
+    /// is what it used to do, independently of `JobController`'s
+    /// `currentJobID` — the exact inconsistency #0041 fixes). Names the
+    /// encode job directory, the `▶ Job` log line, and — via
+    /// `JobController.start` — the notification identifier and the
+    /// fallback's rip job directory, all with the same value. Defaulted so
+    /// the ~25 existing construction sites in `EncodeControllerTests`,
+    /// `MakeMKVFallbackTests`, `PreflightTests`, `OutputDurationCheckTests`
+    /// and `ExtrasPipelineTests` compile unchanged; production always
+    /// passes the id `JobController.start` minted.
+    var jobID: JobID = JobID.make()
     /// The title, audio tracks and deinterlace filter to encode with.
     /// Defaulted to `.phase1` so the ~25 existing construction sites in
     /// `EncodeControllerTests`, `MakeMKVFallbackTests` and `PreflightTests`
@@ -76,6 +88,19 @@ struct DVDPipeline {
     /// exercise `.short`/`.consistent` without a real media file.
     var measureDuration: @Sendable (URL) async throws -> Int = OutputDurationCheck.measureSeconds
 
+    /// #0041 — reports a mid-job phase transition to whoever is watching
+    /// (production: `JobController.applyPhase`, via the `Runner`'s
+    /// phase-report closure). Defaulted to a no-op so every existing
+    /// construction site compiles unchanged; a test can inject a recording
+    /// closure to assert the exact sequence of phases a run reports, with no
+    /// `JobController` involved. Called at the three points `run()` actually
+    /// crosses a `JobPhase` boundary — before the primary encode
+    /// (`.encoding`), before the MakeMKV fallback (`.fallback`), and before
+    /// the move into Plex (`.organizing`). Terminal phases are never
+    /// reported here — `JobController.finish` derives those from the
+    /// `JobOutcome` this method returns, through `JobState.finishing(with:)`.
+    var reportPhase: @MainActor (JobPhase) -> Void = { _ in }
+
     // MARK: - Run
 
     func run() async -> JobOutcome {
@@ -94,10 +119,11 @@ struct DVDPipeline {
         let logURL            = reliabilityLogURL
         let remover           = removeJobDirectory
 
-        // #0004 §2: one job id for this run — the encode job directory and,
-        // on the fallback path, the rip job directory share it, so the two
-        // always correlate.
-        let jobID = JobController.makeJobID()
+        // #0004 §2 / #0041: one job id for this run — the encode job
+        // directory and, on the fallback path, the rip job directory share
+        // it, so the two always correlate. `jobID` is now a caller-supplied
+        // property (`JobController.start` mints it) rather than minted here.
+        let jobID = self.jobID
         log("▶ Job \(jobID)")
 
         // #0004 §2: this job encodes into its own fresh directory, so two
@@ -105,7 +131,7 @@ struct DVDPipeline {
         // can never share an output path, and HandBrake can never overwrite
         // a kept file.
         let jobDirectory = (workingEncodePath as NSString)
-            .appendingPathComponent(jobID)
+            .appendingPathComponent(jobID.rawValue)
         let mp4Path = (jobDirectory as NSString)
             .appendingPathComponent(metadata.fileName)
         var jobDirectoryCreated = false
@@ -359,7 +385,7 @@ struct DVDPipeline {
         // `jobDirectoryCreated == false` and let `finish`'s disposition do
         // nothing.
         do {
-            _ = try await WorkingFiles.createJobDirectory(root: workingEncodePath, jobID: jobID)
+            _ = try await WorkingFiles.createJobDirectory(root: workingEncodePath, jobID: jobID.rawValue)
             jobDirectoryCreated = true
         } catch {
             primaryRecord = DiscReliabilityLog.StageReason(
@@ -372,6 +398,7 @@ struct DVDPipeline {
             )))
         }
         await advanceMarker(.encoding)
+        reportPhase(.encoding)
 
         // Step 1: Encode, straight from the disc's VIDEO_TS — no rip stage
         // on the happy path.
@@ -468,6 +495,7 @@ struct DVDPipeline {
                 if selection.audio != selection.fallbackAudio {
                     log("⚠︎ The MakeMKV fallback does not carry over the audio tracks chosen for this disc; it keeps HandBrake's default audio (#0035).")
                 }
+                reportPhase(.fallback)
                 switch await runFallback(
                     primaryFailure: primaryFailure,
                     discPath:       discPath,
@@ -513,6 +541,7 @@ struct DVDPipeline {
         // sweep can always tell a complete, unmoved `.mp4` from a stale
         // partial.
         await advanceMarker(.encoded)
+        reportPhase(.organizing)
 
         // Step 2: Move into Plex
         let destination: URL
@@ -716,7 +745,7 @@ struct DVDPipeline {
         handbrakePath:  String,
         mp4Path:        String,
         volumeName:     String,
-        jobID:          String,
+        jobID:          JobID,
         fallbackAudio:  EncodeController.AudioSelection,
         targetDurationSeconds: Int?
     ) async -> Result<URL, FallbackRunFailure> {
@@ -724,7 +753,7 @@ struct DVDPipeline {
         // `Working/encoding/<jobID>/` and `Working/ripping/<jobID>/` always
         // correlate.
         let jobDirectory = (workingRipPath as NSString)
-            .appendingPathComponent(jobID)
+            .appendingPathComponent(jobID.rawValue)
 
         // #0026/#0035: `selection.title`'s HandBrake index still never
         // reaches here — a HandBrake title index is not a makemkvcon index

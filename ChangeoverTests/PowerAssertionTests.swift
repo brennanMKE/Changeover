@@ -160,7 +160,7 @@ struct PowerAssertionTests {
     @Test func assertionIsHeldWhileTheJobRunsAndReleasedOnSuccess() async throws {
         let gate = Gate()
         let assertion = FakeSleepAssertion()
-        let controller = JobController(runner: { _, _, _, _, _, log in
+        let controller = JobController(runner: { _, _, _, _, _, log, _, _ in
             log("▶ working")
             await gate.wait()
             return .succeeded(destination: Self.destination)
@@ -183,7 +183,7 @@ struct PowerAssertionTests {
                                  reason: .toolExited(code: 1),
                                  logTail: ["HandBrakeCLI: failed"])
         let assertion = FakeSleepAssertion()
-        let controller = JobController(runner: { _, _, _, _, _, _ in .failed(failure) },
+        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in .failed(failure) },
                                        sleepAssertion: assertion)
         Self.mount(controller, disc: Self.testDisc)
 
@@ -198,7 +198,7 @@ struct PowerAssertionTests {
     @Test func beginIsNeverCalledWhenStartRefusesBecauseAJobIsAlreadyRunning() async throws {
         let gate = Gate()
         let assertion = FakeSleepAssertion()
-        let controller = JobController(runner: { _, _, _, _, _, log in
+        let controller = JobController(runner: { _, _, _, _, _, log, _, _ in
             log("▶ working")
             await gate.wait()
             return .succeeded(destination: Self.destination)
@@ -223,7 +223,7 @@ struct PowerAssertionTests {
 
     @Test func beginIsNeverCalledWhenStartRefusesBecauseNoDiscIsMounted() throws {
         let assertion = FakeSleepAssertion()
-        let controller = JobController(runner: { _, _, _, _, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in
             .succeeded(destination: Self.destination)
         }, sleepAssertion: assertion)
         // Deliberately not mounted — `start` must refuse before ever
@@ -236,7 +236,7 @@ struct PowerAssertionTests {
 
     @Test func reasonStringNamesTheJob() async throws {
         let assertion = FakeSleepAssertion()
-        let controller = JobController(runner: { _, _, _, _, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in
             .succeeded(destination: Self.destination)
         }, sleepAssertion: assertion)
         Self.mount(controller, disc: Self.testDisc)

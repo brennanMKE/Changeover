@@ -108,7 +108,7 @@ struct JobControllerEjectTests {
     @Test func ejectDiscRefusesWhileAJobIsRunning() async throws {
         let gate = Gate()
         let ejector = FakeEjector()
-        let controller = JobController(runner: { _, _, _, _, _, log in
+        let controller = JobController(runner: { _, _, _, _, _, log, _, _ in
             log("▶ working")
             await gate.wait()
             return .succeeded(destination: Self.destination)
@@ -237,7 +237,7 @@ struct JobControllerEjectTests {
         let ejector = FakeEjector()
         let scans = ScanCounter()
         let controller = JobController(
-            runner: { _, _, _, _, _, _ in
+            runner: { _, _, _, _, _, _, _, _ in
                 Issue.record("the runner must not be invoked while ejecting")
                 return .succeeded(destination: Self.destination)
             },
@@ -278,7 +278,7 @@ struct JobControllerEjectTests {
     @Test func aSuccessfulEjectKeepsStartRefusedUntilTheRemovalLands() async throws {
         let ejector = FakeEjector()
         let controller = JobController(
-            runner: { _, _, _, _, _, _ in
+            runner: { _, _, _, _, _, _, _, _ in
                 Issue.record("the runner must not be invoked on an ejected disc")
                 return .succeeded(destination: Self.destination)
             },
