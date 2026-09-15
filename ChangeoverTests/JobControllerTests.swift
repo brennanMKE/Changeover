@@ -843,6 +843,85 @@ struct JobControllerScanTests {
         #expect(log.selections.first?.title == .index(7))
         #expect(log.selections.first?.audio == .tracks([1, 4]))
     }
+
+    // MARK: - #0031 extras selection
+
+    private static let extrasDisc = DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [
+        Self.title(1, 6645), Self.title(2, 300), Self.title(3, 400), Self.title(5, 500),
+    ])
+
+    @Test func startPassesTheResolvedExtrasPlanToTheRunner() async throws {
+        final class PlanLog {
+            private(set) var plans: [ExtrasPlan] = []
+            func record(_ plan: ExtrasPlan) { plans.append(plan) }
+        }
+        let log = PlanLog()
+        let controller = JobController(runner: { _, _, extras, _, _, _ in
+            log.record(extras)
+            return .succeeded(destination: URL(fileURLWithPath: "/x"))
+        })
+        controller.insertedDisc = Self.testDisc
+        controller.scanState = .scanned(DiscScanner.Result(disc: Self.extrasDisc, mainFeatureIndex: 1, warnings: []))
+
+        // The feature, an unknown index and a duplicate are all in the
+        // request; only 3 and 5, ascending, may reach the runner.
+        let request = RipRequest(
+            metadata: try Self.metadata(selectionDisc: Self.testDisc),
+            featureTitleIndex: 1,
+            extraTitleIndices: [5, 1, 99, 3, 3],
+            audioTrackNumbers: []
+        )
+        #expect(controller.start(request: request, settings: AppSettings()) == true)
+        var spins = 0
+        while log.plans.isEmpty && spins < 100_000 { await Task.yield(); spins += 1 }
+
+        #expect(log.plans.map { $0.items.map(\.titleIndex) } == [[3, 5]])
+    }
+
+    @Test func extrasSelectionNeverHoldsTheFeatureAndMatchesThePlan() {
+        let controller = JobController()
+        controller.insertedDisc = Self.testDisc
+        controller.scanState = .scanned(DiscScanner.Result(disc: Self.extrasDisc, mainFeatureIndex: 1, warnings: []))
+        controller.selectTitle(1, settings: AppSettings())
+
+        controller.toggleExtra(1)
+        #expect(controller.selectedExtraTitleIndices.isEmpty)
+
+        controller.toggleExtra(3)
+        controller.toggleExtra(2)
+        #expect(controller.selectedExtraTitleIndices == [2, 3])
+        controller.toggleExtra(2)
+        #expect(controller.selectedExtraTitleIndices == [3])
+        controller.toggleExtra(5)
+        #expect(controller.selectedExtrasPlan.items.map(\.titleIndex) == [3, 5])
+        #expect(controller.selectedExtrasPlan.totalDurationSeconds == 900)
+
+        // Picking an extra as the feature drops just that index.
+        controller.selectTitle(3, settings: AppSettings())
+        #expect(controller.selectedTitleIndex == 3)
+        #expect(controller.selectedExtraTitleIndices == [5])
+        #expect(controller.selectedExtrasPlan.items.map(\.titleIndex) == [5])
+    }
+
+    @Test func extrasSelectionIsClearedOnRemovalAndOnRescan() async throws {
+        let controller = JobController(scanRunner: { _, _, _, _, _ in
+            .success(DiscScanner.Result(disc: Self.extrasDisc, mainFeatureIndex: 1, warnings: []))
+        })
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        try await waitUntilScanned(controller)
+        controller.toggleExtra(3)
+        #expect(controller.selectedExtraTitleIndices == [3])
+
+        controller.startScan(settings: AppSettings())
+        #expect(controller.selectedExtraTitleIndices.isEmpty)
+        try await waitUntilScanned(controller)
+
+        controller.toggleExtra(2)
+        #expect(controller.selectedExtraTitleIndices == [2])
+        controller.removeDisc()
+        #expect(controller.selectedExtraTitleIndices.isEmpty)
+        #expect(controller.selectedExtrasPlan.items.isEmpty)
+    }
 }
 
 /// `JobController.insertedDisc` is only useful if something writes it. The

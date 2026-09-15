@@ -130,8 +130,9 @@ struct DiscTitleListView: View {
         // (`.single`'s "Not this one?" disclosure counts) — extras never
         // gate Start, so this is purely informational until the user checks
         // a box.
-        if !jobs.selectedExtraTitleIndices.isEmpty {
-            extrasSummary(disc: result.disc)
+        let extrasPlan = jobs.selectedExtrasPlan
+        if !extrasPlan.items.isEmpty {
+            extrasSummary(extrasPlan)
         }
 
         // #0032: the verdict is for the title that will actually be encoded
@@ -255,16 +256,16 @@ struct DiscTitleListView: View {
                     .background(Color.accentColor.opacity(0.15))
                     .clipShape(Capsule())
             }
-            // #0031 Step B: the extras opt-in, off by default. A checked
-            // feature row is harmless — `ExtrasPlan.make` drops the feature
-            // index whenever it resolves — so this never needs to disable
-            // itself on the badged row.
+            // #0031 Step B: the extras opt-in, off by default. Disabled on
+            // the selected feature row (#0031 review): the feature can never
+            // be an extra, and `JobController.toggleExtra` refuses it too.
             Toggle("Extra", isOn: Binding(
                 get: { jobs.selectedExtraTitleIndices.contains(title.index) },
                 set: { _ in jobs.toggleExtra(title.index) }
             ))
             .toggleStyle(.checkbox)
             .labelsHidden()
+            .disabled(title.index == jobs.selectedTitleIndex)
             .help("Rip this title as an extra, filed outside the Plex library")
         }
         .padding(.vertical, 2)
@@ -272,10 +273,12 @@ struct DiscTitleListView: View {
 
     // MARK: - Extras running total (#0031 Step B)
 
-    private func extrasSummary(disc: DiscInfo) -> some View {
-        let selectedTitles = disc.titles.filter { jobs.selectedExtraTitleIndices.contains($0.index) }
-        let totalSeconds = selectedTitles.reduce(0) { $0 + $1.durationSeconds }
-        return Text("\(selectedTitles.count) extra\(selectedTitles.count == 1 ? "" : "s") selected — \(DiscTitleFormatting.duration(totalSeconds)) total, filed outside the Plex library")
+    /// Built from `JobController.selectedExtrasPlan` — the same
+    /// `ExtrasPlan.make` `start` runs — so the count and total match what
+    /// will be encoded.
+    private func extrasSummary(_ plan: ExtrasPlan) -> some View {
+        let count = plan.items.count
+        return Text("\(count) extra\(count == 1 ? "" : "s") selected — \(DiscTitleFormatting.duration(plan.totalDurationSeconds)) total, filed outside the Plex library")
             .font(.caption)
             .foregroundStyle(.secondary)
     }

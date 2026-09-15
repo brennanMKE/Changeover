@@ -131,8 +131,10 @@ struct ExtrasPipelineTests {
         settings.plexMediaRoot = root.path
         let stub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
         // The feature (`--title 1`) and extra title 3 succeed; extra title 2
-        // fails outright, with no partial file written.
-        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0", "FAIL_TITLES=2"])
+        // fails after writing a partial file (#0031 review: without
+        // FAIL_WRITE_PARTIAL there was no partial, so "removes the partial"
+        // was never exercised — `removeFile` just returned `.missing`).
+        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0", "FAIL_TITLES=2", "FAIL_WRITE_PARTIAL=1"])
         settings.handbrakePath = stub
 
         var logged: [String] = []
@@ -165,6 +167,57 @@ struct ExtrasPipelineTests {
         #expect(try Self.jobDirectories(under: URL(fileURLWithPath: settings.workingEncodePath)).isEmpty)
 
         #expect(logged.contains { $0.contains("Extra title 2 failed to encode") })
+        #expect(!logged.contains { $0.contains("Could not remove the partial extra") })
+        #expect(!logged.contains { $0.contains("Kept ") })
         #expect(logged.contains { $0.hasPrefix("✓ Extras: 1 of 2") })
+    }
+
+    // MARK: - An extra whose move is refused is deleted; the feature is untouched
+
+    /// #0031 review: `Clips` is a symlink into `Movies`. The feature still
+    /// lands in `Movies/<folder>/` as the only file; both extras are refused
+    /// by the organizer's guard, deleted from the working folder, and never
+    /// appear under `Movies/`; the job still succeeds and is fully disposed.
+    @Test func extrasRefusedByAClipsSymlinkIntoMoviesNeverReachMoviesAndTheFeatureStillSucceeds() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        let stub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0"])
+        settings.handbrakePath = stub
+
+        try FileManager.default.createDirectory(atPath: settings.plexMoviesPath, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            atPath: settings.clipsPath, withDestinationPath: settings.plexMoviesPath)
+
+        var logged: [String] = []
+        let metadata = try Self.metadata()
+        var pipeline = DVDPipeline(
+            metadata: metadata,
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            selection: EncodeSelection(title: .index(1), audio: .sourceDefault, fallbackAudio: .sourceDefault, filter: .none),
+            extras:   ExtrasPlan(items: Self.extraItems),
+            log:      { logged.append($0) }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .succeeded(let destination) = outcome else {
+            Issue.record("expected success, got \(outcome)")
+            return
+        }
+        let movieFolder = URL(fileURLWithPath: settings.plexMoviesPath).appendingPathComponent(metadata.folderName)
+        #expect(destination.deletingLastPathComponent() == movieFolder)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: movieFolder.path) == [metadata.fileName])
+        #expect(try FileManager.default.contentsOfDirectory(atPath: settings.plexMoviesPath) == [metadata.folderName])
+
+        #expect(try Self.jobDirectories(under: URL(fileURLWithPath: settings.workingEncodePath)).isEmpty)
+        #expect(logged.contains { $0.contains("Extra title 2 failed to move") })
+        #expect(logged.contains { $0.contains("Extra title 3 failed to move") })
+        #expect(logged.contains { $0.hasPrefix("✓ Extras: 0 of 2") })
     }
 }

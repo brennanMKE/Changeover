@@ -41,6 +41,9 @@
 #                  disc still succeeds. `--main-feature` invocations (no
 #                  `--title` at all) never match.
 #   FAIL_EXIT    — exit code used above (default 1).
+#   FAIL_WRITE_PARTIAL — 1 writes a partial `--output` file before a
+#                  FAIL_TITLES exit, so a test can prove the partial is
+#                  removed (#0031 review; default 0, no file).
 #
 # #0008 extends the same sidecar mechanism for `PreflightTests` and every
 # stub-driven pipeline test: when invoked as `--help` (Preflight's P2
@@ -173,15 +176,22 @@ esac
 # failure.
 if [ -n "$FAIL_TITLES" ]; then
     title_arg=""
+    fail_output=""
     prev2=""
     for arg in "$@"; do
         if [ "$prev2" = "--title" ]; then
             title_arg="$arg"
         fi
+        if [ "$prev2" = "--output" ]; then
+            fail_output="$arg"
+        fi
         prev2="$arg"
     done
     for t in $FAIL_TITLES; do
         if [ "$t" = "$title_arg" ]; then
+            if [ "${FAIL_WRITE_PARTIAL:-0}" = "1" ] && [ -n "$fail_output" ]; then
+                echo "stub partial output" > "$fail_output"
+            fi
             exit "${FAIL_EXIT:-1}"
         fi
     done

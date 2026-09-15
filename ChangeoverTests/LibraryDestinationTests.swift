@@ -216,4 +216,110 @@ struct PlexOrganizerExtrasTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: movies.path).isEmpty)
         #expect(FileManager.default.fileExists(atPath: encoded.path))
     }
+
+    // MARK: - #0031 review: aliasing below Clips, case, dangling links, symlinked roots
+
+    /// Runs an `.extra` move and returns the thrown failure, if any.
+    private static func moveExtra(from encoded: URL, roots: LibraryRoots) async throws -> (JobFailure?, URL?) {
+        let metadata = try Self.metadata()
+        do {
+            let url = try await PlexOrganizer.move(
+                encodedFile: encoded.path,
+                metadata:    metadata,
+                destination: .extra(titleIndex: 5),
+                roots:       roots,
+                log:         { _ in }
+            )
+            return (nil, url)
+        } catch {
+            return (error, nil)
+        }
+    }
+
+    /// `Clips` is a real folder, but `Clips/<Title (Year) {tmdb-ID}>` is a
+    /// symlink into `Movies/<Title (Year) {tmdb-ID}>` — the first-pass guard
+    /// only canonicalised `Clips` itself and let this through.
+    @Test func extraMoveThrowsWhenTheMovieFolderUnderClipsIsASymlinkIntoMovies() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fm = FileManager.default
+        let folderName = try Self.metadata().folderName
+
+        let movieFolder = root.appendingPathComponent("Movies").appendingPathComponent(folderName)
+        try fm.createDirectory(at: movieFolder, withIntermediateDirectories: true)
+        let clips = root.appendingPathComponent("Clips")
+        try fm.createDirectory(at: clips, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: clips.appendingPathComponent(folderName), withDestinationURL: movieFolder)
+
+        let encoded = root.appendingPathComponent("encoded.mp4")
+        try Data("stub extra".utf8).write(to: encoded)
+
+        let (thrown, _) = try await Self.moveExtra(from: encoded, roots: LibraryRoots(mediaRoot: root.path))
+        #expect(thrown?.stage == .organize)
+        #expect(try fm.contentsOfDirectory(atPath: movieFolder.path).isEmpty)
+        #expect(fm.fileExists(atPath: encoded.path))
+    }
+
+    /// `Clips` → `<root>/movies`. On a case-insensitive volume that is
+    /// `Movies` (Darwin's `realpath` returns on-disk case); on a
+    /// case-sensitive one it is a dangling link. Refused either way.
+    @Test func extraMoveThrowsWhenClipsIsASymlinkToADifferentlyCasedMovies() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fm = FileManager.default
+
+        let movies = root.appendingPathComponent("Movies")
+        try fm.createDirectory(at: movies, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(atPath: root.appendingPathComponent("Clips").path,
+                                  withDestinationPath: root.appendingPathComponent("movies").path)
+
+        let encoded = root.appendingPathComponent("encoded.mp4")
+        try Data("stub extra".utf8).write(to: encoded)
+
+        let (thrown, _) = try await Self.moveExtra(from: encoded, roots: LibraryRoots(mediaRoot: root.path))
+        #expect(thrown?.stage == .organize)
+        #expect(try fm.contentsOfDirectory(atPath: movies.path).isEmpty)
+        #expect(fm.fileExists(atPath: encoded.path))
+    }
+
+    @Test func extraMoveThrowsWhenClipsIsADanglingSymlink() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fm = FileManager.default
+
+        let nowhere = root.appendingPathComponent("Nowhere")
+        try fm.createSymbolicLink(atPath: root.appendingPathComponent("Clips").path, withDestinationPath: nowhere.path)
+
+        let encoded = root.appendingPathComponent("encoded.mp4")
+        try Data("stub extra".utf8).write(to: encoded)
+
+        let (thrown, _) = try await Self.moveExtra(from: encoded, roots: LibraryRoots(mediaRoot: root.path))
+        #expect(thrown?.stage == .organize)
+        #expect(!fm.fileExists(atPath: nowhere.path))
+        #expect(fm.fileExists(atPath: encoded.path))
+    }
+
+    /// No false refusal: a media root that is itself a symlink (and a
+    /// `Movies` that already exists), with `..` in the configured path.
+    @Test func extraMoveSucceedsWhenTheMediaRootIsASymlinkWithDotDotComponents() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fm = FileManager.default
+
+        let real = root.appendingPathComponent("Real")
+        try fm.createDirectory(at: real.appendingPathComponent("Movies"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: root.appendingPathComponent("Other"), withIntermediateDirectories: true)
+        let link = root.appendingPathComponent("Link")
+        try fm.createSymbolicLink(at: link, withDestinationURL: real)
+        let mediaRoot = root.path + "/Other/../Link"
+
+        let encoded = root.appendingPathComponent("encoded.mp4")
+        try Data("stub extra".utf8).write(to: encoded)
+
+        let (thrown, landed) = try await Self.moveExtra(from: encoded, roots: LibraryRoots(mediaRoot: mediaRoot))
+        #expect(thrown == nil)
+        #expect(landed.map { fm.fileExists(atPath: $0.path) } == true)
+        #expect(try fm.contentsOfDirectory(atPath: real.appendingPathComponent("Clips").path).count == 1)
+        #expect(try fm.contentsOfDirectory(atPath: real.appendingPathComponent("Movies").path).isEmpty)
+    }
 }

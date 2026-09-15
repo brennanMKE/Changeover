@@ -350,15 +350,36 @@ final class JobController {
     /// a title on the scan currently held).
     func selectTitle(_ index: Int?, settings: AppSettings) {
         selectedTitleIndex = index
+        // #0031 review: the new feature can't also be an extra. Only that
+        // one index is dropped — the rest of the extras pick survives a
+        // feature change, because clicking a row to pick the feature must
+        // not silently discard the boxes the user already ticked.
+        if let index {
+            selectedExtraTitleIndices.remove(index)
+        }
         mismatchAcknowledgement = nil
         selectedAudioTrackNumbers = Self.preselectedAudioTracks(titleIndex: index, scanState: scanState, settings: settings)
     }
 
+    /// #0031 review — what the extras checkboxes will actually encode, for
+    /// the running total: `ExtrasPlan.make` over the held scan with the
+    /// selected feature, the same function `start` uses, so the summary can
+    /// never count a title the pipeline will drop. Empty without a scan.
+    var selectedExtrasPlan: ExtrasPlan {
+        guard case .scanned(let scan) = scanState else { return ExtrasPlan() }
+        return ExtrasPlan.make(
+            featureIndex: selectedTitleIndex ?? Int.min,
+            requested:    selectedExtraTitleIndices.sorted(),
+            disc:         scan.disc
+        )
+    }
+
     /// #0031 Step B — flips one title's extras opt-in. Used by the picker's
-    /// per-row checkbox; a title already selected as the feature can still
-    /// be toggled here (harmlessly — `ExtrasPlan.make` drops it), so the UI
-    /// doesn't need to special-case that row.
+    /// per-row checkbox. A no-op on the selected feature title (#0031
+    /// review): `ExtrasPlan.make` would drop it anyway, and letting the box
+    /// tick made the picker show a pick the pipeline would not run.
     func toggleExtra(_ titleIndex: Int) {
+        guard titleIndex != selectedTitleIndex else { return }
         if selectedExtraTitleIndices.contains(titleIndex) {
             selectedExtraTitleIndices.remove(titleIndex)
         } else {
