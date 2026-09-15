@@ -136,6 +136,11 @@ final class JobController {
     private let maxLogLines: Int
     private let runner: Runner
     private let scanRunner: ScanRunner
+    /// #0047 — held for the duration of a job so the Mac doesn't idle-sleep
+    /// mid-rip/encode. Taken in `start` right before the job `Task` launches,
+    /// released in `finish`, the only exit from that `Task` — see
+    /// `PowerAssertion.swift`.
+    private let sleepAssertion: SleepAssertion
     private var task: Task<Void, Never>?
     /// Bumped by every `startScan`/`removeDisc`, so only the most recent
     /// scan's outcome is ever applied — even a second scan of the *same*
@@ -147,11 +152,13 @@ final class JobController {
     init(
         maxLogLines: Int = JobController.defaultMaxLogLines,
         runner: Runner? = nil,
-        scanRunner: ScanRunner? = nil
+        scanRunner: ScanRunner? = nil,
+        sleepAssertion: SleepAssertion = ProcessInfoSleepAssertion()
     ) {
         self.maxLogLines = max(1, maxLogLines)
         self.runner = runner ?? JobController.pipelineRunner
         self.scanRunner = scanRunner ?? JobController.defaultScanRunner
+        self.sleepAssertion = sleepAssertion
     }
 
     /// The production runner: the real encode → move pipeline.
@@ -258,6 +265,12 @@ final class JobController {
         }
 
         let disc = currentDisc.mountURL
+
+        // #0047: held for the whole job — encode, moves, extras — and
+        // released unconditionally in `finish`, the only exit from the
+        // `Task` below, so every terminal path (success, failure, fallback,
+        // extras failure) releases it.
+        sleepAssertion.begin(reason: "Changeover: encoding \(request.metadata.baseName)")
 
         isRunning = true
         currentMetadata = request.metadata
@@ -441,6 +454,11 @@ final class JobController {
         lastOutcome = outcome
         isRunning = false
         task = nil
+        // #0047: unconditional and idempotent — releases whatever `start`
+        // took, on every terminal path (success, failure, fallback, extras
+        // failure), with no leak if something upstream ever called `finish`
+        // twice.
+        sleepAssertion.end()
     }
 
     private func append(_ line: String) {
