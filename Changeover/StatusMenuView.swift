@@ -5,12 +5,6 @@ struct StatusMenuView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(JobController.self) private var jobs
 
-    /// #0048 — set while the confirmation alert below is asking about
-    /// cancelling `jobs.current`. A plain `Bool`, not the job's id: this row
-    /// only ever exists while `jobs.current` is set (see `body`), so there is
-    /// never a question of *which* job it refers to.
-    @State private var isConfirmingCancel = false
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
@@ -74,25 +68,22 @@ struct StatusMenuView: View {
             // acting, so a state change between render and tap is still
             // refused (and logged) there.
             // #0048 orchestrator decision: Cancel asks for confirmation, so
-            // one misclick can't end a long encode.
+            // one misclick can't end a long encode. #0048 review: asked by
+            // `AppDelegate.requestCancel` as an `NSAlert` after the popover
+            // closes — never a dialog hosted in this transient popover. The
+            // `Task` hop lets the button action return before the modal
+            // alert's run loop starts.
             if let current = jobs.current {
-                MenuRow("Cancel Job", systemImage: "xmark.circle") {
-                    isConfirmingCancel = true
-                }
-                .disabled(cancelDecision != .cancel)
-                .help(cancelDecision.refusalReason ?? "Stop the running job.")
-                .confirmationDialog(
-                    "Cancel encoding \(current.metadata.baseName)?",
-                    isPresented: $isConfirmingCancel,
-                    titleVisibility: .visible
-                ) {
-                    Button("Cancel Job", role: .destructive) {
-                        jobs.cancel(id: current.id)
+                let cancelID = current.id
+                MenuRow(jobs.cancellingJobID == cancelID ? "Cancelling…" : "Cancel Job", systemImage: "xmark.circle") {
+                    guard let appDelegate = AppDelegate.shared else {
+                        print("Warning: AppDelegate.shared is not defined")
+                        return
                     }
-                    Button("Keep Going", role: .cancel) {}
-                } message: {
-                    Text("The partial file will be deleted.")
+                    Task { @MainActor in appDelegate.requestCancel(jobID: cancelID) }
                 }
+                .disabled(cancelDecision != .cancel || jobs.cancellingJobID == cancelID)
+                .help(cancelDecision.refusalReason ?? "Stop the running job.")
             }
 
             MenuRow("Settings…", systemImage: "gearshape") {
@@ -144,14 +135,23 @@ struct StatusMenuView: View {
         JobPresentation.menuSummary(
             current: jobs.current?.snapshot,
             lastFinished: jobs.history.last?.snapshot,
-            isConfigured: settings.isConfigured
+            isConfigured: settings.isConfigured,
+            isCancelling: isCancellingCurrent
         )
     }
 
     private var statusColor: Color {
-        guard settings.isConfigured else { return .red }
-        guard let current = jobs.current?.snapshot else { return .green }
-        return JobPresentation.make(for: current).tone.color
+        JobPresentation.menuTone(
+            current: jobs.current?.snapshot,
+            lastFinished: jobs.history.last?.snapshot,
+            isConfigured: settings.isConfigured,
+            isCancelling: isCancellingCurrent
+        ).color
+    }
+
+    private var isCancellingCurrent: Bool {
+        guard let current = jobs.current else { return false }
+        return jobs.cancellingJobID == current.id
     }
 }
 

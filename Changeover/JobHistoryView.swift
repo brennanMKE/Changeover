@@ -15,20 +15,16 @@ struct JobHistoryView: View {
     @Environment(JobController.self) private var jobs
 
     @State private var selection: JobID?
-    /// Job ids a Cancel has been accepted for but that haven't reached a
-    /// terminal phase yet — #0046's "SIGKILL escalation can take 10 s or
-    /// more" gap. `JobPresentation.make(for:isCancelling:)` shows
-    /// "Cancelling…" for exactly these, and ignores a stale entry once the
-    /// job's own phase says it's already terminal.
-    @State private var cancellingIDs: Set<JobID> = []
-    @State private var pendingCancel: Job?
 
     var body: some View {
         NavigationSplitView {
             List(rows, id: \.id, selection: $selection) { job in
+                // #0048 review: "Cancelling…" comes from
+                // `JobController.cancellingJobID`, so a cancel accepted from
+                // the status menu shows here too.
                 JobHistoryRow(
                     job: job,
-                    isCancelling: cancellingIDs.contains(job.id)
+                    isCancelling: jobs.cancellingJobID == job.id
                 )
             }
             .listStyle(.sidebar)
@@ -43,9 +39,9 @@ struct JobHistoryView: View {
             if let job = selectedJob {
                 JobDetailView(
                     job: job,
-                    isCancelling: cancellingIDs.contains(job.id),
-                    canRetry: canRetry(job),
-                    onCancel: { pendingCancel = job },
+                    isCancelling: jobs.cancellingJobID == job.id,
+                    retryDecision: jobs.retryDecision(id: job.id),
+                    onCancel: { requestCancel(job) },
                     onRetry: { retry(job) }
                 )
                 .id(job.id)
@@ -53,22 +49,12 @@ struct JobHistoryView: View {
                 ContentUnavailableView("No Job Selected", systemImage: "list.bullet.rectangle")
             }
         }
-        .frame(minWidth: 720, minHeight: 520)
+        // Matches the window's own `minSize` (`AppDelegate.showHistory`).
+        .frame(minWidth: 560, minHeight: 420)
         .onAppear { applyPendingSelection() }
         .onChange(of: jobs.pendingHistorySelection) { _, _ in applyPendingSelection() }
-        .alert(
-            "Cancel encoding \(pendingCancel?.metadata.baseName ?? "")?",
-            isPresented: Binding(
-                get: { pendingCancel != nil },
-                set: { shown in if !shown { pendingCancel = nil } }
-            ),
-            presenting: pendingCancel
-        ) { job in
-            Button("Cancel Job", role: .destructive) { confirmCancel(job) }
-            Button("Keep Going", role: .cancel) {}
-        } message: { _ in
-            Text("The partial file will be deleted.")
-        }
+        // A pruned or cleared selection moves to a row that still exists.
+        .onChange(of: rows.map(\.id)) { _, _ in applyPendingSelection() }
     }
 
     // MARK: - Rows
@@ -94,49 +80,40 @@ struct JobHistoryView: View {
     /// window is already open (a later notification click) — see
     /// `JobController.pendingHistorySelection`.
     private func applyPendingSelection() {
-        if let pending = jobs.pendingHistorySelection {
-            selection = pending
+        let resolved = JobPresentation.historySelection(
+            pending: jobs.pendingHistorySelection,
+            current: selection,
+            available: rows.map(\.id)
+        )
+        if jobs.pendingHistorySelection != nil {
             jobs.pendingHistorySelection = nil
-        } else if selection == nil {
-            selection = rows.last?.id
+        }
+        if resolved != selection {
+            selection = resolved
         }
     }
 
     // MARK: - Actions
 
-    private func canRetry(_ job: Job) -> Bool {
-        JobPresentation.canRetry(
-            job.snapshot,
-            isRunning: jobs.isRunning,
-            insertedDiscID: jobs.insertedDisc?.discID,
-            jobDiscID: job.metadata.selectionDisc?.discID
-        )
-    }
-
-    private func confirmCancel(_ job: Job) {
-        pendingCancel = nil
-        if jobs.cancel(id: job.id) {
-            cancellingIDs.insert(job.id)
+    /// #0048 review — the same confirmed Cancel path the status menu uses
+    /// (`AppDelegate.requestCancel`), so there is one confirmation, one
+    /// wording and one tested decision.
+    private func requestCancel(_ job: Job) {
+        guard let appDelegate = AppDelegate.shared else {
+            print("Warning: AppDelegate.shared is not defined")
+            return
         }
+        appDelegate.requestCancel(jobID: job.id)
     }
 
-    /// Re-starts a failed or cancelled job's disc under the selection
-    /// `JobController` is currently holding for it — #0048's plan: "Retry
-    /// starts a **new** `Job` with the old metadata," never a resurrection of
-    /// the terminal one (#0041's transition table forbids leaving a terminal
-    /// phase). Mirrors `MetadataEntryView.startRipping()`; `canRetry(_:)`
-    /// above already confirmed the failure's disc is the one in the drive,
-    /// so the scan and per-disc selection `JobController` is still holding
-    /// belong to it.
+    /// #0048 review — a **new** `Job` replaying the finished job's own
+    /// recorded `RipRequest` (`JobController.retry(id:settings:)`), never the
+    /// selection the controller holds now, and never a resurrection of the
+    /// terminal job (#0041). Selects the new job when it starts.
     private func retry(_ job: Job) {
-        guard let featureTitleIndex = jobs.selectedTitleIndex else { return }
-        let request = RipRequest(
-            metadata: job.metadata,
-            featureTitleIndex: featureTitleIndex,
-            extraTitleIndices: jobs.selectedExtraTitleIndices.sorted(),
-            audioTrackNumbers: jobs.selectedAudioTrackNumbers
-        )
-        jobs.start(request: request, settings: settings)
+        if jobs.retry(id: job.id, settings: settings), let started = jobs.current?.id {
+            selection = started
+        }
     }
 }
 
@@ -171,7 +148,7 @@ private struct JobHistoryRow: View {
 private struct JobDetailView: View {
     let job: Job
     let isCancelling: Bool
-    let canRetry: Bool
+    let retryDecision: JobPresentation.RetryDecision
     let onCancel: () -> Void
     let onRetry: () -> Void
 
@@ -203,11 +180,16 @@ private struct JobDetailView: View {
                 }
                 HStack {
                     if !job.state.phase.isTerminal {
-                        Button("Cancel Job", role: .destructive, action: onCancel)
-                            .disabled(job.state.phase == .organizing || isCancelling)
+                        // A non-terminal job is always `JobController.current`.
+                        let cancelDecision = CancelPolicy.decide(requestedID: job.id, currentID: job.id, phase: job.state.phase)
+                        Button(isCancelling ? "Cancelling…" : "Cancel Job", role: .destructive, action: onCancel)
+                            .disabled(cancelDecision != .cancel || isCancelling)
+                            .help(cancelDecision.refusalReason ?? "Stop this job.")
                     }
-                    if canRetry {
+                    if job.state.phase == .failed || job.state.phase == .cancelled {
                         Button("Retry", action: onRetry)
+                            .disabled(retryDecision != .retry)
+                            .help(retryDecision.refusalReason ?? "Start a new job with this job's movie, title and tracks.")
                     }
                 }
             }

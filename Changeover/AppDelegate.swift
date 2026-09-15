@@ -10,7 +10,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     let settings = AppSettings()
     /// The one job that can be in flight. Owned here so it outlives every
     /// window — see #0002.
-    let jobs = JobController()
+    let jobs: JobController
+
+    /// #0048 review — asks the user to confirm a cancel. Production runs an
+    /// app-modal `NSAlert` (`runCancelAlert`); tests inject a closure so the
+    /// decision in `requestCancel(jobID:)` is unit-testable with no alert.
+    var confirmCancel: (JobPresentation.CancelConfirmation) -> Bool = AppDelegate.runCancelAlert
+
+    /// #0048 review — the symbol name `updateStatusSymbol()` last applied,
+    /// after its fallback. Lets a test prove the observation loop re-arms,
+    /// even on a delegate that never created a real status item.
+    private(set) var appliedStatusSymbolName: String?
+
+    override init() {
+        self.jobs = JobController()
+        super.init()
+    }
+
+    /// Tests only: a delegate driving a `JobController` with a fake runner.
+    init(jobs: JobController) {
+        self.jobs = jobs
+        super.init()
+    }
 
     private(set) var statusItem: NSStatusItem?
     private(set) var popover: NSPopover?
@@ -183,7 +204,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// while the mutation that triggered it is still in progress, and
     /// re-entering `withObservationTracking` synchronously from inside its
     /// own handler is the documented footgun that pattern avoids.
-    private func observeRunningState() {
+    ///
+    /// Internal (not private) so a test can arm it on a fresh delegate. The
+    /// `onChange` closure holds `self` weakly, so a released delegate's next
+    /// change neither updates nor re-arms: the loop ends on its own.
+    func observeRunningState() {
         withObservationTracking {
             _ = jobs.isRunning
         } onChange: { [weak self] in
@@ -200,10 +225,57 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// (`setupMenuBarIcon()`) if the filled variant doesn't resolve on the
     /// running OS, so a bad symbol name never blanks the menu bar icon.
     private func updateStatusSymbol() {
-        let name = JobPresentation.statusSymbolName(isRunning: jobs.isRunning)
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: "Changeover")
-            ?? NSImage(systemSymbolName: "opticaldisc", accessibilityDescription: "Changeover")
+        var name = JobPresentation.statusSymbolName(isRunning: jobs.isRunning)
+        var image = NSImage(systemSymbolName: name, accessibilityDescription: "Changeover")
+        if image == nil {
+            name = "opticaldisc"
+            image = NSImage(systemSymbolName: name, accessibilityDescription: "Changeover")
+        }
+        appliedStatusSymbolName = name
         statusItem?.button?.image = image
+    }
+
+    // MARK: - Cancel confirmation (#0048 review)
+
+    /// The one Cancel path for every surface: the status menu's row and the
+    /// history window's button. Asks through `confirmCancel`, and only then
+    /// calls `jobs.cancel(id:)`, which re-checks `CancelPolicy` in case the
+    /// job reached `organizing` or finished while the alert was up.
+    ///
+    /// Runs as an app-modal `NSAlert` after closing the popover, never as a
+    /// SwiftUI `.confirmationDialog` inside the transient `NSPopover`: the
+    /// alert taking key closes a transient popover, which could orphan a
+    /// dialog hosted in it so neither button ever fired.
+    ///
+    /// - Returns: `true` only when the user confirmed and the cancel was
+    ///   accepted. A cancel `CancelPolicy` already refuses is passed straight
+    ///   to `jobs.cancel(id:)` (which logs why) without asking.
+    @discardableResult
+    func requestCancel(jobID: JobID) -> Bool {
+        guard let current = jobs.current, current.id == jobID,
+              CancelPolicy.decide(requestedID: jobID, currentID: current.id, phase: current.state.phase) == .cancel,
+              jobs.cancellingJobID != jobID else {
+            return jobs.cancellingJobID == jobID ? false : jobs.cancel(id: jobID)
+        }
+        popover?.performClose(nil)
+        guard confirmCancel(JobPresentation.cancelConfirmation(for: current.snapshot)) else {
+            return false
+        }
+        return jobs.cancel(id: jobID)
+    }
+
+    /// "Keep Going" is the default (Return) button, so a stray Return never
+    /// ends a long encode; "Cancel Job" is marked destructive.
+    private static func runCancelAlert(_ confirmation: JobPresentation.CancelConfirmation) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = confirmation.title
+        alert.informativeText = confirmation.message
+        alert.addButton(withTitle: confirmation.keepButton)
+        let cancelButton = alert.addButton(withTitle: confirmation.confirmButton)
+        cancelButton.hasDestructiveAction = true
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal() == .alertSecondButtonReturn
     }
 
     // MARK: - Settings window

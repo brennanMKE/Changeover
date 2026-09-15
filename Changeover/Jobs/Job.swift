@@ -38,6 +38,17 @@ final class Job {
     /// and never reset in place or shared with any other job.
     let log: JobLog
     let startDate: Date
+    /// #0048 review — the exact request `JobController.start` accepted:
+    /// feature title, audio tracks and extras, not just the movie. Retry
+    /// replays *this*, never whatever selection `JobController` happens to
+    /// hold for the disc by the time the user presses Retry — that selection
+    /// can have moved on (a different title picked for another movie on the
+    /// same disc, a rescan's fresh preselection), and replaying it would
+    /// file the wrong title under this job's movie name, replacing a good
+    /// library copy (`PlexOrganizer.move` replaces on purpose, #0012).
+    /// Optional only so hand-built test jobs needn't invent one;
+    /// `JobController.retry(id:settings:)` refuses a job without it.
+    let request: RipRequest?
 
     private(set) var state: JobState = .initial
     /// Set once, in `finish(with:)`, to whatever `JobOutcome` the runner
@@ -52,12 +63,13 @@ final class Job {
     private(set) var outcome: JobOutcome?
     private(set) var endDate: Date?
 
-    init(id: JobID, metadata: MovieMetadata, disc: URL, log: JobLog, startDate: Date = Date()) {
+    init(id: JobID, metadata: MovieMetadata, disc: URL, log: JobLog, startDate: Date = Date(), request: RipRequest? = nil) {
         self.id = id
         self.metadata = metadata
         self.disc = disc
         self.log = log
         self.startDate = startDate
+        self.request = request
     }
 
     /// Applies one mid-job phase report (`JobController.JobContext.phase`),

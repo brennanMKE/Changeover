@@ -197,6 +197,15 @@ final class JobController {
     /// clears it back to `nil` — a plain navigational hint, not job state.
     var pendingHistorySelection: JobID?
 
+    /// #0048 review — the running job a Cancel has been accepted for, until
+    /// it actually finishes (SIGKILL escalation can take 10 s or more,
+    /// #0046). Held here rather than as view `@State`, so the status menu,
+    /// the history window and the menu summary all show "Cancelling…" no
+    /// matter which surface the cancel came from. Cleared in `finish`;
+    /// `JobPresentation.make(for:isCancelling:)` ignores it once the job's
+    /// phase is terminal, so the real outcome always wins over the click.
+    private(set) var cancellingJobID: JobID?
+
     /// #0045 review — a manual eject is in flight, or has succeeded and
     /// `DVDMonitor`'s removal hasn't reached `removeDisc()` yet. While set,
     /// `start` and `startScan` refuse, and so does a second `ejectDisc`:
@@ -486,7 +495,7 @@ final class JobController {
         // what makes `isRunning`/`currentJobID`/`currentJobState`/
         // `currentMetadata`/`logDisplayRows`/`lastOutcome` all reflect this job,
         // synchronously, before the `Task` below ever runs.
-        let job = Job(id: jobID, metadata: request.metadata, disc: disc, log: JobLog(capacity: logCapacity))
+        let job = Job(id: jobID, metadata: request.metadata, disc: disc, log: JobLog(capacity: logCapacity), request: request)
         current = job
         // #0042 review: the between-job lines belong to the gap before this
         // job; once it ends, the idle view shows its log and then only what
@@ -611,8 +620,54 @@ final class JobController {
             return false
         case .cancel:
             task?.cancel()
+            cancellingJobID = id
             return true
         }
+    }
+
+    // MARK: - Retry (#0048)
+
+    /// Whether the finished job `id` can be retried right now, and if not,
+    /// why — `JobPresentation.retryDecision`, fed from this controller's own
+    /// state so the history view's Retry button and `retry(id:settings:)`
+    /// can never disagree.
+    func retryDecision(id: JobID) -> JobPresentation.RetryDecision {
+        guard let job = history.first(where: { $0.id == id }) else {
+            return .refuse(reason: "that job is no longer in history")
+        }
+        let hasCompletedScan: Bool
+        if case .scanned = scanState { hasCompletedScan = true } else { hasCompletedScan = false }
+        return JobPresentation.retryDecision(
+            job.snapshot,
+            hasRequest: job.request != nil,
+            isRunning: isRunning,
+            isEjecting: isEjecting,
+            hasCompletedScan: hasCompletedScan,
+            insertedDisc: insertedDisc,
+            jobDisc: job.metadata.selectionDisc
+        )
+    }
+
+    /// #0048 review — starts a **new** job replaying a failed or cancelled
+    /// job's own recorded `RipRequest` (title, audio tracks, extras and
+    /// metadata), never the selection this controller currently holds.
+    /// Refuses (logged) unless `retryDecision(id:)` allows it; `start` then
+    /// re-checks everything at the point of harm: the #0034 disc binding
+    /// (`SelectionReset.sameDisc` against the disc in the drive) and that
+    /// the recorded title and tracks still resolve against the held scan.
+    ///
+    /// - Returns: `true` only when `start` accepted the replayed request.
+    @discardableResult
+    func retry(id: JobID, settings: AppSettings) -> Bool {
+        switch retryDecision(id: id) {
+        case .refuse(let reason):
+            append("⚠︎ Retry refused: \(reason).")
+            return false
+        case .retry:
+            break
+        }
+        guard let request = history.first(where: { $0.id == id })?.request else { return false }
+        return start(request: request, settings: settings)
     }
 
     // MARK: - Disc scan (#0026)
@@ -799,6 +854,7 @@ final class JobController {
         // #0042 review: before the guard, so it stays truly unconditional.
         sleepAssertion.end()
         task = nil
+        cancellingJobID = nil
         guard let job = current else { return }
         job.finish(with: outcome)
         // History first, then `current = nil` (the plan refresh's order):

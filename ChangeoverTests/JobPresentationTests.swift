@@ -302,30 +302,124 @@ struct JobPresentationTests {
         #expect(JobPresentation.menuSummary(current: nil, lastFinished: finished, isConfigured: true) == "Idle — insert a DVD to begin")
     }
 
-    // MARK: - canRetry
+    // MARK: - menuTone / menuSummary while cancelling (#0048 review)
 
-    @Test func canRetryTruthTable() throws {
+    @Test func menuToneMatchesTheSummary() throws {
+        let running = try Self.snapshot(phase: .encoding)
+        let failed = try Self.terminalSnapshot(outcome: .failed(Self.failure(.diskFull)))
+        let cancelled = try Self.terminalSnapshot(outcome: .failed(Self.failure(.cancelled)), via: .encoding)
+        let succeeded = try Self.terminalSnapshot(outcome: .succeeded(destination: URL(fileURLWithPath: "/tmp/x.mp4")))
+
+        #expect(JobPresentation.menuTone(current: running, lastFinished: nil, isConfigured: false) == .failure)
+        #expect(JobPresentation.menuTone(current: nil, lastFinished: nil, isConfigured: true) == .success)
+        #expect(JobPresentation.menuTone(current: running, lastFinished: failed, isConfigured: true) == .active)
+        // A "Last job failed — …" summary must not sit beside a green dot.
+        #expect(JobPresentation.menuTone(current: nil, lastFinished: failed, isConfigured: true) == .failure)
+        #expect(JobPresentation.menuTone(current: nil, lastFinished: cancelled, isConfigured: true) == .success)
+        #expect(JobPresentation.menuTone(current: nil, lastFinished: succeeded, isConfigured: true) == .success)
+        #expect(JobPresentation.menuTone(current: running, lastFinished: nil, isConfigured: true, isCancelling: true) == .warning)
+    }
+
+    @Test func menuSummaryShowsCancellingForTheRunningJob() throws {
+        let running = try Self.snapshot(phase: .encoding)
+        #expect(JobPresentation.menuSummary(current: running, lastFinished: nil, isConfigured: true, isCancelling: true) == "Cancelling…")
+    }
+
+    // MARK: - retryDecision (#0048 review)
+
+    private static let discA = DiscInsertion(
+        mountURL: URL(fileURLWithPath: "/Volumes/A"), deviceNode: "disk6", discID: "disc-a")
+    private static let discB = DiscInsertion(
+        mountURL: URL(fileURLWithPath: "/Volumes/B"), deviceNode: "disk6", discID: "disc-b")
+
+    private static func decide(
+        _ job: JobSnapshot,
+        hasRequest: Bool = true,
+        isRunning: Bool = false,
+        isEjecting: Bool = false,
+        hasCompletedScan: Bool = true,
+        insertedDisc: DiscInsertion? = JobPresentationTests.discA,
+        jobDisc: DiscInsertion? = JobPresentationTests.discA
+    ) -> JobPresentation.RetryDecision {
+        JobPresentation.retryDecision(
+            job, hasRequest: hasRequest, isRunning: isRunning, isEjecting: isEjecting,
+            hasCompletedScan: hasCompletedScan, insertedDisc: insertedDisc, jobDisc: jobDisc)
+    }
+
+    @Test func retryDecisionTruthTable() throws {
         let failed = try Self.terminalSnapshot(outcome: .failed(Self.failure(.diskFull)))
         let cancelled = try Self.terminalSnapshot(outcome: .failed(Self.failure(.cancelled)), via: .encoding)
         let succeeded = try Self.terminalSnapshot(outcome: .succeeded(destination: URL(fileURLWithPath: "/tmp/x.mp4")))
         let running = try Self.snapshot(phase: .encoding)
 
-        // Terminal-failed/cancelled, idle, matching disc ids: retryable.
-        #expect(JobPresentation.canRetry(failed, isRunning: false, insertedDiscID: "disc-1", jobDiscID: "disc-1") == true)
-        #expect(JobPresentation.canRetry(cancelled, isRunning: false, insertedDiscID: "disc-1", jobDiscID: "disc-1") == true)
+        // Failed or cancelled, idle, the job's own disc in, scan done: retryable.
+        #expect(Self.decide(failed) == .retry)
+        #expect(Self.decide(cancelled) == .retry)
 
-        // Succeeded or still running: never retryable, whatever the disc ids say.
-        #expect(JobPresentation.canRetry(succeeded, isRunning: false, insertedDiscID: "disc-1", jobDiscID: "disc-1") == false)
-        #expect(JobPresentation.canRetry(running, isRunning: false, insertedDiscID: "disc-1", jobDiscID: "disc-1") == false)
+        // Succeeded or still running: never.
+        #expect(Self.decide(succeeded) != .retry)
+        #expect(Self.decide(running) != .retry)
 
-        // A job is currently running: refuse even a matching failed job.
-        #expect(JobPresentation.canRetry(failed, isRunning: true, insertedDiscID: "disc-1", jobDiscID: "disc-1") == false)
+        // No recorded request, a job running, an eject in flight, no scan.
+        #expect(Self.decide(failed, hasRequest: false) != .retry)
+        #expect(Self.decide(failed, isRunning: true) != .retry)
+        #expect(Self.decide(failed, isEjecting: true) != .retry)
+        #expect(Self.decide(failed, hasCompletedScan: false) != .retry)
 
-        // Disc ids differ, missing, or both nil: never retryable.
-        #expect(JobPresentation.canRetry(failed, isRunning: false, insertedDiscID: "disc-1", jobDiscID: "disc-2") == false)
-        #expect(JobPresentation.canRetry(failed, isRunning: false, insertedDiscID: nil, jobDiscID: "disc-1") == false)
-        #expect(JobPresentation.canRetry(failed, isRunning: false, insertedDiscID: "disc-1", jobDiscID: nil) == false)
-        #expect(JobPresentation.canRetry(failed, isRunning: false, insertedDiscID: nil, jobDiscID: nil) == false)
+        // #0034: a different disc, no disc, or a job with no bound disc.
+        #expect(Self.decide(failed, insertedDisc: Self.discB) != .retry)
+        #expect(Self.decide(failed, insertedDisc: nil) != .retry)
+        #expect(Self.decide(failed, jobDisc: nil) != .retry)
+        #expect(Self.decide(failed, insertedDisc: Self.discB).refusalReason?.contains("different disc") == true)
+    }
+
+    /// Same rule as `JobController.start` (`SelectionReset.sameDisc`): the
+    /// same identity re-inserted is the same disc; an unidentified disc
+    /// matches only its own insertion.
+    @Test func retryDecisionUsesTheSameDiscRuleAsStart() throws {
+        let failed = try Self.terminalSnapshot(outcome: .failed(Self.failure(.diskFull)))
+        let reinsertedA = DiscInsertion(mountURL: Self.discA.mountURL, deviceNode: "disk7", discID: "disc-a")
+        #expect(Self.decide(failed, insertedDisc: reinsertedA, jobDisc: Self.discA) == .retry)
+
+        let unknown = DiscInsertion(mountURL: URL(fileURLWithPath: "/Volumes/X"), deviceNode: "disk6", discID: nil)
+        let otherUnknown = DiscInsertion(mountURL: unknown.mountURL, deviceNode: "disk6", discID: nil)
+        #expect(Self.decide(failed, insertedDisc: unknown, jobDisc: unknown) == .retry)
+        #expect(Self.decide(failed, insertedDisc: otherUnknown, jobDisc: unknown) != .retry)
+    }
+
+    // MARK: - historySelection (#0048 review)
+
+    @Test func historySelectionPrefersAListedPendingJob() {
+        let a = JobID.make(), b = JobID.make(), c = JobID.make()
+        #expect(JobPresentation.historySelection(pending: b, current: a, available: [a, b, c]) == b)
+    }
+
+    /// A notification for a job since pruned from history must not land on
+    /// an empty detail pane.
+    @Test func historySelectionFallsBackWhenThePendingJobWasPruned() {
+        let a = JobID.make(), b = JobID.make(), pruned = JobID.make()
+        #expect(JobPresentation.historySelection(pending: pruned, current: a, available: [a, b]) == a)
+        #expect(JobPresentation.historySelection(pending: pruned, current: nil, available: [a, b]) == b)
+        #expect(JobPresentation.historySelection(pending: pruned, current: pruned, available: [a, b]) == b)
+        #expect(JobPresentation.historySelection(pending: pruned, current: nil, available: []) == nil)
+    }
+
+    @Test func historySelectionKeepsAListedSelectionWithNoPending() {
+        let a = JobID.make(), b = JobID.make()
+        #expect(JobPresentation.historySelection(pending: nil, current: a, available: [a, b]) == a)
+        #expect(JobPresentation.historySelection(pending: nil, current: nil, available: [a, b]) == b)
+    }
+
+    // MARK: - cancelConfirmation
+
+    @Test func cancelConfirmationUsesTheDecidedWording() throws {
+        let running = try Self.snapshot(phase: .encoding)
+        let confirmation = JobPresentation.cancelConfirmation(for: running)
+        #expect(confirmation.jobID == running.id)
+        #expect(confirmation.title == "Cancel encoding Blade Runner (1982)?")
+        #expect(confirmation.message == "The partial file will be deleted.")
+        #expect(confirmation.confirmButton == "Cancel Job")
+        #expect(confirmation.keepButton == "Keep Going")
     }
 
     // MARK: - statusSymbolName

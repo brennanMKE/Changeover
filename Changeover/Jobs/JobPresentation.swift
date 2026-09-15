@@ -116,33 +116,143 @@ nonisolated struct JobPresentation: Equatable, Sendable {
     /// request (`JobNotifier.message(for:outcome:)` makes the same
     /// distinction for the notification), not something to keep surfacing as
     /// a problem after the fact.
-    nonisolated static func menuSummary(current: JobSnapshot?, lastFinished: JobSnapshot?, isConfigured: Bool) -> String {
+    nonisolated static func menuSummary(
+        current: JobSnapshot?,
+        lastFinished: JobSnapshot?,
+        isConfigured: Bool,
+        isCancelling: Bool = false
+    ) -> String {
         guard isConfigured else { return "Settings required" }
         if let current {
-            return make(for: current).label
+            return make(for: current, isCancelling: isCancelling).label
         }
-        if let lastFinished, case .failed(let failure)? = lastFinished.outcome, failure.reason != .cancelled {
+        if let failure = reportableFailure(lastFinished) {
             return "Last job failed — \(FailurePresenter.message(for: failure).headline)"
         }
         return "Idle — insert a DVD to begin"
     }
 
+    /// #0048 review — the status dot beside `menuSummary`, decided by the
+    /// same rules so the dot and the text never disagree (before this, a
+    /// "Last job failed — …" summary sat next to a green dot).
+    nonisolated static func menuTone(
+        current: JobSnapshot?,
+        lastFinished: JobSnapshot?,
+        isConfigured: Bool,
+        isCancelling: Bool = false
+    ) -> Tone {
+        guard isConfigured else { return .failure }
+        if let current {
+            return make(for: current, isCancelling: isCancelling).tone
+        }
+        return reportableFailure(lastFinished) == nil ? .success : .failure
+    }
+
+    /// A last job's failure worth reporting in the menu — never a cancel,
+    /// which is the user's own request (the same exclusion #0046 asks of any
+    /// disc-failure count).
+    private static func reportableFailure(_ lastFinished: JobSnapshot?) -> JobFailure? {
+        guard let lastFinished, case .failed(let failure)? = lastFinished.outcome,
+              failure.reason != .cancelled else { return nil }
+        return failure
+    }
+
     // MARK: - Retry
 
-    /// Retry is enabled only when:
-    /// - `job` ended `.failed` or `.cancelled` — a job still `.succeeded` (or
-    ///   non-terminal) has nothing to retry;
-    /// - no job is currently running — #0040 option A allows exactly one at a
-    ///   time;
-    /// - both disc ids are non-nil and equal — the disc the job failed on has
-    ///   to still be the one in the drive. Failures don't eject (#0005's
-    ///   `DiscEjector.shouldEject` is false for any failure), so the disc is
-    ///   usually still in; a cancel never ejects either (#0046).
-    nonisolated static func canRetry(_ job: JobSnapshot, isRunning: Bool, insertedDiscID: String?, jobDiscID: String?) -> Bool {
-        guard job.state.phase == .failed || job.state.phase == .cancelled else { return false }
-        guard !isRunning else { return false }
-        guard let insertedDiscID, let jobDiscID, insertedDiscID == jobDiscID else { return false }
-        return true
+    nonisolated enum RetryDecision: Equatable, Sendable {
+        case retry
+        case refuse(reason: String)
+
+        /// The refusal's reason, or `nil` for `.retry` — the disabled
+        /// button's tooltip, mirroring `CancelPolicy.Decision.refusalReason`.
+        var refusalReason: String? {
+            if case .refuse(let reason) = self { return reason }
+            return nil
+        }
+    }
+
+    /// Retry is allowed only when:
+    /// - `job` ended `.failed` or `.cancelled` — a `.succeeded` (or
+    ///   non-terminal) job has nothing to retry;
+    /// - the job recorded the request it started from (`Job.request`) — Retry
+    ///   replays that exact title/tracks/extras, never the live selection;
+    /// - no job is running (#0040 option A: one at a time) and no eject is in
+    ///   flight (#0045);
+    /// - the disc in the drive is the job's own disc, by
+    ///   `SelectionReset.sameDisc` — the very check `JobController.start`
+    ///   applies (#0034), so a disc without a resolvable identity can still
+    ///   be retried within the insertion it was chosen on, and a swapped disc
+    ///   never can. Failures and cancels don't eject (#0005, #0046), so the
+    ///   disc is usually still in;
+    /// - the disc scan has completed, since `start` resolves the recorded
+    ///   title and tracks against it.
+    nonisolated static func retryDecision(
+        _ job: JobSnapshot,
+        hasRequest: Bool,
+        isRunning: Bool,
+        isEjecting: Bool,
+        hasCompletedScan: Bool,
+        insertedDisc: DiscInsertion?,
+        jobDisc: DiscInsertion?
+    ) -> RetryDecision {
+        guard job.state.phase == .failed || job.state.phase == .cancelled else {
+            return .refuse(reason: "only a failed or cancelled job can be retried")
+        }
+        guard hasRequest else {
+            return .refuse(reason: "this job didn't record what it was asked to encode")
+        }
+        guard !isRunning else {
+            return .refuse(reason: "a job is already running")
+        }
+        guard !isEjecting else {
+            return .refuse(reason: "the disc is being ejected")
+        }
+        guard let insertedDisc else {
+            return .refuse(reason: "no disc is in the drive — insert this job's disc")
+        }
+        guard let jobDisc, SelectionReset.sameDisc(jobDisc, insertedDisc) else {
+            return .refuse(reason: "a different disc is in the drive — insert this job's disc")
+        }
+        guard hasCompletedScan else {
+            return .refuse(reason: "wait for the disc scan to finish")
+        }
+        return .retry
+    }
+
+    // MARK: - History selection
+
+    /// #0048 review — which row the history window selects. A pending
+    /// selection (a notification click) wins when that job is still listed;
+    /// a job since pruned from history (or a foreign id) falls back to the
+    /// user's existing selection if it's still listed, else the newest row,
+    /// so a click never lands on an empty "No Job Selected" pane while jobs
+    /// exist.
+    nonisolated static func historySelection(pending: JobID?, current: JobID?, available: [JobID]) -> JobID? {
+        if let pending, available.contains(pending) { return pending }
+        if let current, available.contains(current) { return current }
+        return available.last
+    }
+
+    // MARK: - Cancel confirmation
+
+    nonisolated struct CancelConfirmation: Equatable, Sendable {
+        let jobID: JobID
+        let title: String
+        let message: String
+        let confirmButton: String
+        let keepButton: String
+    }
+
+    /// The orchestrator's #0048 wording: "Cancel encoding <Title>? The
+    /// partial file will be deleted." — shown by `AppDelegate.requestCancel`.
+    nonisolated static func cancelConfirmation(for snapshot: JobSnapshot) -> CancelConfirmation {
+        CancelConfirmation(
+            jobID: snapshot.id,
+            title: "Cancel encoding \(snapshot.metadata.baseName)?",
+            message: "The partial file will be deleted.",
+            confirmButton: "Cancel Job",
+            keepButton: "Keep Going"
+        )
     }
 
     // MARK: - Status item symbol
