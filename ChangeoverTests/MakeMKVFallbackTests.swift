@@ -628,6 +628,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { logged.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -686,6 +687,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = logURL
 
         let outcome = await pipeline.run()
@@ -721,6 +723,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -763,6 +766,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         let logURL = root.appendingPathComponent("reliability.jsonl")
         pipeline.reliabilityLogURL = logURL
 
@@ -839,6 +843,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -886,6 +891,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -934,6 +940,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -983,6 +990,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -1029,6 +1037,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -1077,6 +1086,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -1119,6 +1129,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { logged.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -1165,6 +1176,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = reliabilityURL
 
         let outcome = await pipeline.run()
@@ -1227,6 +1239,7 @@ struct MakeMKVFallbackTests {
             // the scan.
             measureDuration: { _ in 28 }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -1281,6 +1294,7 @@ struct MakeMKVFallbackTests {
             // in for the stub's non-media placeholder output.
             measureDuration: { _ in 9471 }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -1330,6 +1344,7 @@ struct MakeMKVFallbackTests {
             ),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -1401,6 +1416,7 @@ struct MakeMKVFallbackTests {
             ]),
             log: { logged.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -1454,6 +1470,7 @@ struct MakeMKVFallbackTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()

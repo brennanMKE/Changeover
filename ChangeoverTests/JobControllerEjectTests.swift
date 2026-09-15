@@ -12,20 +12,11 @@ import Testing
 @MainActor
 struct JobControllerEjectTests {
 
-    // MARK: - Fake
-
-    /// Records every call and returns a scripted outcome.
-    private final class FakeEjector {
-        private(set) var calls: [URL] = []
-        var outcome: DiscEjector.Outcome = .ejected
-
-        func eject(_ url: URL) async -> DiscEjector.Outcome {
-            calls.append(url)
-            return outcome
-        }
-    }
-
     // MARK: - Helpers (mirrors JobControllerTests' / PowerAssertionTests' fixtures)
+
+    // #0050: the recording fake ejector these tests share is
+    // `RecordingEjector`, in `FakeRunnerSupport.swift` — this suite used to
+    // keep its own private `FakeEjector` with the same shape.
 
     private static func metadata(
         id: Int = 78,
@@ -94,7 +85,7 @@ struct JobControllerEjectTests {
     // MARK: - Refusals
 
     @Test func ejectDiscRefusesWithNoDiscMounted() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         // Deliberately not mounted.
 
@@ -107,7 +98,7 @@ struct JobControllerEjectTests {
 
     @Test func ejectDiscRefusesWhileAJobIsRunning() async throws {
         let gate = Gate()
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         let controller = JobController(runner: { context, _ in
             context.log("▶ working")
             await gate.wait()
@@ -138,7 +129,7 @@ struct JobControllerEjectTests {
     // MARK: - Outcomes
 
     @Test func ejectDiscSucceedsAndCallsTheEjectorWithTheMountedVolume() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .ejected
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         Self.mount(controller, disc: Self.testDisc)
@@ -155,7 +146,7 @@ struct JobControllerEjectTests {
         // `AppDelegate.jobs.removeDisc()` path, not from `ejectDisc()`
         // directly — clearing it here would race the real disappearance
         // notification.
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .ejected
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         Self.mount(controller, disc: Self.testDisc)
@@ -166,7 +157,7 @@ struct JobControllerEjectTests {
     }
 
     @Test func ejectDiscReportsABusyFailureAndDoesNotClaimSuccess() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .busy(message: "Could not eject the disc — it's still in use: resource busy.")
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         Self.mount(controller, disc: Self.testDisc)
@@ -179,7 +170,7 @@ struct JobControllerEjectTests {
     }
 
     @Test func ejectDiscReportsAGenericFailure() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .failed(message: "Could not eject the disc: status -119930868.")
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         Self.mount(controller, disc: Self.testDisc)
@@ -203,7 +194,7 @@ struct JobControllerEjectTests {
     /// would fail as busy, or unmount the volume without removing the disc
     /// and turn the scan's I/O error into a misleading scan failure.
     @Test func ejectDiscRefusesWhileTheDiscIsBeingScanned() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         controller.insertedDisc = Self.testDisc
         controller.scanState = .scanning
@@ -220,7 +211,7 @@ struct JobControllerEjectTests {
 
     /// Once the scan has settled, even as a failure, the disc can be ejected.
     @Test func ejectDiscIsAllowedAfterAFailedScan() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         controller.insertedDisc = Self.testDisc
         controller.scanState = .failed(.jsonMissing)
@@ -234,7 +225,7 @@ struct JobControllerEjectTests {
     /// the scanner.
     @Test func ejectStartAndRescanAreRefusedWhileAnEjectIsInFlight() async throws {
         let gate = Gate()
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         let scans = ScanCounter()
         let controller = JobController(
             runner: { context, _ in
@@ -276,7 +267,7 @@ struct JobControllerEjectTests {
     /// until `DVDMonitor`'s removal reaches `removeDisc()`. Start stays
     /// refused in that gap, and the removal clears everything.
     @Test func aSuccessfulEjectKeepsStartRefusedUntilTheRemovalLands() async throws {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         let controller = JobController(
             runner: { context, _ in
                 Issue.record("the runner must not be invoked on an ejected disc")
@@ -300,7 +291,7 @@ struct JobControllerEjectTests {
     /// A new insertion also clears the flag, so the next disc is never
     /// blocked by the previous one's eject.
     @Test func aNewInsertionClearsTheEjectingFlag() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         let controller = JobController(
             scanRunner: { _, _, _, _, _ in .failure(.jsonMissing) },
             ejector: { url in await ejector.eject(url) })
@@ -322,7 +313,7 @@ struct JobControllerEjectTests {
     /// user can retry the eject itself; `insertedDisc` is left alone
     /// (there is no removal event to react to).
     @Test func anUnmountedButNotEjectedOutcomeMarksTheDiscUnavailable() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         Self.mount(controller, disc: Self.testDisc)
@@ -339,7 +330,7 @@ struct JobControllerEjectTests {
     /// Start is refused, with a clear reason, once the disc is marked
     /// unavailable — never left live against a dead mount path.
     @Test func startIsRefusedAfterAnUnmountedButNotEjectedResult() async throws {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
         let controller = JobController(
             runner: { context, _ in
@@ -361,7 +352,7 @@ struct JobControllerEjectTests {
 
     /// Rescan is refused the same way.
     @Test func rescanIsRefusedAfterAnUnmountedButNotEjectedResult() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
         let scans = ScanCounter()
         let controller = JobController(
@@ -384,7 +375,7 @@ struct JobControllerEjectTests {
     /// handoff note this ticket closes: Retry must not stay enabled on a
     /// dead mount path either.
     @Test func retryIsRefusedAfterAnUnmountedButNotEjectedResult() async throws {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         let controller = JobController(
             runner: { context, _ in
                 context.phase(.encoding)
@@ -416,7 +407,7 @@ struct JobControllerEjectTests {
     /// trigger (a removal and a new insertion are covered by the two tests
     /// above/below).
     @Test func aLaterSuccessfulEjectClearsDiscUnavailable() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         Self.mount(controller, disc: Self.testDisc)
@@ -432,7 +423,7 @@ struct JobControllerEjectTests {
 
     /// A removal (the real `DVDMonitor.onDVDRemoved` path) also clears it.
     @Test func removeDiscClearsDiscUnavailable() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         Self.mount(controller, disc: Self.testDisc)
@@ -446,7 +437,7 @@ struct JobControllerEjectTests {
 
     /// A new insertion also clears it, mirroring `aNewInsertionClearsTheEjectingFlag`.
     @Test func insertDiscClearsDiscUnavailable() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
         let controller = JobController(
             scanRunner: { _, _, _, _, _ in .failure(.jsonMissing) },
@@ -465,7 +456,7 @@ struct JobControllerEjectTests {
     /// (which the unmounted-but-not-ejected outcome already clears), so a
     /// retry of the eject is exactly what's on offer.
     @Test func ejectRemainsAvailableWhileDiscUnavailable() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         Self.mount(controller, disc: Self.testDisc)
@@ -488,7 +479,7 @@ struct JobControllerEjectTests {
     /// `DVDPipeline.run()` reports it, must mark the disc unavailable just
     /// like a manual one: Start and Rescan refused afterwards.
     @Test func anAutomaticEndOfJobPartialEjectMarksTheDiscUnavailable() async throws {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
         let scans = ScanCounter()
         var runs = 0
@@ -527,7 +518,7 @@ struct JobControllerEjectTests {
 
     /// A successful automatic eject leaves `discUnavailable` alone.
     @Test func anAutomaticEndOfJobSuccessfulEjectLeavesTheDiscAvailable() async throws {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .ejected
         let controller = JobController(
             runner: { context, _ in
@@ -551,7 +542,7 @@ struct JobControllerEjectTests {
     /// `insertDisc`) clears `discUnavailable`, takes the new mount path and
     /// keeps the insertion's id so the movie selection still matches.
     @Test func aRemountOfTheSameDiscClearsDiscUnavailable() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         Self.mount(controller, disc: Self.testDisc)
@@ -572,7 +563,7 @@ struct JobControllerEjectTests {
     /// A different disc's mount event never clears it, and a remount event
     /// while the disc is available changes nothing.
     @Test func aRemountOfADifferentDiscOrAnAvailableDiscChangesNothing() async {
-        let ejector = FakeEjector()
+        let ejector = RecordingEjector()
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         Self.mount(controller, disc: Self.testDisc)
 

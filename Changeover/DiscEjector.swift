@@ -114,6 +114,50 @@ nonisolated enum DiscEjector {
         return combine(unmountOutcome: unmountOutcome, ejectOutcome: ejectOutcome)
     }
 
+    // MARK: - #0050: guarding the default ejector
+
+    /// Whether the calling process is a test host — the exact check
+    /// `LoginItemPolicy.shouldRegister` (#0019) uses for the same purpose:
+    /// the app-hosted `ChangeoverTests` bundle sets
+    /// `XCTestConfigurationFilePath` in its environment on every unit-test
+    /// run. Pure and side-effect free so it's testable without `ProcessInfo`.
+    static func isTestHost(environment: [String: String]) -> Bool {
+        environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    /// #0050 — the ejector `DVDPipeline.eject` and `JobController`'s
+    /// `Ejector` fall back to when nothing is injected. Found in the #0049
+    /// review: most existing pipeline tests construct a `DVDPipeline`
+    /// without overriding `eject`, so a *successful* test run reached this
+    /// default and issued a real `DiskArbitration` unmount/eject against a
+    /// temp-directory path — harmless today only because that path never
+    /// resolves to a real volume.
+    ///
+    /// Under a test host this refuses immediately — logged the same way any
+    /// other eject failure already is by `DVDPipeline.run()`'s `switch` over
+    /// `Outcome` — instead of calling `eject(volumeURL:onBegin:)` at all.
+    /// Production (no `XCTestConfigurationFilePath` in its environment) is
+    /// unaffected: it calls straight through.
+    ///
+    /// Deliberately does **not** live inside `eject(volumeURL:onBegin:)`
+    /// itself: `DiscEjectorIntegrationTests` calls that function directly,
+    /// under the same test-host environment, against a disk image *it*
+    /// creates and attaches — a guard inside `eject` would refuse that
+    /// sanctioned call too. Guarding only the default keeps that integration
+    /// coverage intact while closing the actual hole (a test that never
+    /// meant to touch `DiscEjector` at all, reaching it only because nothing
+    /// was injected).
+    static func defaultEject(
+        volumeURL: URL,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        onBegin: @Sendable () -> Void = {}
+    ) async -> Outcome {
+        guard !isTestHost(environment: environment) else {
+            return .failed(message: "real ejector called from tests")
+        }
+        return await eject(volumeURL: volumeURL, onBegin: onBegin)
+    }
+
     // MARK: - Pure decision seam
 
     /// #0049 — combines the unmount step's outcome with the eject step's

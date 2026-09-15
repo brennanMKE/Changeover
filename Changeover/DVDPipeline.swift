@@ -104,11 +104,14 @@ struct DVDPipeline {
 
     /// #0049 review — the end-of-job eject (#0005). Production passes
     /// `JobContext.eject`, which goes through `JobController`'s ejector seam
-    /// and applies a partial eject to controller state. Defaulted to the real
-    /// `DiscEjector` so every existing construction site compiles unchanged;
-    /// a test injects a fake.
+    /// and applies a partial eject to controller state. Defaulted to
+    /// `DiscEjector.defaultEject` so every existing construction site
+    /// compiles unchanged; a test injects a fake. #0050: routing the default
+    /// through `defaultEject` rather than `DiscEjector.eject` directly means
+    /// a test that forgets to inject a fake refuses under its own test-host
+    /// guard instead of issuing a real `DiskArbitration` call.
     var eject: @MainActor (URL) async -> DiscEjector.Outcome = { volumeURL in
-        await DiscEjector.eject(volumeURL: volumeURL)
+        await DiscEjector.defaultEject(volumeURL: volumeURL)
     }
 
     // MARK: - Run

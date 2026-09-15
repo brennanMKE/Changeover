@@ -110,6 +110,7 @@ struct ExtrasPipelineTests {
             log:      { _ in },
             measureDuration: Self.matchingExtrasMeasurer
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -212,6 +213,7 @@ struct ExtrasPipelineTests {
             log:      { logged.append($0) },
             measureDuration: Self.matchingExtrasMeasurer
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -268,6 +270,7 @@ struct ExtrasPipelineTests {
             log:      { logged.append($0) },
             measureDuration: Self.matchingExtrasMeasurer
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()

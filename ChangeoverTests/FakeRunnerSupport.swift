@@ -1,6 +1,41 @@
 import Foundation
 @testable import Changeover
 
+/// #0050 — shared eject-related test support, so no pipeline/controller test
+/// has to fall back to `DVDPipeline`'s or `JobController`'s default ejector,
+/// which resolves to the real `DiscEjector`/`DiskArbitration`. Found in the
+/// #0049 review: `DVDPipeline.eject` and `JobController`'s `Ejector` default
+/// both point at `DiscEjector.eject`, and most existing pipeline tests never
+/// overrode it, so a successful test run issued a real unmount/eject against
+/// a temp-directory path. `DiscEjector.defaultEject` now refuses on its own
+/// under a test host (see `DiscEjectorTests`), so this is belt-and-braces —
+/// it also keeps tests from depending on that guard's exact refusal message.
+enum PipelineTestSupport {
+    /// A no-op fake ejector for the (large majority of) tests that don't
+    /// exercise or assert anything about the eject step itself. Always
+    /// reports `.ejected` and never touches `DiscEjector`. Assign it with
+    /// `pipeline.eject = PipelineTestSupport.fakeEject` right after
+    /// constructing a `DVDPipeline`, or pass `ejector: PipelineTestSupport.fakeEject`
+    /// to `JobController.init`.
+    static let fakeEject: @MainActor (URL) async -> DiscEjector.Outcome = { _ in .ejected }
+}
+
+/// #0050 — a recording fake ejector for the tests that *do* care which
+/// volume URL was ejected, or want to script a specific `DiscEjector.Outcome`
+/// (busy, failed, unmounted-but-not-ejected, …). Shared so
+/// `JobControllerEjectTests` and any pipeline test with the same need don't
+/// each keep their own private copy.
+@MainActor
+final class RecordingEjector {
+    private(set) var calls: [URL] = []
+    var outcome: DiscEjector.Outcome = .ejected
+
+    func eject(_ url: URL) async -> DiscEjector.Outcome {
+        calls.append(url)
+        return outcome
+    }
+}
+
 /// #0041 review — a fake `JobController.Runner`'s success, reached the way
 /// the real `DVDPipeline` reaches it: `.encoding`, then `.organizing`, then
 /// the outcome. `JobController.finish` logs an outcome that can't follow the

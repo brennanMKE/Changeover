@@ -101,6 +101,63 @@ struct DiscEjectorTests {
         #expect(outcome == .unmountedButNotEjected(message:
             "The disc was unmounted but not ejected — it's still in the drive. Could not eject the disc — it's still in use: drive busy."))
     }
+
+    // MARK: - #0050: isTestHost / defaultEject guard
+
+    /// Same predicate `LoginItemPolicyTests` exercises for the identical
+    /// environment key, applied here to `DiscEjector`'s own copy.
+    @Test func isTestHostDetectsXCTestConfigurationFilePath() {
+        #expect(DiscEjector.isTestHost(environment: ["XCTestConfigurationFilePath": "/path/to/ChangeoverTests.xctestrun"]))
+        #expect(!DiscEjector.isTestHost(environment: [:]))
+        #expect(!DiscEjector.isTestHost(environment: ["OTHER_VAR": "1"]))
+    }
+
+    /// The bug this ticket fixes: `DVDPipeline`/`JobController`'s default
+    /// ejector must never reach real `DiskArbitration` from a test host.
+    /// Injecting the environment directly (rather than relying on this test
+    /// itself running under XCTest) proves the guard's own logic, matching
+    /// `LoginItemPolicyTests`' style.
+    @Test func defaultEjectRefusesUnderATestHostWithoutTouchingDiskArbitration() async {
+        var beganDiskArbitration = false
+        let outcome = await DiscEjector.defaultEject(
+            volumeURL: URL(fileURLWithPath: "/tmp/not-a-real-volume-\(UUID().uuidString)"),
+            environment: ["XCTestConfigurationFilePath": "/path/to/ChangeoverTests.xctestrun"],
+            onBegin: { beganDiskArbitration = true }
+        )
+        #expect(outcome == .failed(message: "real ejector called from tests"))
+        #expect(!beganDiskArbitration, "the guard must refuse before eject(volumeURL:onBegin:) ever runs")
+    }
+
+    /// This test itself runs under the real `ChangeoverTests` XCTest host —
+    /// no injected environment — so `defaultEject`'s own default parameter
+    /// (`ProcessInfo.processInfo.environment`) is what trips the guard here,
+    /// proving the production default value, not just the injectable
+    /// predicate.
+    @Test func defaultEjectRefusesUsingTheRealProcessEnvironmentUnderTests() async {
+        let outcome = await DiscEjector.defaultEject(
+            volumeURL: URL(fileURLWithPath: "/tmp/not-a-real-volume-\(UUID().uuidString)")
+        )
+        #expect(outcome == .failed(message: "real ejector called from tests"))
+    }
+
+    /// Outside a test host, `defaultEject` calls straight through to
+    /// `eject(volumeURL:onBegin:)` — proven here with an empty environment
+    /// and a volume that was never mounted, so the only observable
+    /// difference from the guard tripping is that `onBegin` (and therefore
+    /// real `DiskArbitration`) is reached.
+    @Test func defaultEjectCallsThroughWhenNotUnderATestHost() async {
+        var beganDiskArbitration = false
+        let outcome = await DiscEjector.defaultEject(
+            volumeURL: URL(fileURLWithPath: "/Volumes/ChangeoverDoesNotExist\(Int.random(in: 1000...9999))"),
+            environment: [:],
+            onBegin: { beganDiskArbitration = true }
+        )
+        #expect(beganDiskArbitration)
+        guard case .failed = outcome else {
+            Issue.record("expected .failed for a volume that was never mounted, got \(outcome)")
+            return
+        }
+    }
 }
 
 /// Real `DiskArbitration` integration, no optical drive required — the same

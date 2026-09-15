@@ -426,6 +426,7 @@ struct DVDPipelinePhaseReportingTests {
             disc:     URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         var phases: [JobPhase] = []
@@ -458,6 +459,7 @@ struct DVDPipelinePhaseReportingTests {
             log:      { _ in },
             measureDuration: { _ in 300 }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         var phases: [JobPhase] = []
@@ -497,6 +499,7 @@ struct DVDPipelinePhaseReportingTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         var phases: [JobPhase] = []
@@ -544,6 +547,7 @@ struct DVDPipelinePhaseReportingTests {
             log:      { _ in },
             measureDuration: { _ in 300 }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         var phases: [JobPhase] = []

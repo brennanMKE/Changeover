@@ -236,6 +236,7 @@ struct OutputDurationCheckTests {
             log:      { logged.append($0) },
             measureDuration: { _ in actualSeconds }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -312,6 +313,7 @@ struct OutputDurationCheckTests {
             log:      log,
             measureDuration: measure
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
         return (pipeline, settings, handbrakeArgvLog, makemkvArgvLog)
     }
@@ -408,6 +410,7 @@ struct OutputDurationCheckTests {
             ),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -448,6 +451,7 @@ struct OutputDurationCheckTests {
             log:      { _ in },
             measureDuration: { _ in actualSeconds }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -485,6 +489,7 @@ struct OutputDurationCheckTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { logged.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -528,6 +533,7 @@ struct OutputDurationCheckTests {
                 url.lastPathComponent.hasSuffix(" - t02.mp4") ? 200 : 400
             }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()

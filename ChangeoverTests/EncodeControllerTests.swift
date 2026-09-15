@@ -442,6 +442,7 @@ struct EncodeControllerTests {
             disc:     URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
             log:      { logged.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         // #0015 re-pass: point at a temp file rather than the real default
         // (`~/Library/Logs/Changeover/disc-reliability.jsonl`) — this test
         // must never write to that machine's actual reliability log.
@@ -477,6 +478,7 @@ struct EncodeControllerTests {
             disc:     URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         // Same reason as the test above: never write to the real reliability
         // log during a test run.
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
@@ -513,6 +515,7 @@ struct EncodeControllerTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
         pipeline.selection = EncodeSelection(
             title:         .index(1),
@@ -561,6 +564,7 @@ struct EncodeControllerTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { logged.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -598,6 +602,7 @@ struct EncodeControllerTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { logged.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -642,6 +647,7 @@ struct EncodeControllerTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { firstLog.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let firstOutcome = await pipeline.run()
@@ -672,6 +678,7 @@ struct EncodeControllerTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { secondLog.append($0) }
         )
+        secondPipeline.eject = PipelineTestSupport.fakeEject
         secondPipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let secondOutcome = await secondPipeline.run()
@@ -717,6 +724,7 @@ struct EncodeControllerTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { logged.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
         pipeline.removeJobDirectory = { _, _, _ in .failed("boom") }
 
@@ -760,6 +768,7 @@ struct EncodeControllerTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { logged.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()

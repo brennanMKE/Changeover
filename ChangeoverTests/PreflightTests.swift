@@ -451,6 +451,7 @@ struct PreflightTests {
             disc:     URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
             log:      { logged.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -742,6 +743,7 @@ struct PreflightTests {
             disc:     URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
             log:      { logged.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -772,6 +774,7 @@ struct PreflightTests {
             disc:     URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()
@@ -800,6 +803,7 @@ struct PreflightTests {
             disc:     URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
             log:      { logged.append($0) }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let outcome = await pipeline.run()

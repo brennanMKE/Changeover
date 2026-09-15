@@ -93,6 +93,7 @@ struct DVDPipelineCancellationTests {
             disc:     try Self.makeFakeDisc(in: root),
             log:      { _ in }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
         let jobDirectory = (settings.workingEncodePath as NSString).appendingPathComponent(pipeline.jobID.rawValue)
 
@@ -152,6 +153,7 @@ struct DVDPipelineCancellationTests {
                 throw CancellationError()
             }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
         let jobDirectory = (settings.workingEncodePath as NSString).appendingPathComponent(pipeline.jobID.rawValue)
 
@@ -211,6 +213,7 @@ struct DVDPipelineCancellationTests {
                 url.lastPathComponent.hasSuffix(" - t03.mp4") ? 400 : 300
             }
         )
+        pipeline.eject = PipelineTestSupport.fakeEject
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
         let start = Date()

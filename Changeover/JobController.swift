@@ -400,8 +400,11 @@ final class JobController {
     }
 
     /// The production ejector: the real `DiskArbitration` unmount + eject.
+    /// #0050: routed through `DiscEjector.defaultEject`, which refuses on
+    /// its own under a test host, so a `JobController` built without an
+    /// injected `ejector:` in a test never reaches real `DiskArbitration`.
     static let defaultEjector: Ejector = { volumeURL in
-        await DiscEjector.eject(volumeURL: volumeURL)
+        await DiscEjector.defaultEject(volumeURL: volumeURL)
     }
 
     // MARK: - Status
