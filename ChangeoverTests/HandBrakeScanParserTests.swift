@@ -99,6 +99,20 @@ struct HandBrakeScanParserTests {
         #expect(spanish.variant == "Wide Screen")
     }
 
+    /// #0033: HandBrake writes `LanguageCode: "und"` verbatim for an
+    /// untagged stream (title 4's CC608 track). `DiscStream.languageCode`'s
+    /// contract is `nil` for untagged, never the string `"und"` — the
+    /// parser must normalize it on the subtitle side.
+    @Test func untaggedSubtitleLanguageCodeUndNormalizesToNil() throws {
+        let output = try Self.parseFixture()
+        let title4 = try #require(output.disc.titles.first { $0.index == 4 })
+        let cc608 = try #require(title4.streams.first { $0.kind == .subtitle })
+
+        #expect(cc608.codecId == "CC608")
+        #expect(cc608.languageCode == nil)
+        #expect(cc608.isTextSubtitle)
+    }
+
     // MARK: - Noise tolerance
 
     /// The real capture's shape: Version + Progress blocks and libdvdnav

@@ -184,7 +184,9 @@ nonisolated struct DiscStream: Codable, Hashable, Sendable, Identifiable {
     /// identifies it (#0027).
     var isCommentary: Bool { flags != 0 && !isForced }
     /// MakeMKV converts this to text; MP4 can carry it. See #0029.
-    var isTextSubtitle: Bool { codecId.hasPrefix("S_CC608") }
+    /// MakeMKV reports `"S_CC608/DVD"`; HandBrake's `SourceName` is the bare
+    /// `"CC608"` with no `S_` prefix — match both (#0033).
+    var isTextSubtitle: Bool { codecId.hasPrefix("S_CC608") || codecId.hasPrefix("CC608") }
 
     private enum CodingKeys: String, CodingKey {
         case index, kind, codecId, codecShort, languageCode, languageName

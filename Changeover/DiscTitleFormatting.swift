@@ -26,9 +26,14 @@ nonisolated enum DiscTitleFormatting {
     /// A single untagged stream among tagged siblings likewise contributes
     /// nothing to the parenthetical, since `orderedUniqueLanguages` only
     /// collects streams that actually carry a code.
+    ///
+    /// The subtitle count is the number of `SubtitleGrouping.groups(for:)`
+    /// groups, not the raw stream count (#0033's #0026 handoff) — a raw
+    /// count double-counts HandBrake's per-aspect-ratio variant pairs, e.g.
+    /// Fargo's twelve VOBSUB substreams for six logical subtitle tracks.
     static func streamSummary(for title: DiscTitle) -> String {
         let audio = title.streams.filter { $0.kind == .audio }
-        let subtitles = title.streams.filter { $0.kind == .subtitle }
+        let subtitleGroups = SubtitleGrouping.groups(for: title)
 
         var parts: [String] = []
         if !audio.isEmpty {
@@ -36,8 +41,8 @@ nonisolated enum DiscTitleFormatting {
             let suffix = languages.isEmpty ? "" : " (\(languages.joined(separator: ", ")))"
             parts.append("\(audio.count) audio\(suffix)")
         }
-        if !subtitles.isEmpty {
-            parts.append("\(subtitles.count) sub\(subtitles.count == 1 ? "" : "s")")
+        if !subtitleGroups.isEmpty {
+            parts.append("\(subtitleGroups.count) sub\(subtitleGroups.count == 1 ? "" : "s")")
         }
         return parts.isEmpty ? "no audio or subtitle streams" : parts.joined(separator: " · ")
     }

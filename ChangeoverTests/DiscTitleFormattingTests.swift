@@ -93,6 +93,23 @@ struct DiscTitleFormattingTests {
         #expect(DiscTitleFormatting.streamSummary(for: title) == "no audio or subtitle streams")
     }
 
+    /// #0033's #0026 handoff: the summary's subtitle count uses
+    /// `SubtitleGrouping.groups(for:)`, so a Wide Screen/Letterbox variant
+    /// pair (HandBrake reports these as two separate streams) reads as one
+    /// logical subtitle track, not two.
+    @Test func summaryCollapsesSubtitleVariantPairsViaSubtitleGrouping() {
+        let title = DiscTitle(index: 1, durationSeconds: 6000, chapterCount: 10, sizeBytes: 0,
+                              outputFileName: nil,
+                              streams: [
+                                stream(1, kind: .audio, languageCode: "eng"),
+                                DiscStream(index: 2, kind: .subtitle, codecId: "VOBSUB",
+                                           languageCode: "eng", variant: "Wide Screen"),
+                                DiscStream(index: 3, kind: .subtitle, codecId: "VOBSUB",
+                                           languageCode: "eng", variant: "Letterbox"),
+                              ])
+        #expect(DiscTitleFormatting.streamSummary(for: title) == "1 audio (eng) · 1 sub")
+    }
+
     @Test func summaryIgnoresVideoStreamsEntirely() {
         let title = DiscTitle(index: 1, durationSeconds: 6000, chapterCount: 10, sizeBytes: 0,
                               outputFileName: nil,

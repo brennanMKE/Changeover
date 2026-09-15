@@ -150,4 +150,11 @@ struct DiscInfoTests {
         #expect(DiscStream(index: 0, kind: .subtitle, codecId: "S_CC608/DVD").isTextSubtitle)
         #expect(!DiscStream(index: 0, kind: .subtitle, codecId: "S_VOBSUB").isTextSubtitle)
     }
+
+    /// #0033: HandBrake's `SourceName` for this codec is the bare `"CC608"`,
+    /// with no `S_` prefix — matching only `"S_CC608"` (MakeMKV's shape)
+    /// would make every HandBrake-scanned CC608 stream read as non-text.
+    @Test func textSubtitleAlsoMatchesHandBrakesUnprefixedCC608() {
+        #expect(DiscStream(index: 0, kind: .subtitle, codecId: "CC608").isTextSubtitle)
+    }
 }
