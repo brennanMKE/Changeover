@@ -39,14 +39,19 @@ protocol SleepAssertion: AnyObject {
 ///
 /// Option choices, each deliberate:
 /// - `.idleSystemSleepDisabled` is the actual requirement — prevents idle
-///   *system* sleep only.
+///   *system* sleep only (`PreventUserIdleSystemSleep` in
+///   `pmset -g assertions`). `.userInitiated` already contains it
+///   (`NSActivityUserInitiated = 0x00FFFFFF | NSActivityIdleSystemSleepDisabled`
+///   in `NSProcessInfo.h`); it is spelled out so the requirement survives
+///   anyone swapping `.userInitiated` for `.userInitiatedAllowingIdleSystemSleep`.
 /// - `.userInitiated` marks the work as user-initiated so App Nap doesn't
 ///   throttle this background menu-bar app (`LSUIElement = YES`, no visible
-///   window) into reading its `HandBrakeCLI` pipe more slowly.
-/// - Deliberately **not** `.idleDisplaySleepDisabled` — keeping a display
-///   awake for a headless rip on a Mac mini is pure waste.
-/// - Deliberately **not** `.automaticTerminationDisabled` — irrelevant; a
-///   status-item app isn't automatically terminable.
+///   window) into reading its `HandBrakeCLI` pipe more slowly. Its low 24 bits
+///   also disable sudden and automatic termination for the job's duration,
+///   which is harmless for an app with a running encode.
+/// - Deliberately **not** `.idleDisplaySleepDisabled` (bit 40, outside
+///   `.userInitiated`) — keeping a display awake for a headless rip on a Mac
+///   mini is pure waste.
 ///
 /// `beginActivity` returns a token whose *lifetime* is the assertion —
 /// storing it in a local that goes out of scope ends the assertion
