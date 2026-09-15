@@ -64,6 +64,12 @@ final class JobController {
         _ log: @escaping @MainActor (String) -> Void
     ) async -> DiscScanner.Outcome
 
+    /// #0045 — the manual Eject seam, mirroring `Runner`/`ScanRunner`: tests
+    /// drive `ejectDisc()` with a fake instead of real `DiskArbitration`/
+    /// `diskutil`. Takes the same volume `URL` `DiscEjector.eject(volumeURL:)`
+    /// does.
+    typealias Ejector = @MainActor (URL) async -> DiscEjector.Outcome
+
     /// Default cap on retained log lines. The log now outlives the window, so
     /// unbounded growth is a real leak rather than something the next view
     /// teardown cleans up.
@@ -141,6 +147,9 @@ final class JobController {
     /// released in `finish`, the only exit from that `Task` — see
     /// `PowerAssertion.swift`.
     private let sleepAssertion: SleepAssertion
+    /// #0045 — the manual Eject seam. Defaults to the real `DiscEjector`;
+    /// tests inject a fake so no run ever touches `DiskArbitration`.
+    private let ejector: Ejector
     private var task: Task<Void, Never>?
     /// Bumped by every `startScan`/`removeDisc`, so only the most recent
     /// scan's outcome is ever applied — even a second scan of the *same*
@@ -153,12 +162,14 @@ final class JobController {
         maxLogLines: Int = JobController.defaultMaxLogLines,
         runner: Runner? = nil,
         scanRunner: ScanRunner? = nil,
-        sleepAssertion: SleepAssertion = ProcessInfoSleepAssertion()
+        sleepAssertion: SleepAssertion = ProcessInfoSleepAssertion(),
+        ejector: Ejector? = nil
     ) {
         self.maxLogLines = max(1, maxLogLines)
         self.runner = runner ?? JobController.pipelineRunner
         self.scanRunner = scanRunner ?? JobController.defaultScanRunner
         self.sleepAssertion = sleepAssertion
+        self.ejector = ejector ?? JobController.defaultEjector
     }
 
     /// The production runner: the real encode → move pipeline.
@@ -175,6 +186,11 @@ final class JobController {
             driveName: driveName,
             log: log
         )
+    }
+
+    /// The production ejector: the real `DiskArbitration` unmount + eject.
+    static let defaultEjector: Ejector = { volumeURL in
+        await DiscEjector.eject(volumeURL: volumeURL)
     }
 
     // MARK: - Status
@@ -294,6 +310,50 @@ final class JobController {
             await JobNotifier.notify(metadata: request.metadata, outcome: outcome, jobID: jobID)
         }
         return true
+    }
+
+    // MARK: - Manual eject (#0045)
+
+    /// The status menu's "Eject Disc" row. Refuses with a logged reason when
+    /// no disc is mounted or a job is running (`EjectPolicy` — there is no
+    /// real cancel yet, #0046, so a running job is never disturbed by this).
+    ///
+    /// On success, `DiscEjector.eject` unmounts the volume, which fires
+    /// `DVDMonitor.onDVDRemoved` → `AppDelegate` → `removeDisc()`, exactly
+    /// the same path any other eject already takes (#0005). This method does
+    /// not clear `insertedDisc`/`scanState` itself — that would race the real
+    /// removal notification and could double-clear or clear the wrong disc if
+    /// a new one were already inserted by the time this call returns.
+    ///
+    /// - Returns: `true` only on a confirmed eject. `false` on refusal
+    ///   (nothing mounted, or a job running) or a reported failure (the disc
+    ///   is busy, or the eject otherwise failed) — every case is logged, so a
+    ///   failed eject is never silent.
+    @discardableResult
+    func ejectDisc() async -> Bool {
+        switch EjectPolicy.decide(isRunning: isRunning, hasDisc: insertedDisc != nil) {
+        case .refuse(let reason):
+            append("⚠︎ \(reason)")
+            return false
+        case .eject:
+            break
+        }
+
+        // `EjectPolicy` already confirmed a disc is mounted; this `guard` is
+        // just how Swift extracts it, not a second decision.
+        guard let disc = insertedDisc else { return false }
+
+        switch await ejector(disc.mountURL) {
+        case .ejected:
+            append("Disc ejected.")
+            return true
+        case .busy(let message):
+            append("⚠︎ \(message)")
+            return false
+        case .failed(let message):
+            append("⚠︎ \(message)")
+            return false
+        }
     }
 
     // MARK: - Disc scan (#0026)

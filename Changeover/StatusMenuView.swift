@@ -39,6 +39,16 @@ struct StatusMenuView: View {
             }
             .disabled(!settings.isConfigured)
 
+            // #0045: refuses (disabled + a no-op tap) with no disc mounted or
+            // while a job is running — `EjectPolicy` is the single source of
+            // truth `JobController.ejectDisc()` re-checks before acting, so
+            // this button can never race a state change between render and
+            // tap.
+            MenuRow("Eject Disc", systemImage: "eject") {
+                Task { await jobs.ejectDisc() }
+            }
+            .disabled(!EjectPolicy.canEjectManually(isRunning: jobs.isRunning, hasDisc: jobs.insertedDisc != nil))
+
             MenuRow("Settings…", systemImage: "gearshape") {
                 guard let appDelegate = AppDelegate.shared else {
                     print("Warning: AppDelegate.shared is not defined")
