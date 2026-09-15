@@ -133,8 +133,12 @@ nonisolated enum DiscEjector {
         switch ejectOutcome {
         case .ejected:
             return .ejected
-        case .busy(let message), .failed(let message), .unmountedButNotEjected(let message):
-            return .unmountedButNotEjected(message: message)
+        case .busy(let message), .failed(let message):
+            // #0049 review: say what state the disc is in, not only that
+            // the eject step failed.
+            return .unmountedButNotEjected(message: "The disc was unmounted but not ejected — it's still in the drive. \(message)")
+        case .unmountedButNotEjected:
+            return ejectOutcome
         }
     }
 

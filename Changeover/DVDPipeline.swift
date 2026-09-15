@@ -102,6 +102,15 @@ struct DVDPipeline {
     /// `JobOutcome` this method returns, through `JobState.finishing(with:)`.
     var reportPhase: @MainActor (JobPhase) -> Void = { _ in }
 
+    /// #0049 review — the end-of-job eject (#0005). Production passes
+    /// `JobContext.eject`, which goes through `JobController`'s ejector seam
+    /// and applies a partial eject to controller state. Defaulted to the real
+    /// `DiscEjector` so every existing construction site compiles unchanged;
+    /// a test injects a fake.
+    var eject: @MainActor (URL) async -> DiscEjector.Outcome = { volumeURL in
+        await DiscEjector.eject(volumeURL: volumeURL)
+    }
+
     // MARK: - Run
 
     func run() async -> JobOutcome {
@@ -804,7 +813,7 @@ struct DVDPipeline {
         // reported but never turns this successful job into a failed one:
         // the movie is already in Plex, so `outcome` stays `.succeeded`
         // regardless of what `DiscEjector` reports.
-        switch await DiscEjector.eject(volumeURL: disc) {
+        switch await eject(disc) {
         case .ejected:
             log("✓ Disc ejected — safe to insert the next one")
         case .busy(let message):
@@ -814,11 +823,10 @@ struct DVDPipeline {
         case .unmountedButNotEjected(let message):
             // #0049: the disc unmounted but the tray didn't open — it's
             // still physically in the drive on a path that no longer
-            // resolves. `JobController` has no way to hear about this from
-            // inside the pipeline, so this stays a log-only surface here;
-            // a manual Eject retry (or physically pulling the disc) is what
-            // actually clears it on the controller side.
-            log("⚠︎ Disc unmounted but not ejected — it's still in the drive: \(message)")
+            // resolves. In production `eject` is `JobContext.eject`, which
+            // has already marked the disc unavailable on the controller;
+            // the job itself still succeeds.
+            log("⚠︎ \(message)")
         }
 
         log("── Done. Scan your Plex Movies library to pick up the new title.")

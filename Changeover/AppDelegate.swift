@@ -113,6 +113,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         dvdMonitor?.onDVDRemoved = { [weak self] in
             self?.jobs.removeDisc()
         }
+        // #0049 review: a disc left unmounted by a partial eject and then
+        // remounted in place never disappears, so it needs its own path to
+        // clear `discUnavailable`.
+        dvdMonitor?.onDVDRemounted = { [weak self] insertion in
+            self?.jobs.discRemounted(insertion)
+        }
     }
 
     // MARK: - Metadata window

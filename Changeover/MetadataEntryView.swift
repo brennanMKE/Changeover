@@ -302,6 +302,10 @@ struct MetadataEntryView: View {
                 runtimeLookup:       vm.runtimeLookup,
                 mismatchAcknowledgement: jobs.mismatchAcknowledgement
             ))
+            // #0049 review: name the reason, as the Rescan button does.
+            .help(jobs.discUnavailable
+                ? "The disc was unmounted but could not be ejected — retry Eject or remove the disc before starting."
+                : "Encode the selected title into the Plex library.")
             .buttonStyle(.borderedProminent)
         }
         .padding()

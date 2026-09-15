@@ -89,15 +89,17 @@ struct DiscEjectorTests {
     @Test func anUnmountSucceededButEjectFailedIsUnmountedButNotEjected() {
         let outcome = DiscEjector.combine(
             unmountOutcome: .ejected,
-            ejectOutcome: .failed(message: "tray jammed"))
-        #expect(outcome == .unmountedButNotEjected(message: "tray jammed"))
+            ejectOutcome: .failed(message: "Could not eject the disc: tray jammed."))
+        #expect(outcome == .unmountedButNotEjected(message:
+            "The disc was unmounted but not ejected — it's still in the drive. Could not eject the disc: tray jammed."))
     }
 
     @Test func anUnmountSucceededButEjectBusyIsUnmountedButNotEjected() {
         let outcome = DiscEjector.combine(
             unmountOutcome: .ejected,
-            ejectOutcome: .busy(message: "drive busy"))
-        #expect(outcome == .unmountedButNotEjected(message: "drive busy"))
+            ejectOutcome: .busy(message: "Could not eject the disc — it's still in use: drive busy."))
+        #expect(outcome == .unmountedButNotEjected(message:
+            "The disc was unmounted but not ejected — it's still in the drive. Could not eject the disc — it's still in use: drive busy."))
     }
 }
 

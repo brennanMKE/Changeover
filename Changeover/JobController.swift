@@ -74,6 +74,12 @@ final class JobController {
         /// `.organizing`/`.extras` — validated by `Job.advance(to:)` before
         /// ever touching this job's `state`.
         let phase: @MainActor (JobPhase) -> Void
+        /// #0049 review — the #0005 automatic end-of-job eject. Bound by
+        /// `start` to the controller's own `ejector` seam, so the pipeline
+        /// ejects through the same fake a test injects, and the outcome
+        /// reaches controller state: a partial eject (unmounted, not
+        /// ejected) sets `discUnavailable` exactly as a manual one does.
+        let eject: @MainActor (URL) async -> DiscEjector.Outcome
     }
 
     /// The unit of work a job performs, injectable so tests can drive the
@@ -377,7 +383,8 @@ final class JobController {
             selection:   context.selection,
             extras:      context.extras,
             log:         context.log,
-            reportPhase: context.phase
+            reportPhase: context.phase,
+            eject:       context.eject
         ).run()
     }
 
@@ -539,7 +546,16 @@ final class JobController {
             selection: selection,
             extras: extrasPlan,
             log: { [job] line in job.log.append(line) },
-            phase: { [job] phase in job.advance(to: phase) }
+            phase: { [job] phase in job.advance(to: phase) },
+            // #0049 review: the automatic end-of-job eject goes through the
+            // same `ejector` seam as the manual one, and its outcome is
+            // applied to controller state — a partial eject here leaves the
+            // same dead mount path a manual one does.
+            eject: { [weak self, ejectVolume = ejector] url in
+                let outcome = await ejectVolume(url)
+                self?.applyAutomaticEject(outcome, volumeURL: url)
+                return outcome
+            }
         )
 
         let run = runner
@@ -626,6 +642,34 @@ final class JobController {
             append("⚠︎ \(message)")
             return false
         }
+    }
+
+    /// #0049 review — applies the #0005 automatic end-of-job eject's outcome
+    /// (reported through `JobContext.eject`). Only a partial eject changes
+    /// state; the pipeline already logged the outcome into the job's own
+    /// log. Matched on the mount URL so a stale report can never mark a
+    /// different disc unavailable.
+    private func applyAutomaticEject(_ outcome: DiscEjector.Outcome, volumeURL: URL) {
+        guard case .unmountedButNotEjected = outcome, insertedDisc?.mountURL == volumeURL else { return }
+        discUnavailable = true
+    }
+
+    /// #0049 review — `DVDMonitor.onDVDRemounted`: the tracked disc mounted
+    /// again with no disappearance in between (e.g. remounted by hand after
+    /// a partial eject). Clears `discUnavailable` when it's the same disc by
+    /// identity, taking the new mount path but keeping the insertion's
+    /// `insertionID`, so the movie selection bound to it survives. A no-op
+    /// otherwise — this also fires for ordinary description changes on a
+    /// disc that never went away.
+    func discRemounted(_ disc: DiscInsertion) {
+        guard discUnavailable, let current = insertedDisc, SelectionReset.sameDisc(current, disc) else { return }
+        if current.mountURL != disc.mountURL || current.deviceNode != disc.deviceNode {
+            var updated = DiscInsertion(mountURL: disc.mountURL, deviceNode: disc.deviceNode, discID: current.discID)
+            updated.insertionID = current.insertionID
+            insertedDisc = updated
+        }
+        discUnavailable = false
+        append("Disc remounted at \(disc.mountURL.path).")
     }
 
     // MARK: - Cancel (#0046)

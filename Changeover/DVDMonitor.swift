@@ -27,6 +27,10 @@ final class DVDMonitor {
     /// Fired when the currently-tracked disc's device disappears, so callers
     /// can clear state such as `JobController.insertedDisc`.
     var onDVDRemoved: (() -> Void)?
+    /// #0049 review — fired when the already-tracked disc (by identity)
+    /// mounts again with no disappearance in between, e.g. remounted by
+    /// hand after an eject that unmounted it but never opened the tray.
+    var onDVDRemounted: ((DiscInsertion) -> Void)?
 
     /// Bridges `self` into the C callbacks below without extending its
     /// lifetime — `DVDMonitor`'s lifetime stays plain ARC, governed by its
@@ -197,6 +201,16 @@ final class DVDMonitor {
 
         case .sameDiscRemounted:
             NSLog("DVDMonitor: same disc remounted (id: %@) — not re-firing", resolvedDiscID ?? "?")
+            // #0049 review: a disc that unmounted but never left the drive
+            // can come back without a disappearance (remounted by hand), so
+            // it never reaches `onDVDInserted`. Report it separately;
+            // `JobController.discRemounted` ignores it unless the disc was
+            // marked unavailable.
+            guard let mountURL else { return }
+            let insertion = DiscInsertion(mountURL: mountURL, deviceNode: deviceNode, discID: resolvedDiscID)
+            Task { @MainActor [weak self] in
+                self?.onDVDRemounted?(insertion)
+            }
 
         case .newDisc:
             guard let mountURL else { return }

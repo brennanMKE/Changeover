@@ -141,6 +141,50 @@ struct ExtrasPipelineTests {
         #expect(try Self.jobDirectories(under: URL(fileURLWithPath: settings.workingEncodePath)).isEmpty)
     }
 
+    // MARK: - #0049 review: the end-of-job eject goes through the injected seam
+
+    /// The #0005 automatic eject must use `eject` (in production,
+    /// `JobContext.eject`), never `DiscEjector` directly, or `JobController`
+    /// never hears about a partial eject. A partial result is logged and the
+    /// job still succeeds.
+    @Test func theEndOfJobEjectGoesThroughTheInjectedEjectorAndAPartialEjectIsLogged() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        let stub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0"])
+        settings.handbrakePath = stub
+
+        var logged: [String] = []
+        var ejected: [URL] = []
+        let disc = try Self.makeFakeDisc(in: root)
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     disc,
+            selection: EncodeSelection(title: .index(1), audio: .sourceDefault, fallbackAudio: .sourceDefault, filter: .none),
+            extras:   ExtrasPlan(items: Self.extraItems),
+            log:      { logged.append($0) },
+            measureDuration: Self.matchingExtrasMeasurer
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+        pipeline.eject = { url in
+            ejected.append(url)
+            return .unmountedButNotEjected(message: "The disc was unmounted but not ejected — it's still in the drive. tray jammed")
+        }
+
+        let outcome = await pipeline.run()
+
+        guard case .succeeded = outcome else {
+            Issue.record("expected success, got \(outcome)")
+            return
+        }
+        #expect(ejected == [disc])
+        #expect(logged.contains("⚠︎ The disc was unmounted but not ejected — it's still in the drive. tray jammed"))
+    }
+
     // MARK: - One extra's encode fails: the job still succeeds, the partial is removed
 
     @Test func oneFailedExtraStillSucceedsTheJobAndRemovesThePartial() async throws {

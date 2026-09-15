@@ -480,4 +480,112 @@ struct JobControllerEjectTests {
 
         #expect(decision == .eject)
     }
+
+    // MARK: - #0049 review: automatic eject and remount
+
+    /// The #0005 automatic end-of-job eject is the most common eject path.
+    /// A partial result there, reported through `JobContext.eject` the way
+    /// `DVDPipeline.run()` reports it, must mark the disc unavailable just
+    /// like a manual one: Start and Rescan refused afterwards.
+    @Test func anAutomaticEndOfJobPartialEjectMarksTheDiscUnavailable() async throws {
+        let ejector = FakeEjector()
+        ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
+        let scans = ScanCounter()
+        var runs = 0
+        let controller = JobController(
+            runner: { context, _ in
+                runs += 1
+                _ = await context.eject(context.disc)
+                return fakeSuccess(context, destination: Self.destination)
+            },
+            scanRunner: { _, _, _, _, _ in
+                scans.calls += 1
+                return .failure(.jsonMissing)
+            },
+            ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+        let request = Self.request(try Self.metadata())
+
+        #expect(controller.start(request: request, settings: AppSettings()))
+        var spins = 0
+        while controller.isRunning && spins < 100_000 {
+            await Task.yield()
+            spins += 1
+        }
+        #expect(controller.isRunning == false)
+        #expect(ejector.calls == [Self.testDisc.mountURL])
+        #expect(controller.discUnavailable == true)
+        #expect(controller.insertedDisc == Self.testDisc)
+
+        #expect(controller.start(request: request, settings: AppSettings()) == false)
+        #expect(controller.logLines.contains(
+            "⚠︎ The disc was unmounted but could not be ejected — retry Eject or remove the disc before starting."))
+        #expect(controller.startScan(settings: AppSettings()) == false)
+        #expect(runs == 1)
+        #expect(scans.calls == 0)
+    }
+
+    /// A successful automatic eject leaves `discUnavailable` alone.
+    @Test func anAutomaticEndOfJobSuccessfulEjectLeavesTheDiscAvailable() async throws {
+        let ejector = FakeEjector()
+        ejector.outcome = .ejected
+        let controller = JobController(
+            runner: { context, _ in
+                _ = await context.eject(context.disc)
+                return fakeSuccess(context, destination: Self.destination)
+            },
+            ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+
+        #expect(controller.start(request: Self.request(try Self.metadata()), settings: AppSettings()))
+        var spins = 0
+        while controller.isRunning && spins < 100_000 {
+            await Task.yield()
+            spins += 1
+        }
+        #expect(ejector.calls == [Self.testDisc.mountURL])
+        #expect(controller.discUnavailable == false)
+    }
+
+    /// The same disc remounted in place (no disappearance, so no
+    /// `insertDisc`) clears `discUnavailable`, takes the new mount path and
+    /// keeps the insertion's id so the movie selection still matches.
+    @Test func aRemountOfTheSameDiscClearsDiscUnavailable() async {
+        let ejector = FakeEjector()
+        ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
+        let controller = JobController(ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+        _ = await controller.ejectDisc()
+        #expect(controller.discUnavailable == true)
+
+        let remounted = DiscInsertion(
+            mountURL: URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9 1"),
+            deviceNode: "disk6",
+            discID: Self.testDisc.discID)
+        controller.discRemounted(remounted)
+
+        #expect(controller.discUnavailable == false)
+        #expect(controller.insertedDisc?.mountURL == remounted.mountURL)
+        #expect(controller.insertedDisc?.insertionID == Self.testDisc.insertionID)
+    }
+
+    /// A different disc's mount event never clears it, and a remount event
+    /// while the disc is available changes nothing.
+    @Test func aRemountOfADifferentDiscOrAnAvailableDiscChangesNothing() async {
+        let ejector = FakeEjector()
+        let controller = JobController(ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+
+        let samePath = DiscInsertion(mountURL: URL(fileURLWithPath: "/Volumes/OTHER"), deviceNode: "disk6", discID: Self.testDisc.discID)
+        controller.discRemounted(samePath)
+        #expect(controller.insertedDisc == Self.testDisc)
+
+        ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
+        _ = await controller.ejectDisc()
+        #expect(controller.discUnavailable == true)
+
+        controller.discRemounted(DiscInsertion(mountURL: URL(fileURLWithPath: "/Volumes/OTHER"), deviceNode: "disk7", discID: "some-other-disc"))
+        #expect(controller.discUnavailable == true)
+        #expect(controller.insertedDisc == Self.testDisc)
+    }
 }
