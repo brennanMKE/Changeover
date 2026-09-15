@@ -2,5 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Changeover uses your local network so Macs, iPhones and iPads in your home can see the disc, choose what to rip, and watch progress.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_changeover._tcp</string>
+	</array>
 </dict>
 </plist>
