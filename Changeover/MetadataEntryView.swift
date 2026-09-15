@@ -9,7 +9,6 @@ struct MetadataEntryView: View {
     /// `@State`-owned. Only job state was hoisted.
     @State private var vm = MovieSearchViewModel()
     @State private var selectedID: Int?
-    @State private var searchTask: Task<Void, Never>?
     /// The disc `selectedID`/`vm.selectedMovie` were chosen for — #0034. Set
     /// alongside the selection (or bound to the first disc inserted after a
     /// selection made with no disc in the drive), `nil` while nothing is
@@ -39,6 +38,18 @@ struct MetadataEntryView: View {
         }
         .onChange(of: jobs.insertedDisc) { reconcileSelection() }
         .onChange(of: jobs.isRunning) { reconcileSelection() }
+        // #0030: debounced as-you-type search. `selectedID` is cleared here
+        // too — the handoff bug this issue also fixes: without it, a new
+        // search leaves `selectedID` pointing at the previous results' row,
+        // so re-picking the same id in the new results never changes
+        // `selectedID` and `.onChange(of: selectedID)` above never fires,
+        // leaving `vm.selectedMovie`/`runtimeLookup` stuck at whatever
+        // `vm.search` reset them to and `Start Ripping` permanently
+        // disabled.
+        .onChange(of: vm.query) { _, _ in
+            selectedID = nil
+            vm.queryChanged(apiKey: settings.tmdbAPIKey)
+        }
     }
 
     /// #0034: applies `SelectionReset.reconcile`. Runs from `onChange`
@@ -255,9 +266,13 @@ struct MetadataEntryView: View {
 
     // MARK: - Actions
 
+    /// Return / the `Search` button: the zero-delay path. Same `selectedID`
+    /// clear as the debounced path (see the `.onChange(of: vm.query)`
+    /// comment above) — re-running the same query with Return must also let
+    /// a re-pick of the same movie retrigger the runtime lookup.
     private func runSearch() {
-        searchTask?.cancel()
-        searchTask = Task { await vm.search(apiKey: settings.tmdbAPIKey) }
+        selectedID = nil
+        vm.runSearchNow(apiKey: settings.tmdbAPIKey)
     }
 
     private func startRipping() {
