@@ -97,10 +97,30 @@ final class JobController {
             return false
         }
 
-        guard let disc = insertedDisc?.mountURL else {
+        guard let currentDisc = insertedDisc else {
             append("⚠︎ No disc is mounted — insert a DVD before starting.")
             return false
         }
+
+        // #0034 defence in depth: if `metadata` was chosen for a disc other
+        // than the one actually in the drive, refuse — this is the failsafe
+        // for the data-loss bug (a stale selection filing the new disc under
+        // the previous movie's name and overwriting it in Plex), in case the
+        // UI-level reset in `MetadataEntryView` didn't run. `metadata`
+        // carrying no `selectionDisc` at all skips the check (back-compat
+        // for call sites/tests that predate #0034); once it does carry one,
+        // `sameDisc` requires a *known, matching* identity on both sides — an
+        // unresolvable identity is treated as a mismatch, same conservative
+        // stance `OpticalDiscClassifier` takes elsewhere ("unprovable is not
+        // proof of same"), so this failsafe never waves through a start it
+        // can't actually vouch for.
+        if let selectionDisc = metadata.selectionDisc,
+           !SelectionReset.sameDisc(selectionDisc, currentDisc) {
+            append("⚠︎ \(metadata.title) was selected for a different disc — insert that disc again, or choose a movie for the disc that's in the drive now.")
+            return false
+        }
+
+        let disc = currentDisc.mountURL
 
         isRunning = true
         currentMetadata = metadata

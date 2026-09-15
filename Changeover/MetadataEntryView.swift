@@ -10,6 +10,12 @@ struct MetadataEntryView: View {
     @State private var vm = MovieSearchViewModel()
     @State private var selectedID: Int?
     @State private var searchTask: Task<Void, Never>?
+    /// The disc `selectedID`/`vm.selectedMovie` were chosen for — #0034. Set
+    /// alongside the selection, `nil` while nothing is selected. Compared
+    /// against `jobs.insertedDisc` on every insertion so a *different* disc
+    /// clears a stale selection instead of letting Start file the new disc
+    /// under the previous movie's name (see `SelectionReset`).
+    @State private var selectionDisc: DiscInsertion?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,6 +32,15 @@ struct MetadataEntryView: View {
         .frame(width: 480)
         .onChange(of: selectedID) { _, id in
             vm.select(movieID: id, apiKey: settings.tmdbAPIKey)
+            selectionDisc = id != nil ? jobs.insertedDisc : nil
+        }
+        .onChange(of: jobs.insertedDisc) { _, newDisc in
+            guard SelectionReset.shouldReset(previousDisc: selectionDisc, newDisc: newDisc, isRunning: jobs.isRunning) else {
+                return
+            }
+            vm.resetForNewDisc()
+            selectedID = nil
+            selectionDisc = nil
         }
     }
 
@@ -208,7 +223,7 @@ struct MetadataEntryView: View {
 
     private func startRipping() {
         guard let movie = vm.selectedMovie else { return }
-        jobs.start(metadata: MovieMetadata(from: movie), settings: settings)
+        jobs.start(metadata: MovieMetadata(from: movie, selectionDisc: selectionDisc), settings: settings)
     }
 }
 

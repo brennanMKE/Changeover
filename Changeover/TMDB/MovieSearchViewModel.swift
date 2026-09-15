@@ -95,6 +95,22 @@ final class MovieSearchViewModel {
         }
     }
 
+    // MARK: - Reset on disc swap (#0034)
+
+    /// Clears everything tied to the previous disc's search — query, results,
+    /// error — plus, via `select(movieID: nil, apiKey:)`, the selection and
+    /// its runtime lookup. Kept as one call so the reset is atomic: a caller
+    /// can never observe `selectedMovie` cleared while `runtimeLookup` still
+    /// reports the old movie's state, or vice versa. `apiKey` isn't actually
+    /// used on the `movieID == nil` path `select` takes, so callers don't
+    /// need one on hand just to reset.
+    func resetForNewDisc() {
+        select(movieID: nil, apiKey: "")
+        query = ""
+        results = []
+        errorMessage = nil
+    }
+
     // MARK: - Poster URL
 
     func posterURL(for movie: TMDBMovie, size: String = "w185") -> URL? {

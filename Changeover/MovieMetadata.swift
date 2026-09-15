@@ -6,11 +6,18 @@ struct MovieMetadata {
     let title:  String
     let year:   String
     let tmdbID: String
+    /// The disc identity this selection was made for, when the caller has
+    /// one to attach — #0034. `JobController.start` compares this against
+    /// the disc actually in the drive as a defence-in-depth check, backing
+    /// up `MetadataEntryView`'s own reset-on-disc-swap. `nil` skips the
+    /// check (e.g. existing call sites/tests that predate #0034).
+    let selectionDisc: DiscInsertion?
 
-    init(from movie: TMDBMovie) {
+    init(from movie: TMDBMovie, selectionDisc: DiscInsertion? = nil) {
         self.title  = movie.title
         self.year   = movie.yearText
         self.tmdbID = String(movie.id)
+        self.selectionDisc = selectionDisc
     }
 
     /// Plex folder name, e.g. "Blade Runner (1982) {tmdb-78}"

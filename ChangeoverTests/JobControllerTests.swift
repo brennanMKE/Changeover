@@ -25,6 +25,20 @@ struct JobControllerTests {
         return MovieMetadata(from: try JSONDecoder().decode(TMDBMovie.self, from: json))
     }
 
+    /// Raw decode, for tests that need a `TMDBMovie` to build their own
+    /// `MovieMetadata` (e.g. attaching a `selectionDisc`) rather than the
+    /// one `metadata()` above produces.
+    private static func decodeMovie(
+        id: Int = 78,
+        title: String = "Blade Runner",
+        releaseDate: String = "1982-06-25"
+    ) throws -> TMDBMovie {
+        let json = """
+        {"id": \(id), "title": "\(title)", "release_date": "\(releaseDate)", "poster_path": null}
+        """.data(using: .utf8)!
+        return try JSONDecoder().decode(TMDBMovie.self, from: json)
+    }
+
     private static let destination = URL(fileURLWithPath:
         "/Volumes/Plex/Movies/Blade Runner (1982) {tmdb-78}/Blade Runner (1982).mp4")
 
@@ -326,6 +340,68 @@ struct JobControllerTests {
         #expect(controller.isRunning == false)
         #expect(runs.count == 0)
         #expect(controller.logLines.contains { $0.contains("No disc is mounted") })
+    }
+
+    // MARK: - Selection/disc mismatch guard (#0034)
+
+    /// The failsafe half of #0034: even if the UI-level reset in
+    /// `MetadataEntryView` somehow didn't run, `start` itself refuses
+    /// metadata selected for a disc other than the one actually mounted —
+    /// this is what stops a stale selection from filing the new disc under
+    /// the previous movie's name and overwriting it in Plex (#0012).
+    @Test func startRefusesMetadataSelectedForADifferentDisc() async throws {
+        let runs = RunLog()
+        let controller = JobController(runner: { metadata, _, _, _ in
+            runs.record(metadata)
+            return .succeeded(destination: Self.destination)
+        })
+        controller.insertedDisc = Self.testDisc
+
+        let otherDisc = DiscInsertion(
+            mountURL: URL(fileURLWithPath: "/Volumes/OTHER_DISC"),
+            deviceNode: "disk9",
+            discID: "a-different-disc-id")
+        let movie = try Self.decodeMovie()
+        let staleMetadata = MovieMetadata(from: movie, selectionDisc: otherDisc)
+
+        #expect(controller.start(metadata: staleMetadata, settings: AppSettings()) == false)
+        #expect(controller.isRunning == false)
+        #expect(runs.starts.isEmpty)
+        #expect(controller.logLines.contains { $0.contains("different disc") })
+    }
+
+    /// Reinserting the *same* disc (by identity) is a convenience, not a
+    /// mismatch — mount path/device node can legitimately differ across a
+    /// remount, so the guard must key off `discID` alone, same as
+    /// `SelectionReset.sameDisc`.
+    @Test func startAcceptsMetadataSelectedForTheSameDiscByIdentity() async throws {
+        let controller = JobController(runner: { _, _, _, _ in
+            .succeeded(destination: Self.destination)
+        })
+        controller.insertedDisc = Self.testDisc
+
+        let sameDiscReinserted = DiscInsertion(
+            mountURL: Self.testDisc.mountURL,
+            deviceNode: "disk9",
+            discID: Self.testDisc.discID)
+        let movie = try Self.decodeMovie()
+        let metadata = MovieMetadata(from: movie, selectionDisc: sameDiscReinserted)
+
+        #expect(controller.start(metadata: metadata, settings: AppSettings()) == true)
+        try await waitUntilIdle(controller)
+    }
+
+    /// Back-compat: `MovieMetadata` built with no `selectionDisc` at all
+    /// (every other test in this file, and any call site that predates
+    /// #0034) must not retroactively start being refused.
+    @Test func startAcceptsMetadataWithNoSelectionDiscAttached() async throws {
+        let controller = JobController(runner: { _, _, _, _ in
+            .succeeded(destination: Self.destination)
+        })
+        controller.insertedDisc = Self.testDisc
+
+        #expect(controller.start(metadata: try Self.metadata(), settings: AppSettings()) == true)
+        try await waitUntilIdle(controller)
     }
 }
 
