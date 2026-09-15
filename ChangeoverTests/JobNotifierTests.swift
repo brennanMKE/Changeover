@@ -99,6 +99,49 @@ struct JobNotifierTests {
         #expect(!body.contains("HandBrakeCLI"))
     }
 
+    /// #0052 — a disc-removal cancel is presented distinctly from a plain
+    /// user cancel: the notification must say the disc was removed, not
+    /// that it was unreadable or that HandBrake timed out (the two failure
+    /// shapes a pulled disc used to produce before this ticket).
+    @Test func discRemovedCancelMessageSaysDiscRemovedNotCancelled() throws {
+        let failure = JobFailure(stage: .encode, reason: .cancelled)
+        let (title, body) = JobNotifier.message(
+            for: try Self.metadata(),
+            outcome: .failed(failure),
+            discRemovedDuringJob: true
+        )
+
+        #expect(title.contains("disc removed"))
+        #expect(!title.contains("was cancelled"))
+        #expect(body.contains("The disc was removed"))
+        #expect(body.contains("Nothing new was filed in Plex"))
+        #expect(!body.contains("HandBrakeCLI"))
+        #expect(!body.contains("unreadable"))
+        #expect(!body.contains("timed out"))
+    }
+
+    /// The default (`discRemovedDuringJob` omitted) is the ordinary
+    /// plain-cancel message — a regression guard so the new parameter never
+    /// changes behaviour for a real user cancel.
+    @Test func plainCancelMessageIsUnaffectedByTheNewParametersDefault() throws {
+        let failure = JobFailure(stage: .encode, reason: .cancelled)
+        let (title, body) = JobNotifier.message(for: try Self.metadata(), outcome: .failed(failure))
+
+        #expect(title == "Blade Runner (1982) was cancelled")
+        #expect(body.contains("Nothing new was filed in Plex"))
+    }
+
+    /// A non-cancelled failure is unaffected by `discRemovedDuringJob` —
+    /// the override only ever applies to the `.cancelled` reason.
+    @Test func discRemovedDuringJobDoesNothingToANonCancelledFailure() throws {
+        let failure = JobFailure(stage: .encode, reason: .discUnreadable)
+        let withFlag = JobNotifier.message(for: try Self.metadata(), outcome: .failed(failure), discRemovedDuringJob: true)
+        let without = JobNotifier.message(for: try Self.metadata(), outcome: .failed(failure))
+
+        #expect(withFlag.title == without.title)
+        #expect(withFlag.body == without.body)
+    }
+
     /// The reason must never leak through as `String(describing:)` — a
     /// person, not a machine, reads this banner (#0009).
     @Test func failureMessageNeverUsesTheRawMachineReadableReason() throws {

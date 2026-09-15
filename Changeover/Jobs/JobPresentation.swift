@@ -40,7 +40,14 @@ nonisolated struct JobPresentation: Equatable, Sendable {
     ///   *requested* — passes it in. Ignored once `snapshot.state.phase` is
     ///   already terminal: the outcome the job actually settled into always
     ///   wins over a stale "cancelling" flag the caller forgot to clear.
-    nonisolated static func make(for snapshot: JobSnapshot, isCancelling: Bool = false) -> JobPresentation {
+    /// - Parameter discRemovedDuringJob: #0052's `Job.discRemovedDuringJob`
+    ///   — like `isCancelling`, not on `JobSnapshot` (host-only, and no new
+    ///   `FailureReason` case per the #0040 decision), so the caller, which
+    ///   holds the `Job` and not just its snapshot, passes it in. Only
+    ///   changes anything once the job actually settles `.cancelled`: a
+    ///   removal during `.organizing`/`.extras` still ends `.succeeded` and
+    ///   is shown exactly like any other success.
+    nonisolated static func make(for snapshot: JobSnapshot, isCancelling: Bool = false, discRemovedDuringJob: Bool = false) -> JobPresentation {
         if isCancelling, !snapshot.state.phase.isTerminal {
             return JobPresentation(label: "Cancelling…", tone: .warning, progress: .indeterminate, detail: [])
         }
@@ -65,9 +72,17 @@ nonisolated struct JobPresentation: Equatable, Sendable {
         case .failed:
             return JobPresentation(label: "Failed", tone: .failure, progress: .none, detail: failureDetail(snapshot))
         case .cancelled:
+            if discRemovedDuringJob {
+                return JobPresentation(label: "Disc removed", tone: .neutral, progress: .none, detail: [Self.discRemovedDetail])
+            }
             return JobPresentation(label: "Cancelled", tone: .neutral, progress: .none, detail: [])
         }
     }
+
+    /// #0052 — the one sentence shared by the history row's detail, so the
+    /// presentation and `JobNotifier`'s notification body never drift apart
+    /// in wording.
+    static let discRemovedDetail = "The disc was removed while the job was running."
 
     private static func progressMode(for progress: Double?) -> ProgressMode {
         guard let progress else { return .indeterminate }

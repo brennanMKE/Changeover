@@ -124,7 +124,7 @@ private struct JobHistoryRow: View {
     let isCancelling: Bool
 
     var body: some View {
-        let presentation = JobPresentation.make(for: job.snapshot, isCancelling: isCancelling)
+        let presentation = JobPresentation.make(for: job.snapshot, isCancelling: isCancelling, discRemovedDuringJob: job.discRemovedDuringJob)
         HStack(spacing: 8) {
             Circle()
                 .fill(presentation.tone.color)
@@ -153,7 +153,7 @@ private struct JobDetailView: View {
     let onRetry: () -> Void
 
     var body: some View {
-        let presentation = JobPresentation.make(for: job.snapshot, isCancelling: isCancelling)
+        let presentation = JobPresentation.make(for: job.snapshot, isCancelling: isCancelling, discRemovedDuringJob: job.discRemovedDuringJob)
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(job.metadata.baseName)

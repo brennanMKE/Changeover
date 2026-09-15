@@ -114,6 +114,18 @@ struct DVDPipeline {
         await DiscEjector.defaultEject(volumeURL: volumeURL)
     }
 
+    /// #0052 — whether the disc this job reads from was pulled from the
+    /// drive while this job was running. Defaulted to `{ false }` so every
+    /// existing construction site compiles unchanged; production passes
+    /// `JobContext.discRemoved`, bound to the job's own
+    /// `Job.discRemovedDuringJob`. Read once, inside `finish(_:)`, so every
+    /// terminal path — a disc-shaped failure classified before the removal
+    /// was noticed, a plain cancel, or even a success (removal during
+    /// `.organizing`/`.extras` doesn't change the outcome) — gets the same
+    /// `decision: "discRemoved"` override in the reliability record, never
+    /// counted as a disc read failure.
+    var discRemoved: @MainActor () -> Bool = { false }
+
     // MARK: - Run
 
     func run() async -> JobOutcome {
@@ -196,6 +208,15 @@ struct DVDPipeline {
                 log("⚠︎ Could not remove \(jobDirectory): \(reason)")
             case .failed(let message):
                 log("⚠︎ Could not remove \(jobDirectory): \(message)")
+            }
+
+            // #0052: overrides whatever `decisionRecord` already holds
+            // (including "cancelled", set above at the boundary-2/boundary-3
+            // `Task.isCancelled` checks) — a disc pulled mid-job is a
+            // distinct fact from a plain user cancel, and reliability
+            // analysis must filter out both, never conflate them.
+            if discRemoved() {
+                decisionRecord = "discRemoved"
             }
 
             let record = DiscReliabilityLog.Record(

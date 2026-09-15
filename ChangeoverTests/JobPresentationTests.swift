@@ -184,6 +184,40 @@ struct JobPresentationTests {
         #expect(presentation.detail.isEmpty)
     }
 
+    /// #0052 — a `.cancelled` outcome produced by a disc removal (not the
+    /// user's own Cancel) reads distinctly: "Disc removed", with the
+    /// explanatory sentence in `detail`, so the history row and the
+    /// notification never say "unreadable" or "timed out" about a disc that
+    /// was simply pulled from the drive. `discRemovedDuringJob` isn't on
+    /// `JobSnapshot` (host-only, per the #0040 no-new-`FailureReason`
+    /// decision), so the caller passes it in — the same shape `isCancelling`
+    /// already uses.
+    @Test func cancelledFromADiscRemovalReadsDiscRemovedNotCancelled() throws {
+        let snapshot = try Self.terminalSnapshot(outcome: .failed(Self.failure(.cancelled)), via: .encoding)
+        let presentation = JobPresentation.make(for: snapshot, discRemovedDuringJob: true)
+        #expect(presentation.label == "Disc removed")
+        #expect(presentation.tone == .neutral)
+        #expect(presentation.progress == .none)
+        #expect(presentation.detail == [JobPresentation.discRemovedDetail])
+    }
+
+    /// `discRemovedDuringJob` only changes anything once the job actually
+    /// settles `.cancelled` — a removal during `.organizing`/`.extras` still
+    /// ends `.succeeded` and is shown exactly like any other success (#0052:
+    /// "the move is from local disk, so it continues unaffected").
+    @Test func discRemovedDuringJobDoesNothingToASucceededOutcome() throws {
+        let end = Self.start.addingTimeInterval(90)
+        let snapshot = try Self.terminalSnapshot(
+            outcome: .succeeded(destination: URL(fileURLWithPath: "/tmp/x.mp4")),
+            startDate: Self.start,
+            endDate: end
+        )
+        let presentation = JobPresentation.make(for: snapshot, discRemovedDuringJob: true)
+        #expect(presentation.label == "Finished in 1m 30s")
+        #expect(presentation.tone == .success)
+        #expect(presentation.detail.isEmpty)
+    }
+
     /// The label stays the fixed word "Failed" — the *reason* lives in
     /// `detail`, matching #0048's "failed jobs show the actual reason".
     @Test func failedShowsAFixedLabelWithTheReasonInDetail() throws {

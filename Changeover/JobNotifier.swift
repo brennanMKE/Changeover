@@ -95,10 +95,11 @@ enum JobNotifier {
         metadata: MovieMetadata,
         outcome: JobOutcome,
         jobID: String,
+        discRemovedDuringJob: Bool = false,
         poster: JobNotificationPoster = UNNotificationCenterPoster()
     ) async {
         guard !isRunningUnderXCTest else { return }
-        await post(metadata: metadata, outcome: outcome, jobID: jobID, poster: poster)
+        await post(metadata: metadata, outcome: outcome, jobID: jobID, discRemovedDuringJob: discRemovedDuringJob, poster: poster)
     }
 
     /// The un-gated post, split out for the same reason `authorize` is: a
@@ -108,9 +109,10 @@ enum JobNotifier {
         metadata: MovieMetadata,
         outcome: JobOutcome,
         jobID: String,
+        discRemovedDuringJob: Bool = false,
         poster: JobNotificationPoster
     ) async {
-        let (title, body) = message(for: metadata, outcome: outcome)
+        let (title, body) = message(for: metadata, outcome: outcome, discRemovedDuringJob: discRemovedDuringJob)
         await poster.post(title: title, body: body, identifier: jobID)
     }
 
@@ -122,12 +124,26 @@ enum JobNotifier {
     /// Failure bodies reuse `FailurePresenter.message(for:).headline`
     /// (#0009) — the same actionable sentence the log already shows —
     /// rather than a bare exit code or a machine-readable `FailureReason`.
-    nonisolated static func message(for metadata: MovieMetadata, outcome: JobOutcome) -> (title: String, body: String) {
+    ///
+    /// - Parameter discRemovedDuringJob: #0052 — `Job.discRemovedDuringJob`.
+    ///   A disc-removal cancel is presented distinctly from a plain user
+    ///   cancel: the whole point of this ticket is that the notification
+    ///   must say the disc was removed, not that it was unreadable or that
+    ///   HandBrake timed out.
+    nonisolated static func message(for metadata: MovieMetadata, outcome: JobOutcome, discRemovedDuringJob: Bool = false) -> (title: String, body: String) {
         switch outcome {
         case .succeeded:
             return (
                 "\(metadata.title) (\(metadata.year)) is ready",
                 "Encoded and moved into Plex. The disc has been ejected."
+            )
+        case .failed(let failure) where failure.reason == .cancelled && discRemovedDuringJob:
+            // #0052: distinct from the plain-cancel case below — the job
+            // didn't stop because the user asked; the disc it needed was
+            // pulled from the drive.
+            return (
+                "\(metadata.title) (\(metadata.year)) — disc removed",
+                "The disc was removed while the job was running. Nothing new was filed in Plex."
             )
         case .failed(let failure) where failure.reason == .cancelled:
             // #0046 review: a cancel is the user's own request, not a

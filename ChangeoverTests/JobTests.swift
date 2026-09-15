@@ -84,6 +84,43 @@ struct JobTests {
         #expect(job.log.lines.last?.text == "⚠︎ Ignored invalid phase transition succeeded → extras")
     }
 
+    // MARK: - markDiscRemoved (#0052)
+
+    @Test func markDiscRemovedSetsTheFlagAndLogsTheMilestone() throws {
+        let job = try Self.makeJob()
+        _ = job.advance(to: .encoding)
+
+        job.markDiscRemoved()
+
+        #expect(job.discRemovedDuringJob)
+        #expect(job.log.lines.map(\.text) == ["⚠︎ Disc removed while the job was running"])
+    }
+
+    /// Idempotent: a second call (e.g. `removeDisc()` firing again before
+    /// the job's `Task` has actually finished) neither re-flags nor
+    /// re-logs.
+    @Test func markDiscRemovedTwiceLogsOnlyOnce() throws {
+        let job = try Self.makeJob()
+        job.markDiscRemoved()
+        job.markDiscRemoved()
+
+        #expect(job.discRemovedDuringJob)
+        #expect(job.log.lines.count == 1)
+    }
+
+    /// Never on `JobSnapshot` — host-only, per the #0040 no-new-`FailureReason`
+    /// decision. `discRemovedDuringJob` doesn't round-trip through the wire
+    /// projection at all.
+    @Test func markDiscRemovedNeverReachesTheSnapshot() throws {
+        let job = try Self.makeJob()
+        job.markDiscRemoved()
+        _ = job.advance(to: .encoding)
+
+        let data = try JSONEncoder().encode(job.snapshot)
+        let text = String(decoding: data, as: UTF8.self)
+        #expect(!text.contains("discRemoved"))
+    }
+
     // MARK: - snapshot
 
     @Test func snapshotMirrorsTheJobsCurrentValues() throws {

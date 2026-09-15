@@ -63,6 +63,15 @@ final class Job {
     private(set) var outcome: JobOutcome?
     private(set) var endDate: Date?
 
+    /// #0052 — set once, by `JobController.removeDisc()`, when this job's
+    /// disc is pulled from the drive while the job is still running. Deliberately
+    /// **not** a new `FailureReason` case (#0040's decision stands: `JobOutcome`
+    /// is wire format) and deliberately **not** on `JobSnapshot` — host-only,
+    /// read directly off this `Job` by `JobController`/`JobPresentation`/
+    /// `JobNotifier` to override how a `.cancelled` outcome is presented,
+    /// without widening the wire shape at all.
+    private(set) var discRemovedDuringJob = false
+
     init(id: JobID, metadata: MovieMetadata, disc: URL, log: JobLog, startDate: Date = Date(), request: RipRequest? = nil) {
         self.id = id
         self.metadata = metadata
@@ -107,6 +116,18 @@ final class Job {
         }
         state = next
         return true
+    }
+
+    /// #0052 — records that this job's disc was pulled while the job was
+    /// running, and logs the milestone into this job's own log at once
+    /// (never into `JobController.controllerLog` — the disc removal is
+    /// about *this* job). Idempotent: a second call (e.g. `removeDisc()`
+    /// firing again before the job's `Task` has actually finished) neither
+    /// re-flags nor re-logs.
+    func markDiscRemoved() {
+        guard !discRemovedDuringJob else { return }
+        discRemovedDuringJob = true
+        log.append("⚠︎ Disc removed while the job was running")
     }
 
     /// A `Codable`/`Sendable` snapshot of this job at the moment it's asked

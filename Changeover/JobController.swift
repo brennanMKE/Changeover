@@ -80,6 +80,12 @@ final class JobController {
         /// reaches controller state: a partial eject (unmounted, not
         /// ejected) sets `discUnavailable` exactly as a manual one does.
         let eject: @MainActor (URL) async -> DiscEjector.Outcome
+        /// #0052 — bound to this job's own `Job.discRemovedDuringJob`, the
+        /// same closure shape `FallbackPolicy`'s `discStillPresent` already
+        /// uses. `DVDPipeline` reads it once, at the end of the run, to mark
+        /// the reliability record `decision: "discRemoved"` instead of
+        /// counting a disc pulled mid-job as a disc read failure.
+        let discRemoved: @MainActor () -> Bool
     }
 
     /// The unit of work a job performs, injectable so tests can drive the
@@ -399,7 +405,8 @@ final class JobController {
             extras:      context.extras,
             log:         context.log,
             reportPhase: context.phase,
-            eject:       context.eject
+            eject:       context.eject,
+            discRemoved: context.discRemoved
         ).run()
     }
 
@@ -573,11 +580,12 @@ final class JobController {
                 let outcome = await ejectVolume(url)
                 self?.applyAutomaticEject(outcome, volumeURL: url)
                 return outcome
-            }
+            },
+            discRemoved: { [job] in job.discRemovedDuringJob }
         )
 
         let run = runner
-        task = Task { [weak self] in
+        task = Task { [weak self, job] in
             let outcome = await run(context, settings)
             self?.finish(outcome)
             // #0006: fires on both outcomes, after DVDPipeline has already
@@ -585,8 +593,15 @@ final class JobController {
             // Captures `request`/`jobID` directly rather than reading them
             // back off `self` so this still fires correctly even if the
             // caller that started the job (and everything holding `self`)
-            // has since gone away.
-            await JobNotifier.notify(metadata: request.metadata, outcome: outcome, jobID: jobID.rawValue)
+            // has since gone away. `job` is captured the same way, purely to
+            // read its #0052 `discRemovedDuringJob` flag — never mutated
+            // here.
+            await JobNotifier.notify(
+                metadata: request.metadata,
+                outcome: outcome,
+                jobID: jobID.rawValue,
+                discRemovedDuringJob: job.discRemovedDuringJob
+            )
         }
         return true
     }
@@ -842,9 +857,47 @@ final class JobController {
     /// ran) — the old `HandBrakeCLI --scan` process must be stopped, not
     /// left to run to completion (or the watchdog) against a disc that's no
     /// longer there.
+    ///
+    /// #0052: the same reasoning applies to a **job**. Before this, a disc
+    /// pulled mid-job told `current` nothing — HandBrakeCLI either failed
+    /// minutes later with a disc-shaped reason (blamed on the disc, not the
+    /// removal) or went silent until #0009's 30-minute inactivity watchdog.
+    /// Both a manual eject (`ejectDisc()` → `DiscEjector` → this same
+    /// `removeDisc()`, via `DVDMonitor.onDVDRemoved`) and a physical pull
+    /// (the drive's own eject button, a tray bump, a USB hiccup — straight
+    /// to `DVDMonitor.onDVDRemoved` with no `JobController` call in
+    /// between) funnel through this one method, so there is exactly one
+    /// place that notices and one that reacts — no separate guard needed to
+    /// "reuse" `isEjecting`/`scanGeneration`; they're already reset right
+    /// here, in the same call, regardless of which path led here.
+    ///
+    /// When a job is running: log the milestone into *that job's own log*
+    /// at once (`Job.markDiscRemoved()` — never `controllerLog`, the same
+    /// distinction `append(_:)` already draws), then stop it promptly
+    /// through #0046's real cancel plumbing (`task?.cancel()` →
+    /// `ProcessRunner`'s SIGTERM→SIGKILL). No phase check first (unlike
+    /// `cancel(id:)`'s `CancelPolicy`, which refuses during `.organizing`):
+    /// `DVDPipeline.run()` never checks `Task.isCancelled` inside
+    /// `PlexOrganizer.move` (the move is already reading the encoded file
+    /// off local disk, not the disc, and finishes unaffected — #0041's
+    /// `organizing` has no outgoing `cancelled` edge for exactly this
+    /// reason), and the extras loop's existing #0046 cancellation points
+    /// already end the job `.succeeded` with the remaining extras skipped
+    /// and logged (the feature is already in Plex). So one unconditional
+    /// `task?.cancel()` here does the right thing in every phase: it cuts a
+    /// blocked or still-reading encode short instead of waiting out the
+    /// watchdog, and is a harmless no-op everywhere a cancel wouldn't change
+    /// the outcome anyway. `DVDPipeline`'s `discRemoved` closure
+    /// (`JobContext.discRemoved`, bound to this same flag) marks the
+    /// reliability record `decision: "discRemoved"` so it's never counted as
+    /// a disc read failure, whatever the outcome.
     func removeDisc() {
         scanTask?.cancel()
         scanTask = nil
+        if let current {
+            current.markDiscRemoved()
+            task?.cancel()
+        }
         insertedDisc = nil
         isEjecting = false
         discUnavailable = false
