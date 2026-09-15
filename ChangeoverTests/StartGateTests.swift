@@ -28,7 +28,7 @@ struct StartGateTests {
         scanState: ScanState,
         selectedTitleIndex: Int?,
         runtimeLookup: RuntimeLookup = .idle,
-        mismatchAcknowledged: Bool = false
+        mismatchAcknowledgement: MismatchAcknowledgement? = nil
     ) -> Bool {
         StartGate.canStart(
             hasMovieSelected: hasMovieSelected,
@@ -37,7 +37,7 @@ struct StartGateTests {
             scanState: scanState,
             selectedTitleIndex: selectedTitleIndex,
             runtimeLookup: runtimeLookup,
-            mismatchAcknowledged: mismatchAcknowledged
+            mismatchAcknowledgement: mismatchAcknowledgement
         )
     }
 
@@ -103,24 +103,42 @@ struct StartGateTests {
         // 6000s disc vs. 22-minute (1320s) TMDB runtime — Brooklyn Nine-Nine
         // shaped, nowhere near the 6%+60s tolerance.
         #expect(canStart(scanState: scanned([title(1, 6000)]), selectedTitleIndex: 1,
-                          runtimeLookup: .loaded(movieID: 1, runtimeMinutes: 22),
-                          mismatchAcknowledged: false) == false)
+                          runtimeLookup: .loaded(movieID: 1, runtimeMinutes: 22)) == false)
     }
 
     @Test func acceptsAMismatchedRuntimeOnceAcknowledged() {
         #expect(canStart(scanState: scanned([title(1, 6000)]), selectedTitleIndex: 1,
                           runtimeLookup: .loaded(movieID: 1, runtimeMinutes: 22),
-                          mismatchAcknowledged: true) == true)
+                          mismatchAcknowledgement: .init(titleIndex: 1, movieID: 1)) == true)
     }
 
     @Test func mismatchAcknowledgementOnOneTitleDoesNotWaiveACheckOnAnother() {
-        // Title 1 is consistent; title 2 (selected) mismatches. Acknowledging
-        // is per-selection state upstream (`JobController.selectTitle` resets
-        // it), but `canStart` itself must still re-evaluate the verdict for
-        // whichever title is actually selected, not trust a stale flag blindly.
-        let disc = scanned([title(1, 1320), title(2, 6000)])
+        // Both titles mismatch a 22-minute runtime. The user confirmed title
+        // 1, then selected title 2: `canStart` must not trust the stale
+        // confirmation, even if `JobController.selectTitle`'s own reset were
+        // bypassed.
+        let disc = scanned([title(1, 6000), title(2, 5000)])
         #expect(canStart(scanState: disc, selectedTitleIndex: 2,
                           runtimeLookup: .loaded(movieID: 1, runtimeMinutes: 22),
-                          mismatchAcknowledged: false) == false)
+                          mismatchAcknowledgement: .init(titleIndex: 1, movieID: 1)) == false)
+    }
+
+    @Test func mismatchAcknowledgementForOneMovieDoesNotCarryOverToAnother() {
+        // Review finding: "Rip anyway" for movie 1, then movie 2 chosen in
+        // the results, same title, also a mismatch. Nothing on
+        // `JobController` hears about a movie change, so only the gate's
+        // movie comparison stands between this and an unconfirmed Start.
+        #expect(canStart(scanState: scanned([title(1, 6000)]), selectedTitleIndex: 1,
+                          runtimeLookup: .loaded(movieID: 2, runtimeMinutes: 22),
+                          mismatchAcknowledgement: .init(titleIndex: 1, movieID: 1)) == false)
+    }
+
+    @Test func isAcknowledgedOnlyForALoadedLookupOfTheSameMovieAndTitle() {
+        let ack = MismatchAcknowledgement(titleIndex: 3, movieID: 7)
+        #expect(StartGate.isAcknowledged(ack, titleIndex: 3, runtimeLookup: .loaded(movieID: 7, runtimeMinutes: 90)))
+        #expect(!StartGate.isAcknowledged(ack, titleIndex: 4, runtimeLookup: .loaded(movieID: 7, runtimeMinutes: 90)))
+        #expect(!StartGate.isAcknowledged(ack, titleIndex: 3, runtimeLookup: .loaded(movieID: 8, runtimeMinutes: 90)))
+        #expect(!StartGate.isAcknowledged(ack, titleIndex: 3, runtimeLookup: .loading(movieID: 7)))
+        #expect(!StartGate.isAcknowledged(nil, titleIndex: 3, runtimeLookup: .loaded(movieID: 7, runtimeMinutes: 90)))
     }
 }

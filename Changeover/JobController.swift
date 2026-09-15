@@ -10,7 +10,7 @@ import Observation
 /// project's `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, and `StartGate`'s
 /// pure `canStart(...)` (itself `nonisolated`) needs to take this as a plain
 /// value with no actor-isolation crossing.
-nonisolated enum ScanState: Equatable {
+nonisolated enum ScanState: Equatable, Sendable {
     case idle
     case scanning
     case scanned(DiscScanner.Result)
@@ -96,11 +96,12 @@ final class JobController {
     /// held in `scanState`.
     private(set) var selectedTitleIndex: Int?
 
-    /// #0032/#0026: whether the user has explicitly confirmed proceeding
-    /// despite a runtime-cross-check mismatch on `selectedTitleIndex`. Reset
-    /// whenever the selection or the scan changes — a different title has a
-    /// different duration, so a prior "rip anyway" no longer applies.
-    private(set) var mismatchAcknowledged = false
+    /// #0032/#0026: the user's explicit confirmation to proceed despite a
+    /// runtime-cross-check mismatch, keyed to the title and movie it was
+    /// given for (`StartGate.isAcknowledged` compares both), so it can't
+    /// carry over to a different movie chosen in the search results. Also
+    /// cleared whenever the selection or the scan changes.
+    private(set) var mismatchAcknowledgement: MismatchAcknowledgement?
 
     // MARK: - Private
 
@@ -108,6 +109,10 @@ final class JobController {
     private let runner: Runner
     private let scanRunner: ScanRunner
     private var task: Task<Void, Never>?
+    /// Bumped by every `startScan`/`removeDisc`, so only the most recent
+    /// scan's outcome is ever applied — even a second scan of the *same*
+    /// insertion (a Rescan), which the disc check alone can't tell apart.
+    private var scanGeneration = 0
 
     // MARK: - Init
 
@@ -248,25 +253,29 @@ final class JobController {
     /// to it — an ejected disc has nothing left to scan or select.
     func removeDisc() {
         insertedDisc = nil
+        scanGeneration += 1
         scanState = .idle
         selectedTitleIndex = nil
-        mismatchAcknowledged = false
+        mismatchAcknowledgement = nil
     }
 
     /// Kicks off a `HandBrakeCLI --scan` of the disc currently in the drive.
     /// Safe to call again while idle or failed (a manual "Rescan"): nothing
     /// tracks or cancels an in-flight scan `Task`, the same "no `cancel()`"
     /// stance this type's header takes for the encode — a superseded scan's
-    /// result is simply discarded by `applyScanOutcome`'s disc check below.
+    /// result is simply discarded by `applyScanOutcome`'s generation and
+    /// disc checks below.
     ///
     /// - Returns: `false` with no state change if there is no disc to scan.
     @discardableResult
     func startScan(settings: AppSettings) -> Bool {
         guard let disc = insertedDisc else { return false }
 
+        scanGeneration += 1
+        let generation = scanGeneration
         scanState = .scanning
         selectedTitleIndex = nil
-        mismatchAcknowledged = false
+        mismatchAcknowledgement = nil
 
         let scan = scanRunner
         let discPath = disc.mountURL.path
@@ -278,33 +287,34 @@ final class JobController {
             let outcome = await scan(discPath, handbrakePath, volumeName, driveName) { line in
                 self?.append(line)
             }
-            self?.applyScanOutcome(outcome, forDisc: disc)
+            self?.applyScanOutcome(outcome, forDisc: disc, generation: generation)
         }
         return true
     }
 
     /// The user's explicit choice of feature title — the "Not this one?"
     /// disclosure's table, or the full picker shown for `.playAll`/`.none`.
-    /// Resets `mismatchAcknowledged`: a different title has a different
+    /// Clears `mismatchAcknowledgement`: a different title has a different
     /// duration, so a prior runtime-mismatch confirmation no longer applies.
     func selectTitle(_ index: Int?) {
         selectedTitleIndex = index
-        mismatchAcknowledged = false
+        mismatchAcknowledgement = nil
     }
 
     /// #0032/#0026: explicit user confirmation to proceed despite a runtime
-    /// cross-check mismatch on `selectedTitleIndex`. `StartGate.canStart`
-    /// requires this before Start is enabled when `RuntimeCrossCheck` returns
-    /// `.mismatch` — never a silent default.
-    func acknowledgeMismatch() {
-        mismatchAcknowledged = true
+    /// cross-check mismatch for `titleIndex` against movie `movieID`.
+    /// `StartGate.canStart` requires a matching one before Start is enabled
+    /// when `RuntimeCrossCheck` returns `.mismatch` — never a silent default.
+    func acknowledgeMismatch(titleIndex: Int, movieID: Int) {
+        mismatchAcknowledgement = MismatchAcknowledgement(titleIndex: titleIndex, movieID: movieID)
     }
 
-    /// Applies a completed scan's outcome, but only if `disc` is still the
-    /// one in the drive — a disc swap (or removal) that lands while the scan
-    /// was in flight must not resurrect a result for a disc that's gone.
-    private func applyScanOutcome(_ outcome: DiscScanner.Outcome, forDisc disc: DiscInsertion) {
-        guard insertedDisc == disc else { return }
+    /// Applies a completed scan's outcome, but only if it is the most recent
+    /// scan and `disc` is still the one in the drive — a disc swap, removal
+    /// or Rescan that lands while the scan was in flight must not resurrect
+    /// a superseded result.
+    private func applyScanOutcome(_ outcome: DiscScanner.Outcome, forDisc disc: DiscInsertion, generation: Int) {
+        guard generation == scanGeneration, insertedDisc == disc else { return }
         switch outcome {
         case .success(let result):
             scanState = .scanned(result)

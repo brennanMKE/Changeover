@@ -638,25 +638,64 @@ struct JobControllerScanTests {
             disc: DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [Self.title(1, 6645)]),
             mainFeatureIndex: 1, warnings: []))
         controller.selectTitle(1)
-        controller.acknowledgeMismatch()
+        controller.acknowledgeMismatch(titleIndex: 1, movieID: 78)
 
         controller.removeDisc()
 
         #expect(controller.insertedDisc == nil)
         #expect(controller.scanState == .idle)
         #expect(controller.selectedTitleIndex == nil)
-        #expect(controller.mismatchAcknowledged == false)
+        #expect(controller.mismatchAcknowledgement == nil)
     }
 
-    // MARK: - selectTitle resets the mismatch acknowledgement
+    // MARK: - A superseded scan of the same insertion is discarded (review)
 
-    @Test func selectingADifferentTitleResetsMismatchAcknowledgement() {
+    /// A Rescan of the same insertion passes the disc check, so only the
+    /// generation token stops the older scan, finishing last, from replacing
+    /// the newer result and its preselection.
+    @Test func anOlderScanOfTheSameInsertionFinishingLastIsDiscarded() async throws {
+        let first = DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [Self.title(1, 6645)])
+        let second = DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [Self.title(2, 6645)])
+        let firstGate = ScanGate()
+        let secondGate = ScanGate()
+        final class CallCount { var value = 0 }
+        let calls = CallCount()
+        let controller = JobController(scanRunner: { _, _, _, _, _ in
+            calls.value += 1
+            if calls.value == 1 {
+                await firstGate.wait()
+                return .success(DiscScanner.Result(disc: first, mainFeatureIndex: 1, warnings: []))
+            }
+            await secondGate.wait()
+            return .success(DiscScanner.Result(disc: second, mainFeatureIndex: 2, warnings: []))
+        })
+
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        controller.startScan(settings: AppSettings())
+        var spins = 0
+        while calls.value < 2 && spins < 100_000 { await Task.yield(); spins += 1 }
+        try #require(calls.value == 2)
+
+        secondGate.open()
+        try await waitUntilScanned(controller)
+        #expect(controller.selectedTitleIndex == 2)
+
+        firstGate.open()
+        for _ in 0..<1000 { await Task.yield() }
+
+        #expect(controller.scanState == .scanned(DiscScanner.Result(disc: second, mainFeatureIndex: 2, warnings: [])))
+        #expect(controller.selectedTitleIndex == 2)
+    }
+
+    // MARK: - The mismatch acknowledgement
+
+    @Test func acknowledgeMismatchRecordsTitleAndMovieAndSelectingATitleClearsIt() {
         let controller = JobController()
-        controller.acknowledgeMismatch()
-        #expect(controller.mismatchAcknowledged == true)
+        controller.acknowledgeMismatch(titleIndex: 1, movieID: 78)
+        #expect(controller.mismatchAcknowledgement == MismatchAcknowledgement(titleIndex: 1, movieID: 78))
 
         controller.selectTitle(3)
-        #expect(controller.mismatchAcknowledged == false)
+        #expect(controller.mismatchAcknowledgement == nil)
     }
 
     // MARK: - start's scan/title gate

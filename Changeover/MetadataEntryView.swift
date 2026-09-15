@@ -246,7 +246,7 @@ struct MetadataEntryView: View {
                 scanState:           jobs.scanState,
                 selectedTitleIndex:  jobs.selectedTitleIndex,
                 runtimeLookup:       vm.runtimeLookup,
-                mismatchAcknowledged: jobs.mismatchAcknowledged
+                mismatchAcknowledgement: jobs.mismatchAcknowledgement
             ))
             .buttonStyle(.borderedProminent)
         }

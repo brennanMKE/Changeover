@@ -123,6 +123,15 @@ struct DiscTitleListView: View {
                 .foregroundStyle(.secondary)
             titleTable(result.disc, badgeIndex: nil)
         }
+
+        // #0032: the verdict is for the title that will actually be encoded
+        // — the *selected* one, in every outcome. Tying it to the
+        // confirmation row (the first pass) left a mismatched title picked
+        // from the table with Start disabled and no "Rip anyway" anywhere.
+        if let index = jobs.selectedTitleIndex,
+           let selected = result.disc.titles.first(where: { $0.index == index }) {
+            runtimeVerdict(for: selected)
+        }
     }
 
     // MARK: - Confirmation row (the primary control on almost every disc)
@@ -143,59 +152,54 @@ struct DiscTitleListView: View {
                 }
                 .buttonStyle(.link)
             }
-            if let title {
-                runtimeCaption(for: title)
-            }
         }
     }
 
-    // MARK: - Runtime cross-check caption + mismatch confirmation (#0032)
+    // MARK: - Runtime cross-check verdict + mismatch confirmation (#0032)
 
     @ViewBuilder
-    private func runtimeCaption(for title: DiscTitle) -> some View {
-        let verdict = RuntimeCrossCheck.evaluate(discSeconds: title.durationSeconds, lookup: runtimeLookup)
-        switch verdict {
+    private func runtimeVerdict(for title: DiscTitle) -> some View {
+        switch RuntimeCrossCheck.evaluate(discSeconds: title.durationSeconds, lookup: runtimeLookup) {
         case .consistent(let delta):
-            Text("Matches TMDB runtime (Δ \(Self.signed(delta))s)")
+            Text("Title \(title.index) matches the TMDB runtime (Δ \(Self.signed(delta))s)")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
         case .mismatch(let delta):
             VStack(alignment: .leading, spacing: 2) {
-                Text("Runtime does not match TMDB (Δ \(Self.signed(delta))s) — check this is the right title.")
+                Text("Title \(title.index) does not match the TMDB runtime (Δ \(Self.signed(delta))s) — check this is the right title.")
                     .font(.caption)
                     .foregroundStyle(.red)
-                if jobs.mismatchAcknowledged {
+                if StartGate.isAcknowledged(jobs.mismatchAcknowledgement, titleIndex: title.index, runtimeLookup: runtimeLookup) {
                     Text("Confirmed — Start is enabled despite the mismatch.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                } else {
+                } else if let movieID = loadedMovieID {
                     Button("Rip anyway") {
-                        jobs.acknowledgeMismatch()
+                        jobs.acknowledgeMismatch(titleIndex: title.index, movieID: movieID)
                     }
                     .font(.caption)
                 }
             }
 
-        case .notRun(let reason):
-            Text("Runtime not checked — \(Self.notRunText(reason))")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+        case .notRun:
+            // Why the check didn't run ("Checking TMDB runtime…", "will not
+            // run — <reason>") is already `MetadataEntryView`'s caption under
+            // the folder preview; repeating it here was the redundant second
+            // line the first pass flagged.
+            EmptyView()
         }
+    }
+
+    /// The movie a `.mismatch` verdict is about — only a `.loaded` lookup
+    /// can produce one.
+    private var loadedMovieID: Int? {
+        if case .loaded(let movieID, _) = runtimeLookup { return movieID }
+        return nil
     }
 
     private static func signed(_ seconds: Int) -> String {
         seconds >= 0 ? "+\(seconds)" : "\(seconds)"
-    }
-
-    private static func notRunText(_ reason: RuntimeCrossCheck.NotRunReason) -> String {
-        switch reason {
-        case .missingAPIKey:        return "TMDB API key is not configured."
-        case .pending:               return "waiting on TMDB."
-        case .lookupFailed(let msg): return msg
-        case .noRuntimeOnTMDB:       return "TMDB has no runtime for this title."
-        case .noFeatureTitle:        return "no disc feature title yet."
-        }
     }
 
     // MARK: - Full title table (the 0-candidate and Play All fallback; the

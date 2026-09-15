@@ -498,6 +498,11 @@ struct DVDPipeline {
         let jobDirectory = (workingRipPath as NSString)
             .appendingPathComponent(jobID)
 
+        // #0026 review: `titleSelection` deliberately does not reach here.
+        // A HandBrake title index is not a makemkvcon index (different base,
+        // numbered after makemkvcon's own filtering), so `rip` keeps choosing
+        // its longest title. That can differ from a title the user picked by
+        // hand — mapping the pick across by duration is a follow-up.
         switch await MakeMKVRipper.rip(
             discMountPath:  discPath,
             jobDirectory:   jobDirectory,
