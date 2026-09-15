@@ -256,6 +256,29 @@ struct JobControllerTests {
         #expect(controller.logLines == ["line 46", "line 47", "line 48", "line 49", "line 50"])
     }
 
+    /// #0043 review: `logLines` is what the log area shows, so a milestone
+    /// pushed out of the capped ring still appears — ahead of the surviving
+    /// window — and the latest progress update appears once, in arrival
+    /// order, instead of not at all.
+    @Test func logLinesKeepAnEvictedMilestoneAheadOfTheCappedWindow() async throws {
+        let controller = JobController(maxLogLines: 3, runner: { _, _, _, _, _, log, _, reportPhase in
+            log("── Starting: Blade Runner (1982)")
+            for index in 1...10 { log("line \(index)") }
+            log("Encoding: task 1 of 1, 50.00 %")
+            return fakeSuccess(reportPhase, destination: Self.destination)
+        })
+        Self.mount(controller, disc: Self.testDisc)
+
+        controller.start(request: Self.request(try Self.metadata()), settings: AppSettings())
+        try await waitUntilIdle(controller)
+
+        #expect(controller.logLines == [
+            "── Starting: Blade Runner (1982)",
+            "line 8", "line 9", "line 10",
+            "Encoding: task 1 of 1, 50.00 %",
+        ])
+    }
+
     @Test func defaultLogCapIsBounded() {
         #expect(JobController.defaultMaxLogLines == 2000)
         let controller = JobController()

@@ -56,15 +56,17 @@ final class JobLog {
     /// against this cap.
     private(set) var lines: [LogLine] = []
 
-    /// Every milestone line ever appended to this log, in order, **never**
-    /// evicted by `capacity` — the whole reason this ticket exists.
-    /// Unbounded is deliberate: a single job's own milestone lines
+    /// Milestone lines appended to this log, in order, **never** evicted by
+    /// `capacity` — the whole reason this ticket exists. They have their
+    /// own, independent cap, `milestoneCapacity` (#0043 review): a single
+    /// job's own milestone lines
     /// (`── Starting`, `▶ Job`, `✓`/`✗` outcomes, the handful of `⚠︎`
     /// warnings) number in the dozens even for the largest real job
     /// (#0031's per-extra loop), nowhere near the several-thousand-line
-    /// `lines` cap, so a second cap here would never fire in practice and
-    /// would only be a second number to get wrong. Revisit if a real job
-    /// proves otherwise.
+    /// `lines` cap, so `milestoneCapacity` never fires within a job. It
+    /// exists for the log that stays `currentLog` between jobs: every idle
+    /// disc scan (`▶ Scanning: N%`) and start/eject refusal lands there, and
+    /// a menu bar app can stay up for weeks.
     private(set) var milestones: [LogLine] = []
 
     /// The most recent HandBrake/MakeMKV progress-only line, replacing
@@ -93,8 +95,14 @@ final class JobLog {
     /// milestone headline and its detail lines.
     private var previousLineWasMilestone = false
 
-    init(capacity: Int = JobLog.defaultCapacity) {
+    /// Independent of `capacity` on purpose: tying it to the ring's size
+    /// would evict milestones exactly when a long encode fills the ring.
+    static let defaultMilestoneCapacity = 1000
+    let milestoneCapacity: Int
+
+    init(capacity: Int = JobLog.defaultCapacity, milestoneCapacity: Int = JobLog.defaultMilestoneCapacity) {
         self.capacity = max(1, capacity)
+        self.milestoneCapacity = max(1, milestoneCapacity)
     }
 
     /// Appends one line, classifying and routing it in the process.
@@ -106,7 +114,7 @@ final class JobLog {
     ///   `lines`, and — if it's a milestone — also appended to `milestones`.
     ///   When `lines` exceeds `capacity`, the oldest lines are dropped from
     ///   the front and `droppedCount` grows by that amount; `milestones` is
-    ///   untouched.
+    ///   untouched by that, and trimmed only past `milestoneCapacity`.
     @discardableResult
     func append(_ text: String, now: Date = Date()) -> LogLine {
         let id = nextID
@@ -125,6 +133,9 @@ final class JobLog {
         lines.append(line)
         if isMilestone {
             milestones.append(line)
+            if milestones.count > milestoneCapacity {
+                milestones.removeFirst(milestones.count - milestoneCapacity)
+            }
         }
         if lines.count > capacity {
             let overflow = lines.count - capacity
@@ -140,6 +151,51 @@ final class JobLog {
     func snapshot(limit: Int? = nil) -> [String] {
         guard let limit, limit < lines.count else { return lines.map(\.text) }
         return lines.suffix(limit).map(\.text)
+    }
+
+    /// #0043 review — the rows a log view renders, and what
+    /// `JobController.logLines` mirrors. `lines` alone is not enough: a
+    /// milestone the ring has evicted lives only in `milestones`, and
+    /// HandBrake's progress lives only in `latestProgress`, so a view of
+    /// `lines` would still lose `── Starting`/`▶ Job` off the top of a long
+    /// encode and never show progress at all.
+    var displayLines: [LogLine] {
+        JobLog.mergedForDisplay(lines: lines, milestones: milestones, latestProgress: latestProgress)
+    }
+
+    /// Merges the three stores into one list in arrival (`id`) order:
+    /// milestones older than the ring's first line, then the ring, with
+    /// `latestProgress` placed by its id. A milestone still inside the ring
+    /// is shown once, from the ring. O(milestones + lines) — no per-line
+    /// search, since `milestones` and `lines` are both already in id order.
+    nonisolated static func mergedForDisplay(
+        lines: [LogLine],
+        milestones: [LogLine],
+        latestProgress: LogLine?
+    ) -> [LogLine] {
+        let firstRetainedID = lines.first?.id ?? Int.max
+        let evicted = milestones.prefix { $0.id < firstRetainedID }
+
+        var rows: [LogLine] = []
+        rows.reserveCapacity(evicted.count + lines.count + 1)
+        rows.append(contentsOf: evicted)
+        rows.append(contentsOf: lines)
+
+        guard let latestProgress else { return rows }
+        if let last = rows.last, last.id > latestProgress.id {
+            // Rare (a line arrived after the last progress update): binary
+            // search for the first row newer than it.
+            var low = 0
+            var high = rows.count
+            while low < high {
+                let mid = (low + high) / 2
+                if rows[mid].id < latestProgress.id { low = mid + 1 } else { high = mid }
+            }
+            rows.insert(latestProgress, at: low)
+        } else {
+            rows.append(latestProgress)
+        }
+        return rows
     }
 
     // MARK: - Classification (pure, nonisolated, no instance required)

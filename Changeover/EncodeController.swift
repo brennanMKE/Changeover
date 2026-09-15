@@ -313,11 +313,25 @@ enum EncodeController {
     /// here rather than duplicating this rule, so the log buffer and the
     /// failure classifier's tail never disagree about what counts as
     /// progress.
+    ///
+    /// **The whole line must be progress** (#0043 review). The earlier
+    /// prefix-plus-no-`] ` rule missed messages HandBrake glues on with no
+    /// timestamp — `failure-disk-full-hb1.11.2-exit4.log`'s `"… ETA
+    /// 00h00m16s)ERROR: avformatMux: … No space left on device'"` and
+    /// `failure-encode-canceled-int-hb1.11.2-exit1.log`'s `"… 24.35 %Signal
+    /// 2 received, terminating …"` — and once `JobLog` coalesced progress,
+    /// that hid the error inside `latestProgress` and overwrote it with the
+    /// next percentage. Matched against the exact shapes HandBrakeCLI
+    /// prints: `Encoding: task n of m, [Searching for start time, ]pp.pp %`
+    /// with an optional `(… fps, avg … fps, ETA …)` group,
+    /// `Scanning title n of m, [preview p, ]pp.pp %`, `Scanning title n of
+    /// m...`, and `Muxing: this may take awhile...`. Anything else, glued or
+    /// not, is a real line.
     nonisolated static func isProgressOnly(_ line: String) -> Bool {
-        let progressPrefixes = ["Encoding: task", "Scanning title", "Muxing:"]
-        guard progressPrefixes.contains(where: line.hasPrefix) else { return false }
-        return !line.contains("] ")
+        line.wholeMatch(of: progressLinePattern) != nil
     }
+
+    nonisolated(unsafe) private static let progressLinePattern = #/(?:Encoding: task \d+ of \d+, (?:Searching for start time, )?\d+(?:\.\d+)? %(?: \([^()]*\))?|Scanning title \d+ of \d+(?:, preview \d+)?, \d+(?:\.\d+)? %|Scanning title \d+ of \d+\.\.\.|Muxing: this may take awhile\.\.\.)/#
 
     /// #0043 — parses the fractional progress out of one of HandBrake's
     /// `"Encoding: task <n> of <m>, <pp.pp> %"` lines, e.g. `"Encoding: task
@@ -329,7 +343,7 @@ enum EncodeController {
     /// `JobLog` — the seam #0041's `JobState.progress` can call once a
     /// progress source exists.
     nonisolated static func progressFraction(fromLogLine line: String) -> Double? {
-        guard line.hasPrefix("Encoding: task") else { return nil }
+        guard line.hasPrefix("Encoding: task"), isProgressOnly(line) else { return nil }
         guard let percentIndex = line.firstIndex(of: "%") else { return nil }
         guard let commaIndex = line[..<percentIndex].lastIndex(of: ",") else { return nil }
         let numberText = line[line.index(after: commaIndex)..<percentIndex]

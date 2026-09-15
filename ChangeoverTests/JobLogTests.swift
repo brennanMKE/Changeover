@@ -106,6 +106,97 @@ struct JobLogTests {
         #expect(log.droppedCount == 200 + 1 - 100)
     }
 
+    /// #0043 review: the test above appends a single milestone, so a
+    /// mutation evicting `milestones` past `capacity` (mirroring `lines`)
+    /// passed it. Many milestones, interleaved with ordinary lines and
+    /// outnumbering the ring's capacity, must all survive, in order.
+    @Test func manyMilestonesAllSurviveWhenTheyOutnumberTheRingCapacity() {
+        let log = JobLog(capacity: 5)
+        var expected: [String] = []
+        for index in 1...12 {
+            let milestone = "✓ Step \(index)"
+            expected.append(milestone)
+            log.append(milestone)
+            for other in 1...3 { log.append("ordinary \(index).\(other)") }
+        }
+
+        #expect(log.milestones.map(\.text) == expected)
+        #expect(log.lines.count == 5)
+        #expect(log.droppedCount == 12 * 4 - 5)
+    }
+
+    /// #0043 review: `milestones` has its own, much larger cap, so a log
+    /// that stays `currentLog` for weeks of idle disc scans and refusals
+    /// (every `▶ Scanning: N%` is a milestone) still can't grow forever.
+    @Test func milestonesAreBoundedByTheirOwnCapNotTheRingCapacity() {
+        let log = JobLog(capacity: 2, milestoneCapacity: 3)
+        for index in 1...10 {
+            log.append("▶ Milestone \(index)")
+            log.append("ordinary \(index)")
+        }
+
+        #expect(log.milestones.map(\.text) == ["▶ Milestone 8", "▶ Milestone 9", "▶ Milestone 10"])
+        #expect(JobLog.defaultMilestoneCapacity > 0)
+    }
+
+    // MARK: - Display rows (what the log area and `logLines` render)
+
+    @Test func displayLinesShowEvictedMilestonesAheadOfTheRetainedWindowInOrder() {
+        let log = JobLog(capacity: 3)
+        log.append("── Starting: Blade Runner (1982)")
+        log.append("ordinary 1")
+        log.append("ordinary 2")
+        log.append("▶ Job job-20260915-053000-abcd")
+        log.append("   detail under the job line")
+        log.append("ordinary 3")
+        log.append("ordinary 4")
+        log.append("✓ Encoded")
+        log.append("ordinary 5")
+
+        #expect(log.lines.map(\.text) == ["ordinary 4", "✓ Encoded", "ordinary 5"])
+        #expect(log.displayLines.map(\.text) == [
+            "── Starting: Blade Runner (1982)",
+            "▶ Job job-20260915-053000-abcd",
+            "   detail under the job line",
+            "ordinary 4",
+            "✓ Encoded", // still in the ring: shown once, not twice
+            "ordinary 5",
+        ])
+        let ids = log.displayLines.map(\.id)
+        #expect(ids == ids.sorted())
+        #expect(Set(ids).count == ids.count)
+    }
+
+    @Test func displayLinesPlaceTheLatestProgressLineInArrivalOrder() {
+        let log = JobLog(capacity: 2000)
+        log.append("▶ Starting HandBrakeCLI encode…")
+        log.append("Encoding: task 1 of 1, 12.00 %")
+        log.append("Encoding: task 1 of 1, 45.12 %")
+        #expect(log.displayLines.map(\.text) == ["▶ Starting HandBrakeCLI encode…", "Encoding: task 1 of 1, 45.12 %"])
+
+        log.append("✓ Encoded")
+        #expect(log.displayLines.map(\.text) == [
+            "▶ Starting HandBrakeCLI encode…",
+            "Encoding: task 1 of 1, 45.12 %",
+            "✓ Encoded",
+        ])
+    }
+
+    @Test func mergedForDisplayOrdersEveryPieceByID() {
+        func line(_ id: Int, _ text: String, milestone: Bool = false) -> LogLine {
+            LogLine(id: id, timestamp: Date(timeIntervalSince1970: 0), text: text, isMilestone: milestone)
+        }
+        let starting = line(0, "── Starting", milestone: true)
+        let progress = line(1, "Encoding: task 1 of 1, 10.00 %")
+        let ring = [line(3, "b"), line(4, "✓ c", milestone: true)]
+
+        let rows = JobLog.mergedForDisplay(lines: ring, milestones: [starting, ring[1]], latestProgress: progress)
+
+        #expect(rows.map(\.id) == [0, 1, 3, 4])
+        #expect(JobLog.mergedForDisplay(lines: [], milestones: [], latestProgress: nil).isEmpty)
+        #expect(JobLog().displayLines.isEmpty)
+    }
+
     // MARK: - Progress coalescing
 
     @Test func aPureProgressLineUpdatesLatestProgressWithoutGrowingLines() {
@@ -133,7 +224,81 @@ struct JobLogTests {
         #expect(log.latestProgress == nil)
     }
 
+    // Real lines from the HandBrake 1.11.2 failure captures: an error glued
+    // onto a progress fragment with no `[hh:mm:ss] ` timestamp.
+    private static let gluedDiskFullError = "Encoding: task 1 of 1, 65.53 % (47.65 fps, avg 59.57 fps, ETA 00h00m16s)ERROR: avformatMux: track 0, av_interleaved_write_frame failed with error 'No space left on device'"
+    private static let gluedSignal = "Encoding: task 1 of 1, 24.35 %Signal 2 received, terminating - do it again in case it gets stuck"
+
+    /// #0043 review: the old prefix-plus-`] ` rule called both of these
+    /// pure progress, so `JobLog` hid the disk-full error inside
+    /// `latestProgress` and overwrote it with the next percentage.
+    @Test func aProgressLineWithAnUntimestampedMessageGluedOnIsAppendedNotCoalesced() {
+        let log = JobLog(capacity: 2000)
+        log.append(Self.gluedDiskFullError)
+        log.append(Self.gluedSignal)
+
+        #expect(log.lines.map(\.text) == [Self.gluedDiskFullError, Self.gluedSignal])
+        #expect(log.latestProgress == nil)
+    }
+
+    @Test func everyHandBrakeProgressFormatCoalesces() {
+        let progressLines = [
+            "Encoding: task 1 of 1, 0.00 %",
+            "Encoding: task 1 of 1, 12.34 % (87.46 fps, avg 87.46 fps, ETA 00h00m29s)",
+            "Encoding: task 1 of 1, Searching for start time, 3.00 %",
+            "Scanning title 1 of 1, preview 9, 90.00 %",
+            "Scanning title 5 of 5, 50.00 %",
+            "Scanning title 1 of 1...",
+            "Muxing: this may take awhile...",
+        ]
+        let log = JobLog(capacity: 2000)
+        for line in progressLines {
+            #expect(JobLog.isProgressOnly(line), "\(line)")
+            log.append(line)
+        }
+
+        #expect(log.lines.isEmpty)
+        #expect(log.latestProgress?.text == progressLines.last)
+    }
+
+    /// Every line of three real HandBrake captures, split the way
+    /// `ProcessRunner` splits the pipe (`\r` and `\n`): pure progress
+    /// coalesces, nothing carrying an error or signal message is classed
+    /// as progress, and every such message is on screen.
+    @Test func realHandBrakeCapturesNeverHideAMessageAsProgress() throws {
+        let dir = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/handbrake")
+        for name in [
+            "failure-disk-full-hb1.11.2-exit4.log",
+            "failure-encode-canceled-int-hb1.11.2-exit1.log",
+            // Not `main-feature-dragon-tattoo.log`: its progress only ever
+            // arrives glued to a timestamped line, so it has none to coalesce.
+            "failure-encode-canceled-term-hb1.11.2-exit143.log",
+        ] {
+            let data = try Data(contentsOf: dir.appendingPathComponent(name))
+            let splitter = LineSplitter()
+            let lines = (splitter.feed(data) + [splitter.flush()])
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            let progress = lines.filter { JobLog.isProgressOnly($0) }
+
+            #expect(progress.count > 1, "\(name) has progress lines to coalesce")
+            #expect(progress.allSatisfy { !$0.contains("ERROR") && !$0.contains("Signal") && !$0.contains("] ") }, "\(name)")
+
+            let log = JobLog(capacity: 100_000)
+            for line in lines { log.append(line) }
+            #expect(log.lines.count == lines.count - progress.count, "\(name)")
+            let shown = Set(log.displayLines.map(\.text))
+            for line in lines where line.contains("ERROR:") || line.contains("Signal 2 received") {
+                #expect(shown.contains(line), "\(name): \(line)")
+            }
+        }
+    }
+
     @Test func progressFractionParsesHandBrakesPercentage() {
+        #expect(EncodeController.progressFraction(fromLogLine: "Encoding: task 1 of 1, 12.34 % (87.46 fps, avg 87.46 fps, ETA 00h00m29s)") == 0.1234)
+        #expect(EncodeController.progressFraction(fromLogLine: Self.gluedDiskFullError) == nil)
         #expect(EncodeController.progressFraction(fromLogLine: "Encoding: task 1 of 1, 45.12 %") == 0.4512)
         #expect(EncodeController.progressFraction(fromLogLine: "Encoding: task 2 of 3, 0.00 %") == 0.0)
         #expect(EncodeController.progressFraction(fromLogLine: "Scanning title 1 of 1...") == nil)
@@ -226,5 +391,37 @@ struct JobLogStoreTests {
         #expect(store.log(for: firstID) == nil)
         #expect(store.log(for: secondID) != nil)
         #expect(store.log(for: thirdID) != nil)
+    }
+}
+
+/// #0043 — `DiscReliabilityLog.Record.jobID` is additive: JSONL lines
+/// written before it existed must still decode.
+struct DiscReliabilityRecordJobIDTests {
+
+    @Test func aLineWrittenBeforeJobIDExistedStillDecodes() throws {
+        let oldLine = #"{"date":"2026-09-10T12:00:00Z","volumeName":"BLADE_RUNNER","movie":"Blade Runner (1982) {tmdb-78}","producedBy":"handbrake","decision":"notEligible","outcome":"succeeded"}"#
+        let record = try JSONDecoder().decode(DiscReliabilityLog.Record.self, from: Data(oldLine.utf8))
+
+        #expect(record.jobID == nil)
+        #expect(record.movie == "Blade Runner (1982) {tmdb-78}")
+        #expect(record.outcome == "succeeded")
+    }
+
+    @Test func jobIDRoundTrips() throws {
+        let record = DiscReliabilityLog.Record(
+            date: "2026-09-15T12:00:00Z",
+            volumeName: "BLADE_RUNNER",
+            movie: "Blade Runner (1982) {tmdb-78}",
+            jobID: "job-20260915-120000-abcd",
+            producedBy: "handbrake",
+            primary: nil,
+            decision: nil,
+            fallback: nil,
+            makemkvVersion: nil,
+            outcome: "succeeded"
+        )
+        let decoded = try JSONDecoder().decode(DiscReliabilityLog.Record.self, from: JSONEncoder().encode(record))
+
+        #expect(decoded == record)
     }
 }

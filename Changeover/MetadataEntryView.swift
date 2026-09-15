@@ -238,14 +238,17 @@ struct MetadataEntryView: View {
 
     // MARK: - Log area
 
-    /// #0043: reads `jobs.currentLog.lines` directly rather than the
+    /// #0043: reads `jobs.currentLog.displayLines` rather than the
     /// back-compat `jobs.logLines: [String]`, so each row keys on the
     /// stable `LogLine.id` instead of an array offset — an offset-keyed
     /// `ForEach` is already fragile, and breaks outright once eviction
     /// shifts every remaining row's offset on every append past the cap.
+    /// `displayLines`, not `lines` (#0043 review): the capped ring alone
+    /// would drop `── Starting`/`▶ Job` off the top of a long encode and
+    /// never show HandBrake's coalesced progress at all.
     @ViewBuilder
     private var logArea: some View {
-        let lines = jobs.currentLog.lines
+        let lines = jobs.currentLog.displayLines
         if !lines.isEmpty || jobs.isRunning {
             ScrollViewReader { proxy in
                 ScrollView {

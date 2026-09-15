@@ -116,9 +116,12 @@ final class JobController {
     /// stable `LogLine` identity and milestone/progress classification.
     private(set) var currentLog: JobLog
     /// Back-compat surface: every existing reader of `logLines: [String]`
-    /// (call sites and tests predating #0043) keeps working unchanged,
-    /// because this always mirrors `currentLog`.
-    var logLines: [String] { currentLog.lines.map(\.text) }
+    /// (call sites and tests predating #0043) keeps working unchanged. It
+    /// mirrors `currentLog.displayLines` — the same rows the log area
+    /// renders — so a milestone evicted from the capped ring still appears
+    /// here, ahead of the surviving window, and the latest progress update
+    /// appears once (#0043 review).
+    var logLines: [String] { currentLog.displayLines.map(\.text) }
     private(set) var isRunning = false
     private(set) var currentMetadata: MovieMetadata?
     /// Filesystem-safe id for the current (or most recent) job. #0003 uses this
