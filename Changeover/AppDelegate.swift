@@ -75,12 +75,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         dvdMonitor = DVDMonitor()
         dvdMonitor?.onDVDInserted = { [weak self] insertion in
             guard let self else { return }
-            // Record which disc is in the drive; #0005 ejects it.
-            self.jobs.insertedDisc = insertion
+            // Records the disc (#0005 ejects it) and starts its HandBrake
+            // scan (#0026) — before this ticket nothing ever called the
+            // scanner on insertion.
+            self.jobs.insertDisc(insertion, settings: self.settings)
             self.showMetadataEntry()
         }
         dvdMonitor?.onDVDRemoved = { [weak self] in
-            self?.jobs.insertedDisc = nil
+            self?.jobs.removeDisc()
         }
     }
 
@@ -99,13 +101,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             return
         }
 
+        // #0026: widened and made resizable to fit the disc-title section
+        // (a confirmation row plus, on disclosure or a Play All/unidentified
+        // disc, the full title table) between the folder preview and the
+        // log. `minSize` keeps the two lists from being crushed.
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 580),
-            styleMask: [.titled, .closable],
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 760),
+            styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Changeover"
+        window.minSize = NSSize(width: 560, height: 560)
         window.center()
         window.contentView = NSHostingView(
             rootView: MetadataEntryView().environment(settings).environment(jobs)

@@ -27,11 +27,12 @@ struct MetadataEntryView: View {
             resultsList
             Divider()
             folderPreview
+            titlesSection
             failureBanner
             logArea
             actionBar
         }
-        .frame(width: 480)
+        .frame(minWidth: 560, idealWidth: 620)
         .onChange(of: selectedID) { _, id in
             vm.select(movieID: id, apiKey: settings.tmdbAPIKey)
             selectionDisc = id != nil ? jobs.insertedDisc : nil
@@ -160,6 +161,20 @@ struct MetadataEntryView: View {
         }
     }
 
+    // MARK: - Disc titles (#0026)
+
+    /// Sits between "which movie is this" (`folderPreview`) and "what is
+    /// happening" (`logArea`), matching `RemoteControl.md`'s decision
+    /// sequence. Hidden entirely at `.idle` (no disc scanned yet) so an empty
+    /// section never appears above an unrelated log.
+    @ViewBuilder
+    private var titlesSection: some View {
+        if jobs.scanState != .idle {
+            Divider()
+            DiscTitleListView(jobs: jobs, settings: settings, runtimeLookup: vm.runtimeLookup)
+        }
+    }
+
     // MARK: - Failure banner (#0009 §4.2)
 
     /// The 130-point log below scrolls the actual explanation out of view by
@@ -224,7 +239,15 @@ struct MetadataEntryView: View {
             Button("Start Ripping") {
                 startRipping()
             }
-            .disabled(vm.selectedMovie == nil || jobs.isRunning)
+            .disabled(!StartGate.canStart(
+                hasMovieSelected:    vm.selectedMovie != nil,
+                isRunning:           jobs.isRunning,
+                hasDisc:             jobs.insertedDisc != nil,
+                scanState:           jobs.scanState,
+                selectedTitleIndex:  jobs.selectedTitleIndex,
+                runtimeLookup:       vm.runtimeLookup,
+                mismatchAcknowledged: jobs.mismatchAcknowledged
+            ))
             .buttonStyle(.borderedProminent)
         }
         .padding()

@@ -43,6 +43,12 @@ struct DVDPipeline {
     /// HandBrakeCLI is pointed at with `--input`. Supplied by `DVDMonitor`
     /// via `JobController.insertedDisc.mountURL`.
     let disc: URL
+    /// Which title HandBrake encodes. Defaulted to `.mainFeature` so the
+    /// ~25 existing construction sites in `EncodeControllerTests`,
+    /// `MakeMKVFallbackTests` and `PreflightTests` compile unchanged;
+    /// production always passes `.index(n)` from #0026's settled scan
+    /// selection via `JobController.pipelineRunner`.
+    var titleSelection: EncodeController.TitleSelection = .mainFeature
     let log: @MainActor (String) -> Void
 
     /// Where `DiscReliabilityLog.append` writes. Defaulted so existing call
@@ -92,11 +98,10 @@ struct DVDPipeline {
             .appendingPathComponent(metadata.fileName)
         var jobDirectoryCreated = false
 
-        // Phase 1 always asks HandBrake for the main feature (#0014 G1); a
-        // single named `let` so the policy is visible and swappable. Phase
-        // 2's scanner (#0023/#0025) replaces this with `.index(n)` at this
-        // one call site — the whole migration.
-        let titleSelection: EncodeController.TitleSelection = .mainFeature
+        // #0026: `titleSelection` is now a caller-supplied property, not a
+        // hardcoded `.mainFeature` — `JobController.pipelineRunner` passes
+        // `.index(n)` from the settled scan selection. `.mainFeature` only
+        // survives as the property's default for tests that don't care.
 
         // Reliability-log bookkeeping, filled in as the run progresses so
         // every `return` below can pass through `finish(_:)` — no path

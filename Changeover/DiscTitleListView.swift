@@ -1,0 +1,247 @@
+import SwiftUI
+
+/// #0026 — renders the scanned disc: a scanning state, a scan failure shown
+/// as itself (the phase's exit criterion — never the same as an empty list),
+/// and the three `DiscTitleHeuristic.Outcome` cases, each a genuinely
+/// different product per the Plan:
+///
+/// - `.single` — a one-line confirmation, table collapsed behind
+///   "Not this one?".
+/// - `.playAll` — an honest refusal naming the episode cluster it found;
+///   nothing is preselected, but the table is still there to override.
+/// - `.none` — the full table, nothing preselected, with a plain statement
+///   that the disc did not identify itself.
+///
+/// Thin by design: every decision (which mode, what a row says) is either
+/// `DiscTitleHeuristic.classify` (tested in `DiscTitleHeuristicTests`) or
+/// `DiscTitleFormatting`/`RuntimeCrossCheck` (tested alongside this ticket).
+/// This view only lays the results out.
+///
+/// Uses `List`, not `Table`: the Plan calls the choice explicit-and-either-
+/// defensible, weighed against reuse in Phase 5's compact iPhone layout
+/// (`Table` doesn't translate there). `List` was the faster path to a fully
+/// tested view within this pass; sortable columns are deferred (see
+/// `issues/0026.md`'s `## Fix`).
+struct DiscTitleListView: View {
+    @Bindable var jobs: JobController
+    let settings: AppSettings
+    let runtimeLookup: RuntimeLookup
+
+    @State private var showFullTable = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            switch jobs.scanState {
+            case .idle:
+                EmptyView()
+            case .scanning:
+                scanningView
+            case .failed(let failure):
+                failedView(failure)
+            case .scanned(let result):
+                scannedView(result)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 6)
+    }
+
+    // MARK: - Scanning
+
+    private var scanningView: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Scanning disc — this takes tens of seconds…")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Failure — the exit criterion: shown as itself, never an empty list
+
+    private func failedView(_ failure: DiscScanner.Failure) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(Self.message(for: failure))
+                .font(.subheadline)
+                .foregroundStyle(.red)
+            Button("Rescan") {
+                jobs.startScan(settings: settings)
+            }
+        }
+    }
+
+    private static func message(for failure: DiscScanner.Failure) -> String {
+        switch failure {
+        case .toolMissing(let path):
+            return "HandBrakeCLI was not found at \(path). Check the path in Settings."
+        case .launchFailure(let message):
+            return "Could not launch HandBrakeCLI: \(message)"
+        case .toolExited(let code):
+            return "The disc scan failed (HandBrakeCLI exited with status \(code))."
+        case .jsonMissing:
+            return "The disc scan did not complete — no title information came back."
+        }
+    }
+
+    // MARK: - Scanned
+
+    @ViewBuilder
+    private func scannedView(_ result: DiscScanner.Result) -> some View {
+        let outcome = DiscTitleHeuristic.classify(result.disc, mainFeatureIndex: result.mainFeatureIndex)
+
+        // #0024: a successful scan can still carry a warning (e.g. 28
+        // MSG:4004 read errors on Hornets' Nest) — non-blocking, but the
+        // only signal the user gets before a rip that may be incomplete.
+        ForEach(result.warnings, id: \.self) { warning in
+            Text("⚠︎ \(warning)")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
+
+        switch outcome {
+        case .single(let index):
+            confirmationRow(index: index, disc: result.disc)
+            if showFullTable {
+                titleTable(result.disc, badgeIndex: index)
+            }
+
+        case .playAll(let index, let episodes):
+            VStack(alignment: .leading, spacing: 2) {
+                Text(DiscTitleFormatting.playAllMessage(index: index, episodes: episodes, disc: result.disc))
+                    .font(.subheadline)
+                    .foregroundStyle(.orange)
+                Text("Ripping is still possible by picking a title below, but nothing here is treated as a movie.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            titleTable(result.disc, badgeIndex: nil)
+
+        case .none:
+            Text("This disc did not identify itself — no title looks like a feature. That can happen on a TV disc with no Play All title, or a feature under 45 minutes. Choose one below.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            titleTable(result.disc, badgeIndex: nil)
+        }
+    }
+
+    // MARK: - Confirmation row (the primary control on almost every disc)
+
+    private func confirmationRow(index: Int, disc: DiscInfo) -> some View {
+        let title = disc.titles.first { $0.index == index }
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text("Main feature")
+                    .font(.headline)
+                if let title {
+                    Text("— Title \(index) · \(DiscTitleFormatting.duration(title.durationSeconds)) · \(title.chapterCount) chapters · \(DiscTitleFormatting.size(title.sizeBytes))")
+                        .font(.system(.body, design: .monospaced))
+                }
+                Spacer()
+                Button(showFullTable ? "Hide titles" : "Not this one?") {
+                    showFullTable.toggle()
+                }
+                .buttonStyle(.link)
+            }
+            if let title {
+                runtimeCaption(for: title)
+            }
+        }
+    }
+
+    // MARK: - Runtime cross-check caption + mismatch confirmation (#0032)
+
+    @ViewBuilder
+    private func runtimeCaption(for title: DiscTitle) -> some View {
+        let verdict = RuntimeCrossCheck.evaluate(discSeconds: title.durationSeconds, lookup: runtimeLookup)
+        switch verdict {
+        case .consistent(let delta):
+            Text("Matches TMDB runtime (Δ \(Self.signed(delta))s)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+        case .mismatch(let delta):
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Runtime does not match TMDB (Δ \(Self.signed(delta))s) — check this is the right title.")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                if jobs.mismatchAcknowledged {
+                    Text("Confirmed — Start is enabled despite the mismatch.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button("Rip anyway") {
+                        jobs.acknowledgeMismatch()
+                    }
+                    .font(.caption)
+                }
+            }
+
+        case .notRun(let reason):
+            Text("Runtime not checked — \(Self.notRunText(reason))")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private static func signed(_ seconds: Int) -> String {
+        seconds >= 0 ? "+\(seconds)" : "\(seconds)"
+    }
+
+    private static func notRunText(_ reason: RuntimeCrossCheck.NotRunReason) -> String {
+        switch reason {
+        case .missingAPIKey:        return "TMDB API key is not configured."
+        case .pending:               return "waiting on TMDB."
+        case .lookupFailed(let msg): return msg
+        case .noRuntimeOnTMDB:       return "TMDB has no runtime for this title."
+        case .noFeatureTitle:        return "no disc feature title yet."
+        }
+    }
+
+    // MARK: - Full title table (the 0-candidate and Play All fallback; the
+    // "Not this one?" disclosure for `.single`)
+
+    private func titleTable(_ disc: DiscInfo, badgeIndex: Int?) -> some View {
+        let selection = Binding<Int?>(
+            get: { jobs.selectedTitleIndex },
+            set: { jobs.selectTitle($0) }
+        )
+        return List(disc.titles, selection: selection) { title in
+            titleRow(title, badgeIndex: badgeIndex)
+                .tag(title.index)
+        }
+        .listStyle(.inset)
+        .frame(minHeight: 160, maxHeight: 260)
+    }
+
+    private func titleRow(_ title: DiscTitle, badgeIndex: Int?) -> some View {
+        HStack(spacing: 10) {
+            Text("\(title.index)")
+                .font(.system(.body, design: .monospaced))
+                .frame(width: 24, alignment: .trailing)
+            Text(DiscTitleFormatting.duration(title.durationSeconds))
+                .font(.system(.body, design: .monospaced))
+                .frame(width: 64, alignment: .trailing)
+            Text("\(title.chapterCount) ch")
+                .font(.system(.body, design: .monospaced))
+                .frame(width: 44, alignment: .trailing)
+            Text(DiscTitleFormatting.size(title.sizeBytes))
+                .font(.system(.body, design: .monospaced))
+                .frame(width: 72, alignment: .trailing)
+            Text(DiscTitleFormatting.streamSummary(for: title))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            if title.index == badgeIndex {
+                Text("Main feature")
+                    .font(.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.accentColor.opacity(0.15))
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(.vertical, 2)
+    }
+}

@@ -51,6 +51,33 @@ struct JobControllerTests {
         deviceNode: "disk6",
         discID: "ceaaceba983071d9a7e28fd6107947b7")
 
+    /// #0026: `start` also requires a completed scan holding a settled
+    /// title. Most of these tests exercise the re-entrancy/disc-identity
+    /// guards, not the scan pipeline itself, so this stands in for "the user
+    /// already confirmed a title" — a single-title scan preselected exactly
+    /// as `JobController.applyScanOutcome` would for a `.single` outcome.
+    private static func readyScanState(titleIndex: Int = 1) -> ScanState {
+        let title = DiscTitle(
+            index: titleIndex,
+            durationSeconds: 6_645,
+            chapterCount: 21,
+            sizeBytes: 6_300_000_000,
+            outputFileName: nil)
+        let disc = DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [title])
+        return .scanned(DiscScanner.Result(disc: disc, mainFeatureIndex: titleIndex, warnings: []))
+    }
+
+    /// Puts `controller` in the state `start` requires: a disc mounted, plus
+    /// #0026's completed-scan-with-a-settled-title gate satisfied. Safe to
+    /// use even in tests whose refusal happens earlier in `start`'s guard
+    /// chain (disc identity, missing `selectionDisc`) — the scan gate is
+    /// never reached in those cases either way.
+    private static func mount(_ controller: JobController, disc: DiscInsertion, titleIndex: Int = 1) {
+        controller.insertedDisc = disc
+        controller.scanState = Self.readyScanState(titleIndex: titleIndex)
+        controller.selectTitle(titleIndex)
+    }
+
     /// A one-shot latch. `open()` before `wait()` is fine — the waiter returns
     /// immediately — so tests don't depend on who gets there first.
     @MainActor
@@ -93,12 +120,12 @@ struct JobControllerTests {
     // MARK: - Outcome is stored on the controller
 
     @Test func succeededOutcomeIsStoredWhenTheJobFinishes() async throws {
-        let controller = JobController(runner: { _, _, _, log in
+        let controller = JobController(runner: { _, _, _, _, log in
             log("▶ ripping")
             log("✓ done")
             return .succeeded(destination: Self.destination)
         })
-        controller.insertedDisc = Self.testDisc
+        Self.mount(controller, disc: Self.testDisc)
 
         #expect(controller.lastOutcome == nil)
         #expect(controller.start(metadata: try Self.metadata(), settings: AppSettings()))
@@ -114,8 +141,8 @@ struct JobControllerTests {
         let failure = JobFailure(stage: .rip,
                                  reason: .toolExited(code: 253),
                                  logTail: ["makemkvcon: bad disc"])
-        let controller = JobController(runner: { _, _, _, _ in .failed(failure) })
-        controller.insertedDisc = Self.testDisc
+        let controller = JobController(runner: { _, _, _, _, _ in .failed(failure) })
+        Self.mount(controller, disc: Self.testDisc)
 
         controller.start(metadata: try Self.metadata(), settings: AppSettings())
         try await waitUntilIdle(controller)
@@ -135,13 +162,13 @@ struct JobControllerTests {
     @Test func secondStartWhileRunningIsRefused() async throws {
         let gate = Gate()
         let runs = RunLog()
-        let controller = JobController(runner: { metadata, _, _, log in
+        let controller = JobController(runner: { metadata, _, _, _, log in
             runs.record(metadata)
             log("▶ started \(metadata.title)")
             await gate.wait()
             return .succeeded(destination: Self.destination)
         })
-        controller.insertedDisc = Self.testDisc
+        Self.mount(controller, disc: Self.testDisc)
 
         let first = try Self.metadata()
         let second = try Self.metadata(id: 50456, title: "Hanna", releaseDate: "2011-03-08")
@@ -174,14 +201,14 @@ struct JobControllerTests {
     @Test func jobKeepsRunningAfterTheStartingScopeGoesAway() async throws {
         let gate = Gate()
         let started = Gate()
-        let controller = JobController(runner: { _, _, _, log in
+        let controller = JobController(runner: { _, _, _, _, log in
             log("▶ line 1")
             started.open()
             await gate.wait()
             log("✓ line 2")
             return .succeeded(destination: Self.destination)
         })
-        controller.insertedDisc = Self.testDisc
+        Self.mount(controller, disc: Self.testDisc)
 
         // Start from a scope that returns immediately, holding nothing.
         func transientCaller() throws {
@@ -202,11 +229,11 @@ struct JobControllerTests {
     // MARK: - Bounded log
 
     @Test func logLinesAreBoundedToTheConfiguredCap() async throws {
-        let controller = JobController(maxLogLines: 5, runner: { _, _, _, log in
+        let controller = JobController(maxLogLines: 5, runner: { _, _, _, _, log in
             for index in 1...50 { log("line \(index)") }
             return .succeeded(destination: Self.destination)
         })
-        controller.insertedDisc = Self.testDisc
+        Self.mount(controller, disc: Self.testDisc)
 
         controller.start(metadata: try Self.metadata(), settings: AppSettings())
         try await waitUntilIdle(controller)
@@ -223,11 +250,11 @@ struct JobControllerTests {
 
     @Test func logIsClearedAtTheStartOfEachJob() async throws {
         var lineToLog = "first job"
-        let controller = JobController(runner: { _, _, _, log in
+        let controller = JobController(runner: { _, _, _, _, log in
             log(lineToLog)
             return .succeeded(destination: Self.destination)
         })
-        controller.insertedDisc = Self.testDisc
+        Self.mount(controller, disc: Self.testDisc)
 
         controller.start(metadata: try Self.metadata(), settings: AppSettings())
         try await waitUntilIdle(controller)
@@ -243,10 +270,10 @@ struct JobControllerTests {
     // MARK: - Job id (input to #0003)
 
     @Test func eachJobGetsAFreshFilesystemSafeID() async throws {
-        let controller = JobController(runner: { _, _, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _ in
             .succeeded(destination: Self.destination)
         })
-        controller.insertedDisc = Self.testDisc
+        Self.mount(controller, disc: Self.testDisc)
 
         #expect(controller.currentJobID == nil)
         controller.start(metadata: try Self.metadata(), settings: AppSettings())
@@ -284,12 +311,12 @@ struct JobControllerTests {
     @Test func statusDescriptionReportsTheRunningJob() async throws {
         let gate = Gate()
         let started = Gate()
-        let controller = JobController(runner: { _, _, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _ in
             started.open()
             await gate.wait()
             return .succeeded(destination: Self.destination)
         })
-        controller.insertedDisc = Self.testDisc
+        Self.mount(controller, disc: Self.testDisc)
 
         #expect(controller.statusDescription == "Idle — insert a DVD to begin")
 
@@ -312,11 +339,11 @@ struct JobControllerTests {
             func record(_ disc: URL) { discs.append(disc) }
         }
         let discLog = DiscLog()
-        let controller = JobController(runner: { _, _, disc, _ in
+        let controller = JobController(runner: { _, _, _, disc, _ in
             discLog.record(disc)
             return .succeeded(destination: Self.destination)
         })
-        controller.insertedDisc = Self.testDisc
+        Self.mount(controller, disc: Self.testDisc)
 
         #expect(controller.start(metadata: try Self.metadata(), settings: AppSettings()) == true)
         try await waitUntilIdle(controller)
@@ -332,7 +359,7 @@ struct JobControllerTests {
             func record() { count += 1 }
         }
         let runs = RunLog()
-        let controller = JobController(runner: { _, _, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _ in
             runs.record()
             return .succeeded(destination: Self.destination)
         })
@@ -353,11 +380,11 @@ struct JobControllerTests {
     /// the previous movie's name and overwriting it in Plex (#0012).
     @Test func startRefusesMetadataSelectedForADifferentDisc() async throws {
         let runs = RunLog()
-        let controller = JobController(runner: { metadata, _, _, _ in
+        let controller = JobController(runner: { metadata, _, _, _, _ in
             runs.record(metadata)
             return .succeeded(destination: Self.destination)
         })
-        controller.insertedDisc = Self.testDisc
+        Self.mount(controller, disc: Self.testDisc)
 
         let otherDisc = DiscInsertion(
             mountURL: URL(fileURLWithPath: "/Volumes/OTHER_DISC"),
@@ -377,10 +404,10 @@ struct JobControllerTests {
     /// remount, so the guard must key off `discID` alone, same as
     /// `SelectionReset.sameDisc`.
     @Test func startAcceptsMetadataSelectedForTheSameDiscByIdentity() async throws {
-        let controller = JobController(runner: { _, _, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _ in
             .succeeded(destination: Self.destination)
         })
-        controller.insertedDisc = Self.testDisc
+        Self.mount(controller, disc: Self.testDisc)
 
         let sameDiscReinserted = DiscInsertion(
             mountURL: Self.testDisc.mountURL,
@@ -397,11 +424,11 @@ struct JobControllerTests {
     /// call site that forgets to bind the selection can't reopen #0034.
     @Test func startRefusesMetadataWithNoSelectionDiscAttached() async throws {
         let runs = RunLog()
-        let controller = JobController(runner: { metadata, _, _, _ in
+        let controller = JobController(runner: { metadata, _, _, _, _ in
             runs.record(metadata)
             return .succeeded(destination: Self.destination)
         })
-        controller.insertedDisc = Self.testDisc
+        Self.mount(controller, disc: Self.testDisc)
 
         let unbound = MovieMetadata(from: try Self.decodeMovie())
         #expect(controller.start(metadata: unbound, settings: AppSettings()) == false)
@@ -414,14 +441,14 @@ struct JobControllerTests {
     /// was chosen on this very insertion, so Start must still work. A
     /// "unknown is never a match" rule on its own locked such discs out.
     @Test func startAcceptsAnUnknownIdentityDiscForTheInsertionItWasSelectedOn() async throws {
-        let controller = JobController(runner: { _, _, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _ in
             .succeeded(destination: Self.destination)
         })
         let unidentified = DiscInsertion(
             mountURL: URL(fileURLWithPath: "/Volumes/Untitled"),
             deviceNode: "disk6",
             discID: nil)
-        controller.insertedDisc = unidentified
+        Self.mount(controller, disc: unidentified)
 
         let metadata = MovieMetadata(from: try Self.decodeMovie(), selectionDisc: unidentified)
         #expect(controller.start(metadata: metadata, settings: AppSettings()) == true)
@@ -432,7 +459,7 @@ struct JobControllerTests {
     /// path and device node is still a different insertion, so it's refused.
     @Test func startRefusesAnUnknownIdentityLookalikeFromAnotherInsertion() async throws {
         let runs = RunLog()
-        let controller = JobController(runner: { metadata, _, _, _ in
+        let controller = JobController(runner: { metadata, _, _, _, _ in
             runs.record(metadata)
             return .succeeded(destination: Self.destination)
         })
@@ -449,6 +476,252 @@ struct JobControllerTests {
         #expect(controller.start(metadata: metadata, settings: AppSettings()) == false)
         #expect(runs.starts.isEmpty)
         #expect(controller.logLines.contains { $0.contains("different disc") })
+    }
+}
+
+/// Covers #0026's wiring: a disc insertion starts a HandBrake scan, the
+/// scan's outcome is applied through `DiscTitleHeuristic.classify` (a
+/// `.single` outcome preselects; `.playAll`/`.none` leave the choice to the
+/// user), a scan failure is held as itself, and `start` refuses to run
+/// without a settled title that actually belongs to the scan it holds.
+///
+/// Driven entirely through the injectable `ScanRunner`/`Runner` seams — no
+/// disc, no `HandBrakeCLI`.
+@MainActor
+struct JobControllerScanTests {
+
+    // MARK: - Helpers
+
+    private static let testDisc = DiscInsertion(
+        mountURL: URL(fileURLWithPath: "/Volumes/FARGO_SE__16X9"),
+        deviceNode: "disk6",
+        discID: "ceaaceba983071d9a7e28fd6107947b7")
+
+    private static func title(_ index: Int, _ durationSeconds: Int, chapters: Int = 10) -> DiscTitle {
+        DiscTitle(index: index, durationSeconds: durationSeconds, chapterCount: chapters,
+                  sizeBytes: 1_000_000_000, outputFileName: nil)
+    }
+
+    /// A one-shot latch, same shape as `JobControllerTests`' private `Gate`
+    /// — duplicated rather than shared across the two test structs, which
+    /// stay independent on purpose.
+    @MainActor
+    private final class ScanGate {
+        private var isOpen = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+
+        func open() {
+            guard !isOpen else { return }
+            isOpen = true
+            let resuming = waiters
+            waiters = []
+            for continuation in resuming { continuation.resume() }
+        }
+
+        func wait() async {
+            if isOpen { return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+    }
+
+    /// Pumps the main actor until `scanState` leaves `.scanning`.
+    private func waitUntilScanned(_ controller: JobController, iterations: Int = 100_000) async throws {
+        var spins = 0
+        while controller.scanState == .scanning && spins < iterations {
+            await Task.yield()
+            spins += 1
+        }
+        try #require(controller.scanState != .scanning, "scan never finished")
+    }
+
+    // MARK: - insertDisc starts a scan
+
+    @Test func insertDiscStartsAScanThatPreselectsASingleFeature() async throws {
+        let disc = DiscInfo(volumeName: "TEST", driveName: "disk6",
+                            titles: [Self.title(1, 6645, chapters: 21)])
+        let controller = JobController(scanRunner: { _, _, _, _, _ in
+            .success(DiscScanner.Result(disc: disc, mainFeatureIndex: 1, warnings: []))
+        })
+
+        #expect(controller.scanState == .idle)
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        #expect(controller.scanState == .scanning)
+        try await waitUntilScanned(controller)
+
+        #expect(controller.scanState == .scanned(DiscScanner.Result(disc: disc, mainFeatureIndex: 1, warnings: [])))
+        #expect(controller.selectedTitleIndex == 1)
+    }
+
+    @Test func aPlayAllOutcomeLeavesNothingSelected() async throws {
+        // Eight ~21-minute episodes (1256s) clustering to the long title's
+        // duration, the Brooklyn Nine-Nine shape #0025's guard is built on.
+        let episodes = (1...8).map { Self.title($0, 1256) }
+        let longTitle = Self.title(9, episodes.reduce(0) { $0 + $1.durationSeconds }, chapters: 33)
+        let disc = DiscInfo(volumeName: "TV", driveName: "disk6", titles: episodes + [longTitle])
+        let controller = JobController(scanRunner: { _, _, _, _, _ in
+            .success(DiscScanner.Result(disc: disc, mainFeatureIndex: 9, warnings: []))
+        })
+
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        try await waitUntilScanned(controller)
+
+        guard case .scanned = controller.scanState else {
+            Issue.record("expected .scanned")
+            return
+        }
+        #expect(controller.selectedTitleIndex == nil)
+    }
+
+    @Test func noFeatureIdentifiedLeavesNothingSelected() async throws {
+        let disc = DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [Self.title(1, 120)])
+        let controller = JobController(scanRunner: { _, _, _, _, _ in
+            .success(DiscScanner.Result(disc: disc, mainFeatureIndex: nil, warnings: []))
+        })
+
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        try await waitUntilScanned(controller)
+
+        #expect(controller.selectedTitleIndex == nil)
+    }
+
+    // MARK: - Failure is held as itself (#0024's exit criterion, rendered by #0026)
+
+    @Test func aFailedScanIsHeldAsAFailureNotAnEmptyScan() async throws {
+        let controller = JobController(scanRunner: { _, _, _, _, _ in
+            .failure(.toolExited(code: 1))
+        })
+
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        try await waitUntilScanned(controller)
+
+        #expect(controller.scanState == .failed(.toolExited(code: 1)))
+        #expect(controller.selectedTitleIndex == nil)
+    }
+
+    @Test func startScanWithNoDiscDoesNothing() {
+        let controller = JobController()
+        #expect(controller.startScan(settings: AppSettings()) == false)
+        #expect(controller.scanState == .idle)
+    }
+
+    // MARK: - A disc swap mid-scan discards the superseded result
+
+    @Test func aDiscRemovedWhileScanningDiscardsTheStaleResult() async throws {
+        let disc = DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [Self.title(1, 6645)])
+        let gate = ScanGate()
+        let controller = JobController(scanRunner: { _, _, _, _, _ in
+            await gate.wait()
+            return .success(DiscScanner.Result(disc: disc, mainFeatureIndex: 1, warnings: []))
+        })
+
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        #expect(controller.scanState == .scanning)
+
+        controller.removeDisc()
+        #expect(controller.scanState == .idle)
+
+        gate.open()
+        // Give the in-flight scan's continuation a chance to land, if it
+        // were (wrongly) going to.
+        for _ in 0..<1000 { await Task.yield() }
+
+        #expect(controller.scanState == .idle)
+        #expect(controller.insertedDisc == nil)
+    }
+
+    // MARK: - removeDisc clears everything
+
+    @Test func removeDiscClearsScanAndSelectionState() {
+        let controller = JobController()
+        controller.insertedDisc = Self.testDisc
+        controller.scanState = .scanned(DiscScanner.Result(
+            disc: DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [Self.title(1, 6645)]),
+            mainFeatureIndex: 1, warnings: []))
+        controller.selectTitle(1)
+        controller.acknowledgeMismatch()
+
+        controller.removeDisc()
+
+        #expect(controller.insertedDisc == nil)
+        #expect(controller.scanState == .idle)
+        #expect(controller.selectedTitleIndex == nil)
+        #expect(controller.mismatchAcknowledged == false)
+    }
+
+    // MARK: - selectTitle resets the mismatch acknowledgement
+
+    @Test func selectingADifferentTitleResetsMismatchAcknowledgement() {
+        let controller = JobController()
+        controller.acknowledgeMismatch()
+        #expect(controller.mismatchAcknowledged == true)
+
+        controller.selectTitle(3)
+        #expect(controller.mismatchAcknowledged == false)
+    }
+
+    // MARK: - start's scan/title gate
+
+    private static func metadata(selectionDisc: DiscInsertion?) throws -> MovieMetadata {
+        let json = """
+        {"id": 78, "title": "Blade Runner", "release_date": "1982-06-25", "poster_path": null}
+        """.data(using: .utf8)!
+        return MovieMetadata(from: try JSONDecoder().decode(TMDBMovie.self, from: json), selectionDisc: selectionDisc)
+    }
+
+    @Test func startRefusesWithoutACompletedScan() async throws {
+        let controller = JobController(runner: { _, _, _, _, _ in .succeeded(destination: URL(fileURLWithPath: "/x")) })
+        controller.insertedDisc = Self.testDisc
+        // scanState stays .idle — no scan has ever run.
+
+        #expect(controller.start(metadata: try Self.metadata(selectionDisc: Self.testDisc), settings: AppSettings()) == false)
+        #expect(controller.logLines.contains { $0.contains("No completed disc scan") })
+    }
+
+    @Test func startRefusesWithNoTitleSelectedFromTheScan() async throws {
+        let controller = JobController(runner: { _, _, _, _, _ in .succeeded(destination: URL(fileURLWithPath: "/x")) })
+        controller.insertedDisc = Self.testDisc
+        controller.scanState = .scanned(DiscScanner.Result(
+            disc: DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [Self.title(1, 6645)]),
+            mainFeatureIndex: nil, warnings: []))
+        // selectedTitleIndex stays nil — a .none/.playAll outcome, unpicked.
+
+        #expect(controller.start(metadata: try Self.metadata(selectionDisc: Self.testDisc), settings: AppSettings()) == false)
+        #expect(controller.logLines.contains { $0.contains("No title selected") })
+    }
+
+    @Test func startRefusesASelectedIndexNotOnTheHeldScan() async throws {
+        let controller = JobController(runner: { _, _, _, _, _ in .succeeded(destination: URL(fileURLWithPath: "/x")) })
+        controller.insertedDisc = Self.testDisc
+        controller.scanState = .scanned(DiscScanner.Result(
+            disc: DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [Self.title(1, 6645)]),
+            mainFeatureIndex: 1, warnings: []))
+        controller.selectTitle(99) // not a title on this scan
+
+        #expect(controller.start(metadata: try Self.metadata(selectionDisc: Self.testDisc), settings: AppSettings()) == false)
+        #expect(controller.logLines.contains { $0.contains("No title selected") })
+    }
+
+    @Test func startPassesTheSelectedTitleIndexToTheRunnerAsAnExplicitIndex() async throws {
+        final class SelectionLog {
+            private(set) var selections: [EncodeController.TitleSelection] = []
+            func record(_ selection: EncodeController.TitleSelection) { selections.append(selection) }
+        }
+        let log = SelectionLog()
+        let controller = JobController(runner: { _, titleSelection, _, _, _ in
+            log.record(titleSelection)
+            return .succeeded(destination: URL(fileURLWithPath: "/x"))
+        })
+        controller.insertedDisc = Self.testDisc
+        controller.scanState = .scanned(DiscScanner.Result(
+            disc: DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [Self.title(1, 6645), Self.title(7, 500)]),
+            mainFeatureIndex: 1, warnings: []))
+        controller.selectTitle(7)
+
+        #expect(controller.start(metadata: try Self.metadata(selectionDisc: Self.testDisc), settings: AppSettings()) == true)
+        var spins = 0
+        while log.selections.isEmpty && spins < 100_000 { await Task.yield(); spins += 1 }
+
+        #expect(log.selections == [.index(7)])
     }
 }
 

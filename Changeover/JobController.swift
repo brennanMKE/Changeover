@@ -1,6 +1,22 @@
 import Foundation
 import Observation
 
+/// #0026 — where the disc scan for the currently inserted disc stands.
+///
+/// File-scope and `nonisolated`, not nested inside `JobController`, for the
+/// same reason `RuntimeLookup` sits at file scope in
+/// `MovieSearchViewModel.swift` (#0032's gotcha, recorded in its Fix): a type
+/// nested inside a MainActor class defaults to MainActor isolation under this
+/// project's `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, and `StartGate`'s
+/// pure `canStart(...)` (itself `nonisolated`) needs to take this as a plain
+/// value with no actor-isolation crossing.
+nonisolated enum ScanState: Equatable {
+    case idle
+    case scanning
+    case scanned(DiscScanner.Result)
+    case failed(DiscScanner.Failure)
+}
+
 /// App-level owner of the one job that can be in flight at a time.
 ///
 /// Before this type existed, rip/encode progress lived as `@State` inside
@@ -27,8 +43,22 @@ final class JobController {
     /// controller without `makemkvcon`, `HandBrakeCLI`, or a physical disc.
     ///
     /// The `URL` is the disc's mount root (#0014) — `start(metadata:settings:)`
-    /// refuses to run without one, so the runner never sees a nil disc.
-    typealias Runner = @MainActor (MovieMetadata, AppSettings, URL, @escaping @MainActor (String) -> Void) async -> JobOutcome
+    /// refuses to run without one, so the runner never sees a nil disc. The
+    /// `EncodeController.TitleSelection` is #0026's settled feature title —
+    /// `start` refuses to run without one that matches the scan it holds, so
+    /// the runner never sees `.mainFeature` again once a scan exists.
+    typealias Runner = @MainActor (MovieMetadata, EncodeController.TitleSelection, AppSettings, URL, @escaping @MainActor (String) -> Void) async -> JobOutcome
+
+    /// The unit of work a disc scan performs, injectable for the same reason
+    /// `Runner` is: tests drive it with a canned `DiscScanner.Outcome`
+    /// instead of a real `HandBrakeCLI --scan` and a physical disc.
+    typealias ScanRunner = @MainActor (
+        _ discPath: String,
+        _ handbrakePath: String,
+        _ volumeName: String,
+        _ driveName: String,
+        _ log: @escaping @MainActor (String) -> Void
+    ) async -> DiscScanner.Outcome
 
     /// Default cap on retained log lines. The log now outlives the window, so
     /// unbounded growth is a real leak rather than something the next view
@@ -52,22 +82,59 @@ final class JobController {
     /// `DVDMonitor.onDVDRemoved` fires.
     var insertedDisc: DiscInsertion?
 
+    /// #0026: where the scan for `insertedDisc` stands. `AppDelegate` never
+    /// writes this directly — `insertDisc(_:settings:)` starts the scan that
+    /// drives it, and `removeDisc()` clears it. Plain `var`, not
+    /// `private(set)`, so tests can put the controller in a known scan state
+    /// without going through the real scanner.
+    var scanState: ScanState = .idle
+
+    /// The settled feature title index — the heuristic's `.single`
+    /// preselection, or an explicit user pick from the table (#0026). `nil`
+    /// until one of those has happened. `start(metadata:settings:)` refuses
+    /// to run without an index that's actually a title on the scan currently
+    /// held in `scanState`.
+    private(set) var selectedTitleIndex: Int?
+
+    /// #0032/#0026: whether the user has explicitly confirmed proceeding
+    /// despite a runtime-cross-check mismatch on `selectedTitleIndex`. Reset
+    /// whenever the selection or the scan changes — a different title has a
+    /// different duration, so a prior "rip anyway" no longer applies.
+    private(set) var mismatchAcknowledged = false
+
     // MARK: - Private
 
     private let maxLogLines: Int
     private let runner: Runner
+    private let scanRunner: ScanRunner
     private var task: Task<Void, Never>?
 
     // MARK: - Init
 
-    init(maxLogLines: Int = JobController.defaultMaxLogLines, runner: Runner? = nil) {
+    init(
+        maxLogLines: Int = JobController.defaultMaxLogLines,
+        runner: Runner? = nil,
+        scanRunner: ScanRunner? = nil
+    ) {
         self.maxLogLines = max(1, maxLogLines)
         self.runner = runner ?? JobController.pipelineRunner
+        self.scanRunner = scanRunner ?? JobController.defaultScanRunner
     }
 
     /// The production runner: the real encode → move pipeline.
-    static let pipelineRunner: Runner = { metadata, settings, disc, log in
-        await DVDPipeline(metadata: metadata, settings: settings, disc: disc, log: log).run()
+    static let pipelineRunner: Runner = { metadata, titleSelection, settings, disc, log in
+        await DVDPipeline(metadata: metadata, settings: settings, disc: disc, titleSelection: titleSelection, log: log).run()
+    }
+
+    /// The production scan runner: the real `HandBrakeCLI --scan`.
+    static let defaultScanRunner: ScanRunner = { discPath, handbrakePath, volumeName, driveName, log in
+        await DiscScanner.scan(
+            discPath: discPath,
+            handbrakePath: handbrakePath,
+            volumeName: volumeName,
+            driveName: driveName,
+            log: log
+        )
     }
 
     // MARK: - Status
@@ -123,7 +190,24 @@ final class JobController {
             return false
         }
 
+        // #0026: the title to encode has to come from the scan this
+        // controller is currently holding for this disc — never let a stale
+        // or superseded scan's index reach the encoder. `StartGate.canStart`
+        // is what disables the Start button before this is ever called; this
+        // is the failsafe at the point of harm, the same pattern #0034
+        // established for the disc-identity guard above.
+        guard case .scanned(let scan) = scanState else {
+            append("⚠︎ No completed disc scan — wait for the scan to finish before starting.")
+            return false
+        }
+        guard let titleIndex = selectedTitleIndex,
+              scan.disc.titles.contains(where: { $0.index == titleIndex }) else {
+            append("⚠︎ No title selected from the disc scan — choose a title before starting.")
+            return false
+        }
+
         let disc = currentDisc.mountURL
+        let titleSelection = EncodeController.TitleSelection.index(titleIndex)
 
         isRunning = true
         currentMetadata = metadata
@@ -134,7 +218,7 @@ final class JobController {
 
         let run = runner
         task = Task { [weak self] in
-            let outcome = await run(metadata, settings, disc) { line in
+            let outcome = await run(metadata, titleSelection, settings, disc) { line in
                 self?.append(line)
             }
             self?.finish(outcome)
@@ -147,6 +231,93 @@ final class JobController {
             await JobNotifier.notify(metadata: metadata, outcome: outcome, jobID: jobID)
         }
         return true
+    }
+
+    // MARK: - Disc scan (#0026)
+
+    /// Records a new disc and starts its scan. `AppDelegate` calls this
+    /// instead of assigning `insertedDisc` directly, so an insertion always
+    /// starts a scan — before this ticket, `DiscTitleHeuristic.classify` and
+    /// `applyingSuggestedRoles` existed but nothing ever called them.
+    func insertDisc(_ disc: DiscInsertion, settings: AppSettings) {
+        insertedDisc = disc
+        startScan(settings: settings)
+    }
+
+    /// Clears the disc along with every piece of scan/selection state tied
+    /// to it — an ejected disc has nothing left to scan or select.
+    func removeDisc() {
+        insertedDisc = nil
+        scanState = .idle
+        selectedTitleIndex = nil
+        mismatchAcknowledged = false
+    }
+
+    /// Kicks off a `HandBrakeCLI --scan` of the disc currently in the drive.
+    /// Safe to call again while idle or failed (a manual "Rescan"): nothing
+    /// tracks or cancels an in-flight scan `Task`, the same "no `cancel()`"
+    /// stance this type's header takes for the encode — a superseded scan's
+    /// result is simply discarded by `applyScanOutcome`'s disc check below.
+    ///
+    /// - Returns: `false` with no state change if there is no disc to scan.
+    @discardableResult
+    func startScan(settings: AppSettings) -> Bool {
+        guard let disc = insertedDisc else { return false }
+
+        scanState = .scanning
+        selectedTitleIndex = nil
+        mismatchAcknowledged = false
+
+        let scan = scanRunner
+        let discPath = disc.mountURL.path
+        let handbrakePath = settings.handbrakePath
+        let volumeName = disc.mountURL.lastPathComponent
+        let driveName = disc.deviceNode ?? ""
+
+        Task { [weak self] in
+            let outcome = await scan(discPath, handbrakePath, volumeName, driveName) { line in
+                self?.append(line)
+            }
+            self?.applyScanOutcome(outcome, forDisc: disc)
+        }
+        return true
+    }
+
+    /// The user's explicit choice of feature title — the "Not this one?"
+    /// disclosure's table, or the full picker shown for `.playAll`/`.none`.
+    /// Resets `mismatchAcknowledged`: a different title has a different
+    /// duration, so a prior runtime-mismatch confirmation no longer applies.
+    func selectTitle(_ index: Int?) {
+        selectedTitleIndex = index
+        mismatchAcknowledged = false
+    }
+
+    /// #0032/#0026: explicit user confirmation to proceed despite a runtime
+    /// cross-check mismatch on `selectedTitleIndex`. `StartGate.canStart`
+    /// requires this before Start is enabled when `RuntimeCrossCheck` returns
+    /// `.mismatch` — never a silent default.
+    func acknowledgeMismatch() {
+        mismatchAcknowledged = true
+    }
+
+    /// Applies a completed scan's outcome, but only if `disc` is still the
+    /// one in the drive — a disc swap (or removal) that lands while the scan
+    /// was in flight must not resurrect a result for a disc that's gone.
+    private func applyScanOutcome(_ outcome: DiscScanner.Outcome, forDisc disc: DiscInsertion) {
+        guard insertedDisc == disc else { return }
+        switch outcome {
+        case .success(let result):
+            scanState = .scanned(result)
+            // #0025: preselect only on an unambiguous, non-Play-All answer.
+            // `.playAll`/`.none` leave `selectedTitleIndex` nil so Start stays
+            // disabled until the user picks explicitly — the whole point of
+            // the guard is that nothing here defaults to "rip it".
+            if case .single(let index) = DiscTitleHeuristic.classify(result.disc, mainFeatureIndex: result.mainFeatureIndex) {
+                selectedTitleIndex = index
+            }
+        case .failure(let failure):
+            scanState = .failed(failure)
+        }
     }
 
     // MARK: - Internals
