@@ -110,6 +110,7 @@ xcodebuild archive \
     -archivePath "$ARCHIVE_PATH" \
     -destination 'generic/platform=macOS' \
     DEVELOPMENT_TEAM="$TEAM_ID" \
+    ENABLE_HARDENED_RUNTIME=YES \
     CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
 
 print "==> Exporting signed app"
