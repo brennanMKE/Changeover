@@ -189,6 +189,14 @@ final class JobController {
     /// `DVDMonitor.onDVDRemoved` fires.
     var insertedDisc: DiscInsertion?
 
+    /// #0048 — which job `JobHistoryView` should select, set by
+    /// `AppDelegate.showHistory(selecting:)` (a notification click names a
+    /// specific job; the status menu's plain "History…" row leaves it
+    /// `nil`). The view reads it once on appear (or on change, so a click
+    /// while the window is already open still jumps to the right row) and
+    /// clears it back to `nil` — a plain navigational hint, not job state.
+    var pendingHistorySelection: JobID?
+
     /// #0045 review — a manual eject is in flight, or has succeeded and
     /// `DVDMonitor`'s removal hasn't reached `removeDisc()` yet. While set,
     /// `start` and `startScan` refuse, and so does a second `ejectDisc`:

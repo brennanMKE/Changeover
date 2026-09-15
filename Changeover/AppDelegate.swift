@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import ServiceManagement
 import SwiftUI
 import UserNotifications
@@ -20,6 +21,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// Internal rather than private so a test can assert the window is *reused*
     /// across a close/reopen instead of being rebuilt (#0011).
     private(set) var settingsWindow: NSWindow?
+    /// Internal rather than private so a test can assert the window is *reused*
+    /// across a close/reopen instead of being rebuilt (#0048, following #0011).
+    private(set) var historyWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
@@ -27,6 +31,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         setupPopover()
         startDVDMonitor()
         registerLoginItem()
+        // #0048: the status item isn't SwiftUI, so nothing re-renders it on
+        // its own when a job starts or ends — this arms the one observer
+        // that keeps its glyph in sync with `jobs.isRunning`.
+        observeRunningState()
 
         // #0006: so a finished job is announced even when the window is
         // closed. Requested at launch, not lazily at job completion — see
@@ -123,6 +131,81 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         metadataWindow = window
     }
 
+    // MARK: - History window (#0048)
+
+    /// Opens the session history window, reusing it whenever it exists
+    /// (`showSettings()`'s shape, not `showMetadataEntry()`'s
+    /// reuse-if-visible one — #0048's plan is explicit about which pattern
+    /// to copy).
+    ///
+    /// - Parameter jobID: when non-`nil` (a notification click), the job the
+    ///   window should jump to — set on `jobs.pendingHistorySelection` and
+    ///   picked up by `JobHistoryView`, whether the window is being created
+    ///   or was already open.
+    func showHistory(selecting jobID: JobID?) {
+        popover?.performClose(nil)
+
+        if let jobID {
+            jobs.pendingHistorySelection = jobID
+        }
+
+        if let w = historyWindow {
+            w.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 520),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "History"
+        window.minSize = NSSize(width: 560, height: 420)
+        window.center()
+        window.contentView = NSHostingView(
+            rootView: JobHistoryView().environment(settings).environment(jobs)
+        )
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        historyWindow = window
+    }
+
+    // MARK: - Status item symbol (#0048)
+
+    /// Re-arms itself on every change: `withObservationTracking`'s handler
+    /// fires once per registration, so the only way to keep tracking
+    /// `jobs.isRunning` for the app's whole life is to re-register from
+    /// inside the handler. Hops through a `Task` rather than calling
+    /// `observeRunningState()` straight from `onChange` — `onChange` can run
+    /// while the mutation that triggered it is still in progress, and
+    /// re-entering `withObservationTracking` synchronously from inside its
+    /// own handler is the documented footgun that pattern avoids.
+    private func observeRunningState() {
+        withObservationTracking {
+            _ = jobs.isRunning
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.updateStatusSymbol()
+                self?.observeRunningState()
+            }
+        }
+        updateStatusSymbol()
+    }
+
+    /// `JobPresentation.statusSymbolName(isRunning:)` picks the name; falls
+    /// back to the plain glyph already in production use
+    /// (`setupMenuBarIcon()`) if the filled variant doesn't resolve on the
+    /// running OS, so a bad symbol name never blanks the menu bar icon.
+    private func updateStatusSymbol() {
+        let name = JobPresentation.statusSymbolName(isRunning: jobs.isRunning)
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: "Changeover")
+            ?? NSImage(systemSymbolName: "opticaldisc", accessibilityDescription: "Changeover")
+        statusItem?.button?.image = image
+    }
+
     // MARK: - Settings window
 
     func showSettings() {
@@ -184,11 +267,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         [.banner, .sound]
     }
 
-    /// Clicking the banner opens the metadata window on the job's log.
+    /// Clicking the banner opens the history window on that job's row.
+    /// `JobNotifier` posts using the job's own id as the notification
+    /// identifier (`JobNotifier.swift`, `jobID.rawValue`), so a valid click
+    /// always names a real job; an identifier that fails `JobID(rawValue:)`
+    /// (a stale or foreign notification) just opens the window with no
+    /// selection forced.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
-        showMetadataEntry()
+        showHistory(selecting: JobID(rawValue: response.notification.request.identifier))
     }
 }

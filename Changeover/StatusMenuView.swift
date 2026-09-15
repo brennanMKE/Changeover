@@ -5,6 +5,12 @@ struct StatusMenuView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(JobController.self) private var jobs
 
+    /// #0048 — set while the confirmation alert below is asking about
+    /// cancelling `jobs.current`. A plain `Bool`, not the job's id: this row
+    /// only ever exists while `jobs.current` is set (see `body`), so there is
+    /// never a question of *which* job it refers to.
+    @State private var isConfirmingCancel = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
@@ -39,6 +45,16 @@ struct StatusMenuView: View {
             }
             .disabled(!settings.isConfigured)
 
+            // #0048 — never gated on `isConfigured`: a user whose settings
+            // broke mid-session still needs to see why their jobs failed.
+            MenuRow("History…", systemImage: "clock.arrow.circlepath") {
+                guard let appDelegate = AppDelegate.shared else {
+                    print("Warning: AppDelegate.shared is not defined")
+                    return
+                }
+                appDelegate.showHistory(selecting: nil)
+            }
+
             // #0045: disabled with no disc mounted, while a job or a scan is
             // running, or while an eject is already in flight. The tooltip
             // names the reason. `EjectPolicy` is the single source of truth
@@ -57,12 +73,26 @@ struct StatusMenuView: View {
             // source of truth `JobController.cancel(id:)` re-checks before
             // acting, so a state change between render and tap is still
             // refused (and logged) there.
-            if let cancelID = jobs.current?.id {
+            // #0048 orchestrator decision: Cancel asks for confirmation, so
+            // one misclick can't end a long encode.
+            if let current = jobs.current {
                 MenuRow("Cancel Job", systemImage: "xmark.circle") {
-                    jobs.cancel(id: cancelID)
+                    isConfirmingCancel = true
                 }
                 .disabled(cancelDecision != .cancel)
                 .help(cancelDecision.refusalReason ?? "Stop the running job.")
+                .confirmationDialog(
+                    "Cancel encoding \(current.metadata.baseName)?",
+                    isPresented: $isConfirmingCancel,
+                    titleVisibility: .visible
+                ) {
+                    Button("Cancel Job", role: .destructive) {
+                        jobs.cancel(id: current.id)
+                    }
+                    Button("Keep Going", role: .cancel) {}
+                } message: {
+                    Text("The partial file will be deleted.")
+                }
             }
 
             MenuRow("Settings…", systemImage: "gearshape") {
@@ -107,16 +137,21 @@ struct StatusMenuView: View {
         return CancelPolicy.decide(requestedID: current.id, currentID: current.id, phase: current.state.phase)
     }
 
-    /// Job state is app-level now (#0002), so the popover can report the running
-    /// job instead of always claiming to be idle.
+    /// #0048 — `JobPresentation` is the single place deciding what a phase
+    /// looks like, shared with the history view (and, eventually, Phase 4's
+    /// remote client).
     private var statusText: String {
-        guard settings.isConfigured else { return "Settings required" }
-        return jobs.statusDescription
+        JobPresentation.menuSummary(
+            current: jobs.current?.snapshot,
+            lastFinished: jobs.history.last?.snapshot,
+            isConfigured: settings.isConfigured
+        )
     }
 
     private var statusColor: Color {
         guard settings.isConfigured else { return .red }
-        return jobs.isRunning ? .blue : .green
+        guard let current = jobs.current?.snapshot else { return .green }
+        return JobPresentation.make(for: current).tone.color
     }
 }
 
