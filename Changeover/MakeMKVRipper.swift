@@ -140,7 +140,11 @@ enum MakeMKVRipper {
                 }
                 return .failure(JobFailure(
                     stage:   .rip,
-                    reason:  .unknown("no unique makemkvcon title within tolerance of target duration \(target)s among \(allTitles.count) titles"),
+                    // Reaches the user through `FailurePresenter` as "The
+                    // MakeMKV fallback was tried and also failed: Something
+                    // went wrong: …", so this reads as a sentence, not a
+                    // diagnostic; the candidate list is in the log line above.
+                    reason:  .unknown("the chosen title (\(formatDuration(target))) didn't match exactly one of MakeMKV's \(allTitles.count) titles, so no other title was ripped in its place"),
                     logTail: Array(scanLines.suffix(LogTailBuffer.defaultCapacity))
                 ))
             }

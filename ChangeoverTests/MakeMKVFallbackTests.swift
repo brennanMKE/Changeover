@@ -273,6 +273,31 @@ struct MakeMKVFallbackTests {
         #expect(MakeMKVRipper.matchTitle([], toDurationSeconds: 100) == nil)
     }
 
+    /// #0035 review: the two tools really do disagree about the same title.
+    /// For the same Dragon Tattoo disc, HandBrake's scan says 9478 s
+    /// (2:37:58) for the feature where makemkvcon says 9471 s (2:37:51) — a
+    /// 7 s gap, wider than the 2 s floor — and 29 s where makemkvcon says
+    /// 28 s. Feed HandBrake's real scanned durations through `matchTitle`
+    /// against makemkvcon's real `info` titles for the same disc: the
+    /// feature and the distinct short titles map to the right index, and
+    /// the 14 s/15 s pair (within 2 s of each other) is refused, never
+    /// guessed.
+    @Test func matchTitleMapsHandBrakeScanDurationsOntoMakeMKVTitlesForDragonTattoo() throws {
+        let scanText = try String(contentsOfFile: Self.fixturePath("handbrake-scan/dragon-tattoo-title0-min1.json"), encoding: .utf8)
+        let scanned = HandBrakeScanParser.parse(scanText, volumeName: "DRAGON", driveName: "disk6").disc
+        let hb = Dictionary(uniqueKeysWithValues: scanned.titles.map { ($0.index, $0.durationSeconds) })
+        #expect(hb == [1: 9478, 2: 14, 3: 9, 4: 15, 5: 29])
+
+        let mkv = MakeMKVRipper.titles(fromInfoOutput: try Self.fixtureLines("makemkvcon/dragon-tattoo-min0.txt"))
+        #expect(mkv.map(\.durationSeconds) == [9471, 14, 9, 15, 28])
+
+        #expect(MakeMKVRipper.matchTitle(mkv, toDurationSeconds: try #require(hb[1]))?.index == 0)
+        #expect(MakeMKVRipper.matchTitle(mkv, toDurationSeconds: try #require(hb[3]))?.index == 2)
+        #expect(MakeMKVRipper.matchTitle(mkv, toDurationSeconds: try #require(hb[5]))?.index == 4)
+        #expect(MakeMKVRipper.matchTitle(mkv, toDurationSeconds: try #require(hb[2])) == nil)
+        #expect(MakeMKVRipper.matchTitle(mkv, toDurationSeconds: try #require(hb[4])) == nil)
+    }
+
     // MARK: - 5. failureReason
 
     @Test func failureReasonMatchesActivationExpiredByNumericCode() throws {
@@ -1316,6 +1341,10 @@ struct MakeMKVFallbackTests {
         } else {
             Issue.record("expected .unknown (refusal), got \(fallbackReason)")
         }
+        // #0035 review: what the person reads says the chosen title wasn't
+        // found and that nothing else was ripped in its place.
+        let details = FailurePresenter.message(for: failure).details
+        #expect(details.contains { $0.contains("The MakeMKV fallback was tried and also failed") && $0.contains("0:01:40") && $0.contains("no other title was ripped") })
 
         // The info scan ran (to learn durations), but the rip never did —
         // and the fallback encode never ran either.
@@ -1375,6 +1404,15 @@ struct MakeMKVFallbackTests {
         // fallback re-encode. Nothing for the extra.
         #expect(Self.argvLines(at: handbrakeArgvLog).count == 2)
         #expect(logged.contains { $0.contains("Skipping") && $0.contains("extra") && $0.contains("#0035") })
+
+        // #0035 review: skipping extras still reaches the eject step (which
+        // sits unconditionally between the extras block and "── Done.") and
+        // leaves no working files under either root.
+        let skipLine = logged.firstIndex { $0.contains("Skipping") && $0.contains("#0035") }
+        let doneLine = logged.firstIndex { $0.hasPrefix("── Done.") }
+        #expect(skipLine != nil && doneLine != nil && skipLine! < doneLine!)
+        #expect((try? FileManager.default.contentsOfDirectory(atPath: settings.workingEncodePath))?.filter { $0.hasPrefix("job-") }.isEmpty == true)
+        #expect((try? FileManager.default.contentsOfDirectory(atPath: settings.workingRipPath))?.filter { $0.hasPrefix("job-") }.isEmpty == true)
     }
 
     /// #0004 T17: a fallback that fails at the rip stage leaves no working
