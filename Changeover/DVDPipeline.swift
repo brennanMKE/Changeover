@@ -190,6 +190,7 @@ struct DVDPipeline {
                 date:           ISO8601DateFormatter().string(from: Date()),
                 volumeName:     volumeName,
                 movie:          metadata.folderName,
+                jobID:          jobID.rawValue,
                 producedBy:     producedBy?.rawValue,
                 primary:        primaryRecord,
                 decision:       decisionRecord,

@@ -23,6 +23,14 @@ enum DiscReliabilityLog {
         let date: String
         let volumeName: String
         let movie: String
+        /// #0043 (#0041's review handoff) — the job this record came from,
+        /// so a reliability row can be correlated with that job's `JobLog`
+        /// in a future history view. Additive and optional: existing
+        /// `disc-reliability.jsonl` lines have no `jobID` key, and the
+        /// synthesized `Decodable` treats a missing key on an `Optional`
+        /// property as `nil` rather than failing to decode, so old lines on
+        /// disk keep reading back unchanged.
+        let jobID: String?
         /// `"handbrake"` | `"makemkvFallback"` | `nil` (no file was produced).
         let producedBy: String?
         /// A preflight failure (#0008) is also recorded here, with

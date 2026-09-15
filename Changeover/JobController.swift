@@ -89,14 +89,36 @@ final class JobController {
     /// does.
     typealias Ejector = @MainActor (URL) async -> DiscEjector.Outcome
 
-    /// Default cap on retained log lines. The log now outlives the window, so
-    /// unbounded growth is a real leak rather than something the next view
-    /// teardown cleans up.
-    static let defaultMaxLogLines = 2000
+    /// Default cap on retained log lines, per job. The log now outlives the
+    /// window, so unbounded growth is a real leak rather than something the
+    /// next view teardown cleans up. #0043: forwards to `JobLog
+    /// .defaultCapacity`, which now owns the number.
+    static let defaultMaxLogLines = JobLog.defaultCapacity
 
     // MARK: - Observable state
 
-    private(set) var logLines: [String] = []
+    /// #0043 — the current (or most recently finished) job's log.
+    ///
+    /// Unlike `currentJobID`/`lastOutcome`, this is never `nil`: before the
+    /// first job of the app's lifetime it's a plain, not-yet-retained
+    /// `JobLog` that catches whatever `append` writes before any job has
+    /// successfully started (a refused `start`/`ejectDisc` call, disc-scan
+    /// output). The moment `start` actually starts a job, this is replaced
+    /// — never cleared in place — with a fresh `JobLog` minted by
+    /// `logStore.makeLog(for:)` and keyed to that job's `JobID`. The
+    /// previous value (a finished job's log, or the pre-first-job catch-all)
+    /// is not destroyed: if it came from `logStore`, it's still reachable
+    /// there by its own `JobID` until `maxJobs` evicts it — the fix for
+    /// this ticket's headline bug, "a finished job's log is gone the moment
+    /// the next one starts."
+    ///
+    /// New code (the log view, #0042/#0048) should read this directly for
+    /// stable `LogLine` identity and milestone/progress classification.
+    private(set) var currentLog: JobLog
+    /// Back-compat surface: every existing reader of `logLines: [String]`
+    /// (call sites and tests predating #0043) keeps working unchanged,
+    /// because this always mirrors `currentLog`.
+    var logLines: [String] { currentLog.lines.map(\.text) }
     private(set) var isRunning = false
     private(set) var currentMetadata: MovieMetadata?
     /// Filesystem-safe id for the current (or most recent) job. #0003 uses this
@@ -174,7 +196,11 @@ final class JobController {
 
     // MARK: - Private
 
-    private let maxLogLines: Int
+    /// #0043 — retains each started job's `JobLog`, keyed by `JobID`, so a
+    /// finished job's log survives past the next `start()`. Bounded to the
+    /// most recent few jobs, per this ticket's scope; the full session
+    /// history view is #0042/#0048's.
+    private let logStore: JobLogStore
     private let runner: Runner
     private let scanRunner: ScanRunner
     /// #0047 — held for the duration of a job so the Mac doesn't idle-sleep
@@ -195,16 +221,31 @@ final class JobController {
 
     init(
         maxLogLines: Int = JobController.defaultMaxLogLines,
+        maxRetainedJobLogs: Int = 10,
         runner: Runner? = nil,
         scanRunner: ScanRunner? = nil,
         sleepAssertion: SleepAssertion = ProcessInfoSleepAssertion(),
         ejector: Ejector? = nil
     ) {
-        self.maxLogLines = max(1, maxLogLines)
+        let capacity = max(1, maxLogLines)
+        self.logStore = JobLogStore(maxJobs: maxRetainedJobLogs, logCapacity: capacity)
+        // The pre-first-job catch-all — see `currentLog`'s doc comment.
+        // Not retained in `logStore`: it isn't tied to any `JobID`, and
+        // `start` replaces it the same way it replaces any prior job's log.
+        self.currentLog = JobLog(capacity: capacity)
         self.runner = runner ?? JobController.pipelineRunner
         self.scanRunner = scanRunner ?? JobController.defaultScanRunner
         self.sleepAssertion = sleepAssertion
         self.ejector = ejector ?? JobController.defaultEjector
+    }
+
+    /// #0043 — retrieves a retained job's log by its raw `JobID` string, for
+    /// a future history view (#0042/#0048) or a test proving retention.
+    /// `nil` if `jobID` never named a real job, or its log has since been
+    /// evicted by `maxRetainedJobLogs`.
+    func retainedLog(forJobID rawJobID: String) -> JobLog? {
+        guard let jobID = JobID(rawValue: rawJobID) else { return nil }
+        return logStore.log(for: jobID)
     }
 
     /// The production runner: the real encode → move pipeline. Stays a
@@ -358,7 +399,12 @@ final class JobController {
         currentJobID = jobID.rawValue
         currentJobState = .initial
         lastOutcome = nil
-        logLines = []
+        // #0043: a fresh `JobLog` per job, retained in `logStore` under
+        // `jobID` — never a wipe-in-place. Whatever `currentLog` pointed at
+        // before (the previous job's log, or the pre-first-job catch-all)
+        // is left exactly as it was; only this controller's *current*
+        // pointer moves.
+        currentLog = logStore.makeLog(for: jobID)
 
         let run = runner
         task = Task { [weak self] in
@@ -646,10 +692,7 @@ final class JobController {
     }
 
     private func append(_ line: String) {
-        logLines.append(line)
-        if logLines.count > maxLogLines {
-            logLines.removeFirst(logLines.count - maxLogLines)
-        }
+        currentLog.append(line)
     }
 
     /// Sortable, unique and safe to use as a directory name — #0003 names the

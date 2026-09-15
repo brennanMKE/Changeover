@@ -308,10 +308,34 @@ enum EncodeController {
     /// a genuine log line can arrive glued to a progress fragment
     /// (`main-feature-dragon-tattoo.log:507`). Progress still reaches the UI
     /// log; this only decides what's worth keeping in the bounded tail.
-    nonisolated private static func isProgressOnly(_ line: String) -> Bool {
+    ///
+    /// Internal, not `private` (#0043): `JobLog.isProgressOnly` forwards
+    /// here rather than duplicating this rule, so the log buffer and the
+    /// failure classifier's tail never disagree about what counts as
+    /// progress.
+    nonisolated static func isProgressOnly(_ line: String) -> Bool {
         let progressPrefixes = ["Encoding: task", "Scanning title", "Muxing:"]
         guard progressPrefixes.contains(where: line.hasPrefix) else { return false }
         return !line.contains("] ")
+    }
+
+    /// #0043 — parses the fractional progress out of one of HandBrake's
+    /// `"Encoding: task <n> of <m>, <pp.pp> %"` lines, e.g. `"Encoding: task
+    /// 1 of 1, 45.12 %"` → `0.4512`. `nil` for anything else, including
+    /// `"Scanning title …"`/`"Muxing: …"` (no percentage to parse) and a
+    /// glued progress+log fragment (which `isProgressOnly` already refuses
+    /// to treat as progress, so it never reaches `JobLog.latestProgress` in
+    /// the first place). Pure and `nonisolated`, with no dependency on
+    /// `JobLog` — the seam #0041's `JobState.progress` can call once a
+    /// progress source exists.
+    nonisolated static func progressFraction(fromLogLine line: String) -> Double? {
+        guard line.hasPrefix("Encoding: task") else { return nil }
+        guard let percentIndex = line.firstIndex(of: "%") else { return nil }
+        guard let commaIndex = line[..<percentIndex].lastIndex(of: ",") else { return nil }
+        let numberText = line[line.index(after: commaIndex)..<percentIndex]
+            .trimmingCharacters(in: .whitespaces)
+        guard let value = Double(numberText) else { return nil }
+        return value / 100.0
     }
 
     /// The output volume's available capacity, read after the process exits

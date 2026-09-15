@@ -238,26 +238,32 @@ struct MetadataEntryView: View {
 
     // MARK: - Log area
 
+    /// #0043: reads `jobs.currentLog.lines` directly rather than the
+    /// back-compat `jobs.logLines: [String]`, so each row keys on the
+    /// stable `LogLine.id` instead of an array offset — an offset-keyed
+    /// `ForEach` is already fragile, and breaks outright once eviction
+    /// shifts every remaining row's offset on every append past the cap.
     @ViewBuilder
     private var logArea: some View {
-        if !jobs.logLines.isEmpty || jobs.isRunning {
+        let lines = jobs.currentLog.lines
+        if !lines.isEmpty || jobs.isRunning {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
-                        ForEach(Array(jobs.logLines.enumerated()), id: \.offset) { index, line in
-                            Text(line)
+                        ForEach(lines) { line in
+                            Text(line.text)
                                 .font(.system(.caption2, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .id(index)
+                                .id(line.id)
                         }
                     }
                     .padding(8)
                 }
                 .background(Color(.textBackgroundColor))
                 .frame(height: 130)
-                .onChange(of: jobs.logLines.count) { _, count in
-                    if count > 0 {
-                        proxy.scrollTo(count - 1, anchor: .bottom)
+                .onChange(of: lines.last?.id) { _, lastID in
+                    if let lastID {
+                        proxy.scrollTo(lastID, anchor: .bottom)
                     }
                 }
             }

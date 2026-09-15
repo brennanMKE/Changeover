@@ -262,7 +262,15 @@ struct JobControllerTests {
         #expect(controller.logLines.isEmpty)
     }
 
-    @Test func logIsClearedAtTheStartOfEachJob() async throws {
+    /// #0043: `logLines` (mirroring `currentLog`) still shows only the
+    /// running/most-recently-started job's lines — same observable values as
+    /// before this ticket for a single controller instance driven serially.
+    /// What changed is that the *first* job's log is no longer destroyed
+    /// when the second one starts; it's swapped out of `currentLog`, not
+    /// wiped, and stays reachable through `retainedLog(forJobID:)`. Renamed
+    /// from `logIsClearedAtTheStartOfEachJob`, which asserted the bug this
+    /// ticket fixes.
+    @Test func eachJobGetsAFreshLogAndThePreviousOnesLogIsRetained() async throws {
         var lineToLog = "first job"
         let controller = JobController(runner: { _, _, _, _, _, log, _, reportPhase in
             log(lineToLog)
@@ -273,12 +281,18 @@ struct JobControllerTests {
         controller.start(request: Self.request(try Self.metadata()), settings: AppSettings())
         try await waitUntilIdle(controller)
         #expect(controller.logLines == ["first job"])
+        let firstJobID = try #require(controller.currentJobID)
 
         lineToLog = "second job"
         controller.start(request: Self.request(try Self.metadata()), settings: AppSettings())
         try await waitUntilIdle(controller)
         #expect(controller.logLines == ["second job"])
         #expect(controller.lastOutcome != nil)
+
+        // The bug this ticket fixes: the first job's log used to be gone
+        // the moment the second job started (`logLines = []`). It's still
+        // here, by its own JobID.
+        #expect(controller.retainedLog(forJobID: firstJobID)?.lines.map(\.text) == ["first job"])
     }
 
     // MARK: - Job id (input to #0003)
