@@ -1,0 +1,144 @@
+import Foundation
+
+/// #0027 — turns a scanned title's raw audio streams into the rows a picker
+/// shows, and decides which ones are preselected.
+///
+/// Pure, `nonisolated`: a plain function from `DiscTitle` to options — no
+/// disc, no process, no UI import — the same seam as `SubtitleGrouping` and
+/// `DiscTitleFormatting`. `LanguageCode.normalize` (`Changeover/LanguageCode.swift`,
+/// #0029) is reused rather than redefined here, per that type's own doc
+/// comment.
+nonisolated struct AudioTrackOption: Equatable, Sendable, Identifiable {
+    /// The HandBrake `TrackNumber` of the first (kept) occurrence — what
+    /// `EncodeController.AudioSelection.tracks` receives.
+    var trackNumber: Int
+    /// Identical *tagged* tracks merged into this row, beyond the first —
+    /// e.g. `[3]` when tracks 1 and 3 are the same offering, so the UI can
+    /// say "2 tracks". Always empty for an untagged track (untagged streams
+    /// are never merged — see `options(for:)`).
+    var duplicateTrackNumbers: [Int]
+    /// Normalized (`LanguageCode.normalize`). `nil` means untagged.
+    var languageCode: String?
+    /// `DiscStream.displayName`, else `.languageName`, else `"Track N"` —
+    /// never blank.
+    var displayName: String
+    var isCommentary: Bool
+    var id: Int { trackNumber }
+}
+
+nonisolated enum AudioTrackOptions {
+    /// Lists a title's audio streams, in `TrackNumber` order, collapsing
+    /// duplicates.
+    ///
+    /// **Tagged streams** are merged on `(languageCode, codecId, bitrate,
+    /// channelCount, flags, displayName)`, keeping the first occurrence —
+    /// `flags` is part of the key so a commentary can never merge into a
+    /// plain track that otherwise looks identical (Super Troopers 2's
+    /// unflagged commentary aside, which has no metadata that could
+    /// distinguish it in the first place).
+    ///
+    /// **Untagged streams are never merged**, even when two of them are
+    /// otherwise byte-for-byte identical metadata (Hornets' Nest's two
+    /// untagged `DD Surround 5.1` tracks): identical-looking untagged audio
+    /// is exactly what a Swedish original plus an English dub looks like,
+    /// and merging them would silently drop a language.
+    nonisolated static func options(for title: DiscTitle) -> [AudioTrackOption] {
+        let audioStreams = title.streams
+            .filter { $0.kind == .audio }
+            .sorted { $0.index < $1.index }
+
+        var result: [AudioTrackOption] = []
+        var indexForKey: [MergeKey: Int] = [:]
+
+        for stream in audioStreams {
+            let normalizedCode = LanguageCode.normalize(stream.languageCode)
+            let displayName = stream.displayName ?? stream.languageName ?? "Track \(stream.index)"
+
+            if let normalizedCode {
+                let key = MergeKey(
+                    languageCode: normalizedCode,
+                    codecId:      stream.codecId,
+                    bitrate:      stream.bitrate,
+                    channelCount: stream.channelCount,
+                    flags:        stream.flags,
+                    displayName:  displayName
+                )
+                if let existingIndex = indexForKey[key] {
+                    result[existingIndex].duplicateTrackNumbers.append(stream.index)
+                    continue
+                }
+                indexForKey[key] = result.count
+            }
+
+            result.append(AudioTrackOption(
+                trackNumber:            stream.index,
+                duplicateTrackNumbers:  [],
+                languageCode:           normalizedCode,
+                displayName:            displayName,
+                isCommentary:           stream.isCommentary
+            ))
+        }
+
+        return result
+    }
+
+    /// True when no audio stream on `title` carries a language tag at all —
+    /// the whole-title fallback (Hornets' Nest): the language preference
+    /// does not apply, and every non-commentary track should be kept rather
+    /// than falling back to "first track only", which would silently drop a
+    /// language on a disc with (say) an English and a Spanish track.
+    nonisolated static func isUntagged(_ title: DiscTitle) -> Bool {
+        !title.streams.contains {
+            $0.kind == .audio && LanguageCode.normalize($0.languageCode) != nil
+        }
+    }
+
+    /// Which track numbers should be preselected.
+    ///
+    /// - On an untagged title, every non-commentary option is selected (or,
+    ///   if every option happens to be flagged commentary, every option).
+    /// - Otherwise, the non-commentary options in `preferred` (normalized)
+    ///   are selected.
+    /// - If nothing matches, the first non-commentary option is selected —
+    ///   silently producing a movie with no audio is the worst outcome
+    ///   available here.
+    /// - If every option is a commentary, the first option is selected.
+    /// - Never `[]` when `options` is non-empty.
+    nonisolated static func preselection(
+        _ options: [AudioTrackOption],
+        preferred: [String],
+        untagged: Bool
+    ) -> [Int] {
+        let nonCommentary = options.filter { !$0.isCommentary }
+
+        if untagged {
+            let selected = nonCommentary.isEmpty ? options : nonCommentary
+            return selected.map(\.trackNumber)
+        }
+
+        let normalizedPreferred = Set(preferred.compactMap(LanguageCode.normalize))
+        let matched = nonCommentary.filter { option in
+            guard let code = option.languageCode else { return false }
+            return normalizedPreferred.contains(code)
+        }
+        if !matched.isEmpty {
+            return matched.map(\.trackNumber)
+        }
+        if let first = nonCommentary.first {
+            return [first.trackNumber]
+        }
+        if let first = options.first {
+            return [first.trackNumber]
+        }
+        return []
+    }
+
+    private struct MergeKey: Hashable {
+        var languageCode: String
+        var codecId: String
+        var bitrate: String?
+        var channelCount: Int?
+        var flags: Int
+        var displayName: String
+    }
+}

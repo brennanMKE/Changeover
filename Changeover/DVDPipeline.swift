@@ -43,12 +43,12 @@ struct DVDPipeline {
     /// HandBrakeCLI is pointed at with `--input`. Supplied by `DVDMonitor`
     /// via `JobController.insertedDisc.mountURL`.
     let disc: URL
-    /// Which title HandBrake encodes. Defaulted to `.mainFeature` so the
-    /// ~25 existing construction sites in `EncodeControllerTests`,
-    /// `MakeMKVFallbackTests` and `PreflightTests` compile unchanged;
-    /// production always passes `.index(n)` from #0026's settled scan
-    /// selection via `JobController.pipelineRunner`.
-    var titleSelection: EncodeController.TitleSelection = .mainFeature
+    /// The title, audio tracks and deinterlace filter to encode with.
+    /// Defaulted to `.phase1` so the ~25 existing construction sites in
+    /// `EncodeControllerTests`, `MakeMKVFallbackTests` and `PreflightTests`
+    /// compile unchanged; production always passes a selection built by
+    /// `EncodeSelection.make(request:disc:)` via `JobController.pipelineRunner`.
+    var selection: EncodeSelection = .phase1
     let log: @MainActor (String) -> Void
 
     /// Where `DiscReliabilityLog.append` writes. Defaulted so existing call
@@ -98,10 +98,11 @@ struct DVDPipeline {
             .appendingPathComponent(metadata.fileName)
         var jobDirectoryCreated = false
 
-        // #0026: `titleSelection` is now a caller-supplied property, not a
-        // hardcoded `.mainFeature` — `JobController.pipelineRunner` passes
-        // `.index(n)` from the settled scan selection. `.mainFeature` only
-        // survives as the property's default for tests that don't care.
+        // #0026/#0027/#0029: `selection` is now a caller-supplied property,
+        // not a hardcoded `.mainFeature`/default audio — `JobController
+        // .pipelineRunner` passes the real `EncodeSelection.make(request:
+        // disc:)` result. `.phase1` only survives as the property's default
+        // for tests that don't care.
 
         // Reliability-log bookkeeping, filled in as the run progresses so
         // every `return` below can pass through `finish(_:)` — no path
@@ -272,29 +273,14 @@ struct DVDPipeline {
         }
         log("✓ Preflight passed")
 
-        // #0016: the deinterlace/detelecine decision, made here (not inside
-        // EncodeController) so the controller never reads a scan, settings,
-        // or a global — it only ever takes the resolved filter as a plain
-        // parameter, the same way it already takes `titleSelection`.
-        //
-        // `frameRate`/`interlaceDetected` are `nil` today: #0022/#0023 (the
-        // disc model and the HandBrake scanner) haven't landed, so there is
-        // no scan to read yet — see issues/0016.md's Notes. `decide` treats
-        // missing data the same as an ambiguous scan and returns `.none`,
-        // which matches today's actual (unfiltered) HandBrakeCLI output
-        // byte-for-byte; only the plumbing is new. Logged unconditionally so
-        // the day a real scan starts feeding this, the log line already
-        // shows the values driving the choice — and so a `nil` today reads
-        // as "no scan yet," not silence.
-        let scannedFrameRate: Double?         = nil
-        let scannedInterlaceDetected: Bool?   = nil
-        let deinterlaceFilter = DeinterlaceDecision.decide(
-            frameRate:         scannedFrameRate,
-            interlaceDetected: scannedInterlaceDetected
-        )
-        let frameRateText: String = scannedFrameRate.map { String($0) } ?? "unknown"
-        let interlaceText: String = scannedInterlaceDetected.map { String($0) } ?? "unknown"
-        log("▶ Deinterlace: frameRate=\(frameRateText) interlaceDetected=\(interlaceText) → filter=\(deinterlaceFilter)")
+        // #0016/#0027: the deinterlace/detelecine decision now travels on
+        // `selection`, resolved by `EncodeSelection.make(request:disc:)`
+        // from the real scanned `frameRate`/`interlaceDetected` — this stage
+        // only logs the resolved filter, the same way it only ever takes
+        // `selection.title` as a plain parameter rather than reading a scan
+        // itself.
+        let deinterlaceFilter = selection.filter
+        log("▶ Deinterlace: filter=\(deinterlaceFilter)")
 
         // #0004 §7 step 4: create this job's encode directory — fresh, never
         // adopted — and mark it `encoding` before HandBrake launches. On a
@@ -322,10 +308,11 @@ struct DVDPipeline {
         let mp4URL: URL
         switch await EncodeController.encode(
             source:        discPath,
-            title:         titleSelection,
+            title:         selection.title,
             output:        mp4Path,
             handbrakePath: handbrakePath,
             filter:        deinterlaceFilter,
+            audio:         selection.audio,
             log:           log
         ) {
         case .success(let url):
@@ -400,7 +387,8 @@ struct DVDPipeline {
                     handbrakePath:  handbrakePath,
                     mp4Path:        mp4Path,
                     volumeName:     volumeName,
-                    jobID:          jobID
+                    jobID:          jobID,
+                    fallbackAudio:  selection.fallbackAudio
                 ) {
                 case .failure(let runFailure):
                     fallbackRecord = runFailure.record
@@ -490,7 +478,8 @@ struct DVDPipeline {
         handbrakePath:  String,
         mp4Path:        String,
         volumeName:     String,
-        jobID:          String
+        jobID:          String,
+        fallbackAudio:  EncodeController.AudioSelection
     ) async -> Result<URL, FallbackRunFailure> {
         // #0004 §2: the rip job directory shares the run's single job id, so
         // `Working/encoding/<jobID>/` and `Working/ripping/<jobID>/` always
@@ -498,11 +487,17 @@ struct DVDPipeline {
         let jobDirectory = (workingRipPath as NSString)
             .appendingPathComponent(jobID)
 
-        // #0026 review: `titleSelection` deliberately does not reach here.
+        // #0026 review: `selection.title` deliberately does not reach here.
         // A HandBrake title index is not a makemkvcon index (different base,
         // numbered after makemkvcon's own filtering), so `rip` keeps choosing
         // its longest title. That can differ from a title the user picked by
         // hand — mapping the pick across by duration is a follow-up.
+        //
+        // `fallbackAudio` DOES reach here (#0027/#0029's refresh): the
+        // ripped `.mkv`'s track numbers don't match the disc's, so
+        // `EncodeSelection.make` builds this as a `.languages(...)`
+        // selection rather than the disc-relative `.tracks(...)` the
+        // primary encode uses.
         switch await MakeMKVRipper.rip(
             discMountPath:  discPath,
             jobDirectory:   jobDirectory,
@@ -553,6 +548,7 @@ struct DVDPipeline {
                 output:        mp4Path,
                 handbrakePath: handbrakePath,
                 filter:        fallbackFilter,
+                audio:         fallbackAudio,
                 log:           log
             )
 

@@ -191,6 +191,22 @@ struct MetadataEntryView: View {
         if jobs.scanState != .idle {
             Divider()
             DiscTitleListView(jobs: jobs, settings: settings, runtimeLookup: vm.runtimeLookup)
+            trackSelectionSection
+        }
+    }
+
+    /// #0027 — the audio (and, read-only, #0033's subtitle-group) picker for
+    /// the settled feature title, under the verdict row per the #0026
+    /// review's handoff. Shown only once a title has resolved against the
+    /// scan `jobs` currently holds — an unselected title has nothing to pick
+    /// tracks for.
+    @ViewBuilder
+    private var trackSelectionSection: some View {
+        if case .scanned(let result) = jobs.scanState,
+           let index = jobs.selectedTitleIndex,
+           let title = result.disc.titles.first(where: { $0.index == index }) {
+            Divider()
+            TrackSelectionView(jobs: jobs, settings: settings, title: title)
         }
     }
 
@@ -284,8 +300,14 @@ struct MetadataEntryView: View {
     }
 
     private func startRipping() {
-        guard let movie = vm.selectedMovie else { return }
-        jobs.start(metadata: MovieMetadata(from: movie, selectionDisc: selectionDisc), settings: settings)
+        guard let movie = vm.selectedMovie, let featureTitleIndex = jobs.selectedTitleIndex else { return }
+        let metadata = MovieMetadata(from: movie, selectionDisc: selectionDisc)
+        let request = RipRequest(
+            metadata: metadata,
+            featureTitleIndex: featureTitleIndex,
+            audioTrackNumbers: jobs.selectedAudioTrackNumbers
+        )
+        jobs.start(request: request, settings: settings)
     }
 }
 

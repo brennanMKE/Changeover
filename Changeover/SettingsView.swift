@@ -59,6 +59,23 @@ struct SettingsView: View {
                 .padding(6)
             }
 
+            // Languages (#0027)
+            GroupBox("Languages") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Preferred audio")
+                            .frame(width: 90, alignment: .trailing)
+                        TextField("eng, spa", text: preferredAudioLanguagesText)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    Text("Comma-separated ISO 639-2 codes (e.g. eng, spa). Preselects matching audio tracks in the picker; if none match, the first track is kept so a movie never ends up silent. Leave blank to always start from the disc's first track.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(6)
+            }
+
             // TMDB
             GroupBox("Movie Database (TMDB)") {
                 VStack(alignment: .leading, spacing: 8) {
@@ -111,6 +128,20 @@ struct SettingsView: View {
     }
 
     // MARK: - Helpers
+
+    /// Comma-separated text in, normalized codes out. `LanguageCode.normalize`
+    /// drops anything that isn't a recognizable code (blank entries from a
+    /// trailing comma, stray whitespace) rather than storing it verbatim.
+    private var preferredAudioLanguagesText: Binding<String> {
+        Binding(
+            get: { settings.preferredAudioLanguages.joined(separator: ", ") },
+            set: { newValue in
+                settings.preferredAudioLanguages = newValue
+                    .split(separator: ",")
+                    .compactMap { LanguageCode.normalize(String($0)) }
+            }
+        )
+    }
 
     private func pathPreviewRow(_ label: String, _ path: String) -> some View {
         HStack(spacing: 4) {

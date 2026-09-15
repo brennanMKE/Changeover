@@ -42,12 +42,14 @@ final class JobController {
     /// The unit of work a job performs, injectable so tests can drive the
     /// controller without `makemkvcon`, `HandBrakeCLI`, or a physical disc.
     ///
-    /// The `URL` is the disc's mount root (#0014) — `start(metadata:settings:)`
+    /// The `URL` is the disc's mount root (#0014) — `start(request:settings:)`
     /// refuses to run without one, so the runner never sees a nil disc. The
-    /// `EncodeController.TitleSelection` is #0026's settled feature title —
-    /// `start` refuses to run without one that matches the scan it holds, so
-    /// the runner never sees `.mainFeature` again once a scan exists.
-    typealias Runner = @MainActor (MovieMetadata, EncodeController.TitleSelection, AppSettings, URL, @escaping @MainActor (String) -> Void) async -> JobOutcome
+    /// `EncodeSelection` (#0027) is resolved from the `RipRequest` against
+    /// the scan `JobController` is currently holding — `start` refuses to
+    /// run unless `EncodeSelection.make(request:disc:)` succeeds, so the
+    /// runner never sees an index or track number that doesn't belong to
+    /// the live scan.
+    typealias Runner = @MainActor (RipRequest, EncodeSelection, AppSettings, URL, @escaping @MainActor (String) -> Void) async -> JobOutcome
 
     /// The unit of work a disc scan performs, injectable for the same reason
     /// `Runner` is: tests drive it with a canned `DiscScanner.Outcome`
@@ -91,10 +93,20 @@ final class JobController {
 
     /// The settled feature title index — the heuristic's `.single`
     /// preselection, or an explicit user pick from the table (#0026). `nil`
-    /// until one of those has happened. `start(metadata:settings:)` refuses
-    /// to run without an index that's actually a title on the scan currently
-    /// held in `scanState`.
+    /// until one of those has happened. `start(request:settings:)` refuses
+    /// to run unless the request it's handed resolves against the scan
+    /// currently held in `scanState`.
     private(set) var selectedTitleIndex: Int?
+
+    /// #0027 — the user's audio-track selection for `selectedTitleIndex`.
+    /// Recomputed from `AudioTrackOptions.preselection` every time the
+    /// feature title changes (a fresh `.single` preselection, an explicit
+    /// table pick, or the selection clearing), and thrown away on disc
+    /// removal/rescan along with everything else in this section. Plain
+    /// `var`, not `private(set)`: `TrackSelectionView` binds to it directly
+    /// with `@Bindable`, the same convention #0026's title table already
+    /// uses for `selectTitle`.
+    var selectedAudioTrackNumbers: [Int] = []
 
     /// #0032/#0026: the user's explicit confirmation to proceed despite a
     /// runtime-cross-check mismatch, keyed to the title and movie it was
@@ -127,8 +139,8 @@ final class JobController {
     }
 
     /// The production runner: the real encode → move pipeline.
-    static let pipelineRunner: Runner = { metadata, titleSelection, settings, disc, log in
-        await DVDPipeline(metadata: metadata, settings: settings, disc: disc, titleSelection: titleSelection, log: log).run()
+    static let pipelineRunner: Runner = { request, selection, settings, disc, log in
+        await DVDPipeline(metadata: request.metadata, settings: settings, disc: disc, selection: selection, log: log).run()
     }
 
     /// The production scan runner: the real `HandBrakeCLI --scan`.
@@ -158,14 +170,17 @@ final class JobController {
     /// Starts a job unless one is already running.
     ///
     /// - Returns: `true` if the job was started, `false` if it was refused —
-    ///   either because another job is in flight (the app-level re-entrancy
-    ///   guard that per-view `isProcessing` could never provide), or because
-    ///   no disc is mounted (#0014: the encode now reads the disc directly,
-    ///   so there is no job to start without one).
+    ///   another job in flight (the app-level re-entrancy guard that
+    ///   per-view `isProcessing` could never provide), no disc mounted
+    ///   (#0014: the encode now reads the disc directly, so there is no job
+    ///   to start without one), `request.metadata` chosen for a different
+    ///   disc (#0034), or `request` naming a title/tracks that don't resolve
+    ///   against the scan currently held (#0027 — see
+    ///   `EncodeSelection.make(request:disc:)`).
     @discardableResult
-    func start(metadata: MovieMetadata, settings: AppSettings) -> Bool {
+    func start(request: RipRequest, settings: AppSettings) -> Bool {
         guard !isRunning else {
-            append("⚠︎ A job is already running — ignoring request to start \(metadata.folderName).")
+            append("⚠︎ A job is already running — ignoring request to start \(request.metadata.folderName).")
             return false
         }
 
@@ -174,11 +189,12 @@ final class JobController {
             return false
         }
 
-        // #0034 defence in depth: if `metadata` was chosen for a disc other
-        // than the one actually in the drive, refuse — this is the failsafe
-        // for the data-loss bug (a stale selection filing the new disc under
-        // the previous movie's name and overwriting it in Plex), in case the
-        // UI-level reset in `MetadataEntryView` didn't run.
+        // #0034 defence in depth: if `request.metadata` was chosen for a
+        // disc other than the one actually in the drive, refuse — this is
+        // the failsafe for the data-loss bug (a stale selection filing the
+        // new disc under the previous movie's name and overwriting it in
+        // Plex), in case the UI-level reset in `MetadataEntryView` didn't
+        // run.
         //
         // Fails closed: metadata with no `selectionDisc` is refused rather
         // than waved through, so a future call site that forgets to bind the
@@ -186,36 +202,35 @@ final class JobController {
         // known identity (lsdvd or the no-lsdvd fallback) or the exact
         // insertion the selection was made on, so a disc with no resolvable
         // identity can still be started.
-        guard let selectionDisc = metadata.selectionDisc else {
-            append("⚠︎ \(metadata.title) isn't tied to a disc — choose the movie again with the disc in the drive.")
+        guard let selectionDisc = request.metadata.selectionDisc else {
+            append("⚠︎ \(request.metadata.title) isn't tied to a disc — choose the movie again with the disc in the drive.")
             return false
         }
         if !SelectionReset.sameDisc(selectionDisc, currentDisc) {
-            append("⚠︎ \(metadata.title) was selected for a different disc — insert that disc again, or choose a movie for the disc that's in the drive now.")
+            append("⚠︎ \(request.metadata.title) was selected for a different disc — insert that disc again, or choose a movie for the disc that's in the drive now.")
             return false
         }
 
-        // #0026: the title to encode has to come from the scan this
-        // controller is currently holding for this disc — never let a stale
-        // or superseded scan's index reach the encoder. `StartGate.canStart`
-        // is what disables the Start button before this is ever called; this
-        // is the failsafe at the point of harm, the same pattern #0034
-        // established for the disc-identity guard above.
+        // #0026/#0027: the title and audio tracks to encode have to resolve
+        // against the scan this controller is currently holding for this
+        // disc — never let a stale or superseded scan's indices reach the
+        // encoder. `StartGate.canStart` is what disables the Start button
+        // before this is ever called; this is the failsafe at the point of
+        // harm, the same pattern #0034 established for the disc-identity
+        // guard above.
         guard case .scanned(let scan) = scanState else {
             append("⚠︎ No completed disc scan — wait for the scan to finish before starting.")
             return false
         }
-        guard let titleIndex = selectedTitleIndex,
-              scan.disc.titles.contains(where: { $0.index == titleIndex }) else {
-            append("⚠︎ No title selected from the disc scan — choose a title before starting.")
+        guard let selection = EncodeSelection.make(request: request, disc: scan.disc) else {
+            append("⚠︎ The selected title or audio tracks don't match the current disc scan — rescan and choose again before starting.")
             return false
         }
 
         let disc = currentDisc.mountURL
-        let titleSelection = EncodeController.TitleSelection.index(titleIndex)
 
         isRunning = true
-        currentMetadata = metadata
+        currentMetadata = request.metadata
         let jobID = Self.makeJobID()
         currentJobID = jobID
         lastOutcome = nil
@@ -223,17 +238,17 @@ final class JobController {
 
         let run = runner
         task = Task { [weak self] in
-            let outcome = await run(metadata, titleSelection, settings, disc) { line in
+            let outcome = await run(request, selection, settings, disc) { line in
                 self?.append(line)
             }
             self?.finish(outcome)
             // #0006: fires on both outcomes, after DVDPipeline has already
             // ejected the disc on success — "done" means the disc is out.
-            // Captures `metadata`/`jobID` directly rather than reading them
+            // Captures `request`/`jobID` directly rather than reading them
             // back off `self` so this still fires correctly even if the
             // caller that started the job (and everything holding `self`)
             // has since gone away.
-            await JobNotifier.notify(metadata: metadata, outcome: outcome, jobID: jobID)
+            await JobNotifier.notify(metadata: request.metadata, outcome: outcome, jobID: jobID)
         }
         return true
     }
@@ -256,6 +271,7 @@ final class JobController {
         scanGeneration += 1
         scanState = .idle
         selectedTitleIndex = nil
+        selectedAudioTrackNumbers = []
         mismatchAcknowledgement = nil
     }
 
@@ -275,6 +291,7 @@ final class JobController {
         let generation = scanGeneration
         scanState = .scanning
         selectedTitleIndex = nil
+        selectedAudioTrackNumbers = []
         mismatchAcknowledgement = nil
 
         let scan = scanRunner
@@ -287,7 +304,7 @@ final class JobController {
             let outcome = await scan(discPath, handbrakePath, volumeName, driveName) { line in
                 self?.append(line)
             }
-            self?.applyScanOutcome(outcome, forDisc: disc, generation: generation)
+            self?.applyScanOutcome(outcome, forDisc: disc, generation: generation, settings: settings)
         }
         return true
     }
@@ -296,9 +313,13 @@ final class JobController {
     /// disclosure's table, or the full picker shown for `.playAll`/`.none`.
     /// Clears `mismatchAcknowledgement`: a different title has a different
     /// duration, so a prior runtime-mismatch confirmation no longer applies.
-    func selectTitle(_ index: Int?) {
+    /// Recomputes `selectedAudioTrackNumbers` from `AudioTrackOptions
+    /// .preselection` for the new title (`[]` when `index` is `nil` or isn't
+    /// a title on the scan currently held).
+    func selectTitle(_ index: Int?, settings: AppSettings) {
         selectedTitleIndex = index
         mismatchAcknowledgement = nil
+        selectedAudioTrackNumbers = Self.preselectedAudioTracks(titleIndex: index, scanState: scanState, settings: settings)
     }
 
     /// #0032/#0026: explicit user confirmation to proceed despite a runtime
@@ -313,7 +334,7 @@ final class JobController {
     /// scan and `disc` is still the one in the drive — a disc swap, removal
     /// or Rescan that lands while the scan was in flight must not resurrect
     /// a superseded result.
-    private func applyScanOutcome(_ outcome: DiscScanner.Outcome, forDisc disc: DiscInsertion, generation: Int) {
+    private func applyScanOutcome(_ outcome: DiscScanner.Outcome, forDisc disc: DiscInsertion, generation: Int, settings: AppSettings) {
         guard generation == scanGeneration, insertedDisc == disc else { return }
         switch outcome {
         case .success(let result):
@@ -324,10 +345,29 @@ final class JobController {
             // the guard is that nothing here defaults to "rip it".
             if case .single(let index) = DiscTitleHeuristic.classify(result.disc, mainFeatureIndex: result.mainFeatureIndex) {
                 selectedTitleIndex = index
+                selectedAudioTrackNumbers = Self.preselectedAudioTracks(titleIndex: index, scanState: scanState, settings: settings)
             }
         case .failure(let failure):
             scanState = .failed(failure)
         }
+    }
+
+    /// #0027: the audio-track preselection for `titleIndex` on whatever scan
+    /// `scanState` holds — `[]` when `titleIndex` is `nil` or isn't a title
+    /// on that scan, so `selectTitle`/`applyScanOutcome` can call this
+    /// unconditionally. `static` (not an instance method) because it's
+    /// called from `applyScanOutcome` with the `scanState` value already
+    /// resolved for this generation, rather than reading `self.scanState`
+    /// again after the fact.
+    private static func preselectedAudioTracks(titleIndex: Int?, scanState: ScanState, settings: AppSettings) -> [Int] {
+        guard let titleIndex,
+              case .scanned(let scan) = scanState,
+              let title = scan.disc.titles.first(where: { $0.index == titleIndex }) else {
+            return []
+        }
+        let options = AudioTrackOptions.options(for: title)
+        let untagged = AudioTrackOptions.isUntagged(title)
+        return AudioTrackOptions.preselection(options, preferred: settings.preferredAudioLanguages, untagged: untagged)
     }
 
     // MARK: - Internals

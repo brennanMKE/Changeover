@@ -208,7 +208,7 @@ struct DiscTitleListView: View {
     private func titleTable(_ disc: DiscInfo, badgeIndex: Int?) -> some View {
         let selection = Binding<Int?>(
             get: { jobs.selectedTitleIndex },
-            set: { jobs.selectTitle($0) }
+            set: { jobs.selectTitle($0, settings: settings) }
         )
         return List(disc.titles, selection: selection) { title in
             titleRow(title, badgeIndex: badgeIndex)

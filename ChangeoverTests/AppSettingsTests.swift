@@ -1,0 +1,60 @@
+import Foundation
+import Testing
+@testable import Changeover
+
+/// Covers #0027's `AppSettings.preferredAudioLanguages`: it loads/persists
+/// through an injected `UserDefaults` suite (never the real
+/// `UserDefaults.standard` domain), normalizes on both load and save, and —
+/// the case the existing `!v.isEmpty` string-loading idiom would get wrong —
+/// an intentionally empty list is a real preference, distinct from "never
+/// set", and survives a round trip as empty rather than reverting to the
+/// `["eng", "spa"]` default.
+@MainActor
+struct AppSettingsTests {
+
+    /// A fresh, disposable suite per test — never `UserDefaults.standard`.
+    private func throwawaySuite(_ name: String = #function) -> UserDefaults {
+        let suiteName = "AppSettingsTests.\(name).\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return defaults
+    }
+
+    @Test func defaultsToTheWorkflowDocsPreference() {
+        let settings = AppSettings(defaults: throwawaySuite())
+        #expect(settings.preferredAudioLanguages == ["eng", "spa"])
+    }
+
+    @Test func persistThenReloadRoundTripsTheList() {
+        let defaults = throwawaySuite()
+        let settings = AppSettings(defaults: defaults)
+        settings.preferredAudioLanguages = ["fra", "spa"]
+        settings.persist()
+
+        let reloaded = AppSettings(defaults: defaults)
+        #expect(reloaded.preferredAudioLanguages == ["fra", "spa"])
+    }
+
+    /// The nil-versus-empty distinction the plan calls out explicitly: an
+    /// empty list must survive, not silently revert to the default.
+    @Test func anIntentionallyEmptyListSurvivesARoundTrip() {
+        let defaults = throwawaySuite()
+        let settings = AppSettings(defaults: defaults)
+        settings.preferredAudioLanguages = []
+        settings.persist()
+
+        let reloaded = AppSettings(defaults: defaults)
+        #expect(reloaded.preferredAudioLanguages == [])
+    }
+
+    @Test func bibliographicCodesNormalizeOnSave() {
+        let defaults = throwawaySuite()
+        let settings = AppSettings(defaults: defaults)
+        settings.preferredAudioLanguages = ["FRE", "eng", "und"]
+        settings.persist()
+
+        // "und" normalizes to nil and is dropped; "FRE" becomes "fra".
+        let reloaded = AppSettings(defaults: defaults)
+        #expect(reloaded.preferredAudioLanguages == ["fra", "eng"])
+    }
+}

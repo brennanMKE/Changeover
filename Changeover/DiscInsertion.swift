@@ -10,7 +10,11 @@ import Foundation
 /// Identifies one optical disc mount: enough for the eject step (#0005) to
 /// target the right volume and device, and for `DVDMonitor`'s debounce to
 /// tell "same disc" from "different disc" (#0013).
-nonisolated struct DiscInsertion: Equatable, Sendable {
+///
+/// `Codable`/`Hashable` since #0027: `MovieMetadata.selectionDisc` carries
+/// one of these, and `RipRequest` (which embeds a `MovieMetadata`) needs
+/// both conformances to cross the wire in Phase 4.
+nonisolated struct DiscInsertion: Codable, Equatable, Hashable, Sendable {
     let mountURL: URL
     /// BSD device node, e.g. "disk6". Optional because DiskArbitration could
     /// in principle omit it; never omitted in practice.
@@ -27,7 +31,18 @@ nonisolated struct DiscInsertion: Equatable, Sendable {
     /// was made on without `discID`, and makes `onChange(of: insertedDisc)`
     /// fire for every new insertion even when SwiftUI coalesces the removal
     /// in between.
-    let insertionID = UUID()
+    ///
+    /// `var`, not `let`, since #0027: the Swift compiler's synthesized
+    /// `Decodable.init(from:)` silently skips decoding an immutable stored
+    /// property that carries its own initializer expression — it always
+    /// re-runs `UUID()` instead of reading the wire value, warning "immutable
+    /// property will not be decoded because it is declared with an initial
+    /// value which cannot be overwritten" — so a `let` here would silently
+    /// break every `RipRequest`/`MovieMetadata` JSON round trip (found by
+    /// `RipRequestTests`). `var` is what makes the synthesized decoder
+    /// actually assign the decoded value; nothing in this codebase mutates
+    /// it after construction.
+    var insertionID = UUID()
 }
 
 /// Outcome of classifying one DiskArbitration disk-appeared (or

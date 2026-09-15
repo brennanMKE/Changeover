@@ -2,7 +2,18 @@ import Foundation
 
 /// Plain value type constructed from a TMDB search result.
 /// Drives the Plex folder and file names for the encoded output.
-struct MovieMetadata {
+///
+/// `Codable`/`Hashable`/`Sendable` since #0027: `RipRequest` embeds one and
+/// needs both to cross the wire in Phase 4. `nonisolated` at the type level
+/// for the same reason `RipRequest`/`DiscInfo` are — it has to reach the
+/// `nonisolated` `EncodeController`/`PlexOrganizer` under this target's
+/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, and — unlike the app target —
+/// `ChangeoverTests` does not set that build setting, so its ~15 existing
+/// `MovieMetadata(from:)` call sites (plain, non-`async`, non-`@MainActor`
+/// helper functions) need this to stay a plain value conversion rather than
+/// an actor-isolated one. `TMDBMovie` is itself a plain `Sendable`-shaped
+/// value type, so nothing about this conversion actually needs MainActor.
+nonisolated struct MovieMetadata: Codable, Hashable, Sendable {
     let title:  String
     let year:   String
     let tmdbID: String
@@ -18,6 +29,15 @@ struct MovieMetadata {
         self.title  = movie.title
         self.year   = movie.yearText
         self.tmdbID = String(movie.id)
+        self.selectionDisc = selectionDisc
+    }
+
+    /// Plain memberwise init — for tests, `RipRequest` decoding, and any
+    /// future caller with no `TMDBMovie` on hand.
+    init(title: String, year: String, tmdbID: String, selectionDisc: DiscInsertion? = nil) {
+        self.title = title
+        self.year = year
+        self.tmdbID = tmdbID
         self.selectionDisc = selectionDisc
     }
 

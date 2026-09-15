@@ -491,6 +491,54 @@ struct EncodeControllerTests {
         #expect(failure.reason == .toolExited(code: 1))
     }
 
+    /// #0027/#0029: `DVDPipeline.selection` actually reaches HandBrakeCLI's
+    /// argv, not just the pure `EncodeController.arguments(...)` builder —
+    /// the wiring this issue adds (`JobController.pipelineRunner` →
+    /// `EncodeSelection.make` → `DVDPipeline.selection` → `EncodeController
+    /// .encode(...audio:...)`) exercised end to end against the stub tool.
+    @Test func pipelinePassesTheSelectionsTitleAndAudioTracksToTheStub() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        let stub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        let argvLog = root.appendingPathComponent("argv.log").path
+        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0", "ARGV_LOG=\"\(argvLog)\""])
+        settings.handbrakePath = stub
+
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            log:      { _ in }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+        pipeline.selection = EncodeSelection(
+            title:         .index(1),
+            audio:         .tracks([1, 4]),
+            fallbackAudio: .sourceDefault,
+            filter:        .none
+        )
+
+        let outcome = await pipeline.run()
+        guard case .succeeded = outcome else {
+            Issue.record("expected success, got \(outcome)")
+            return
+        }
+
+        let argv = try String(contentsOfFile: argvLog, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: " ")
+        let titleIndex = try #require(argv.firstIndex(of: "--title"))
+        #expect(argv[titleIndex + 1] == "1")
+        let audioIndex = try #require(argv.firstIndex(of: "--audio"))
+        #expect(argv[audioIndex + 1] == "1,1,4")
+        let aencoderIndex = try #require(argv.firstIndex(of: "--aencoder"))
+        #expect(argv[aencoderIndex + 1] == "copy:aac,copy:ac3,copy:ac3")
+        #expect(!argv.contains("--main-feature"))
+    }
+
     // MARK: - Working-file disposal (#0004) — pipeline-level
 
     /// T14: a succeeded job leaves no `job-*` directory behind — the `.mp4`
