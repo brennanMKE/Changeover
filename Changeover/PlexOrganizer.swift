@@ -1,10 +1,16 @@
 import Foundation
 
 enum PlexOrganizer {
-    /// Moves `encodedFile` into the correct Plex Movies folder structure
-    /// based on `metadata.folderName` and `metadata.fileName`.
+    /// Moves `encodedFile` into the correct library folder structure — the
+    /// Plex `Movies` tree for `.feature`, or the non-Plex `Clips` tree for
+    /// `.extra` (#0031). The destination `String` is computed once, by
+    /// `LibraryPaths.resolve`, from a `LibraryDestination` + `LibraryRoots`
+    /// the caller supplies — there is no way for a caller to hand this
+    /// function a bare path, so there is no code path that can file an extra
+    /// under `Movies/`.
     ///
-    /// Result path: `Movies/<Title (Year) {tmdb-ID}>/<Title (Year).mp4>`
+    /// `.feature` result path: `Movies/<Title (Year) {tmdb-ID}>/<Title (Year).mp4>`
+    /// `.extra` result path: `Clips/<Title (Year) {tmdb-ID}>/<Title (Year)> - tNN.<ext>`
     ///
     /// Returns the destination the file landed at. Throws a `JobFailure` rather
     /// than swallowing the error — the log stays, it just stops being the only
@@ -48,22 +54,44 @@ enum PlexOrganizer {
     @discardableResult
     @concurrent
     nonisolated static func move(
-        encodedFile:    String,
-        metadata:       MovieMetadata,
-        plexMoviesPath: String,
-        log:            @MainActor (String) -> Void,
-        onBegin:        @Sendable () -> Void = {}
+        encodedFile: String,
+        metadata:    MovieMetadata,
+        destination: LibraryDestination,
+        roots:       LibraryRoots,
+        log:         @MainActor (String) -> Void,
+        onBegin:     @Sendable () -> Void = {}
     ) async throws(JobFailure) -> URL {
         onBegin()
 
         let fm = FileManager.default
 
-        let folderPath = (plexMoviesPath as NSString)
-            .appendingPathComponent(metadata.folderName)
-        let destPath = (folderPath as NSString)
-            .appendingPathComponent(metadata.fileName)
+        let sourceExtension = (encodedFile as NSString).pathExtension
+        let resolved = LibraryPaths.resolve(
+            destination,
+            metadata:        metadata,
+            roots:           roots,
+            sourceExtension: sourceExtension
+        )
+        let folderPath = resolved.folder
+        let destPath = resolved.file
         let destURL = URL(fileURLWithPath: destPath)
         let encodedURL = URL(fileURLWithPath: encodedFile)
+
+        // #0031: an extra must never land inside `Movies/` or `TV Shows/`,
+        // even by way of a `Clips` symlink pointing into either — checked
+        // before any filesystem mutation, using the same realpath-based
+        // overlap check the working-file guards use (`WorkingFiles
+        // .rootsOverlap`). `.feature` never runs this: `roots.moviesPath` is
+        // its own destination root, so "overlaps Movies" is trivially true
+        // and meaningless there.
+        if case .extra = destination,
+           let realClips = WorkingFiles.canonicalPath(roots.clipsPath),
+           WorkingFiles.rootsOverlap(realClips, roots.moviesPath)
+               || WorkingFiles.rootsOverlap(realClips, roots.tvPath) {
+            await log("✗ ERROR moving file: the Clips folder overlaps the Plex library — refusing to move an extra there")
+            throw JobFailure(stage: .organize,
+                             reason: .destinationUnwritable(path: folderPath))
+        }
 
         do {
             try fm.createDirectory(atPath: folderPath,

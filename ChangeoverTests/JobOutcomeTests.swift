@@ -123,7 +123,6 @@ struct JobOutcomeTests {
         let root = try Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let moviesPath = root.appendingPathComponent("Movies").path
         let encoded = root.appendingPathComponent("encoded.mp4")
         try Data("stub".utf8).write(to: encoded)
 
@@ -131,7 +130,8 @@ struct JobOutcomeTests {
         let destination = try await PlexOrganizer.move(
             encodedFile:    encoded.path,
             metadata:       try Self.metadata(),
-            plexMoviesPath: moviesPath,
+            destination:    .feature,
+            roots:          LibraryRoots(mediaRoot: root.path),
             log:            { logged.append($0) }
         )
 
@@ -173,7 +173,8 @@ struct JobOutcomeTests {
             _ = try await PlexOrganizer.move(
                 encodedFile:    encoded.path,
                 metadata:       metadata,
-                plexMoviesPath: movies.path,
+                destination:    .feature,
+                roots:          LibraryRoots(mediaRoot: root.path),
                 log:            { logged.append($0) }
             )
         } catch {
@@ -238,7 +239,8 @@ struct JobOutcomeTests {
             _ = try await PlexOrganizer.move(
                 encodedFile:    encoded.path,
                 metadata:       metadata,
-                plexMoviesPath: movies.path,
+                destination:    .feature,
+                roots:          LibraryRoots(mediaRoot: root.path),
                 log:            { logged.append($0) }
             )
         } catch {
@@ -282,7 +284,8 @@ struct JobOutcomeTests {
         let destination = try await PlexOrganizer.move(
             encodedFile:    encoded.path,
             metadata:       metadata,
-            plexMoviesPath: moviesPath,
+            destination:    .feature,
+            roots:          LibraryRoots(mediaRoot: root.path),
             log:            { logged.append($0) }
         )
 
@@ -343,7 +346,8 @@ struct JobOutcomeTests {
             _ = try await PlexOrganizer.move(
                 encodedFile:    encoded.path,
                 metadata:       metadata,
-                plexMoviesPath: movies.path,
+                destination:    .feature,
+                roots:          LibraryRoots(mediaRoot: root.path),
                 log:            { logged.append($0) }
             )
         } catch {
@@ -398,7 +402,6 @@ struct JobOutcomeTests {
         let root = try Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let moviesPath = root.appendingPathComponent("Movies").path
         let encoded = root.appendingPathComponent("encoded.mp4")
         try Data("stub".utf8).write(to: encoded)
 
@@ -406,7 +409,8 @@ struct JobOutcomeTests {
         _ = try await PlexOrganizer.move(
             encodedFile:    encoded.path,
             metadata:       try Self.metadata(),
-            plexMoviesPath: moviesPath,
+            destination:    .feature,
+            roots:          LibraryRoots(mediaRoot: root.path),
             log:            { _ in },
             onBegin:        { recorder.record() }
         )

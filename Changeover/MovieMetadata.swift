@@ -46,9 +46,17 @@ nonisolated struct MovieMetadata: Codable, Hashable, Sendable {
         "\(Self.pathSafe(title)) (\(year)) {tmdb-\(tmdbID)}"
     }
 
+    /// "Title (Year)" with no extension and no `{tmdb-ID}` tag — the shared
+    /// stem `fileName` and #0031's `.extra` naming both build on, so the
+    /// extension is written in exactly one place (`fileName`'s `.mp4`, or
+    /// `LibraryPaths.resolve`'s `sourceExtension` for an extra).
+    nonisolated var baseName: String {
+        "\(Self.pathSafe(title)) (\(year))"
+    }
+
     /// Encoded file name, e.g. "Blade Runner (1982).mp4"
     nonisolated var fileName: String {
-        "\(Self.pathSafe(title)) (\(year)).mp4"
+        "\(baseName).mp4"
     }
 
     /// Makes an arbitrary title safe to sit inside a single filesystem path

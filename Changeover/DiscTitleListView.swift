@@ -124,6 +124,16 @@ struct DiscTitleListView: View {
             titleTable(result.disc, badgeIndex: nil)
         }
 
+        // #0031 Step B — the extras opt-in is the same table, in its fourth
+        // mode: an "Extra" checkbox per row, off by default, with a running
+        // duration total. Shown whenever the table itself is on screen
+        // (`.single`'s "Not this one?" disclosure counts) — extras never
+        // gate Start, so this is purely informational until the user checks
+        // a box.
+        if !jobs.selectedExtraTitleIndices.isEmpty {
+            extrasSummary(disc: result.disc)
+        }
+
         // #0032: the verdict is for the title that will actually be encoded
         // — the *selected* one, in every outcome. Tying it to the
         // confirmation row (the first pass) left a mismatched title picked
@@ -245,7 +255,28 @@ struct DiscTitleListView: View {
                     .background(Color.accentColor.opacity(0.15))
                     .clipShape(Capsule())
             }
+            // #0031 Step B: the extras opt-in, off by default. A checked
+            // feature row is harmless — `ExtrasPlan.make` drops the feature
+            // index whenever it resolves — so this never needs to disable
+            // itself on the badged row.
+            Toggle("Extra", isOn: Binding(
+                get: { jobs.selectedExtraTitleIndices.contains(title.index) },
+                set: { _ in jobs.toggleExtra(title.index) }
+            ))
+            .toggleStyle(.checkbox)
+            .labelsHidden()
+            .help("Rip this title as an extra, filed outside the Plex library")
         }
         .padding(.vertical, 2)
+    }
+
+    // MARK: - Extras running total (#0031 Step B)
+
+    private func extrasSummary(disc: DiscInfo) -> some View {
+        let selectedTitles = disc.titles.filter { jobs.selectedExtraTitleIndices.contains($0.index) }
+        let totalSeconds = selectedTitles.reduce(0) { $0 + $1.durationSeconds }
+        return Text("\(selectedTitles.count) extra\(selectedTitles.count == 1 ? "" : "s") selected — \(DiscTitleFormatting.duration(totalSeconds)) total, filed outside the Plex library")
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 }

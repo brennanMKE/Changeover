@@ -25,11 +25,21 @@ final class AppSettings {
 
     // MARK: - Derived Plex paths (standard Plex folder structure under root)
 
+    /// #0031 — the one place `Movies`/`TV Shows`/`Clips` are derived from
+    /// `plexMediaRoot`. `plexMoviesPath`/`plexTVPath`/`clipsPath` below all
+    /// delegate to this rather than deriving their own strings, so there is
+    /// exactly one derivation to keep in sync with `LibraryRoots`.
+    var libraryRoots: LibraryRoots { LibraryRoots(mediaRoot: plexMediaRoot) }
+
     /// e.g. /Volumes/MediaSSD/Plex Media/Movies
-    var plexMoviesPath: String { "\(plexMediaRoot)/Movies" }
+    var plexMoviesPath: String { libraryRoots.moviesPath }
 
     /// e.g. /Volumes/MediaSSD/Plex Media/TV Shows
-    var plexTVPath: String { "\(plexMediaRoot)/TV Shows" }
+    var plexTVPath: String { libraryRoots.tvPath }
+
+    /// e.g. /Volumes/MediaSSD/Plex Media/Clips — extras land here, outside
+    /// both Plex libraries (#0031).
+    var clipsPath: String { libraryRoots.clipsPath }
 
     /// Fallback only — where the optional `makemkvcon` fallback (#0015)
     /// writes its intermediate `.mkv`. Not used on the happy path since

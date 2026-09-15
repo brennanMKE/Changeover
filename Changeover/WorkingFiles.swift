@@ -406,7 +406,12 @@ nonisolated enum WorkingFiles {
     /// True when `realRoot` equals, is inside, or contains the Movies path.
     /// When `moviesPath` doesn't exist (no `realpath`), compare standardised
     /// strings instead (#0004 §6 check 5).
-    private static func rootsOverlap(_ realRoot: String, _ moviesPath: String) -> Bool {
+    ///
+    /// Internal, not `private`, since #0031: `PlexOrganizer` reuses this to
+    /// refuse an `.extra` destination that canonically aliases into `Movies`
+    /// or `TV Shows` (e.g. a `Clips` symlink), rather than reimplementing the
+    /// same realpath-based comparison a second time.
+    static func rootsOverlap(_ realRoot: String, _ moviesPath: String) -> Bool {
         let realMovies = canonicalPath(moviesPath) ?? (moviesPath as NSString).standardizingPath
         return realMovies == realRoot
             || realRoot.hasPrefix(realMovies + "/")

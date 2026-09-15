@@ -33,6 +33,15 @@
 #                     only ever one process, so a signal to it ends the sleep
 #                     immediately and closes the pipe right away.
 #
+# #0031 extends the same sidecar mechanism for the extras pipeline tests:
+#   FAIL_TITLES  — space-separated list of `--title` values that should fail
+#                  this invocation with FAIL_EXIT (default 1) and no output
+#                  file written, so one specific extra (or the feature) can
+#                  be made to fail while every other `--title` on the same
+#                  disc still succeeds. `--main-feature` invocations (no
+#                  `--title` at all) never match.
+#   FAIL_EXIT    — exit code used above (default 1).
+#
 # #0008 extends the same sidecar mechanism for `PreflightTests` and every
 # stub-driven pipeline test: when invoked as `--help` (Preflight's P2
 # capability check), this script never falls through to any of the above —
@@ -156,6 +165,27 @@ case "$*" in
         exit "${SCAN_EXIT:-0}"
         ;;
 esac
+
+# #0031: fail one specific --title (used for extras: the feature and other
+# extras must keep succeeding while exactly one extra fails). Checked before
+# any output is written, and before ARGV_LOG's invocation is otherwise
+# treated as a success, so it behaves like a genuine early HandBrakeCLI
+# failure.
+if [ -n "$FAIL_TITLES" ]; then
+    title_arg=""
+    prev2=""
+    for arg in "$@"; do
+        if [ "$prev2" = "--title" ]; then
+            title_arg="$arg"
+        fi
+        prev2="$arg"
+    done
+    for t in $FAIL_TITLES; do
+        if [ "$t" = "$title_arg" ]; then
+            exit "${FAIL_EXIT:-1}"
+        fi
+    done
+fi
 
 echo "Scanning title 1 of 1..."
 echo "Encoding: task 1 of 1, 50.00 %"

@@ -48,8 +48,10 @@ final class JobController {
     /// the scan `JobController` is currently holding — `start` refuses to
     /// run unless `EncodeSelection.make(request:disc:)` succeeds, so the
     /// runner never sees an index or track number that doesn't belong to
-    /// the live scan.
-    typealias Runner = @MainActor (RipRequest, EncodeSelection, AppSettings, URL, @escaping @MainActor (String) -> Void) async -> JobOutcome
+    /// the live scan. The `ExtrasPlan` (#0031 Step B) is resolved the same
+    /// way, against the same scan — an empty plan is the default and a
+    /// valid job.
+    typealias Runner = @MainActor (RipRequest, EncodeSelection, ExtrasPlan, AppSettings, URL, @escaping @MainActor (String) -> Void) async -> JobOutcome
 
     /// The unit of work a disc scan performs, injectable for the same reason
     /// `Runner` is: tests drive it with a canned `DiscScanner.Outcome`
@@ -108,6 +110,20 @@ final class JobController {
     /// uses for `selectTitle`.
     var selectedAudioTrackNumbers: [Int] = []
 
+    /// #0031 Step B — the extras the user opted into, over the same title
+    /// table the feature is picked from. Its own selection property, never
+    /// folded into `selectedTitleIndex`: the destination an index implies is
+    /// different (`Movies/` versus `Clips/`), and conflating the two is
+    /// exactly the mistake `LibraryDestination` types its way out of. Plain
+    /// `var`, not `private(set)`, for the same reason
+    /// `selectedAudioTrackNumbers` is — the picker binds to it directly.
+    /// Never gates `StartGate.canStart`: zero extras is the default and a
+    /// valid job. Cleared on disc removal and on a fresh scan, same as
+    /// every other per-disc selection; **not** cleared when the feature
+    /// title changes — `ExtrasPlan.make` already drops the feature index
+    /// (and anything not on the disc) whenever it resolves.
+    var selectedExtraTitleIndices: Set<Int> = []
+
     /// #0032/#0026: the user's explicit confirmation to proceed despite a
     /// runtime-cross-check mismatch, keyed to the title and movie it was
     /// given for (`StartGate.isAcknowledged` compares both), so it can't
@@ -139,8 +155,8 @@ final class JobController {
     }
 
     /// The production runner: the real encode → move pipeline.
-    static let pipelineRunner: Runner = { request, selection, settings, disc, log in
-        await DVDPipeline(metadata: request.metadata, settings: settings, disc: disc, selection: selection, log: log).run()
+    static let pipelineRunner: Runner = { request, selection, extras, settings, disc, log in
+        await DVDPipeline(metadata: request.metadata, settings: settings, disc: disc, selection: selection, extras: extras, log: log).run()
     }
 
     /// The production scan runner: the real `HandBrakeCLI --scan`.
@@ -226,6 +242,12 @@ final class JobController {
             append("⚠︎ The selected title or audio tracks don't match the current disc scan — rescan and choose again before starting.")
             return false
         }
+        // #0031 Step B: resolved the same way as `selection` above, against
+        // the same held scan. Never refuses `start` — an extra index that
+        // no longer resolves (a stale pick from a superseded scan) is simply
+        // dropped, not treated as a reason to fail the whole job the feature
+        // is about.
+        let extrasPlan = ExtrasPlan.make(featureIndex: request.featureTitleIndex, requested: request.extraTitleIndices, disc: scan.disc)
         // #0027 review: `make` accepts an empty track list, which HandBrake
         // would turn into "first track only" while the picker shows nothing
         // checked. Refuse it on a title that has audio.
@@ -246,7 +268,7 @@ final class JobController {
 
         let run = runner
         task = Task { [weak self] in
-            let outcome = await run(request, selection, settings, disc) { line in
+            let outcome = await run(request, selection, extrasPlan, settings, disc) { line in
                 self?.append(line)
             }
             self?.finish(outcome)
@@ -280,6 +302,7 @@ final class JobController {
         scanState = .idle
         selectedTitleIndex = nil
         selectedAudioTrackNumbers = []
+        selectedExtraTitleIndices = []
         mismatchAcknowledgement = nil
     }
 
@@ -300,6 +323,7 @@ final class JobController {
         scanState = .scanning
         selectedTitleIndex = nil
         selectedAudioTrackNumbers = []
+        selectedExtraTitleIndices = []
         mismatchAcknowledgement = nil
 
         let scan = scanRunner
@@ -328,6 +352,18 @@ final class JobController {
         selectedTitleIndex = index
         mismatchAcknowledgement = nil
         selectedAudioTrackNumbers = Self.preselectedAudioTracks(titleIndex: index, scanState: scanState, settings: settings)
+    }
+
+    /// #0031 Step B — flips one title's extras opt-in. Used by the picker's
+    /// per-row checkbox; a title already selected as the feature can still
+    /// be toggled here (harmlessly — `ExtrasPlan.make` drops it), so the UI
+    /// doesn't need to special-case that row.
+    func toggleExtra(_ titleIndex: Int) {
+        if selectedExtraTitleIndices.contains(titleIndex) {
+            selectedExtraTitleIndices.remove(titleIndex)
+        } else {
+            selectedExtraTitleIndices.insert(titleIndex)
+        }
     }
 
     /// #0032/#0026: explicit user confirmation to proceed despite a runtime

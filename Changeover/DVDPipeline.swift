@@ -49,6 +49,11 @@ struct DVDPipeline {
     /// compile unchanged; production always passes a selection built by
     /// `EncodeSelection.make(request:disc:)` via `JobController.pipelineRunner`.
     var selection: EncodeSelection = .phase1
+    /// #0031 Step B — the extras to encode and move after the feature.
+    /// Defaulted to empty so every existing construction site (tests
+    /// included) is unaffected; production always passes the plan
+    /// `JobController.start` resolved against the held scan.
+    var extras: ExtrasPlan = ExtrasPlan()
     let log: @MainActor (String) -> Void
 
     /// Where `DiscReliabilityLog.append` writes. Defaulted so existing call
@@ -78,6 +83,7 @@ struct DVDPipeline {
         let workingRipPath    = settings.workingRipPath
         let plexMediaRoot     = settings.plexMediaRoot
         let plexMoviesPath    = settings.plexMoviesPath
+        let libraryRoots      = settings.libraryRoots
         let volumeName        = disc.lastPathComponent
         let logURL            = reliabilityLogURL
         let remover           = removeJobDirectory
@@ -413,10 +419,11 @@ struct DVDPipeline {
         let destination: URL
         do {
             destination = try await PlexOrganizer.move(
-                encodedFile:    mp4URL.path,
-                metadata:       metadata,
-                plexMoviesPath: plexMoviesPath,
-                log:            log
+                encodedFile: mp4URL.path,
+                metadata:    metadata,
+                destination: .feature,
+                roots:       libraryRoots,
+                log:         log
             )
         } catch {
             log("✗ Moving into Plex failed. Aborting.")
@@ -439,6 +446,93 @@ struct DVDPipeline {
             log("✓ Produced by: MakeMKV fallback, then HandBrake")
         } else {
             log("✓ Produced by: HandBrake, direct from disc")
+        }
+
+        // Step 2.5: Extras (#0031 Step B). One by one, after the feature has
+        // already moved — the feature is already safely in Plex by this
+        // point, so a failed extra must never change the outcome being
+        // returned, and never reaches `FallbackPolicy` (that only ever sees
+        // the feature's primary failure). The disc stays mounted until every
+        // extra is done; eject moves after this loop for exactly that
+        // reason.
+        if !extras.items.isEmpty {
+            // The marker goes back to `.encoding`: the feature (the only
+            // copy #0012 cares about) has already moved, and anything an
+            // extra leaves behind on a mid-loop crash is re-derivable from
+            // the disc. Leaving it at `.encoded` would make the sweep report
+            // `encodedNeverMoved` forever for a directory that in fact holds
+            // no unmoved feature at all.
+            await advanceMarker(.encoding)
+
+            var succeededExtras = 0
+            for item in extras.items {
+                let extraFilter = DeinterlaceDecision.decide(
+                    frameRate:         item.frameRate,
+                    interlaceDetected: item.interlaceDetected
+                )
+                let paddedIndex = String(format: "%02d", item.titleIndex)
+                let extraOutput = (jobDirectory as NSString)
+                    .appendingPathComponent("\(metadata.baseName) - t\(paddedIndex).mp4")
+
+                log("▶ Extra: title \(item.titleIndex)")
+
+                // #0031: extras use `.sourceDefault` audio — the disc's
+                // default track, same encoder settings as the feature — and
+                // there is no per-extra audio picker in this phase.
+                switch await EncodeController.encode(
+                    source:        discPath,
+                    title:         .index(item.titleIndex),
+                    output:        extraOutput,
+                    handbrakePath: handbrakePath,
+                    filter:        extraFilter,
+                    audio:         .sourceDefault,
+                    log:           log
+                ) {
+                case .failure(let extraFailure):
+                    log("✗ Extra title \(item.titleIndex) failed to encode: \(String(describing: extraFailure.reason)) — skipping")
+                    switch WorkingFiles.removeFile(
+                        extraOutput,
+                        inJobDirectory: jobDirectory,
+                        under:           workingEncodePath,
+                        forbidding:      plexMoviesPath
+                    ) {
+                    case .removed, .refused(.missing):
+                        break
+                    case .refused, .failed:
+                        log("⚠︎ Could not remove the partial extra at \(extraOutput)")
+                    }
+
+                case .success(let extraURL):
+                    do {
+                        _ = try await PlexOrganizer.move(
+                            encodedFile: extraURL.path,
+                            metadata:    metadata,
+                            destination: .extra(titleIndex: item.titleIndex),
+                            roots:       libraryRoots,
+                            log:         log
+                        )
+                        succeededExtras += 1
+                    } catch {
+                        log("✗ Extra title \(item.titleIndex) failed to move into \(libraryRoots.clipsPath) — deleting")
+                        // #0031 decision: an extra whose move failed is
+                        // deleted, not kept — the disc remains the source,
+                        // unlike the feature (#0012), so there is nothing to
+                        // preserve here.
+                        switch WorkingFiles.removeFile(
+                            extraURL.path,
+                            inJobDirectory: jobDirectory,
+                            under:           workingEncodePath,
+                            forbidding:      plexMoviesPath
+                        ) {
+                        case .removed, .refused(.missing):
+                            break
+                        case .refused, .failed:
+                            log("⚠︎ Could not remove the partial extra at \(extraURL.path)")
+                        }
+                    }
+                }
+            }
+            log("✓ Extras: \(succeededExtras) of \(extras.items.count) → \(libraryRoots.clipsPath)")
         }
 
         // Step 3: Eject (#0005). Only ever reached on a typed success — the

@@ -306,6 +306,7 @@ struct MetadataEntryView: View {
         let request = RipRequest(
             metadata: metadata,
             featureTitleIndex: featureTitleIndex,
+            extraTitleIndices: jobs.selectedExtraTitleIndices.sorted(),
             audioTrackNumbers: jobs.selectedAudioTrackNumbers
         )
         jobs.start(request: request, settings: settings)
