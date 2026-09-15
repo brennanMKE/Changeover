@@ -50,6 +50,14 @@ struct MetadataEntryView: View {
             selectedID = nil
             vm.queryChanged(apiKey: settings.tmdbAPIKey)
         }
+        // #0030 review: the keystroke clears `selectedID` at once, but the
+        // debounced search clears `vm.selectedMovie` only when it fires. A
+        // row clicked inside that window would leave `selectedID` set with no
+        // selected movie, which is the stuck re-pick bug again. Follow the
+        // view model whenever it drops the selection.
+        .onChange(of: vm.selectedMovie?.id) { _, id in
+            if id == nil, selectedID != nil { selectedID = nil }
+        }
     }
 
     /// #0034: applies `SelectionReset.reconcile`. Runs from `onChange`

@@ -56,31 +56,59 @@ final class MovieSearchViewModel {
     /// The actual network round trip, shared by the immediate and debounced
     /// paths. Sorts the response with `sorted(_:for:)` (#0030, `Plan.md`
     /// 11.7) before publishing it.
+    ///
+    /// Only the latest search may publish (#0030 review). A superseded one
+    /// (cancelled by a keystroke, Return, a blank query or a disc reset) is
+    /// dropped when its request returns: URLSession throws
+    /// `URLError.cancelled` for a cancelled task, which would otherwise blank
+    /// `results`, show a red "cancelled" error, and clear `isLoading` under
+    /// the newer search that is still loading.
     func search(apiKey: String) async {
+        searchGeneration &+= 1
+        let generation = searchGeneration
         runtimeTask?.cancel()
         runtimeTask = nil
         runtimeLookup = .idle
         errorMessage  = nil
         selectedMovie = nil
         isLoading     = true
-        defer { isLoading = false }
+        defer { if generation == searchGeneration { isLoading = false } }
 
         let searchedQuery = query
         do {
             let fetched = try await client.searchMovies(query: searchedQuery, apiKey: apiKey)
+            guard isCurrent(generation) else { return }
             results = Self.sorted(fetched, for: searchedQuery)
         } catch {
+            guard isCurrent(generation) else { return }
             results = []
             errorMessage = (error as? LocalizedError)?.errorDescription
                         ?? error.localizedDescription
         }
     }
 
+    /// Bumped by every `search` start and every cancellation, so an older
+    /// search's response can tell it no longer owns the published state.
+    private var searchGeneration = 0
+
+    private func isCurrent(_ generation: Int) -> Bool {
+        generation == searchGeneration && !Task.isCancelled
+    }
+
+    /// Cancels the pending or in-flight search and retires its generation,
+    /// so its response is dropped and it can't leave the spinner running.
+    private func cancelSearch() {
+        searchTask?.cancel()
+        searchTask = nil
+        searchGeneration &+= 1
+        isLoading = false
+    }
+
     /// Return / the `Search` button: fires immediately, cancelling any
     /// pending debounced search so the two triggers can't race and produce
     /// two requests for the same keystroke.
     func runSearchNow(apiKey: String) {
-        searchTask?.cancel()
+        cancelSearch()
         searchTask = Task { await self.search(apiKey: apiKey) }
     }
 
@@ -92,10 +120,10 @@ final class MovieSearchViewModel {
     /// which would flash an error the user never asked to see. Mirrors the
     /// `Search` button's own disabled condition.
     func queryChanged(apiKey: String) {
-        searchTask?.cancel()
+        cancelSearch()
 
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            searchTask = nil
+            select(movieID: nil, apiKey: "")
             results = []
             errorMessage = nil
             return
@@ -216,8 +244,7 @@ final class MovieSearchViewModel {
     /// search for the previous disc's query must not land after the reset
     /// and repopulate `results` for a disc that's no longer in the drive.
     func resetForNewDisc() {
-        searchTask?.cancel()
-        searchTask = nil
+        cancelSearch()
         select(movieID: nil, apiKey: "")
         query = ""
         results = []
