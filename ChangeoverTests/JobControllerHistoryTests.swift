@@ -188,6 +188,85 @@ struct JobControllerHistoryTests {
         #expect(!finishedLog.lines.contains { $0.text.contains("No disc is mounted") })
     }
 
+    // MARK: - Between-job traffic stays visible (#0042 review)
+
+    /// The regression the review found: after the first job, refusals went
+    /// to `controllerLog` while the log area rendered only the finished
+    /// job's log, so "No disc is mounted" and every other refusal vanished.
+    @Test func refusalsAfterAFinishedJobAreShownAfterItsLog() async throws {
+        let controller = JobController(runner: { context, _ in
+            context.log("▶ first job")
+            return fakeSuccess(context, destination: Self.destination)
+        }, ejector: { _ in .ejected })
+        try await runOneJob(controller)
+        let finishedID = try #require(controller.history.last?.id)
+
+        controller.removeDisc()
+        #expect(controller.start(request: Self.request(try Self.metadata()), settings: AppSettings()) == false)
+        #expect(await controller.ejectDisc() == false)
+
+        let lines = controller.logLines
+        #expect(lines.first == "▶ first job")
+        let startRefusal = try #require(lines.firstIndex { $0.contains("No disc is mounted — insert a DVD") })
+        let ejectRefusal = try #require(lines.firstIndex { $0 == "⚠︎ \(EjectPolicy.noDiscReason)" })
+        #expect(startRefusal < ejectRefusal)
+        #expect(Set(controller.logDisplayRows.map(\.id)).count == controller.logDisplayRows.count)
+
+        // Visible, but still never in the finished job's retained log.
+        let retained = try #require(controller.retainedLog(forJobID: finishedID.rawValue))
+        #expect(!retained.lines.contains { $0.text.contains("No disc is mounted") })
+    }
+
+    @Test func theNextDiscsScanOutputIsShownAfterAFinishedJob() async throws {
+        let scanned = DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [
+            DiscTitle(index: 1, durationSeconds: 6_645, chapterCount: 21, sizeBytes: 6_300_000_000, outputFileName: nil)
+        ])
+        let controller = JobController(runner: { context, _ in
+            fakeSuccess(context, destination: Self.destination)
+        }, scanRunner: { _, _, _, _, log in
+            log("▶ Scanning the next disc")
+            return .success(DiscScanner.Result(disc: scanned, mainFeatureIndex: 1, warnings: []))
+        })
+        try await runOneJob(controller)
+
+        controller.removeDisc()
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        var spins = 0
+        while controller.scanState == .scanning && spins < 100_000 {
+            await Task.yield()
+            spins += 1
+        }
+        try #require(controller.scanState != .scanning, "scan never finished")
+
+        #expect(controller.logLines.last == "▶ Scanning the next disc")
+    }
+
+    /// Between-job lines belong to the gap they were logged in: the next
+    /// job's view starts empty, and once it ends the old refusal is gone.
+    @Test func theNextJobDropsTheLinesFromTheGapBeforeIt() async throws {
+        let gate = Gate()
+        final class CallCount { var value = 0 }
+        let calls = CallCount()
+        let controller = JobController(runner: { context, _ in
+            calls.value += 1
+            context.log("▶ job \(calls.value)")
+            if calls.value == 2 { await gate.wait() }
+            return fakeSuccess(context, destination: Self.destination)
+        })
+        try await runOneJob(controller)
+        controller.removeDisc()
+        _ = controller.start(request: Self.request(try Self.metadata()), settings: AppSettings())
+        #expect(controller.logLines.contains { $0.contains("No disc is mounted") })
+
+        Self.mount(controller, disc: Self.testDisc)
+        #expect(controller.start(request: Self.request(try Self.metadata()), settings: AppSettings()))
+        #expect(!controller.logLines.contains { $0.contains("No disc is mounted") })
+
+        gate.open()
+        try await waitUntilIdle(controller)
+        #expect(controller.logLines == ["▶ job 2"])
+    }
+
     // MARK: - clearHistory / snapshots
 
     @Test func clearHistoryRemovesEveryFinishedJobButNeverTouchesCurrent() async throws {

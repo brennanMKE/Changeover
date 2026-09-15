@@ -113,7 +113,7 @@ final class JobController {
 
     /// #0042 — the job currently running, or `nil` when idle. The single
     /// source of truth `isRunning`/`currentMetadata`/`currentJobID`/
-    /// `currentJobState`/`currentLog` are all derived from, together with
+    /// `currentJobState`/`logDisplayRows` are all derived from, together with
     /// `history` below.
     private(set) var current: Job?
 
@@ -153,22 +153,34 @@ final class JobController {
     /// never a crash.
     var currentJobState: JobState? { (current ?? history.last)?.state }
 
-    /// #0043 — the current (or most recently finished) job's log, or a
-    /// controller-level log for anything that happens with no job running
-    /// (a refused `start`/`ejectDisc`, disc-scan output) — see
-    /// `controllerLog`'s doc comment for why that traffic is never appended
-    /// to a *finished* job's log.
+    /// #0042 review — the rows the log area renders. While a job runs, its
+    /// own log. Once idle, the most recent job's log **followed by**
+    /// `controllerLog`, the between-job lines logged since that job (the
+    /// next disc's scan, a refused `start`/`ejectDisc`). Those lines never
+    /// enter the finished job's retained log, but they must stay on screen:
+    /// without the merge, every refusal after the app's first job was
+    /// logged to a buffer nothing rendered.
     ///
-    /// New code (the log view, #0048) should read this directly for stable
-    /// `LogLine` identity and milestone/progress classification.
-    var currentLog: JobLog { (current ?? history.last)?.log ?? controllerLog }
+    /// Rows key on `LogDisplayRow.ID` (source + `LogLine.id`), never on
+    /// `LogLine.id` alone: every `JobLog` numbers its lines from 0, so the
+    /// two sources collide.
+    var logDisplayRows: [LogDisplayRow] {
+        if let current {
+            return LogDisplayRow.merge(jobID: current.id, jobLines: current.log.displayLines, controllerLines: [])
+        }
+        return LogDisplayRow.merge(
+            jobID: history.last?.id,
+            jobLines: history.last?.log.displayLines ?? [],
+            controllerLines: controllerLog.displayLines
+        )
+    }
     /// Back-compat surface: every existing reader of `logLines: [String]`
     /// (call sites and tests predating #0043) keeps working unchanged. It
-    /// mirrors `currentLog.displayLines` — the same rows the log area
-    /// renders — so a milestone evicted from the capped ring still appears
-    /// here, ahead of the surviving window, and the latest progress update
-    /// appears once (#0043 review).
-    var logLines: [String] { currentLog.displayLines.map(\.text) }
+    /// mirrors `logDisplayRows`, the same rows the log area renders, so a
+    /// milestone evicted from the capped ring still appears here, ahead of
+    /// the surviving window, and the latest progress update appears once
+    /// (#0043 review).
+    var logLines: [String] { logDisplayRows.map(\.line.text) }
 
     /// The disc currently in the drive, written by `DVDMonitor` — mount URL,
     /// device node, and identity, not just a bare `URL` (#0013). #0005 reads
@@ -242,7 +254,13 @@ final class JobController {
     /// mid-job, e.g. "already running" — it's about that job); once
     /// `current` is `nil`, every line goes here instead, never to
     /// `history.last`.
-    private let controllerLog: JobLog
+    ///
+    /// #0042 review: replaced with a fresh log by every successful `start`,
+    /// so it only ever holds the lines since the last job began, and
+    /// `logDisplayRows` shows it after that job's log once the job ends.
+    /// Pre-first-job traffic is discarded at the first `start`, as before
+    /// #0042.
+    private var controllerLog: JobLog
     private let logCapacity: Int
     private let historyLimit: Int
     private let runner: Runner
@@ -457,10 +475,14 @@ final class JobController {
         // #0042: one `Job` per job, holding its own fresh `JobLog` — never a
         // wipe-in-place of some shared buffer. Setting `current` here is
         // what makes `isRunning`/`currentJobID`/`currentJobState`/
-        // `currentMetadata`/`currentLog`/`lastOutcome` all reflect this job,
+        // `currentMetadata`/`logDisplayRows`/`lastOutcome` all reflect this job,
         // synchronously, before the `Task` below ever runs.
         let job = Job(id: jobID, metadata: request.metadata, disc: disc, log: JobLog(capacity: logCapacity))
         current = job
+        // #0042 review: the between-job lines belong to the gap before this
+        // job; once it ends, the idle view shows its log and then only what
+        // is logged after it.
+        controllerLog = JobLog(capacity: logCapacity)
 
         // #0042: `log`/`phase` are bound directly to `job`, not routed
         // through `self`/`append` — a report arriving after this job is no
@@ -729,15 +751,19 @@ final class JobController {
     /// itself is still recorded on the job either way (`Job.outcome`), so
     /// `lastOutcome` always reflects what the runner actually returned.
     private func finish(_ outcome: JobOutcome) {
-        guard let job = current else { return }
-        task = nil
+        // #0042 review: before the guard, so it stays truly unconditional.
         sleepAssertion.end()
+        task = nil
+        guard let job = current else { return }
         job.finish(with: outcome)
-        current = nil
+        // History first, then `current = nil` (the plan refresh's order):
+        // an observer that fires when `isRunning` flips never sees the job
+        // in neither place.
         history.append(job)
         if history.count > historyLimit {
             history.removeFirst(history.count - historyLimit)
         }
+        current = nil
     }
 
     private func append(_ line: String) {

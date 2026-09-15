@@ -28,13 +28,10 @@ nonisolated struct LogLine: Codable, Sendable, Hashable, Identifiable {
 /// `"── Starting …"` and the preflight lines out of a 2,000-line cap long
 /// before a 40-minute encode finished.
 ///
-/// `JobLog` fixes the buffer itself; `JobLogStore` (below) is what keeps a
-/// finished job's `JobLog` alive after `JobController` moves on to the next
-/// one. Per the #0043 plan refresh, the log conceptually belongs on `Job`,
-/// but `Job`/`JobSnapshot` are #0042's — until then `JobLogStore` is owned
-/// directly by `JobController`, one instance per started job, keyed by
-/// `JobID`. #0042 can lift a job's already-built `JobLog` onto `Job` without
-/// redoing any of the classification or eviction logic here.
+/// `JobLog` fixes the buffer itself. Since #0042 each `Job` owns one,
+/// created by `JobController.start` and kept alive by
+/// `JobController.history`; between-job lines go to a separate
+/// controller-owned `JobLog`, never to a finished job's.
 ///
 /// MainActor by default (`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`,
 /// `CLAUDE.md`) — every real caller already hops to MainActor before
@@ -64,7 +61,7 @@ final class JobLog {
     /// warnings) number in the dozens even for the largest real job
     /// (#0031's per-extra loop), nowhere near the several-thousand-line
     /// `lines` cap, so `milestoneCapacity` never fires within a job. It
-    /// exists for the log that stays `currentLog` between jobs: every idle
+    /// exists for `JobController`'s between-job log: every idle
     /// disc scan (`▶ Scanning: N%`) and start/eject refusal lands there, and
     /// a menu bar app can stay up for weeks.
     private(set) var milestones: [LogLine] = []
@@ -231,57 +228,38 @@ final class JobLog {
     }
 }
 
-/// #0043 — a bounded store of per-job `JobLog`s, keyed by `JobID`.
+/// #0042 review — one row of the log area: a `LogLine` tagged with the log
+/// it came from.
 ///
-/// This is the piece that actually stops a finished job's log from being
-/// destroyed: `JobController.start` used to reset its single `logLines`
-/// array to `[]` for every new job. Now it asks this store for a fresh
-/// `JobLog` instead, and the previous job's `JobLog` — object and all —
-/// keeps existing here, reachable by its `JobID`, until either it's evicted
-/// by `maxJobs` or the app quits.
-///
-/// Deliberately narrow: this is not #0042's job/session history (`Job`,
-/// `JobSnapshot`, a `history` list a view can render). It only has to keep
-/// the last few jobs' logs alive and out of each other's way, in a shape
-/// #0042 can lift onto `Job` wholesale — a `JobLog` per `Job`, created once,
-/// never reset.
-final class JobLogStore {
-
-    /// How many jobs' logs to retain at once, oldest evicted first. Small on
-    /// purpose: each retained `JobLog` can hold up to its own `logCapacity`
-    /// lines, and nothing today reads a log for any job but the current one
-    /// (#0048 is what will).
-    let maxJobs: Int
-    let logCapacity: Int
-
-    /// Insertion order, oldest first — what decides which job's log is
-    /// evicted next.
-    private(set) var order: [JobID] = []
-    private var logsByJobID: [JobID: JobLog] = [:]
-
-    init(maxJobs: Int = 10, logCapacity: Int = JobLog.defaultCapacity) {
-        self.maxJobs = max(1, maxJobs)
-        self.logCapacity = logCapacity
+/// The idle log view shows the last job's log followed by
+/// `JobController`'s between-job log, and every `JobLog` numbers its lines
+/// from 0, so `LogLine.id` alone collides across the two. `id` pairs the
+/// source with the line id, which stays stable as either log grows.
+nonisolated struct LogDisplayRow: Identifiable, Hashable, Sendable {
+    enum Source: Hashable, Sendable {
+        case job(JobID)
+        case controller
     }
 
-    /// Creates and retains a fresh, empty `JobLog` for `jobID`. If `jobID`
-    /// was already known (it shouldn't be — `JobID`s are unique per job),
-    /// its previous log is replaced, not merged.
-    @discardableResult
-    func makeLog(for jobID: JobID) -> JobLog {
-        let log = JobLog(capacity: logCapacity)
-        if logsByJobID[jobID] == nil {
-            order.append(jobID)
-        }
-        logsByJobID[jobID] = log
-        if order.count > maxJobs {
-            let evicted = order.removeFirst()
-            logsByJobID.removeValue(forKey: evicted)
-        }
-        return log
+    struct ID: Hashable, Sendable {
+        let source: Source
+        let lineID: Int
     }
 
-    func log(for jobID: JobID) -> JobLog? {
-        logsByJobID[jobID]
+    let source: Source
+    let line: LogLine
+
+    var id: ID { ID(source: source, lineID: line.id) }
+
+    /// The job's rows (when there is a job), then the controller's rows.
+    /// Pure, so the ordering and id uniqueness are unit-tested directly.
+    static func merge(jobID: JobID?, jobLines: [LogLine], controllerLines: [LogLine]) -> [LogDisplayRow] {
+        var rows: [LogDisplayRow] = []
+        rows.reserveCapacity(jobLines.count + controllerLines.count)
+        if let jobID {
+            rows.append(contentsOf: jobLines.map { LogDisplayRow(source: .job(jobID), line: $0) })
+        }
+        rows.append(contentsOf: controllerLines.map { LogDisplayRow(source: .controller, line: $0) })
+        return rows
     }
 }

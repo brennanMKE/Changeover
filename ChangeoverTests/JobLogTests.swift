@@ -126,7 +126,7 @@ struct JobLogTests {
     }
 
     /// #0043 review: `milestones` has its own, much larger cap, so a log
-    /// that stays `currentLog` for weeks of idle disc scans and refusals
+    /// that collects weeks of idle disc scans and refusals between jobs
     /// (every `▶ Scanning: N%` is a milestone) still can't grow forever.
     @Test func milestonesAreBoundedByTheirOwnCapNotTheRingCapacity() {
         let log = JobLog(capacity: 2, milestoneCapacity: 3)
@@ -344,53 +344,32 @@ struct JobLogTests {
     }
 }
 
-/// #0043 — `JobLogStore`: the bounded, `JobID`-keyed retention of a few
-/// jobs' `JobLog`s that keeps a finished job's log from being destroyed the
-/// moment the next job starts. Deliberately narrow — see the type's doc
-/// comment; #0042 owns the real job/session history.
-@MainActor
-struct JobLogStoreTests {
+/// #0042 review — `LogDisplayRow.merge`: the idle log view's job-then-
+/// controller ordering, with ids that never collide across the two logs.
+struct LogDisplayRowTests {
 
-    private static func jobID(_ suffix: String) -> JobID {
-        // Matches `WorkingFiles.jobIDPattern`: job-yyyyMMdd-HHmmss-XXXX.
-        JobID(rawValue: "job-20260915-053000-\(suffix)")!
+    private static let jobID = JobID(rawValue: "job-20260915-053000-aaaa")!
+
+    private static func line(_ id: Int, _ text: String) -> LogLine {
+        LogLine(id: id, timestamp: Date(timeIntervalSince1970: 0), text: text, isMilestone: false)
     }
 
-    @Test func makeLogReturnsAFreshEmptyLogForEachJob() {
-        let store = JobLogStore(maxJobs: 10)
-        let log1 = store.makeLog(for: Self.jobID("aaaa"))
-        log1.append("job one's line")
+    @Test func jobRowsComeFirstThenControllerRowsWithUniqueIDs() {
+        let rows = LogDisplayRow.merge(
+            jobID: Self.jobID,
+            jobLines: [Self.line(0, "job 0"), Self.line(1, "job 1")],
+            controllerLines: [Self.line(0, "idle 0"), Self.line(1, "idle 1")]
+        )
 
-        let log2 = store.makeLog(for: Self.jobID("bbbb"))
-
-        #expect(log2.lines.isEmpty)
-        #expect(log1.lines.map(\.text) == ["job one's line"])
+        #expect(rows.map(\.line.text) == ["job 0", "job 1", "idle 0", "idle 1"])
+        #expect(Set(rows.map(\.id)).count == rows.count)
+        #expect(rows.first?.source == .job(Self.jobID))
+        #expect(rows.last?.source == .controller)
     }
 
-    @Test func aPreviousJobsLogIsStillReachableAfterANewJobStarts() {
-        let store = JobLogStore(maxJobs: 10)
-        let firstID = Self.jobID("aaaa")
-        let log1 = store.makeLog(for: firstID)
-        log1.append("first job's line")
-
-        _ = store.makeLog(for: Self.jobID("bbbb"))
-
-        #expect(store.log(for: firstID)?.lines.map(\.text) == ["first job's line"])
-    }
-
-    @Test func theOldestJobsLogIsEvictedOnceMaxJobsIsExceeded() {
-        let store = JobLogStore(maxJobs: 2)
-        let firstID = Self.jobID("aaaa")
-        let secondID = Self.jobID("bbbb")
-        let thirdID = Self.jobID("cccc")
-
-        _ = store.makeLog(for: firstID)
-        _ = store.makeLog(for: secondID)
-        _ = store.makeLog(for: thirdID)
-
-        #expect(store.log(for: firstID) == nil)
-        #expect(store.log(for: secondID) != nil)
-        #expect(store.log(for: thirdID) != nil)
+    @Test func withNoJobOnlyControllerRowsAreShown() {
+        let rows = LogDisplayRow.merge(jobID: nil, jobLines: [Self.line(0, "ignored")], controllerLines: [Self.line(0, "idle")])
+        #expect(rows.map(\.line.text) == ["idle"])
     }
 }
 

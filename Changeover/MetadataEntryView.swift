@@ -246,18 +246,22 @@ struct MetadataEntryView: View {
     /// `displayLines`, not `lines` (#0043 review): the capped ring alone
     /// would drop `── Starting`/`▶ Job` off the top of a long encode and
     /// never show HandBrake's coalesced progress at all.
+    ///
+    /// #0042 review: reads `jobs.logDisplayRows`, which appends the
+    /// between-job lines (scan, refusals) after the last job's log, keyed by
+    /// source + line id because each `JobLog` numbers from 0.
     @ViewBuilder
     private var logArea: some View {
-        let lines = jobs.currentLog.displayLines
+        let lines = jobs.logDisplayRows
         if !lines.isEmpty || jobs.isRunning {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {
-                        ForEach(lines) { line in
-                            Text(line.text)
+                        ForEach(lines) { row in
+                            Text(row.line.text)
                                 .font(.system(.caption2, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .id(line.id)
+                                .id(row.id)
                         }
                     }
                     .padding(8)
