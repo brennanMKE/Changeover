@@ -23,6 +23,86 @@ enum EncodeController {
         case index(Int)
     }
 
+    /// Which audio tracks HandBrakeCLI encodes, and how.
+    ///
+    /// `nonisolated` + `Sendable` for the same reason as `TitleSelection`.
+    /// #0029: the encoder previously always took HandBrake's own default (the
+    /// disc's first audio track); this makes an explicit selection possible
+    /// while keeping `.sourceDefault` byte-identical to that old behaviour.
+    nonisolated enum AudioSelection: Equatable, Sendable {
+        /// No `--audio`; `--aencoder Config.audioEncoder`. Today's vector,
+        /// byte for byte — every existing call site defaults to this.
+        case sourceDefault
+        /// Explicit HandBrake `TrackNumber`s from the same scan the `title`
+        /// selection came from (i.e. the disc path, not the #0015 MakeMKV
+        /// fallback's renumbered `.mkv`).
+        case tracks([Int])
+        /// For the MakeMKV fallback's `.mkv`, whose track numbers don't match
+        /// the disc's. Empty means "every track" (no language filter).
+        case languages([String])
+    }
+
+    /// Builds the `--audio`/`--audio-lang-list`/`--all-audio`/`--aencoder`
+    /// argument group for `selection`. Pure and `nonisolated` for the same
+    /// reason as `arguments(...)`.
+    ///
+    /// - `.sourceDefault` → `["--aencoder", Config.audioEncoder]`, unchanged
+    ///   from before this type existed.
+    /// - `.tracks`: repeated and non-positive track numbers are dropped,
+    ///   keeping first-occurrence order. An empty result (including
+    ///   `.tracks([])` and `.tracks([0])`) falls back to `.sourceDefault` —
+    ///   **`--audio none` is never emitted**, because a silent movie is the
+    ///   worst failure available here. Otherwise the first track gets the
+    ///   verified AAC-stereo-plus-AC3-5.1 compatibility pair
+    ///   (`Config.audioCompatibilityEncoders`, #0014/#0017) and every later
+    ///   track gets one `Config.audioPassthroughEncoder` entry, so the
+    ///   `--audio` and `--aencoder` lists always have the same length and
+    ///   HandBrake's "reuse the last `--aencoder` entry" behaviour for a
+    ///   short list is never exercised. Which selected tracks get the AAC
+    ///   copy is a user-facing playback-compatibility question the code
+    ///   can't answer on its own; "first selected track only" is the
+    ///   orchestrator's decision (2026-09-15, #0029), because it keeps a
+    ///   single-track output identical to the file #0017 verified on Apple TV.
+    /// - `.languages`: codes are normalized (`LanguageCode.normalize`) and
+    ///   deduplicated. A non-empty result selects every matching track with
+    ///   `--audio-lang-list` + `--all-audio`; an empty result (no codes, or
+    ///   none survive normalization) omits `--audio-lang-list` and keeps
+    ///   `--all-audio` alone, i.e. every track. Both branches use
+    ///   `Config.audioPassthroughEncoder` for every matched track — a
+    ///   positional `--aencoder` list can't be matched to an a-priori unknown
+    ///   number of tracks, and whether HandBrake reuses the last entry for
+    ///   every match is unverified (checked by hand on joe, not here).
+    nonisolated static func audioArguments(_ selection: AudioSelection) -> [String] {
+        switch selection {
+        case .sourceDefault:
+            return ["--aencoder", Config.audioEncoder]
+
+        case .tracks(let tracks):
+            var seen = Set<Int>()
+            let unique = tracks.filter { $0 > 0 && seen.insert($0).inserted }
+            guard let first = unique.first else {
+                return ["--aencoder", Config.audioEncoder]
+            }
+            let rest = unique.dropFirst()
+            let audioList = ([first, first] + rest).map(String.init).joined(separator: ",")
+            let aencoderList = (Config.audioCompatibilityEncoders + rest.map { _ in Config.audioPassthroughEncoder })
+                .joined(separator: ",")
+            return ["--audio", audioList, "--aencoder", aencoderList]
+
+        case .languages(let languages):
+            var seen = Set<String>()
+            let normalized = languages
+                .compactMap(LanguageCode.normalize)
+                .filter { seen.insert($0).inserted }
+            var args: [String] = []
+            if !normalized.isEmpty {
+                args += ["--audio-lang-list", normalized.joined(separator: ",")]
+            }
+            args += ["--all-audio", "--aencoder", Config.audioPassthroughEncoder]
+            return args
+        }
+    }
+
     /// Builds the exact HandBrakeCLI argument vector, kept pure so it can be
     /// asserted with no disc and no HandBrake binary (neither is available on
     /// every development machine — see `ChangeoverTests/EncodeControllerTests.swift`).
@@ -52,7 +132,8 @@ enum EncodeController {
         source: String,
         title:  TitleSelection,
         output: String,
-        filter: DeinterlaceFilter = .none
+        filter: DeinterlaceFilter = .none,
+        audio:  AudioSelection = .sourceDefault
     ) -> [String] {
         var args = ["--input", source]
 
@@ -73,9 +154,9 @@ enum EncodeController {
             "--encoder",        Config.videoEncoder,
             "--encoder-preset", Config.encoderPreset,
             "--quality",        Config.videoQuality,
-            "--aencoder",       Config.audioEncoder,
-            "--markers",
         ]
+        args += audioArguments(audio)
+        args += ["--markers"]
         return args
     }
 
@@ -116,6 +197,7 @@ enum EncodeController {
         output:           String,
         handbrakePath:    String,
         filter:           DeinterlaceFilter = .none,
+        audio:            AudioSelection = .sourceDefault,
         hangTimeout:      TimeInterval = 30 * 60,
         readerDelay:      @escaping () -> Void = {},
         hardCeilingGrace: TimeInterval = 10,
@@ -152,7 +234,7 @@ enum EncodeController {
 
         let result = await ProcessRunner.run(
             executablePath:   handbrakePath,
-            arguments:        arguments(source: source, title: title, output: output, filter: filter),
+            arguments:        arguments(source: source, title: title, output: output, filter: filter, audio: audio),
             watchdog:         .inactivity(hangTimeout),
             readerDelay:      readerDelay,
             hardCeilingGrace: hardCeilingGrace

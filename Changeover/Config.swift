@@ -30,6 +30,23 @@ enum Config {
     /// roughly 4x the encode time for a small further gain.
     nonisolated static let encoderPreset = "slow"
 
-    /// Audio encoder string passed to HandBrakeCLI --aencoder.
-    nonisolated static let audioEncoder = "copy:aac,copy:ac3"
+    /// The verified audio-compatibility pair (#0014's full-disc run; #0017's
+    /// Apple TV Direct Play confirmation): an AAC stereo copy plus an AC3 5.1
+    /// copy, in that order. `EncodeController.AudioSelection.tracks` (#0029)
+    /// applies this pair to the first selected track only — see that type's
+    /// doc comment for why only the first.
+    nonisolated static let audioCompatibilityEncoders = ["copy:aac", "copy:ac3"]
+
+    /// The passthrough-only encoder `AudioSelection.tracks` uses for every
+    /// selected track after the first, and `AudioSelection.languages` (the
+    /// #0015 MakeMKV-fallback path) uses for every matched track. `copy:ac3`
+    /// falls back to HandBrake's default AAC encoder on a source that isn't
+    /// AC3, the same fallback `copy:aac` already depends on today.
+    nonisolated static let audioPassthroughEncoder = "copy:ac3"
+
+    /// Audio encoder string passed to HandBrakeCLI --aencoder. Kept as the
+    /// joined `audioCompatibilityEncoders` pair so today's default vector
+    /// (`AudioSelection.sourceDefault`) stays byte-identical to what #0017
+    /// verified direct-plays on Apple TV.
+    nonisolated static let audioEncoder = audioCompatibilityEncoders.joined(separator: ",")
 }

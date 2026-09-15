@@ -160,13 +160,18 @@ struct EncodeControllerTests {
     }
 
     /// Regression test for #0014 §5 — without this, `--subtitle scan` could
-    /// creep back in.
+    /// creep back in. #0029 extends this to every `AudioSelection` case,
+    /// since that's the other place a stray `--subtitle` could get glued on.
     @Test func subtitleScanIsNeverPassed() {
         let mainFeature = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4")
         let indexed      = EncodeController.arguments(source: "/Volumes/X", title: .index(1), output: "/tmp/x.mp4")
+        let tracked      = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4", audio: .tracks([1, 4]))
+        let languaged    = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4", audio: .languages(["eng"]))
 
         #expect(!mainFeature.contains("--subtitle"))
         #expect(!indexed.contains("--subtitle"))
+        #expect(!tracked.contains("--subtitle"))
+        #expect(!languaged.contains("--subtitle"))
     }
 
     @Test func sourceWithASpaceSurvivesAsOneElement() throws {
@@ -251,6 +256,91 @@ struct EncodeControllerTests {
         let args = EncodeController.arguments(source: "/Volumes/CONCERT_DISC", title: .mainFeature, output: "/tmp/concert.mp4", filter: filter)
         #expect(args.contains("--decomb"))
         #expect(!args.contains("--detelecine"))
+    }
+
+    // MARK: - AudioSelection (#0029) — arguments(...) with an explicit selection
+
+    /// `.sourceDefault` must produce exactly today's vector — the same
+    /// assertion `argumentsForMainFeature`/`argumentsForExplicitTitleIndex`
+    /// already make with the default `audio:` argument, spelled out
+    /// explicitly here so a future refactor can't quietly change the default
+    /// without a test noticing.
+    @Test func sourceDefaultAudioSelectionMatchesTodaysVector() {
+        let implicit = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4")
+        let explicit = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4", audio: .sourceDefault)
+        #expect(implicit == explicit)
+        #expect(EncodeController.audioArguments(.sourceDefault) == ["--aencoder", Config.audioEncoder])
+    }
+
+    /// A single selected track gets the verified AAC-stereo-plus-AC3-5.1
+    /// compatibility pair (#0014/#0017) — the "first selected track only"
+    /// orchestrator decision (2026-09-15, #0029).
+    @Test func singleTrackGetsTheVerifiedCompatibilityPair() {
+        let args = EncodeController.audioArguments(.tracks([1]))
+        #expect(args == ["--audio", "1,1", "--aencoder", "copy:aac,copy:ac3"])
+    }
+
+    /// A second selected track gets one passthrough `--aencoder` entry, so
+    /// the two lists stay the same length.
+    @Test func secondTrackGetsOnePassthroughEncoderEntry() {
+        let args = EncodeController.audioArguments(.tracks([1, 4]))
+        #expect(args == ["--audio", "1,1,4", "--aencoder", "copy:aac,copy:ac3,copy:ac3"])
+    }
+
+    /// The `--audio` and `--aencoder` lists always have the same number of
+    /// entries, across several track-count shapes.
+    @Test func audioAndAencoderListsAlwaysMatchInLength() throws {
+        for tracks in [[1], [1, 4], [2, 3, 5], [1, 2, 3, 4]] {
+            let args = EncodeController.audioArguments(.tracks(tracks))
+            let audioIndex    = try #require(args.firstIndex(of: "--audio"))
+            let aencoderIndex = try #require(args.firstIndex(of: "--aencoder"))
+            let audioCount    = args[audioIndex + 1].split(separator: ",").count
+            let aencoderCount = args[aencoderIndex + 1].split(separator: ",").count
+            #expect(audioCount == aencoderCount, "mismatched for \(tracks)")
+        }
+    }
+
+    /// An empty or all-non-positive track list behaves exactly like
+    /// `.sourceDefault` — never `--audio none`, since a silent movie is the
+    /// worst failure available here.
+    @Test func emptyOrZeroTracksFallBackToSourceDefault() {
+        let sourceDefault = EncodeController.audioArguments(.sourceDefault)
+        #expect(EncodeController.audioArguments(.tracks([])) == sourceDefault)
+        #expect(EncodeController.audioArguments(.tracks([0])) == sourceDefault)
+        #expect(!EncodeController.audioArguments(.tracks([])).contains("none"))
+    }
+
+    /// Repeated track numbers are dropped, keeping first-occurrence order —
+    /// the repeat of `4` does not produce a third `--audio` entry.
+    @Test func repeatedTrackNumbersAreDroppedKeepingOrder() {
+        let args = EncodeController.audioArguments(.tracks([4, 1, 4]))
+        #expect(args == ["--audio", "4,4,1", "--aencoder", "copy:aac,copy:ac3,copy:ac3"])
+    }
+
+    /// Language codes are normalized (bibliographic → terminologic, and
+    /// uppercase → lowercase) before joining.
+    @Test func languagesSelectionNormalizesCodes() {
+        let args = EncodeController.audioArguments(.languages(["eng", "FRE"]))
+        #expect(args == ["--audio-lang-list", "eng,fra", "--all-audio", "--aencoder", Config.audioPassthroughEncoder])
+    }
+
+    /// An empty language list keeps every track — `--all-audio` with no
+    /// `--audio-lang-list` — rather than silently producing a silent movie.
+    @Test func emptyLanguagesSelectionKeepsAllAudio() {
+        let args = EncodeController.audioArguments(.languages([]))
+        #expect(!args.contains("--audio-lang-list"))
+        #expect(args.contains("--all-audio"))
+        #expect(args == ["--all-audio", "--aencoder", Config.audioPassthroughEncoder])
+    }
+
+    /// `--audio` (explicit tracks) and `--audio-lang-list` (language filter)
+    /// must never appear together — they come from different `AudioSelection`
+    /// cases by construction, asserted directly here.
+    @Test func audioAndAudioLangListNeverAppearTogether() {
+        let trackArgs    = EncodeController.audioArguments(.tracks([1, 2]))
+        let languageArgs = EncodeController.audioArguments(.languages(["eng", "spa"]))
+        #expect(!(trackArgs.contains("--audio") && trackArgs.contains("--audio-lang-list")))
+        #expect(!(languageArgs.contains("--audio") && languageArgs.contains("--audio-lang-list")))
     }
 
     // MARK: - Directory creation (#0014 G2)
