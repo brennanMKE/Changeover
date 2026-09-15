@@ -70,6 +70,12 @@ struct DVDPipeline {
         WorkingFiles.removeJobDirectory($0, under: $1, forbidding: $2)
     }
 
+    /// #0037: the test seam for the post-encode duration check. Defaulted
+    /// to the real `AVURLAsset`-backed measurer so every existing
+    /// construction site compiles unchanged; a test injects a fake to
+    /// exercise `.short`/`.consistent` without a real media file.
+    var measureDuration: @Sendable (URL) async throws -> Int = OutputDurationCheck.measureSeconds
+
     // MARK: - Run
 
     func run() async -> JobOutcome {
@@ -229,6 +235,35 @@ struct DVDPipeline {
             } else {
                 log("⚠︎ Could not remove \(jobDirectory)/.changeover-job either")
             }
+        }
+
+        // #0037: measures `url` against `expectedSeconds` and logs the
+        // verdict — used both for the feature (once, before the marker
+        // advances to `.encoded`) and for each extra (before its move).
+        // Returns `nil`, having already logged, when the file couldn't be
+        // measured at all — a local `.mp4` `AVFoundation` can't open is not
+        // one Plex or the Apple TV will play either, so this is treated the
+        // same as `.short` by both callers.
+        func checkDuration(_ url: URL, expectedSeconds: Int, label: String) async -> OutputDurationCheck.Verdict? {
+            let actualSeconds: Int
+            do {
+                actualSeconds = try await measureDuration(url)
+            } catch {
+                log("✗ \(label): could not read its duration (\(error.localizedDescription))")
+                return nil
+            }
+            let verdict = OutputDurationCheck.compare(expectedSeconds: expectedSeconds, actualSeconds: actualSeconds)
+            let expectedText = DiscTitleFormatting.duration(expectedSeconds)
+            let actualText = DiscTitleFormatting.duration(actualSeconds)
+            let delta: Int
+            let marker: String
+            switch verdict {
+            case .consistent(let d): delta = d; marker = "✓"
+            case .long(let d):       delta = d; marker = "⚠︎"
+            case .short(let d):      delta = d; marker = "✗"
+            }
+            log("\(marker) \(label): runs \(actualText), scan said \(expectedText) (Δ \(String(format: "%+d", delta)) s)")
+            return verdict
         }
 
         // #0004 §4: sweep stale working folders before preflight, so
@@ -411,6 +446,34 @@ struct DVDPipeline {
         }
         log("✓ Encode complete: \(mp4URL.path)")
 
+        // #0037: verify the encoded file's duration against the scan before
+        // the marker advances to `.encoded` and the file becomes eligible
+        // to move — the one thing standing between a disc read error's
+        // short exit-0 encode and #0012's staged replace silently
+        // overwriting a good library copy. This runs after the primary/
+        // fallback switch above has already returned, so a duration failure
+        // here can never trigger `FallbackPolicy` a second time.
+        //
+        // `selection.featureDurationSeconds` is `nil` only for `.phase1`
+        // (no scan ever happened) — production always sets it via
+        // `EncodeSelection.make(request:disc:)`. Never guess a duration:
+        // with no scan number to compare against, skip the check entirely.
+        if let expectedSeconds = selection.featureDurationSeconds {
+            switch await checkDuration(mp4URL, expectedSeconds: expectedSeconds, label: "Output") {
+            case .consistent, .long:
+                break
+            case .short(let delta):
+                let actualSeconds = expectedSeconds + delta
+                let reason = "The encoded file runs \(DiscTitleFormatting.duration(actualSeconds)) but the scan said this title runs \(DiscTitleFormatting.duration(expectedSeconds)), so it was not filed"
+                return await finish(.failed(JobFailure(stage: .encode, reason: .unknown(reason))))
+            case .none:
+                let reason = "The encoded file's duration could not be read, so it was not filed"
+                return await finish(.failed(JobFailure(stage: .encode, reason: .unknown(reason))))
+            }
+        } else {
+            log("Output duration not checked — no scan duration")
+        }
+
         // #0004 §3: mark the directory `encoded` before the move, so the
         // sweep can always tell a complete, unmoved `.mp4` from a stale
         // partial.
@@ -515,6 +578,37 @@ struct DVDPipeline {
                     }
 
                 case .success(let extraURL):
+                    // #0037: the same check as the feature, log-only — a
+                    // short extra is skipped exactly like a failed extra
+                    // (#0031's rules), and never changes the job's outcome.
+                    let verdict = await checkDuration(
+                        extraURL,
+                        expectedSeconds: item.durationSeconds,
+                        label: "Extra title \(item.titleIndex)"
+                    )
+                    let durationOK: Bool
+                    switch verdict {
+                    case .consistent, .long:
+                        durationOK = true
+                    case .short, .none:
+                        durationOK = false
+                    }
+
+                    guard durationOK else {
+                        switch WorkingFiles.removeFile(
+                            extraURL.path,
+                            inJobDirectory: jobDirectory,
+                            under:           workingEncodePath,
+                            forbidding:      plexMoviesPath
+                        ) {
+                        case .removed, .refused(.missing):
+                            break
+                        case .refused, .failed:
+                            log("⚠︎ Could not remove the partial extra at \(extraURL.path)")
+                        }
+                        continue
+                    }
+
                     do {
                         _ = try await PlexOrganizer.move(
                             encodedFile: extraURL.path,

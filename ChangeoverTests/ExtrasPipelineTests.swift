@@ -69,6 +69,25 @@ struct ExtrasPipelineTests {
         ExtrasPlan.Item(titleIndex: 3, durationSeconds: 400, frameRate: nil, interlaceDetected: nil),
     ]
 
+    /// #0037: `stub-HandBrakeCLI.sh` writes a plain-text placeholder, not a
+    /// real `.mp4` — `AVFoundation` can't read its duration, and these
+    /// tests are about the extras plumbing (which folder a file lands in),
+    /// not the duration check itself (`OutputDurationCheckTests` and the
+    /// two duration-focused pipeline tests own that). Stand in with a
+    /// measurer that reports each extra's own scanned duration exactly, by
+    /// matching the `" - t<NN>.mp4"` suffix `DVDPipeline` names each extra's
+    /// output with — always `.consistent`, never `.short`.
+    private static let matchingExtrasMeasurer: @Sendable (URL) async throws -> Int = { url in
+        let name = url.lastPathComponent
+        for item in Self.extraItems {
+            let suffix = " - t\(String(format: "%02d", item.titleIndex)).mp4"
+            if name.hasSuffix(suffix) {
+                return item.durationSeconds
+            }
+        }
+        return 0
+    }
+
     // MARK: - Feature plus two extras: extras land under Clips, nothing extra under Movies
 
     @Test func featurePlusTwoExtrasLandTheFeatureUnderMoviesAndBothExtrasUnderClips() async throws {
@@ -88,7 +107,8 @@ struct ExtrasPipelineTests {
             disc:     try Self.makeFakeDisc(in: root),
             selection: EncodeSelection(title: .index(1), audio: .sourceDefault, fallbackAudio: .sourceDefault, filter: .none),
             extras:   ExtrasPlan(items: Self.extraItems),
-            log:      { _ in }
+            log:      { _ in },
+            measureDuration: Self.matchingExtrasMeasurer
         )
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
@@ -145,7 +165,8 @@ struct ExtrasPipelineTests {
             disc:     try Self.makeFakeDisc(in: root),
             selection: EncodeSelection(title: .index(1), audio: .sourceDefault, fallbackAudio: .sourceDefault, filter: .none),
             extras:   ExtrasPlan(items: Self.extraItems),
-            log:      { logged.append($0) }
+            log:      { logged.append($0) },
+            measureDuration: Self.matchingExtrasMeasurer
         )
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
@@ -200,7 +221,8 @@ struct ExtrasPipelineTests {
             disc:     try Self.makeFakeDisc(in: root),
             selection: EncodeSelection(title: .index(1), audio: .sourceDefault, fallbackAudio: .sourceDefault, filter: .none),
             extras:   ExtrasPlan(items: Self.extraItems),
-            log:      { logged.append($0) }
+            log:      { logged.append($0) },
+            measureDuration: Self.matchingExtrasMeasurer
         )
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 

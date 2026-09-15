@@ -1219,7 +1219,13 @@ struct MakeMKVFallbackTests {
                 title: .index(7), audio: .sourceDefault, fallbackAudio: .sourceDefault,
                 filter: .none, featureDurationSeconds: 28
             ),
-            log:      { _ in }
+            log:      { _ in },
+            // #0037: the stub writes a plain-text placeholder, not a real
+            // `.mp4` — AVFoundation can't read its duration. This test is
+            // about which title the fallback ripped, not the duration
+            // check, so stand in with a measurer that always agrees with
+            // the scan.
+            measureDuration: { _ in 28 }
         )
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
@@ -1270,7 +1276,10 @@ struct MakeMKVFallbackTests {
                 title: .index(0), audio: .sourceDefault, fallbackAudio: .sourceDefault,
                 filter: .none, featureDurationSeconds: 9471
             ),
-            log:      { _ in }
+            log:      { _ in },
+            // #0037: see the sibling test above — a fake measurer standing
+            // in for the stub's non-media placeholder output.
+            measureDuration: { _ in 9471 }
         )
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
