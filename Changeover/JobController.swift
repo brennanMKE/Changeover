@@ -58,7 +58,7 @@ final class JobController {
     ///   `▶ Job` log line, and the notification identifier are all the same
     ///   value instead of two independently-minted strings.
     /// - the phase-report closure — `DVDPipeline` calls it as it crosses
-    ///   `.encoding`/`.fallback`/`.organizing`; `start` binds it to
+    ///   `.encoding`/`.fallback`/`.organizing`/`.extras`; `start` binds it to
     ///   `applyPhase`, which validates the report against `JobState
     ///   .advancing(to:)` before ever touching `currentJobState`.
     typealias Runner = @MainActor (
@@ -606,25 +606,23 @@ final class JobController {
         sleepAssertion.end()
 
         // #0041: the single terminal transition — maps `outcome` onto
-        // `.succeeded`/`.failed`/`.cancelled`, validated the same table
-        // every mid-job `applyPhase` report is validated against. Applied
-        // silently, unlike `applyPhase`'s rejection (which logs): a Runner
-        // fake that never calls the phase-report closure at all — the
-        // overwhelming majority of existing test fakes, which predate
-        // #0041 and are under no obligation to simulate phases — leaves
-        // `currentJobState` at `.starting` and then returns `.succeeded`,
-        // which `.starting → .succeeded` correctly rejects as illegal (only
-        // `.organizing` may finish successfully). That is completely normal
-        // for a fake and not worth a log line a real user would read as a
-        // warning; logging it here flooded `logLines` and broke every
-        // existing test asserting exact log contents. A genuine production
-        // mismatch (impossible today — every real early return leaves
-        // `currentJobState` at a phase whose outcome mapping is legal, see
-        // `DVDPipeline`'s `reportPhase` call sites) would simply leave
-        // `currentJobState` at its last valid value, same as any other
-        // rejected transition — never crash, never desync.
-        if let state = currentJobState, let next = state.finishing(with: outcome) {
-            currentJobState = next
+        // `.succeeded`/`.failed`/`.cancelled`, validated against the same
+        // table every mid-job `applyPhase` report is. The `Runner` contract
+        // is that it reports the phases it crosses before returning (the real
+        // `DVDPipeline` does, pinned by `DVDPipelinePhaseReportingTests`, and
+        // test fakes do via `fakeSuccess`). An outcome that can't follow the
+        // last reported phase — e.g. `.succeeded` while still `.starting` —
+        // breaks that contract, so it is logged, never applied: the state
+        // stays at the last valid phase, visibly, rather than being forged
+        // into a terminal one. Never a crash, and never a gate on
+        // `sleepAssertion.end()` above.
+        if let state = currentJobState {
+            if let next = state.finishing(with: outcome) {
+                currentJobState = next
+            } else {
+                let target = JobState.terminalPhase(for: outcome)
+                append("⚠︎ Ignored invalid phase transition \(state.phase.rawValue) → \(target.rawValue) at the end of the job")
+            }
         }
     }
 

@@ -134,10 +134,10 @@ struct JobControllerTests {
     // MARK: - Outcome is stored on the controller
 
     @Test func succeededOutcomeIsStoredWhenTheJobFinishes() async throws {
-        let controller = JobController(runner: { _, _, _, _, _, log, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _, log, _, reportPhase in
             log("▶ ripping")
             log("✓ done")
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -176,11 +176,11 @@ struct JobControllerTests {
     @Test func secondStartWhileRunningIsRefused() async throws {
         let gate = Gate()
         let runs = RunLog()
-        let controller = JobController(runner: { request, _, _, _, _, log, _, _ in
+        let controller = JobController(runner: { request, _, _, _, _, log, _, reportPhase in
             runs.record(request.metadata)
             log("▶ started \(request.metadata.title)")
             await gate.wait()
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -215,12 +215,12 @@ struct JobControllerTests {
     @Test func jobKeepsRunningAfterTheStartingScopeGoesAway() async throws {
         let gate = Gate()
         let started = Gate()
-        let controller = JobController(runner: { _, _, _, _, _, log, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _, log, _, reportPhase in
             log("▶ line 1")
             started.open()
             await gate.wait()
             log("✓ line 2")
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -243,9 +243,9 @@ struct JobControllerTests {
     // MARK: - Bounded log
 
     @Test func logLinesAreBoundedToTheConfiguredCap() async throws {
-        let controller = JobController(maxLogLines: 5, runner: { _, _, _, _, _, log, _, _ in
+        let controller = JobController(maxLogLines: 5, runner: { _, _, _, _, _, log, _, reportPhase in
             for index in 1...50 { log("line \(index)") }
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -264,9 +264,9 @@ struct JobControllerTests {
 
     @Test func logIsClearedAtTheStartOfEachJob() async throws {
         var lineToLog = "first job"
-        let controller = JobController(runner: { _, _, _, _, _, log, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _, log, _, reportPhase in
             log(lineToLog)
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -284,8 +284,8 @@ struct JobControllerTests {
     // MARK: - Job id (input to #0003)
 
     @Test func eachJobGetsAFreshFilesystemSafeID() async throws {
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in
-            .succeeded(destination: Self.destination)
+        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in
+            fakeSuccess(reportPhase, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -325,10 +325,10 @@ struct JobControllerTests {
     @Test func statusDescriptionReportsTheRunningJob() async throws {
         let gate = Gate()
         let started = Gate()
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in
             started.open()
             await gate.wait()
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -353,9 +353,9 @@ struct JobControllerTests {
             func record(_ disc: URL) { discs.append(disc) }
         }
         let discLog = DiscLog()
-        let controller = JobController(runner: { _, _, _, _, disc, _, _, _ in
+        let controller = JobController(runner: { _, _, _, _, disc, _, _, reportPhase in
             discLog.record(disc)
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -373,9 +373,9 @@ struct JobControllerTests {
             func record() { count += 1 }
         }
         let runs = RunLog()
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in
             runs.record()
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         })
 
         #expect(controller.insertedDisc == nil)
@@ -394,9 +394,9 @@ struct JobControllerTests {
     /// the previous movie's name and overwriting it in Plex (#0012).
     @Test func startRefusesMetadataSelectedForADifferentDisc() async throws {
         let runs = RunLog()
-        let controller = JobController(runner: { request, _, _, _, _, _, _, _ in
+        let controller = JobController(runner: { request, _, _, _, _, _, _, reportPhase in
             runs.record(request.metadata)
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -418,8 +418,8 @@ struct JobControllerTests {
     /// remount, so the guard must key off `discID` alone, same as
     /// `SelectionReset.sameDisc`.
     @Test func startAcceptsMetadataSelectedForTheSameDiscByIdentity() async throws {
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in
-            .succeeded(destination: Self.destination)
+        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in
+            fakeSuccess(reportPhase, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -438,9 +438,9 @@ struct JobControllerTests {
     /// call site that forgets to bind the selection can't reopen #0034.
     @Test func startRefusesMetadataWithNoSelectionDiscAttached() async throws {
         let runs = RunLog()
-        let controller = JobController(runner: { request, _, _, _, _, _, _, _ in
+        let controller = JobController(runner: { request, _, _, _, _, _, _, reportPhase in
             runs.record(request.metadata)
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -455,8 +455,8 @@ struct JobControllerTests {
     /// was chosen on this very insertion, so Start must still work. A
     /// "unknown is never a match" rule on its own locked such discs out.
     @Test func startAcceptsAnUnknownIdentityDiscForTheInsertionItWasSelectedOn() async throws {
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in
-            .succeeded(destination: Self.destination)
+        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in
+            fakeSuccess(reportPhase, destination: Self.destination)
         })
         let unidentified = DiscInsertion(
             mountURL: URL(fileURLWithPath: "/Volumes/Untitled"),
@@ -473,9 +473,9 @@ struct JobControllerTests {
     /// path and device node is still a different insertion, so it's refused.
     @Test func startRefusesAnUnknownIdentityLookalikeFromAnotherInsertion() async throws {
         let runs = RunLog()
-        let controller = JobController(runner: { request, _, _, _, _, _, _, _ in
+        let controller = JobController(runner: { request, _, _, _, _, _, _, reportPhase in
             runs.record(request.metadata)
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         })
         let selectedOn = DiscInsertion(
             mountURL: URL(fileURLWithPath: "/Volumes/Untitled"),
@@ -742,7 +742,7 @@ struct JobControllerScanTests {
     }
 
     @Test func startRefusesWithoutACompletedScan() async throws {
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in .succeeded(destination: URL(fileURLWithPath: "/x")) })
+        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in fakeSuccess(reportPhase, destination: URL(fileURLWithPath: "/x")) })
         controller.insertedDisc = Self.testDisc
         // scanState stays .idle — no scan has ever run.
 
@@ -756,7 +756,7 @@ struct JobControllerScanTests {
     /// nothing was ever selected in the UI or because the scan changed out
     /// from under a stale request.
     @Test func startRefusesARequestWhoseFeatureTitleIndexIsNotOnTheHeldScan() async throws {
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in .succeeded(destination: URL(fileURLWithPath: "/x")) })
+        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in fakeSuccess(reportPhase, destination: URL(fileURLWithPath: "/x")) })
         controller.insertedDisc = Self.testDisc
         controller.scanState = .scanned(DiscScanner.Result(
             disc: DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [Self.title(1, 6645)]),
@@ -770,7 +770,7 @@ struct JobControllerScanTests {
     /// track number on the request isn't one of its streams — e.g. a track
     /// number left over from a superseded scan of a different disc.
     @Test func startRefusesARequestWhoseAudioTrackNumberIsNotOnTheHeldScan() async throws {
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in .succeeded(destination: URL(fileURLWithPath: "/x")) })
+        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in fakeSuccess(reportPhase, destination: URL(fileURLWithPath: "/x")) })
         controller.insertedDisc = Self.testDisc
         let scannedTitle = DiscTitle(
             index: 1, durationSeconds: 6645, chapterCount: 21, sizeBytes: 6_300_000_000, outputFileName: nil,
@@ -791,9 +791,9 @@ struct JobControllerScanTests {
     @Test func startRefusesAnEmptyAudioSelectionOnATitleWithAudio() async throws {
         final class RunCount { var value = 0 }
         let runs = RunCount()
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in
             runs.value += 1
-            return .succeeded(destination: URL(fileURLWithPath: "/x"))
+            return fakeSuccess(reportPhase, destination: URL(fileURLWithPath: "/x"))
         })
         controller.insertedDisc = Self.testDisc
         let scannedTitle = DiscTitle(
@@ -816,9 +816,9 @@ struct JobControllerScanTests {
             func record(_ selection: EncodeSelection) { selections.append(selection) }
         }
         let log = SelectionLog()
-        let controller = JobController(runner: { _, selection, _, _, _, _, _, _ in
+        let controller = JobController(runner: { _, selection, _, _, _, _, _, reportPhase in
             log.record(selection)
-            return .succeeded(destination: URL(fileURLWithPath: "/x"))
+            return fakeSuccess(reportPhase, destination: URL(fileURLWithPath: "/x"))
         })
         controller.insertedDisc = Self.testDisc
         let scannedTitle = DiscTitle(
@@ -856,9 +856,9 @@ struct JobControllerScanTests {
             func record(_ plan: ExtrasPlan) { plans.append(plan) }
         }
         let log = PlanLog()
-        let controller = JobController(runner: { _, _, extras, _, _, _, _, _ in
+        let controller = JobController(runner: { _, _, extras, _, _, _, _, reportPhase in
             log.record(extras)
-            return .succeeded(destination: URL(fileURLWithPath: "/x"))
+            return fakeSuccess(reportPhase, destination: URL(fileURLWithPath: "/x"))
         })
         controller.insertedDisc = Self.testDisc
         controller.scanState = .scanned(DiscScanner.Result(disc: Self.extrasDisc, mainFeatureIndex: 1, warnings: []))

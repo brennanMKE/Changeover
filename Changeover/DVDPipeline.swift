@@ -93,10 +93,11 @@ struct DVDPipeline {
     /// phase-report closure). Defaulted to a no-op so every existing
     /// construction site compiles unchanged; a test can inject a recording
     /// closure to assert the exact sequence of phases a run reports, with no
-    /// `JobController` involved. Called at the three points `run()` actually
+    /// `JobController` involved. Called at the four points `run()` actually
     /// crosses a `JobPhase` boundary — before the primary encode
-    /// (`.encoding`), before the MakeMKV fallback (`.fallback`), and before
-    /// the move into Plex (`.organizing`). Terminal phases are never
+    /// (`.encoding`), before the MakeMKV fallback (`.fallback`), before the
+    /// move into Plex (`.organizing`), and before the extras loop
+    /// (`.extras`, only when extras run). Terminal phases are never
     /// reported here — `JobController.finish` derives those from the
     /// `JobOutcome` this method returns, through `JobState.finishing(with:)`.
     var reportPhase: @MainActor (JobPhase) -> Void = { _ in }
@@ -602,6 +603,9 @@ struct DVDPipeline {
             // `encodedNeverMoved` forever for a directory that in fact holds
             // no unmoved feature at all.
             await advanceMarker(.encoding)
+            // #0041 review: a HandBrake encode per extra is not "moving into
+            // Plex" — report its own phase, only when extras actually run.
+            reportPhase(.extras)
 
             var succeededExtras = 0
             for item in extras.items {

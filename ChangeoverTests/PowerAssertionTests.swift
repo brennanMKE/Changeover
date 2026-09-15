@@ -160,10 +160,10 @@ struct PowerAssertionTests {
     @Test func assertionIsHeldWhileTheJobRunsAndReleasedOnSuccess() async throws {
         let gate = Gate()
         let assertion = FakeSleepAssertion()
-        let controller = JobController(runner: { _, _, _, _, _, log, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _, log, _, reportPhase in
             log("▶ working")
             await gate.wait()
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         }, sleepAssertion: assertion)
         Self.mount(controller, disc: Self.testDisc)
 
@@ -198,10 +198,10 @@ struct PowerAssertionTests {
     @Test func beginIsNeverCalledWhenStartRefusesBecauseAJobIsAlreadyRunning() async throws {
         let gate = Gate()
         let assertion = FakeSleepAssertion()
-        let controller = JobController(runner: { _, _, _, _, _, log, _, _ in
+        let controller = JobController(runner: { _, _, _, _, _, log, _, reportPhase in
             log("▶ working")
             await gate.wait()
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         }, sleepAssertion: assertion)
         Self.mount(controller, disc: Self.testDisc)
 
@@ -223,8 +223,8 @@ struct PowerAssertionTests {
 
     @Test func beginIsNeverCalledWhenStartRefusesBecauseNoDiscIsMounted() throws {
         let assertion = FakeSleepAssertion()
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in
-            .succeeded(destination: Self.destination)
+        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in
+            fakeSuccess(reportPhase, destination: Self.destination)
         }, sleepAssertion: assertion)
         // Deliberately not mounted — `start` must refuse before ever
         // reaching the assertion.
@@ -236,8 +236,8 @@ struct PowerAssertionTests {
 
     @Test func reasonStringNamesTheJob() async throws {
         let assertion = FakeSleepAssertion()
-        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in
-            .succeeded(destination: Self.destination)
+        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in
+            fakeSuccess(reportPhase, destination: Self.destination)
         }, sleepAssertion: assertion)
         Self.mount(controller, disc: Self.testDisc)
 

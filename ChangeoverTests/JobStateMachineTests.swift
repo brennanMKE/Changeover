@@ -44,7 +44,8 @@ struct JobPhaseTests {
             .starting:   [.encoding, .failed, .cancelled],
             .encoding:   [.fallback, .organizing, .failed, .cancelled],
             .fallback:   [.organizing, .failed, .cancelled],
-            .organizing: [.succeeded, .failed],
+            .organizing: [.extras, .succeeded, .failed],
+            .extras:     [.succeeded, .failed],
             .succeeded:  [],
             .failed:     [],
             .cancelled:  [],
@@ -59,6 +60,18 @@ struct JobPhaseTests {
     /// could leave a half-placed file in the Plex library.
     @Test func organizingCannotBeCancelled() {
         #expect(!JobPhase.organizing.canTransition(to: .cancelled))
+    }
+
+    /// #0041 review: extras run only after the feature is in Plex, so the
+    /// phase is reachable only from `organizing`, can end the job
+    /// successfully, and has no `cancelled` edge until #0046 decides what a
+    /// cancel mid-extras means.
+    @Test func extrasFollowsOnlyOrganizingAndCannotBeCancelled() {
+        for phase in JobPhase.allCases {
+            #expect(phase.canTransition(to: .extras) == (phase == .organizing), "\(phase.rawValue) → extras")
+        }
+        #expect(JobPhase.extras.canTransition(to: .succeeded))
+        #expect(!JobPhase.extras.canTransition(to: .cancelled))
     }
 
     @Test func codesAsItsRawStringValue() throws {
@@ -193,6 +206,10 @@ struct JobStateTests {
             (.fallback, .encoding),     // backward
             (.organizing, .encoding),   // backward
             (.organizing, .cancelled),  // explicitly excluded — see JobPhaseTests
+            (.encoding, .extras),       // extras need the feature moved first
+            (.fallback, .extras),       // same
+            (.extras, .organizing),     // backward
+            (.extras, .cancelled),      // no cancel edge until #0046
         ]
         for (from, to) in cases {
             let state = JobState.testState(phase: from)
@@ -207,7 +224,7 @@ struct JobStateTests {
     /// only `finishing(with:)` may produce one, so the
     /// `outcome != nil ⇔ phase.isTerminal` invariant can't be bypassed.
     @Test func advancingNeverReachesATerminalPhase() {
-        for from in [JobPhase.starting, .encoding, .fallback, .organizing] {
+        for from in JobPhase.allCases where !from.isTerminal {
             for target in JobPhase.allCases where target.isTerminal {
                 #expect(JobState.testState(phase: from).advancing(to: target) == nil)
             }
@@ -227,8 +244,9 @@ struct JobStateTests {
 
     // MARK: finishing(with:) — outcome → terminal phase
 
-    @Test func succeededIsAcceptedOnlyFromOrganizing() {
+    @Test func succeededIsAcceptedOnlyFromOrganizingOrExtras() {
         #expect(JobState.testState(phase: .organizing).finishing(with: Self.succeeded)?.phase == .succeeded)
+        #expect(JobState.testState(phase: .extras).finishing(with: Self.succeeded)?.phase == .succeeded)
         for phase in [JobPhase.starting, .encoding, .fallback] {
             #expect(JobState.testState(phase: phase).finishing(with: Self.succeeded) == nil, "\(phase.rawValue) must reject .succeeded")
         }
@@ -254,10 +272,11 @@ struct JobStateTests {
     /// reinterpreted as a plain `.failed`.
     @Test func aCancelledReasonFromOrganizingIsRejectedOutright() {
         #expect(JobState.testState(phase: .organizing).finishing(with: Self.failed(.cancelled)) == nil)
+        #expect(JobState.testState(phase: .extras).finishing(with: Self.failed(.cancelled)) == nil)
     }
 
     @Test func anyOtherFailureReasonLandsInFailedFromEveryNonTerminalPhase() throws {
-        for phase in [JobPhase.starting, .encoding, .fallback, .organizing] {
+        for phase in JobPhase.allCases where !phase.isTerminal {
             let next = try #require(JobState.testState(phase: phase).finishing(with: Self.failed()))
             #expect(next.phase == .failed)
             #expect(next.outcome == Self.failed())
@@ -300,6 +319,30 @@ struct JobStateTests {
             let decoded = try JSONDecoder().decode(JobState.self, from: data)
             #expect(decoded == state)
         }
+    }
+
+    /// #0041 review: decoding re-validates the invariant instead of trusting
+    /// the payload, so a Phase 4 peer can't hand the host a state the public
+    /// API could never produce.
+    @Test func decodingRejectsAStateThatBreaksTheInvariant() throws {
+        let succeededJSON = String(data: try JSONEncoder().encode(Self.succeeded), encoding: .utf8)!
+        let failedJSON = String(data: try JSONEncoder().encode(Self.failed()), encoding: .utf8)!
+        let invalid = [
+            #"{"phase":"succeeded"}"#,                               // terminal, no outcome
+            #"{"phase":"encoding","outcome":\#(succeededJSON)}"#,      // non-terminal with an outcome
+            #"{"phase":"failed","outcome":\#(succeededJSON)}"#,        // phase contradicts outcome
+            #"{"phase":"cancelled","outcome":\#(failedJSON)}"#,        // not a cancelled reason
+            #"{"phase":"encoding","progress":1.5}"#,                 // progress out of range
+            #"{"phase":"queued"}"#,                                  // unknown phase
+        ]
+        for json in invalid {
+            #expect(throws: DecodingError.self, "\(json) should not decode") {
+                try JSONDecoder().decode(JobState.self, from: Data(json.utf8))
+            }
+        }
+        let valid = try JSONDecoder().decode(JobState.self, from: Data(#"{"phase":"extras","progress":0.5}"#.utf8))
+        #expect(valid.phase == .extras)
+        #expect(valid.progress == 0.5)
     }
 }
 
@@ -360,6 +403,10 @@ struct DVDPipelinePhaseReportingTests {
         try lines.joined(separator: "\n").write(toFile: stubPath + ".conf", atomically: true, encoding: .utf8)
     }
 
+    private static let extraItems: [ExtrasPlan.Item] = [
+        ExtrasPlan.Item(titleIndex: 2, durationSeconds: 300, frameRate: nil, interlaceDetected: nil),
+    ]
+
     // MARK: - Tests
 
     /// The happy path: `.encoding` before HandBrake runs, `.organizing`
@@ -391,6 +438,42 @@ struct DVDPipelinePhaseReportingTests {
             return
         }
         #expect(phases == [.encoding, .organizing])
+    }
+
+    /// #0041 review: extras get their own phase after the feature's move —
+    /// a HandBrake encode per extra is not "organizing".
+    @Test func successfulRunWithExtrasReportsExtrasAfterOrganizing() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+        settings.handbrakePath = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            extras:   ExtrasPlan(items: Self.extraItems),
+            log:      { _ in },
+            measureDuration: { _ in 300 }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        var phases: [JobPhase] = []
+        pipeline.reportPhase = { phases.append($0) }
+
+        let outcome = await pipeline.run()
+
+        guard case .succeeded = outcome else {
+            Issue.record("expected success, got \(outcome)")
+            return
+        }
+        #expect(phases == [.encoding, .organizing, .extras])
+        // The reported sequence plus the outcome is a legal walk end to end.
+        var state = JobState.initial
+        for phase in phases { state = try #require(state.advancing(to: phase)) }
+        #expect(state.finishing(with: outcome)?.phase == .succeeded)
     }
 
     /// A disc-shaped primary failure with `makemkvcon` unavailable never
@@ -433,6 +516,8 @@ struct DVDPipelinePhaseReportingTests {
     /// `.fallback` (MakeMKV rip + second HandBrake pass), `.organizing`
     /// (the move) — mirrors `MakeMKVFallbackTests
     /// .pipelineFallsBackAndSucceedsAgainstDragonTattooFixture`'s setup.
+    /// Extras are requested too, and #0035 skips them on the fallback path,
+    /// so no `.extras` report may appear.
     @Test func fallbackSuccessReportsEncodingThenFallbackThenOrganizing() async throws {
         let root = try Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -455,7 +540,9 @@ struct DVDPipelinePhaseReportingTests {
             metadata: try Self.metadata(),
             settings: settings,
             disc:     try Self.makeFakeDisc(in: root),
-            log:      { _ in }
+            extras:   ExtrasPlan(items: Self.extraItems),
+            log:      { _ in },
+            measureDuration: { _ in 300 }
         )
         pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
 
@@ -531,9 +618,9 @@ struct JobControllerPhaseWiringTests {
     /// their own.
     @Test func theRunnerReceivesTheSameIDCurrentJobIDExposes() async throws {
         var receivedID: JobID?
-        let controller = JobController(runner: { _, _, _, _, _, _, jobID, _ in
+        let controller = JobController(runner: { _, _, _, _, _, _, jobID, reportPhase in
             receivedID = jobID
-            return .succeeded(destination: Self.destination)
+            return fakeSuccess(reportPhase, destination: Self.destination)
         })
         Self.mount(controller, disc: Self.testDisc)
 
@@ -588,10 +675,61 @@ struct JobControllerPhaseWiringTests {
         // `JobController.finish`), and `currentJobState` is left at its
         // last valid value, `.encoding`.
         #expect(controller.currentJobState?.phase == .encoding)
+        // …and that end-of-job rejection is logged too (#0041 review): a
+        // runner that didn't reach `.organizing` broke its contract.
+        #expect(controller.logLines.last == "⚠︎ Ignored invalid phase transition encoding → succeeded at the end of the job")
         // The job still finished cleanly despite both rejections — never a
         // crash, and `isRunning`/`lastOutcome` are unaffected by any of this.
         #expect(controller.isRunning == false)
         #expect(controller.lastOutcome == .succeeded(destination: Self.destination))
+    }
+
+    /// #0041 review: `finish` never forges a terminal state. A runner that
+    /// returns `.succeeded` without reporting a single phase is logged, and
+    /// `currentJobState` stays at `.starting` — while `isRunning`,
+    /// `lastOutcome` and the sleep assertion behave exactly as for any job.
+    @Test func aSuccessWithNoPhaseReportsIsLoggedNotApplied() async throws {
+        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in
+            .succeeded(destination: Self.destination)
+        })
+        Self.mount(controller, disc: Self.testDisc)
+
+        controller.start(request: Self.request(try Self.metadata()), settings: AppSettings())
+        try await waitUntilIdle(controller)
+
+        #expect(controller.logLines == ["⚠︎ Ignored invalid phase transition starting → succeeded at the end of the job"])
+        #expect(controller.currentJobState?.phase == .starting)
+        #expect(controller.lastOutcome == .succeeded(destination: Self.destination))
+    }
+
+    /// A preflight-style failure straight from `.starting` is a legal,
+    /// silent terminal transition — no phase report is owed.
+    @Test func aFailureWithNoPhaseReportsLandsInFailedSilently() async throws {
+        let failure = JobFailure(stage: .preflight, reason: .toolMissing(path: "/nope"))
+        let controller = JobController(runner: { _, _, _, _, _, _, _, _ in .failed(failure) })
+        Self.mount(controller, disc: Self.testDisc)
+
+        controller.start(request: Self.request(try Self.metadata()), settings: AppSettings())
+        try await waitUntilIdle(controller)
+
+        #expect(controller.logLines.isEmpty)
+        #expect(controller.currentJobState?.phase == .failed)
+    }
+
+    @Test func aJobWithExtrasEndsSucceededFromExtras() async throws {
+        let controller = JobController(runner: { _, _, _, _, _, _, _, reportPhase in
+            reportPhase(.encoding)
+            reportPhase(.organizing)
+            reportPhase(.extras)
+            return .succeeded(destination: Self.destination)
+        })
+        Self.mount(controller, disc: Self.testDisc)
+
+        controller.start(request: Self.request(try Self.metadata()), settings: AppSettings())
+        try await waitUntilIdle(controller)
+
+        #expect(controller.logLines.isEmpty)
+        #expect(controller.currentJobState?.phase == .succeeded)
     }
 
     @Test func startResetsCurrentJobStateToInitialForEachNewJob() async throws {
@@ -632,6 +770,8 @@ private extension JobState {
             return JobState.initial.advancing(to: .encoding)!.advancing(to: .fallback)!
         case .organizing:
             return JobState.initial.advancing(to: .encoding)!.advancing(to: .organizing)!
+        case .extras:
+            return JobState.initial.advancing(to: .encoding)!.advancing(to: .organizing)!.advancing(to: .extras)!
         case .succeeded:
             return JobState.initial.advancing(to: .encoding)!.advancing(to: .organizing)!
                 .finishing(with: .succeeded(destination: URL(fileURLWithPath: "/tmp/x.mp4")))!
