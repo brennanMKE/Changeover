@@ -190,4 +190,51 @@ struct DiscScannerTests {
         #expect(DiscScanner.progressValue(in: "libdvdnav: vm: dvd_read_name failed") == nil)
         #expect(DiscScanner.progressValue(in: "") == nil)
     }
+
+    // MARK: - #0051: a real cancel reaches the child process
+
+    /// Cancels the enclosing `Task` while the stub is mid-`SLEEP_SECONDS`
+    /// (a stand-in for a real scan that hangs — a scratched disc, a
+    /// malformed IFO), mirroring `DVDPipelineCancellationTests
+    /// .cancellingMidEncodeEndsCancelledAndNeverTriggersTheFallback`'s shape
+    /// but for `DiscScanner.scan` directly. Confirms the real
+    /// `ProcessRunner`/`RunCancellation` path (SIGTERM, #0046) this ticket's
+    /// `JobController.cancelScan()` depends on actually reaches a scan's
+    /// child process and reports `.failure(.cancelled)` — not just that a
+    /// fake `ScanRunner` honors `Task.isCancelled`, which
+    /// `JobControllerScanTests` already covers. `ProcessRunnerTests` proves
+    /// the SIGTERM→SIGKILL escalation and "the process is no longer
+    /// running" bound generically; this is the integration point.
+    @Test func aRealCancelMidScanReportsCancelledAndReturnsPromptly() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let stub = try Self.copyStub(into: root)
+        let argvLog = root.appendingPathComponent("hb-argv.log").path
+        try Self.writeConf(forStubAt: stub, [
+            "SLEEP_SECONDS=30",
+            "ARGV_LOG=\"\(argvLog)\"",
+        ])
+
+        let task = Task {
+            await Self.scan(stubPath: stub, disc: root.appendingPathComponent("FAKE_DISC"))
+        }
+
+        // Wait for the stub to actually launch, so this cancels mid-scan,
+        // not before launch (`ProcessRunnerTests` covers that race
+        // separately).
+        var spins = 0
+        while !FileManager.default.fileExists(atPath: argvLog) && spins < 200_000 {
+            await Task.yield()
+            spins += 1
+        }
+        try #require(FileManager.default.fileExists(atPath: argvLog), "the stub never launched")
+
+        let start = Date()
+        task.cancel()
+        let outcome = await task.value
+        let elapsed = Date().timeIntervalSince(start)
+
+        #expect(outcome == .failure(.cancelled))
+        #expect(elapsed < 5, "took \(elapsed)s — a cancel should stop a 30s sleep almost immediately, proving the child process is no longer running, not merely that the Swift Task returned")
+    }
 }

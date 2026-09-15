@@ -959,6 +959,181 @@ struct JobControllerScanTests {
         #expect(controller.selectedExtraTitleIndices.isEmpty)
         #expect(controller.selectedExtrasPlan.items.isEmpty)
     }
+
+    // MARK: - #0051: cancelling a running scan
+
+    /// `cancelScan()` ends the scan as `.failed(.cancelled)` — the same
+    /// "The scan was cancelled." / Rescan-offered rendering as any other
+    /// scan failure — and a following `startScan` (Rescan) is accepted, not
+    /// refused by any leftover state.
+    @Test func cancelScanEndsTheScanAsFailedCancelledAndAFollowingStartScanIsAccepted() async throws {
+        let controller = JobController(scanRunner: fakeCancelScan)
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        #expect(controller.scanState == .scanning)
+
+        #expect(controller.cancelScan() == true)
+        try await waitUntilScanned(controller)
+        #expect(controller.scanState == .failed(.cancelled))
+
+        #expect(controller.startScan(settings: AppSettings()) == true)
+        #expect(controller.scanState == .scanning)
+
+        // Clean up: cancel the second scan too (`fakeCancelScan` never
+        // returns on its own), mirroring `JobCancellationTests`' convention
+        // for `fakeCancel`-driven jobs.
+        #expect(controller.cancelScan() == true)
+        try await waitUntilScanned(controller)
+        #expect(controller.scanState == .failed(.cancelled))
+    }
+
+    @Test func cancelScanWithNoScanRunningIsANoOp() {
+        let controller = JobController()
+        #expect(controller.cancelScan() == false)
+        #expect(controller.scanState == .idle)
+    }
+
+    /// `ejectDisc()` mid-scan cancels the scan first (logging one line),
+    /// waits for it to actually stop, then re-checks `EjectPolicy` and
+    /// proceeds — never leaving Eject refused for the scan's duration.
+    @Test func ejectDiscMidScanCancelsTheScanThenEjects() async {
+        let ejector = RecordingEjector()
+        ejector.outcome = .ejected
+        let controller = JobController(scanRunner: fakeCancelScan, ejector: { url in await ejector.eject(url) })
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        #expect(controller.scanState == .scanning)
+
+        let result = await controller.ejectDisc()
+
+        #expect(result == true)
+        #expect(controller.scanState == .failed(.cancelled))
+        #expect(ejector.calls == [Self.testDisc.mountURL])
+        #expect(controller.logLines.contains("Cancelling the scan to eject…"))
+        #expect(controller.logLines.contains("Disc ejected."))
+    }
+
+    /// A second `startScan` while one is already running (a Rescan clicked
+    /// twice, or `insertDisc` racing a stale scan) cancels the first, and
+    /// only the second's outcome is ever applied — the first's own outcome,
+    /// whatever it turns out to be, is for a generation that's already
+    /// superseded.
+    @Test func aSecondStartScanWhileScanningCancelsTheFirstAndOnlyTheSecondOutcomeIsApplied() async throws {
+        final class CallCount { var value = 0 }
+        let calls = CallCount()
+        let secondDisc = DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [Self.title(2, 6645)])
+        let controller = JobController(scanRunner: { _, _, _, _, _ in
+            calls.value += 1
+            if calls.value == 1 {
+                while !Task.isCancelled { await Task.yield() }
+                return .failure(.cancelled)
+            }
+            return .success(DiscScanner.Result(disc: secondDisc, mainFeatureIndex: 2, warnings: []))
+        })
+
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        #expect(controller.scanState == .scanning)
+
+        #expect(controller.startScan(settings: AppSettings()) == true)
+        try await waitUntilScanned(controller)
+
+        #expect(controller.scanState == .scanned(DiscScanner.Result(disc: secondDisc, mainFeatureIndex: 2, warnings: [])))
+        #expect(controller.selectedTitleIndex == 2)
+        #expect(calls.value == 2)
+    }
+
+    /// The same shape as the review's generation test
+    /// (`anOlderScanOfTheSameInsertionFinishingLastIsDiscarded`), but tied
+    /// explicitly to cancellation: the first scan's `.cancelled` outcome
+    /// arrives *after* the second has already settled, and must not
+    /// overwrite it.
+    @Test func aCancelledScansLateOutcomeForAnOlderGenerationIsDiscarded() async throws {
+        let firstGate = ScanGate()
+        let secondDisc = DiscInfo(volumeName: "TEST", driveName: "disk6", titles: [Self.title(2, 6645)])
+        final class CallCount { var value = 0 }
+        let calls = CallCount()
+        let controller = JobController(scanRunner: { _, _, _, _, _ in
+            calls.value += 1
+            if calls.value == 1 {
+                await firstGate.wait()
+                return .failure(.cancelled)
+            }
+            return .success(DiscScanner.Result(disc: secondDisc, mainFeatureIndex: 2, warnings: []))
+        })
+
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        #expect(controller.startScan(settings: AppSettings()) == true)
+        try await waitUntilScanned(controller)
+        #expect(controller.scanState == .scanned(DiscScanner.Result(disc: secondDisc, mainFeatureIndex: 2, warnings: [])))
+
+        firstGate.open()
+        for _ in 0..<1000 { await Task.yield() }
+
+        #expect(controller.scanState == .scanned(DiscScanner.Result(disc: secondDisc, mainFeatureIndex: 2, warnings: [])))
+    }
+
+    /// A removal during a scan cancels it for real — not just discards its
+    /// eventual result via the generation check, but actually stops the
+    /// in-flight `Task` (and, in production, the `HandBrakeCLI --scan`
+    /// process behind it), so nothing is left running after the disc is
+    /// gone.
+    @Test func removeDiscDuringAScanActuallyCancelsTheScanTask() async {
+        final class Witness { var observed = false }
+        let witness = Witness()
+        let controller = JobController(scanRunner: { _, _, _, _, _ in
+            while !Task.isCancelled { await Task.yield() }
+            witness.observed = true
+            return .failure(.cancelled)
+        })
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        #expect(controller.scanState == .scanning)
+
+        controller.removeDisc()
+        #expect(controller.scanState == .idle)
+        #expect(controller.insertedDisc == nil)
+
+        var spins = 0
+        while !witness.observed && spins < 100_000 {
+            await Task.yield()
+            spins += 1
+        }
+        #expect(witness.observed == true, "removeDisc must actually cancel the in-flight scan, not just discard its eventual result")
+    }
+
+    /// An insertion during a scan (a fresh disc swapped in before the
+    /// previous one's scan settled) also cancels the old scan for real,
+    /// before starting the new one.
+    @Test func insertDiscDuringAScanActuallyCancelsTheOldScanTask() async throws {
+        final class Witness { var observed = false }
+        let witness = Witness()
+        final class CallCount { var value = 0 }
+        let calls = CallCount()
+        let secondDisc = DiscInfo(volumeName: "TEST", driveName: "disk7", titles: [Self.title(3, 100)])
+        let controller = JobController(scanRunner: { _, _, _, _, _ in
+            calls.value += 1
+            if calls.value == 1 {
+                while !Task.isCancelled { await Task.yield() }
+                witness.observed = true
+                return .failure(.cancelled)
+            }
+            return .success(DiscScanner.Result(disc: secondDisc, mainFeatureIndex: 3, warnings: []))
+        })
+
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        #expect(controller.scanState == .scanning)
+
+        let otherDisc = DiscInsertion(mountURL: URL(fileURLWithPath: "/Volumes/OTHER"), deviceNode: "disk7", discID: "different-disc")
+        controller.insertDisc(otherDisc, settings: AppSettings())
+
+        var spins = 0
+        while !witness.observed && spins < 100_000 {
+            await Task.yield()
+            spins += 1
+        }
+        #expect(witness.observed == true)
+
+        try await waitUntilScanned(controller)
+        #expect(controller.scanState == .scanned(DiscScanner.Result(disc: secondDisc, mainFeatureIndex: 3, warnings: [])))
+        #expect(controller.insertedDisc == otherDisc)
+    }
 }
 
 /// `JobController.insertedDisc` is only useful if something writes it. The

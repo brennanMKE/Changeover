@@ -49,12 +49,25 @@ struct DiscTitleListView: View {
     // MARK: - Scanning
 
     private var scanningView: some View {
-        HStack(spacing: 8) {
-            ProgressView()
-                .controlSize(.small)
-            Text("Scanning disc — this takes tens of seconds…")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Scanning disc — this takes tens of seconds…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            // #0051: a hung scan (a scratched disc, a malformed IFO, a slow
+            // drive) used to have no way out short of `DiscScanner
+            // .scanWatchdog`'s 15 minutes — Start, Rescan and Eject were all
+            // dead for the duration. `cancelScan()` ends it promptly
+            // (#0046's SIGTERM→SIGKILL) and lands as "The scan was
+            // cancelled." with Rescan offered, same as any other failure.
+            Button("Cancel Scan") {
+                jobs.cancelScan()
+            }
+            .buttonStyle(.link)
+            .font(.caption)
         }
     }
 
@@ -89,8 +102,10 @@ struct DiscTitleListView: View {
         case .jsonMissing:
             return "The disc scan did not complete — no title information came back."
         case .cancelled:
-            // #0046: not reachable today (no scan-cancel UI exists yet), but
-            // exhaustive so a future one doesn't have to revisit this file.
+            // #0051: reached from `JobController.cancelScan()` (the "Cancel
+            // Scan" button below) and from `ejectDisc()` cancelling a scan
+            // before ejecting. Rescan is offered the same as any other
+            // failure, via the `Button("Rescan")` in `failedView` above.
             return "The scan was cancelled."
         }
     }

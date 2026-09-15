@@ -17,14 +17,22 @@ import Foundation
 /// (#0046) is the prerequisite for ending a job cleanly mid-encode.
 ///
 /// #0045 review: the same reasoning applies to a disc **scan** (#0026). A
-/// `HandBrakeCLI --scan` holds the disc just as the encode does, and nothing
-/// can cancel it either. Ejecting mid-scan either fails as busy, or — worse —
-/// unmounts the volume and then fails the eject with the disc still in the
-/// drive. `DVDMonitor` reports removal only when the media itself disappears,
-/// so that second case clears nothing, and the scan's I/O failure is then
-/// applied as a genuine-looking scan failure whose Rescan targets a volume
-/// that is no longer mounted. So a scan refuses too, until #0046 can cancel
-/// it cleanly.
+/// `HandBrakeCLI --scan` holds the disc just as the encode does. Ejecting
+/// mid-scan either fails as busy, or — worse — unmounts the volume and then
+/// fails the eject with the disc still in the drive. `DVDMonitor` reports
+/// removal only when the media itself disappears, so that second case clears
+/// nothing, and the scan's I/O failure is then applied as a genuine-looking
+/// scan failure whose Rescan targets a volume that is no longer mounted. So
+/// `decide` still refuses outright while a scan is running — it stays pure
+/// and has no way to cancel anything itself.
+///
+/// #0051: a scan is no longer a dead end, though. `JobController.ejectDisc()`
+/// checks for exactly this refusal (`scanningReason`) and, only for that
+/// case, cancels the scan (`cancelScan()`, reaching #0046's real
+/// `ProcessRunner` cancellation) and waits for it to actually stop before
+/// re-asking `decide` and proceeding — so the *caller* turns "refuse" into
+/// "cancel, then eject" without this type ever needing to know about
+/// cancellation.
 nonisolated enum EjectPolicy {
 
     /// The outcome of asking "can the disc be ejected right now?" — a plain

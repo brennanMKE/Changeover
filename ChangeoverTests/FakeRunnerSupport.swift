@@ -82,3 +82,30 @@ func fakeCancel(_ context: JobController.JobContext, phase: JobPhase = .encoding
     }
     return .failed(JobFailure(stage: stage, reason: .cancelled))
 }
+
+/// #0051 — a fake `JobController.ScanRunner` that blocks until its own
+/// `Task` is actually cancelled (polling `Task.isCancelled`, mirroring
+/// `fakeCancel`'s shape above — there is no real subprocess suspension point
+/// to hang a cancellation handler off here either), and returns the same
+/// shape a real cancelled `DiscScanner.scan` does: `.failure(.cancelled)`.
+/// Exists to exercise `JobController.cancelScan()`'s own wiring (the
+/// `scanTask` handle, `applyScanOutcome`'s generation check) — `DiscScanner`
+/// gets its own direct real-process cancellation coverage in
+/// `DiscScannerTests`.
+///
+/// Never returns on its own — a test that starts a scan with this runner and
+/// never cancels it (directly, via `removeDisc()`, `insertDisc()`, or a
+/// second `startScan`) will hang forever, same as `fakeCancel`.
+@MainActor
+func fakeCancelScan(
+    _ discPath: String,
+    _ handbrakePath: String,
+    _ volumeName: String,
+    _ driveName: String,
+    _ log: @escaping @MainActor (String) -> Void
+) async -> DiscScanner.Outcome {
+    while !Task.isCancelled {
+        await Task.yield()
+    }
+    return .failure(.cancelled)
+}

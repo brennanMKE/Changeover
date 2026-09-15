@@ -317,6 +317,21 @@ final class JobController {
     /// scan's outcome is ever applied — even a second scan of the *same*
     /// insertion (a Rescan), which the disc check alone can't tell apart.
     private var scanGeneration = 0
+    /// #0051 — the in-flight scan's own `Task`, tracked so it can actually be
+    /// stopped rather than merely superseded. Before this ticket nothing held
+    /// onto it (`startScan`'s own doc comment said so), so a hung scan had no
+    /// way out short of `DiscScanner.scanWatchdog`'s 15 minutes: `cancelScan()`
+    /// had nothing to cancel, and `ejectDisc()` could only refuse.
+    ///
+    /// Set by `startScan` right before launching; cleared by
+    /// `applyScanOutcome` once the outcome for the *matching* generation
+    /// lands — never unconditionally, so a superseded scan's late arrival
+    /// (already discarded by the generation check) can't clear the handle
+    /// out from under the scan that replaced it. Also cancelled (not just
+    /// discarded) by `startScan` itself before starting a new one, and by
+    /// `removeDisc()` — a disc swap or removal must stop the old
+    /// `HandBrakeCLI --scan` process, not just ignore its eventual result.
+    private var scanTask: Task<Void, Never>?
 
     // MARK: - Init
 
@@ -579,9 +594,11 @@ final class JobController {
     // MARK: - Manual eject (#0045)
 
     /// The status menu's "Eject Disc" row. Refuses with a logged reason when
-    /// no disc is mounted, a job is running, a scan is running, or an eject
-    /// is already in flight (`EjectPolicy` — there is no real cancel yet,
-    /// #0046, so neither a job nor a scan is ever disturbed by this).
+    /// no disc is mounted, a job is running, or an eject is already in
+    /// flight (`EjectPolicy`). A scan in progress no longer causes an
+    /// outright refusal (#0051): it is cancelled first — see below — so a
+    /// hung scan can't hold the drive for up to `DiscScanner.scanWatchdog`'s
+    /// 15 minutes with Eject dead the whole time.
     ///
     /// On success, `DiscEjector.eject` unmounts and ejects the disc, which
     /// fires `DVDMonitor.onDVDRemoved` → `AppDelegate` → `removeDisc()`,
@@ -597,12 +614,37 @@ final class JobController {
     ///   failed eject is never silent.
     @discardableResult
     func ejectDisc() async -> Bool {
-        switch EjectPolicy.decide(
+        var decision = EjectPolicy.decide(
             isRunning: isRunning,
             isScanning: scanState == .scanning,
             isEjecting: isEjecting,
             hasDisc: insertedDisc != nil
-        ) {
+        )
+
+        // #0051: when a scan is the *only* thing blocking the eject, cancel
+        // it first rather than refuse — the scan can now be stopped cleanly
+        // (#0046's `ProcessRunner` cancellation), so there is no reason left
+        // to make the user wait out the watchdog. Checked by the exact
+        // refusal reason (not `scanState` directly) so this only fires for
+        // the case `EjectPolicy` actually means by "scanning": if a job is
+        // *also* running, `EjectPolicy`'s own guard order means `.decide`
+        // already returned the job-running refusal instead, and a scan that
+        // happens to be running alongside a dying job (see `startScan`'s own
+        // doc comment) is left alone.
+        if case .refuse(let reason) = decision, reason == EjectPolicy.scanningReason {
+            append("Cancelling the scan to eject…")
+            let inFlightScan = scanTask
+            cancelScan()
+            await inFlightScan?.value
+            decision = EjectPolicy.decide(
+                isRunning: isRunning,
+                isScanning: scanState == .scanning,
+                isEjecting: isEjecting,
+                hasDisc: insertedDisc != nil
+            )
+        }
+
+        switch decision {
         case .refuse(let reason):
             append("⚠︎ \(reason)")
             return false
@@ -773,7 +815,16 @@ final class JobController {
 
     /// Clears the disc along with every piece of scan/selection state tied
     /// to it — an ejected disc has nothing left to scan or select.
+    ///
+    /// #0051: also cancels any scan still in flight for the departing disc.
+    /// `DVDMonitor` reports a removal when the media itself disappears, which
+    /// can happen mid-scan (a manual pull, or the physical eject that just
+    /// ran) — the old `HandBrakeCLI --scan` process must be stopped, not
+    /// left to run to completion (or the watchdog) against a disc that's no
+    /// longer there.
     func removeDisc() {
+        scanTask?.cancel()
+        scanTask = nil
         insertedDisc = nil
         isEjecting = false
         discUnavailable = false
@@ -785,12 +836,34 @@ final class JobController {
         mismatchAcknowledgement = nil
     }
 
+    /// #0051 — cancels the in-flight scan, if there is one. Reaches
+    /// `ProcessRunner.run` the same way `cancel(id:)` reaches a running
+    /// job's process — `scanTask.cancel()` is observed by
+    /// `withTaskCancellationHandler` inside `ProcessRunner.run`, which sends
+    /// the child `HandBrakeCLI --scan` `SIGTERM`, escalating to `SIGKILL`
+    /// after the grace period (#0046) — so this really stops the process,
+    /// not just the UI's idea of it. `DiscScanner.scan` maps a cancelled
+    /// termination to `.failure(.cancelled)`, which `applyScanOutcome`
+    /// applies for the current generation as `scanState = .failed(.cancelled)`
+    /// — the existing "The scan was cancelled." message and Rescan button
+    /// (`DiscTitleListView`) render from there, exactly like any other scan
+    /// failure.
+    ///
+    /// - Returns: `true` only when a scan was actually running to cancel.
+    @discardableResult
+    func cancelScan() -> Bool {
+        guard scanState == .scanning, let task = scanTask else { return false }
+        task.cancel()
+        return true
+    }
+
     /// Kicks off a `HandBrakeCLI --scan` of the disc currently in the drive.
-    /// Safe to call again while idle or failed (a manual "Rescan"): nothing
-    /// tracks or cancels an in-flight scan `Task`, the same "no `cancel()`"
-    /// stance this type's header takes for the encode — a superseded scan's
-    /// result is simply discarded by `applyScanOutcome`'s generation and
-    /// disc checks below.
+    /// Safe to call again while idle or failed (a manual "Rescan"), and while
+    /// a scan of the same disc is already running: any scan still in flight
+    /// is cancelled first (#0051) — one `HandBrakeCLI --scan` process per
+    /// disc at a time — and a superseded scan's eventual result (cancelled
+    /// or not) is discarded by `applyScanOutcome`'s generation and disc
+    /// checks below regardless.
     ///
     /// - Returns: `false` with no state change if there is no disc to scan,
     ///   it is being ejected (#0045 review), or it was unmounted but could
@@ -798,6 +871,8 @@ final class JobController {
     @discardableResult
     func startScan(settings: AppSettings) -> Bool {
         guard let disc = insertedDisc, !isEjecting, !discUnavailable else { return false }
+
+        scanTask?.cancel()
 
         scanGeneration += 1
         let generation = scanGeneration
@@ -813,12 +888,13 @@ final class JobController {
         let volumeName = disc.mountURL.lastPathComponent
         let driveName = disc.deviceNode ?? ""
 
-        Task { [weak self] in
+        let newScanTask = Task { [weak self] in
             let outcome = await scan(discPath, handbrakePath, volumeName, driveName) { line in
                 self?.append(line)
             }
             self?.applyScanOutcome(outcome, forDisc: disc, generation: generation, settings: settings)
         }
+        scanTask = newScanTask
         return true
     }
 
@@ -879,9 +955,18 @@ final class JobController {
     /// Applies a completed scan's outcome, but only if it is the most recent
     /// scan and `disc` is still the one in the drive — a disc swap, removal
     /// or Rescan that lands while the scan was in flight must not resurrect
-    /// a superseded result.
+    /// a superseded result. A `.failure(.cancelled)` outcome (#0051) is
+    /// applied exactly like any other failure — `scanState = .failed(.cancelled)`
+    /// — nothing special-cased here; `DiscTitleListView` already renders it
+    /// as "The scan was cancelled." with Rescan offered.
+    ///
+    /// #0051: also clears `scanTask`, but only when this outcome is for the
+    /// generation actually landing — a superseded (older) scan's outcome,
+    /// discarded by the guard below, must never clear the handle to the
+    /// *newer* scan that `startScan` already stored there.
     private func applyScanOutcome(_ outcome: DiscScanner.Outcome, forDisc disc: DiscInsertion, generation: Int, settings: AppSettings) {
         guard generation == scanGeneration, insertedDisc == disc else { return }
+        scanTask = nil
         switch outcome {
         case .success(let result):
             scanState = .scanned(result)

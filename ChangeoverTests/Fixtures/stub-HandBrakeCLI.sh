@@ -31,7 +31,11 @@
 #                     finished on its own — precisely the "inherited pipe
 #                     end" risk #0009 §9 calls out. `exec` means there is
 #                     only ever one process, so a signal to it ends the sleep
-#                     immediately and closes the pipe right away.
+#                     immediately and closes the pipe right away. #0051
+#                     extends this to the `--scan` branch below too, for
+#                     DiscScannerTests' real-process cancellation test — a
+#                     scan invocation now honors SLEEP_SECONDS the same way
+#                     an encode invocation always has.
 #
 # #0031 extends the same sidecar mechanism for the extras pipeline tests:
 #   FAIL_TITLES  — space-separated list of `--title` values that should fail
@@ -164,6 +168,13 @@ case "$*" in
     *--scan*)
         if [ -n "$SCAN_FIXTURE" ] && [ -f "$SCAN_FIXTURE" ]; then
             cat "$SCAN_FIXTURE"
+        fi
+        # #0051: sleep before exiting, exactly like the encode path below —
+        # a real-process stand-in for a scan that hangs, so a cancellation
+        # test can kill this process mid-scan and confirm `DiscScanner.scan`
+        # reports `.failure(.cancelled)`.
+        if [ -n "$SLEEP_SECONDS" ]; then
+            exec sleep "$SLEEP_SECONDS"
         fi
         exit "${SCAN_EXIT:-0}"
         ;;
