@@ -277,7 +277,9 @@ struct MetadataEntryView: View {
             .disabled(!StartGate.canStart(
                 hasMovieSelected:    vm.selectedMovie != nil,
                 isRunning:           jobs.isRunning,
-                hasDisc:             jobs.insertedDisc != nil,
+                // #0045 review: a disc being ejected by hand is not a disc
+                // to start on (`start` refuses it too).
+                hasDisc:             jobs.insertedDisc != nil && !jobs.isEjecting,
                 scanState:           jobs.scanState,
                 selectedTitleIndex:  jobs.selectedTitleIndex,
                 selectedAudioTrackNumbers: jobs.selectedAudioTrackNumbers,

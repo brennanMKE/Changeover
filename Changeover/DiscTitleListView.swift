@@ -68,6 +68,8 @@ struct DiscTitleListView: View {
             Button("Rescan") {
                 jobs.startScan(settings: settings)
             }
+            // #0045 review: `startScan` refuses a disc being ejected.
+            .disabled(jobs.isEjecting)
         }
     }
 

@@ -39,15 +39,17 @@ struct StatusMenuView: View {
             }
             .disabled(!settings.isConfigured)
 
-            // #0045: refuses (disabled + a no-op tap) with no disc mounted or
-            // while a job is running — `EjectPolicy` is the single source of
-            // truth `JobController.ejectDisc()` re-checks before acting, so
-            // this button can never race a state change between render and
-            // tap.
+            // #0045: disabled with no disc mounted, while a job or a scan is
+            // running, or while an eject is already in flight. The tooltip
+            // names the reason. `EjectPolicy` is the single source of truth
+            // `JobController.ejectDisc()` re-checks before acting, so a
+            // state change between render and tap is still refused (and
+            // logged) there.
             MenuRow("Eject Disc", systemImage: "eject") {
                 Task { await jobs.ejectDisc() }
             }
-            .disabled(!EjectPolicy.canEjectManually(isRunning: jobs.isRunning, hasDisc: jobs.insertedDisc != nil))
+            .disabled(ejectDecision != .eject)
+            .help(ejectDecision.refusalReason ?? "Unmount and eject the disc.")
 
             MenuRow("Settings…", systemImage: "gearshape") {
                 guard let appDelegate = AppDelegate.shared else {
@@ -69,6 +71,15 @@ struct StatusMenuView: View {
     }
 
     // MARK: - Status
+
+    private var ejectDecision: EjectPolicy.Decision {
+        EjectPolicy.decide(
+            isRunning: jobs.isRunning,
+            isScanning: jobs.scanState == .scanning,
+            isEjecting: jobs.isEjecting,
+            hasDisc: jobs.insertedDisc != nil
+        )
+    }
 
     /// Job state is app-level now (#0002), so the popover can report the running
     /// job instead of always claiming to be idle.

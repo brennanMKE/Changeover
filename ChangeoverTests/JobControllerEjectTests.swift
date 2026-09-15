@@ -175,6 +175,7 @@ struct JobControllerEjectTests {
 
         #expect(result == false)
         #expect(controller.logLines.contains("⚠︎ Could not eject the disc — it's still in use: resource busy."))
+        #expect(controller.isEjecting == false)
     }
 
     @Test func ejectDiscReportsAGenericFailure() async {
@@ -187,5 +188,129 @@ struct JobControllerEjectTests {
 
         #expect(result == false)
         #expect(controller.logLines.contains("⚠︎ Could not eject the disc: status -119930868."))
+        // A failed eject leaves the disc usable: Eject can be tried again.
+        #expect(controller.isEjecting == false)
+    }
+
+    // MARK: - #0045 review: scan and in-flight eject
+
+    private final class ScanCounter {
+        var calls = 0
+    }
+
+    /// A `HandBrakeCLI --scan` holds the disc and can't be cancelled yet
+    /// (#0046). Ejecting mid-scan must be refused, not attempted: the eject
+    /// would fail as busy, or unmount the volume without removing the disc
+    /// and turn the scan's I/O error into a misleading scan failure.
+    @Test func ejectDiscRefusesWhileTheDiscIsBeingScanned() async {
+        let ejector = FakeEjector()
+        let controller = JobController(ejector: { url in await ejector.eject(url) })
+        controller.insertedDisc = Self.testDisc
+        controller.scanState = .scanning
+
+        let result = await controller.ejectDisc()
+
+        #expect(result == false)
+        #expect(ejector.calls.isEmpty)
+        #expect(controller.logLines.contains("⚠︎ The disc is still being scanned — wait for the scan to finish before ejecting."))
+        #expect(controller.scanState == .scanning)
+        #expect(controller.insertedDisc == Self.testDisc)
+        #expect(controller.isEjecting == false)
+    }
+
+    /// Once the scan has settled, even as a failure, the disc can be ejected.
+    @Test func ejectDiscIsAllowedAfterAFailedScan() async {
+        let ejector = FakeEjector()
+        let controller = JobController(ejector: { url in await ejector.eject(url) })
+        controller.insertedDisc = Self.testDisc
+        controller.scanState = .failed(.jsonMissing)
+
+        #expect(await controller.ejectDisc() == true)
+        #expect(ejector.calls == [Self.testDisc.mountURL])
+    }
+
+    /// While the eject is in flight, a second Eject, a Start and a Rescan
+    /// are all refused, and none of them reach the ejector, the runner or
+    /// the scanner.
+    @Test func ejectStartAndRescanAreRefusedWhileAnEjectIsInFlight() async throws {
+        let gate = Gate()
+        let ejector = FakeEjector()
+        let scans = ScanCounter()
+        let controller = JobController(
+            runner: { _, _, _, _, _, _ in
+                Issue.record("the runner must not be invoked while ejecting")
+                return .succeeded(destination: Self.destination)
+            },
+            scanRunner: { _, _, _, _, _ in
+                scans.calls += 1
+                return .failure(.jsonMissing)
+            },
+            ejector: { url in
+                await gate.wait()
+                return await ejector.eject(url)
+            })
+        Self.mount(controller, disc: Self.testDisc)
+
+        let first = Task { await controller.ejectDisc() }
+        var spins = 0
+        while !controller.isEjecting && spins < 100_000 {
+            await Task.yield()
+            spins += 1
+        }
+        #expect(controller.isEjecting == true)
+
+        #expect(await controller.ejectDisc() == false)
+        #expect(controller.logLines.contains("⚠︎ The disc is already being ejected."))
+        #expect(controller.start(request: Self.request(try Self.metadata()), settings: AppSettings()) == false)
+        #expect(controller.logLines.contains("⚠︎ The disc is being ejected — insert a DVD before starting."))
+        #expect(controller.startScan(settings: AppSettings()) == false)
+
+        gate.open()
+        #expect(await first.value == true)
+        #expect(ejector.calls == [Self.testDisc.mountURL])
+        #expect(controller.isRunning == false)
+        #expect(scans.calls == 0)
+    }
+
+    /// After a successful eject, `insertedDisc` still names the departed disc
+    /// until `DVDMonitor`'s removal reaches `removeDisc()`. Start stays
+    /// refused in that gap, and the removal clears everything.
+    @Test func aSuccessfulEjectKeepsStartRefusedUntilTheRemovalLands() async throws {
+        let ejector = FakeEjector()
+        let controller = JobController(
+            runner: { _, _, _, _, _, _ in
+                Issue.record("the runner must not be invoked on an ejected disc")
+                return .succeeded(destination: Self.destination)
+            },
+            ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+
+        #expect(await controller.ejectDisc() == true)
+        #expect(controller.isEjecting == true)
+        #expect(controller.start(request: Self.request(try Self.metadata()), settings: AppSettings()) == false)
+
+        // What `AppDelegate`'s `onDVDRemoved` handler calls.
+        controller.removeDisc()
+
+        #expect(controller.isEjecting == false)
+        #expect(controller.insertedDisc == nil)
+        #expect(controller.scanState == .idle)
+    }
+
+    /// A new insertion also clears the flag, so the next disc is never
+    /// blocked by the previous one's eject.
+    @Test func aNewInsertionClearsTheEjectingFlag() async {
+        let ejector = FakeEjector()
+        let controller = JobController(
+            scanRunner: { _, _, _, _, _ in .failure(.jsonMissing) },
+            ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+        #expect(await controller.ejectDisc() == true)
+        #expect(controller.isEjecting == true)
+
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+
+        #expect(controller.isEjecting == false)
+        #expect(controller.scanState == .scanning)
     }
 }

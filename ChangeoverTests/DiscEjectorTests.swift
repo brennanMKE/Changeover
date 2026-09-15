@@ -142,4 +142,29 @@ struct DiscEjectorIntegrationTests {
             return
         }
     }
+
+    private final class ThreadRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private(set) var onMainThread: [Bool] = []
+        func record() {
+            lock.lock()
+            onMainThread.append(Thread.isMainThread)
+            lock.unlock()
+        }
+    }
+
+    /// #0045 review: both callers of `eject` are MainActor. `@MainActor` on
+    /// the test is deliberate: `ChangeoverTests` doesn't default to
+    /// MainActor, so a plain test would start off the main thread and could
+    /// never catch a missing `@concurrent`. Uses a volume that was never
+    /// mounted, like the test above, so no disk is touched.
+    @MainActor
+    @Test func ejectNeverRunsOnTheMainActor() async {
+        let recorder = ThreadRecorder()
+        _ = await DiscEjector.eject(
+            volumeURL: URL(fileURLWithPath: "/Volumes/ChangeoverDoesNotExist\(Int.random(in: 1000...9999))"),
+            onBegin: { recorder.record() }
+        )
+        #expect(recorder.onMainThread == [false])
+    }
 }

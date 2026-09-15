@@ -92,6 +92,13 @@ final class JobController {
     /// `DVDMonitor.onDVDRemoved` fires.
     var insertedDisc: DiscInsertion?
 
+    /// #0045 review — a manual eject is in flight, or has succeeded and
+    /// `DVDMonitor`'s removal hasn't reached `removeDisc()` yet. While set,
+    /// `start` and `startScan` refuse, and so does a second `ejectDisc`:
+    /// none of them may act on a disc that is being unmounted or is already
+    /// gone. Cleared by `removeDisc`, `insertDisc`, or a failed eject.
+    private(set) var isEjecting = false
+
     /// #0026: where the scan for `insertedDisc` stands. `AppDelegate` never
     /// writes this directly — `insertDisc(_:settings:)` starts the scan that
     /// drives it, and `removeDisc()` clears it. Plain `var`, not
@@ -223,6 +230,14 @@ final class JobController {
             return false
         }
 
+        // #0045 review: the disc is being (or has just been) ejected by hand.
+        // The removal callback hasn't landed yet, so `insertedDisc` still
+        // names a disc that is going away.
+        guard !isEjecting else {
+            append("⚠︎ The disc is being ejected — insert a DVD before starting.")
+            return false
+        }
+
         guard let currentDisc = insertedDisc else {
             append("⚠︎ No disc is mounted — insert a DVD before starting.")
             return false
@@ -315,15 +330,17 @@ final class JobController {
     // MARK: - Manual eject (#0045)
 
     /// The status menu's "Eject Disc" row. Refuses with a logged reason when
-    /// no disc is mounted or a job is running (`EjectPolicy` — there is no
-    /// real cancel yet, #0046, so a running job is never disturbed by this).
+    /// no disc is mounted, a job is running, a scan is running, or an eject
+    /// is already in flight (`EjectPolicy` — there is no real cancel yet,
+    /// #0046, so neither a job nor a scan is ever disturbed by this).
     ///
-    /// On success, `DiscEjector.eject` unmounts the volume, which fires
-    /// `DVDMonitor.onDVDRemoved` → `AppDelegate` → `removeDisc()`, exactly
-    /// the same path any other eject already takes (#0005). This method does
-    /// not clear `insertedDisc`/`scanState` itself — that would race the real
-    /// removal notification and could double-clear or clear the wrong disc if
-    /// a new one were already inserted by the time this call returns.
+    /// On success, `DiscEjector.eject` unmounts and ejects the disc, which
+    /// fires `DVDMonitor.onDVDRemoved` → `AppDelegate` → `removeDisc()`,
+    /// exactly the same path any other eject already takes (#0005). This
+    /// method does not clear `insertedDisc`/`scanState` itself — that would
+    /// race the real removal notification. Instead `isEjecting` stays set
+    /// until that removal (or a new insertion) lands, so nothing can act on
+    /// the departing disc in the gap.
     ///
     /// - Returns: `true` only on a confirmed eject. `false` on refusal
     ///   (nothing mounted, or a job running) or a reported failure (the disc
@@ -331,7 +348,12 @@ final class JobController {
     ///   failed eject is never silent.
     @discardableResult
     func ejectDisc() async -> Bool {
-        switch EjectPolicy.decide(isRunning: isRunning, hasDisc: insertedDisc != nil) {
+        switch EjectPolicy.decide(
+            isRunning: isRunning,
+            isScanning: scanState == .scanning,
+            isEjecting: isEjecting,
+            hasDisc: insertedDisc != nil
+        ) {
         case .refuse(let reason):
             append("⚠︎ \(reason)")
             return false
@@ -343,14 +365,19 @@ final class JobController {
         // just how Swift extracts it, not a second decision.
         guard let disc = insertedDisc else { return false }
 
+        isEjecting = true
         switch await ejector(disc.mountURL) {
         case .ejected:
+            // `isEjecting` stays set: the disc is out, but `insertedDisc`
+            // still names it until `removeDisc()` runs.
             append("Disc ejected.")
             return true
         case .busy(let message):
+            isEjecting = false
             append("⚠︎ \(message)")
             return false
         case .failed(let message):
+            isEjecting = false
             append("⚠︎ \(message)")
             return false
         }
@@ -363,6 +390,7 @@ final class JobController {
     /// starts a scan — before this ticket, `DiscTitleHeuristic.classify` and
     /// `applyingSuggestedRoles` existed but nothing ever called them.
     func insertDisc(_ disc: DiscInsertion, settings: AppSettings) {
+        isEjecting = false
         insertedDisc = disc
         startScan(settings: settings)
     }
@@ -371,6 +399,7 @@ final class JobController {
     /// to it — an ejected disc has nothing left to scan or select.
     func removeDisc() {
         insertedDisc = nil
+        isEjecting = false
         scanGeneration += 1
         scanState = .idle
         selectedTitleIndex = nil
@@ -386,10 +415,11 @@ final class JobController {
     /// result is simply discarded by `applyScanOutcome`'s generation and
     /// disc checks below.
     ///
-    /// - Returns: `false` with no state change if there is no disc to scan.
+    /// - Returns: `false` with no state change if there is no disc to scan,
+    ///   or it is being ejected (#0045 review).
     @discardableResult
     func startScan(settings: AppSettings) -> Bool {
-        guard let disc = insertedDisc else { return false }
+        guard let disc = insertedDisc, !isEjecting else { return false }
 
         scanGeneration += 1
         let generation = scanGeneration

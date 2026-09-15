@@ -38,7 +38,7 @@ import Foundation
 nonisolated enum DiscEjector {
 
     /// Result of attempting to eject one disc.
-    enum Outcome: Equatable {
+    enum Outcome: Equatable, Sendable {
         case ejected
         /// Something still has the disc open (a lingering encode process,
         /// Finder, a shell `cd`'d into it, …). `message` is ready to log or
@@ -55,12 +55,25 @@ nonisolated enum DiscEjector {
         outcome.failure == nil
     }
 
-    /// Unmounts and ejects the disc mounted at `volumeURL`. Runs entirely off
-    /// MainActor: creates its own private `DASession`, scheduled on a private
-    /// dispatch queue for the lifetime of this one call only (mirroring
-    /// `DVDMonitor`'s init/deinit shape, just scoped to a single operation
-    /// instead of the app's lifetime).
-    static func eject(volumeURL: URL) async -> Outcome {
+    /// Unmounts and ejects the disc mounted at `volumeURL`. Creates its own
+    /// private `DASession`, scheduled on a private dispatch queue for the
+    /// lifetime of this one call only (mirroring `DVDMonitor`'s init/deinit
+    /// shape, just scoped to a single operation instead of the app's
+    /// lifetime).
+    ///
+    /// #0045 review: `@concurrent`. Both callers (`DVDPipeline.run()` and
+    /// `JobController.ejectDisc()`) are MainActor, and with
+    /// `SWIFT_APPROACHABLE_CONCURRENCY` a plain `nonisolated async` function
+    /// runs on its caller's actor, so the synchronous session and
+    /// `DADiskCreateFromVolumePath` calls used to run on the main thread
+    /// despite this comment's earlier claim. Same fix as
+    /// `PlexOrganizer.move`. `onBegin` is the test-only hook
+    /// `DiscEjectorIntegrationTests.ejectNeverRunsOnTheMainActor` uses to
+    /// pin it.
+    @concurrent
+    nonisolated static func eject(volumeURL: URL, onBegin: @Sendable () -> Void = {}) async -> Outcome {
+        onBegin()
+
         guard let session = DASessionCreate(kCFAllocatorDefault) else {
             return .failed(message: "Could not open a DiskArbitration session.")
         }
