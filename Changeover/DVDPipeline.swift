@@ -397,7 +397,8 @@ struct DVDPipeline {
                     mp4Path:        mp4Path,
                     volumeName:     volumeName,
                     jobID:          jobID,
-                    fallbackAudio:  selection.fallbackAudio
+                    fallbackAudio:  selection.fallbackAudio,
+                    targetDurationSeconds: selection.featureDurationSeconds
                 ) {
                 case .failure(let runFailure):
                     fallbackRecord = runFailure.record
@@ -455,7 +456,18 @@ struct DVDPipeline {
         // the feature's primary failure). The disc stays mounted until every
         // extra is done; eject moves after this loop for exactly that
         // reason.
-        if !extras.items.isEmpty {
+        //
+        // #0035 (orchestrator decision from the #0031 handoff): when the
+        // feature was produced by the MakeMKV fallback, HandBrake already
+        // failed once against this disc, and extras would go straight back
+        // to HandBrake against the same disc — probably failing the same
+        // way, possibly slowly. Skip them entirely, log why, and leave the
+        // feature outcome (already `.succeeded`) unchanged.
+        if producedBy == .makemkvFallback {
+            if !extras.items.isEmpty {
+                log("⚠︎ Skipping \(extras.items.count) extra(s): the feature came from the MakeMKV fallback, and extras still go straight to HandBrake against the same disc HandBrake already failed on (#0035).")
+            }
+        } else if !extras.items.isEmpty {
             // The marker goes back to `.encoding`: the feature (the only
             // copy #0012 cares about) has already moved, and anything an
             // extra leaves behind on a mid-loop crash is re-derivable from
@@ -576,7 +588,8 @@ struct DVDPipeline {
         mp4Path:        String,
         volumeName:     String,
         jobID:          String,
-        fallbackAudio:  EncodeController.AudioSelection
+        fallbackAudio:  EncodeController.AudioSelection,
+        targetDurationSeconds: Int?
     ) async -> Result<URL, FallbackRunFailure> {
         // #0004 §2: the rip job directory shares the run's single job id, so
         // `Working/encoding/<jobID>/` and `Working/ripping/<jobID>/` always
@@ -584,11 +597,16 @@ struct DVDPipeline {
         let jobDirectory = (workingRipPath as NSString)
             .appendingPathComponent(jobID)
 
-        // #0026 review: `selection.title` deliberately does not reach here.
-        // A HandBrake title index is not a makemkvcon index (different base,
-        // numbered after makemkvcon's own filtering), so `rip` keeps choosing
-        // its longest title. That can differ from a title the user picked by
-        // hand — mapping the pick across by duration is a follow-up.
+        // #0026/#0035: `selection.title`'s HandBrake index still never
+        // reaches here — a HandBrake title index is not a makemkvcon index
+        // (different base, numbered after makemkvcon's own filtering) — but
+        // `selection.featureDurationSeconds` (HandBrake's own scan duration
+        // for the chosen title) does, as `targetDurationSeconds` below.
+        // `MakeMKVRipper.rip` matches its own `info` scan against that
+        // duration (`matchTitle`) instead of always picking the longest
+        // title, and refuses rather than guessing when there's no unique
+        // match. `nil` (no title was ever explicitly chosen) keeps the
+        // pre-#0035 "pick the longest" behaviour.
         //
         // `fallbackAudio` is `.sourceDefault` from `EncodeSelection.make`
         // (#0027 review): the `.mkv`'s track numbers don't match the disc's,
@@ -598,6 +616,7 @@ struct DVDPipeline {
             discMountPath:  discPath,
             jobDirectory:   jobDirectory,
             makemkvconPath: makemkvconPath,
+            targetDurationSeconds: targetDurationSeconds,
             log:            log
         ) {
         case .failure(let ripFailure):

@@ -239,6 +239,40 @@ struct MakeMKVFallbackTests {
         #expect(chosen?.durationSeconds == 8652) // 2:24:12 — Play All, not one episode
     }
 
+    // MARK: - 4b. matchTitle (#0035) — duration matching, never a guess
+
+    private static func title(_ index: Int, _ durationSeconds: Int) -> MakeMKVRipper.RippableTitle {
+        MakeMKVRipper.RippableTitle(index: index, durationSeconds: durationSeconds, sizeBytes: nil, outputNameHint: nil)
+    }
+
+    @Test func matchTitleFindsTheUniqueTitleWithinTolerance() {
+        let titles = [Self.title(0, 600), Self.title(1, 5987), Self.title(2, 1200)]
+        #expect(MakeMKVRipper.matchTitle(titles, toDurationSeconds: 5986)?.index == 1)
+    }
+
+    @Test func matchTitleToleratesA2SecondRoundingDifference() {
+        // target 200 -> tolerance max(2, 200/100) = 2
+        let titles = [Self.title(0, 198), Self.title(1, 500)]
+        #expect(MakeMKVRipper.matchTitle(titles, toDurationSeconds: 200)?.index == 0)
+    }
+
+    @Test func matchTitleRefusesWhenNothingIsWithinTolerance() {
+        let titles = [Self.title(0, 600), Self.title(1, 1200)]
+        #expect(MakeMKVRipper.matchTitle(titles, toDurationSeconds: 900) == nil)
+    }
+
+    /// Two titles both fall within tolerance of the target (e.g. two
+    /// near-identical episode lengths) — refuse rather than guess which one
+    /// the user meant.
+    @Test func matchTitleRefusesAnAmbiguousMatchRatherThanGuessing() {
+        let titles = [Self.title(0, 2698), Self.title(1, 2701), Self.title(2, 1000)]
+        #expect(MakeMKVRipper.matchTitle(titles, toDurationSeconds: 2700) == nil)
+    }
+
+    @Test func matchTitleRefusesOnAnEmptyTitleList() {
+        #expect(MakeMKVRipper.matchTitle([], toDurationSeconds: 100) == nil)
+    }
+
     // MARK: - 5. failureReason
 
     @Test func failureReasonMatchesActivationExpiredByNumericCode() throws {
@@ -1120,6 +1154,227 @@ struct MakeMKVFallbackTests {
 
         let record = try Self.readLastJSONLine(at: reliabilityURL)
         #expect(record.decision == "notEligible")
+    }
+
+    // MARK: - 20-23. #0035 — the fallback rips the chosen title, by duration
+
+    /// The core #0035 fix: a non-longest title, chosen by hand (a HandBrake
+    /// scan reporting title 4's duration, 28s in `dragon-tattoo-min0.txt`),
+    /// is ripped — not title 0, the longest (9471s), which is what the
+    /// pre-#0035 `chooseTitle` heuristic would have picked instead.
+    @Test func fallbackRipsTheChosenTitleByDurationNotTheLongest() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+
+        let handbrakeStub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        let handbrakeArgvLog = root.appendingPathComponent("hb-argv.log").path
+        try Self.writeConf(forStubAt: handbrakeStub, [
+            "EXIT_DIR_INPUT=3", "EXIT_FILE_INPUT=0", "ARGV_LOG=\"\(handbrakeArgvLog)\"",
+        ])
+        settings.handbrakePath = handbrakeStub
+
+        let makemkvStub = try Self.copyStub("stub-makemkvcon.sh", into: root)
+        let makemkvArgvLog = root.appendingPathComponent("mkv-argv.log").path
+        try Self.writeConf(forStubAt: makemkvStub, [
+            "INFO_FIXTURE=\"\(Self.fixturePath("makemkvcon/dragon-tattoo-min0.txt"))\"",
+            "MKV_FILES=1", "MKV_NAME=\"ripped.mkv\"", "ARGV_LOG=\"\(makemkvArgvLog)\"",
+        ])
+        settings.makemkvconPath = makemkvStub
+
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            // HandBrake's own scan reported this chosen title at 28s — title
+            // 4 in the fixture (durations: 0=9471, 1=14, 2=9, 3=15, 4=28).
+            selection: EncodeSelection(
+                title: .index(7), audio: .sourceDefault, fallbackAudio: .sourceDefault,
+                filter: .none, featureDurationSeconds: 28
+            ),
+            log:      { _ in }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .succeeded = outcome else {
+            Issue.record("expected success, got \(outcome)")
+            return
+        }
+
+        let mkvLines = Self.argvLines(at: makemkvArgvLog)
+        #expect(mkvLines.count == 2)
+        #expect(mkvLines[1].contains(" 4 ") || mkvLines[1].hasSuffix(" 4"))
+        #expect(!mkvLines[1].contains(" 0 ") && !mkvLines[1].hasSuffix(" 0")) // never the longest title
+    }
+
+    /// The heuristic's `.single` answer (auto-picked, not hand-picked) still
+    /// works: its `EncodeSelection.featureDurationSeconds` happens to agree
+    /// with the longest title (9471s, title 0), so the duration match lands
+    /// on the same title `chooseTitle` would have picked anyway.
+    @Test func fallbackMatchesByDurationWhenTheHeuristicPickAgreesWithTheLongestTitle() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+
+        let handbrakeStub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        let handbrakeArgvLog = root.appendingPathComponent("hb-argv.log").path
+        try Self.writeConf(forStubAt: handbrakeStub, [
+            "EXIT_DIR_INPUT=3", "EXIT_FILE_INPUT=0", "ARGV_LOG=\"\(handbrakeArgvLog)\"",
+        ])
+        settings.handbrakePath = handbrakeStub
+
+        let makemkvStub = try Self.copyStub("stub-makemkvcon.sh", into: root)
+        let makemkvArgvLog = root.appendingPathComponent("mkv-argv.log").path
+        try Self.writeConf(forStubAt: makemkvStub, [
+            "INFO_FIXTURE=\"\(Self.fixturePath("makemkvcon/dragon-tattoo-min0.txt"))\"",
+            "MKV_FILES=1", "MKV_NAME=\"ripped.mkv\"", "ARGV_LOG=\"\(makemkvArgvLog)\"",
+        ])
+        settings.makemkvconPath = makemkvStub
+
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            selection: EncodeSelection(
+                title: .index(0), audio: .sourceDefault, fallbackAudio: .sourceDefault,
+                filter: .none, featureDurationSeconds: 9471
+            ),
+            log:      { _ in }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .succeeded = outcome else {
+            Issue.record("expected success, got \(outcome)")
+            return
+        }
+        let mkvLines = Self.argvLines(at: makemkvArgvLog)
+        #expect(mkvLines[1].contains(" 0 ") || mkvLines[1].hasSuffix(" 0"))
+    }
+
+    /// No makemkvcon title is within tolerance of the chosen title's
+    /// duration — the fallback must refuse rather than guess. Neither the
+    /// `mkv` rip nor a second HandBrake pass ever runs.
+    @Test func fallbackRefusesWhenNoTitleMatchesTheChosenDuration() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+
+        let handbrakeStub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        let handbrakeArgvLog = root.appendingPathComponent("hb-argv.log").path
+        try Self.writeConf(forStubAt: handbrakeStub, [
+            "EXIT_DIR_INPUT=3", "EXIT_FILE_INPUT=0", "ARGV_LOG=\"\(handbrakeArgvLog)\"",
+        ])
+        settings.handbrakePath = handbrakeStub
+
+        let makemkvStub = try Self.copyStub("stub-makemkvcon.sh", into: root)
+        let makemkvArgvLog = root.appendingPathComponent("mkv-argv.log").path
+        try Self.writeConf(forStubAt: makemkvStub, [
+            "INFO_FIXTURE=\"\(Self.fixturePath("makemkvcon/dragon-tattoo-min0.txt"))\"",
+            "MKV_FILES=1", "ARGV_LOG=\"\(makemkvArgvLog)\"",
+        ])
+        settings.makemkvconPath = makemkvStub
+
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            // No fixture title is anywhere near 100s (durations: 9471, 14,
+            // 9, 15, 28) — this must refuse, not fall back to the longest.
+            selection: EncodeSelection(
+                title: .index(9), audio: .sourceDefault, fallbackAudio: .sourceDefault,
+                filter: .none, featureDurationSeconds: 100
+            ),
+            log:      { _ in }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .failed(let failure) = outcome else {
+            Issue.record("expected failure, got \(outcome)")
+            return
+        }
+        #expect(failure.stage == .encode)
+        #expect(failure.reason == .toolExited(code: 3)) // the original HandBrake failure, unmasked
+        guard case .failed(let fallbackStage, let fallbackReason, _) = failure.fallback else {
+            Issue.record("expected a fallback failure, got \(String(describing: failure.fallback))")
+            return
+        }
+        #expect(fallbackStage == .rip)
+        if case .unknown = fallbackReason {
+            // expected — refusal, never a guess
+        } else {
+            Issue.record("expected .unknown (refusal), got \(fallbackReason)")
+        }
+
+        // The info scan ran (to learn durations), but the rip never did —
+        // and the fallback encode never ran either.
+        #expect(Self.argvLines(at: makemkvArgvLog).count == 1)
+        #expect(Self.argvLines(at: handbrakeArgvLog).count == 1)
+
+        let remaining = (try? FileManager.default.contentsOfDirectory(atPath: settings.workingRipPath)) ?? []
+        #expect(remaining.isEmpty)
+    }
+
+    /// #0031 handoff, orchestrator decision: on the fallback path, extras
+    /// are skipped entirely (never sent back to the same HandBrake that just
+    /// failed), the reason is logged, and the feature's own outcome — which
+    /// already succeeded before extras are even considered — is unchanged.
+    @Test func fallbackSkipsExtrasAndLeavesTheFeatureOutcomeUnchanged() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let settings = AppSettings()
+        settings.plexMediaRoot = root.path
+
+        let handbrakeStub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
+        let handbrakeArgvLog = root.appendingPathComponent("hb-argv.log").path
+        try Self.writeConf(forStubAt: handbrakeStub, [
+            "EXIT_DIR_INPUT=3", "EXIT_FILE_INPUT=0", "ARGV_LOG=\"\(handbrakeArgvLog)\"",
+        ])
+        settings.handbrakePath = handbrakeStub
+
+        let makemkvStub = try Self.copyStub("stub-makemkvcon.sh", into: root)
+        try Self.writeConf(forStubAt: makemkvStub, [
+            "INFO_FIXTURE=\"\(Self.fixturePath("makemkvcon/dragon-tattoo-min0.txt"))\"",
+            "MKV_FILES=1", "MKV_NAME=\"ripped.mkv\"",
+        ])
+        settings.makemkvconPath = makemkvStub
+
+        var logged: [String] = []
+        var pipeline = DVDPipeline(
+            metadata: try Self.metadata(),
+            settings: settings,
+            disc:     try Self.makeFakeDisc(in: root),
+            // `.phase1`'s default selection (no chosen duration) — the
+            // extras-skip decision doesn't depend on how the title matched.
+            extras: ExtrasPlan(items: [
+                ExtrasPlan.Item(titleIndex: 2, durationSeconds: 300, frameRate: nil, interlaceDetected: nil),
+            ]),
+            log: { logged.append($0) }
+        )
+        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
+
+        let outcome = await pipeline.run()
+
+        guard case .succeeded = outcome else {
+            Issue.record("expected success, got \(outcome)")
+            return
+        }
+        // Exactly two HandBrake invocations: the failing primary and the
+        // fallback re-encode. Nothing for the extra.
+        #expect(Self.argvLines(at: handbrakeArgvLog).count == 2)
+        #expect(logged.contains { $0.contains("Skipping") && $0.contains("extra") && $0.contains("#0035") })
     }
 
     /// #0004 T17: a fallback that fails at the rip stage leaves no working

@@ -34,18 +34,29 @@ enum MakeMKVRipper {
 
     // MARK: - Entry point
 
-    /// Rips exactly one title (the longest, by `chooseTitle`) from
-    /// `discMountPath` into a fresh `jobDirectory`, using `makemkvcon` at
-    /// `makemkvconPath`. Every failure has `stage == .rip`.
+    /// Rips exactly one title from `discMountPath` into a fresh
+    /// `jobDirectory`, using `makemkvcon` at `makemkvconPath`. Every failure
+    /// has `stage == .rip`.
+    ///
+    /// Which title: when `targetDurationSeconds` is given (#0035 —
+    /// `EncodeSelection.featureDurationSeconds`, HandBrake's own scan of the
+    /// title the user chose), the *unique* makemkvcon title whose duration
+    /// matches within `matchTitle`'s tolerance. Zero or more than one match
+    /// refuses the fallback outright — it never guesses, and never
+    /// substitutes a different title (#0035's bug). When
+    /// `targetDurationSeconds` is `nil` (no title was ever explicitly
+    /// chosen — `.phase1`/`.mainFeature`), falls back to `chooseTitle`'s
+    /// pre-#0035 "pick the longest" heuristic, unchanged.
     ///
     /// Does **not** clean up `jobDirectory` on failure — that is
     /// `DVDPipeline`'s job (#0015 §6), uniformly, for both a failed rip and a
     /// failed fallback encode.
     nonisolated static func rip(
-        discMountPath:  String,
-        jobDirectory:   String,
-        makemkvconPath: String,
-        log:            @escaping @MainActor (String) -> Void
+        discMountPath:        String,
+        jobDirectory:         String,
+        makemkvconPath:       String,
+        targetDurationSeconds: Int? = nil,
+        log:                  @escaping @MainActor (String) -> Void
     ) async -> Result<URL, JobFailure> {
         let fm = FileManager.default
         let root = (jobDirectory as NSString).deletingLastPathComponent
@@ -109,7 +120,30 @@ enum MakeMKVRipper {
         }
 
         let allTitles = titles(fromInfoOutput: scanLines)
-        guard let chosen = chooseTitle(allTitles) else {
+
+        let chosen: RippableTitle?
+        if let target = targetDurationSeconds {
+            chosen = matchTitle(allTitles, toDurationSeconds: target)
+        } else {
+            chosen = chooseTitle(allTitles)
+        }
+
+        guard let chosen else {
+            // Titles exist, but none (or more than one) matched the chosen
+            // title's duration — refuse rather than guess (#0035). Distinct
+            // from "no titles at all", below, so the log/failure explains
+            // which happened.
+            if let target = targetDurationSeconds, !allTitles.isEmpty {
+                let candidates = allTitles.map { "\($0.index):\(formatDuration($0.durationSeconds))" }.joined(separator: ", ")
+                Task { @MainActor in
+                    log("✗ No makemkvcon title matches the chosen title's duration (\(formatDuration(target))) within tolerance — refusing to guess (\(allTitles.count) candidates: \(candidates))")
+                }
+                return .failure(JobFailure(
+                    stage:   .rip,
+                    reason:  .unknown("no unique makemkvcon title within tolerance of target duration \(target)s among \(allTitles.count) titles"),
+                    logTail: Array(scanLines.suffix(LogTailBuffer.defaultCapacity))
+                ))
+            }
             Task { @MainActor in log("✗ makemkvcon found no usable titles on this disc") }
             return .failure(JobFailure(stage: .rip, reason: .noTitlesProduced))
         }
@@ -326,7 +360,10 @@ enum MakeMKVRipper {
 
     /// Longest `durationSeconds`; ties go to the lowest index. This is a
     /// heuristic — it picks *The IT Crowd*'s "Play All" title — acceptable
-    /// only because this is a fallback path (#0015 §9 risk).
+    /// only because this is a fallback path (#0015 §9 risk). Since #0035,
+    /// `rip(...)` only reaches this when no title was ever explicitly
+    /// chosen (`targetDurationSeconds == nil`); otherwise `matchTitle` picks
+    /// by duration instead.
     nonisolated static func chooseTitle(_ titles: [RippableTitle]) -> RippableTitle? {
         var best: RippableTitle?
         for title in titles.sorted(by: { $0.index < $1.index }) {
@@ -339,6 +376,20 @@ enum MakeMKVRipper {
             }
         }
         return best
+    }
+
+    /// Matches `titles` (a fresh makemkvcon `info` scan) against `target`
+    /// seconds — HandBrake's own scan duration for the title the user chose
+    /// (#0035). HandBrake and MakeMKV number titles differently and can't be
+    /// mapped index to index, so duration is the one signal both tools
+    /// report for the same physical title. Tolerance is `max(2, target /
+    /// 100)` seconds — 2s or ~1%, whichever is larger, to absorb each tool's
+    /// own rounding. Returns the single title within tolerance, or `nil` —
+    /// never a guess — when zero or more than one title qualifies.
+    nonisolated static func matchTitle(_ titles: [RippableTitle], toDurationSeconds target: Int) -> RippableTitle? {
+        let tolerance = max(2, target / 100)
+        let matches = titles.filter { abs($0.durationSeconds - target) <= tolerance }
+        return matches.count == 1 ? matches.first : nil
     }
 
     /// `MSG` code **5021** present → `.activationExpired` (matched on the

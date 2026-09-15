@@ -38,6 +38,9 @@ struct EncodeSelectionTests {
             frameRate: scannedTitle.frameRate, interlaceDetected: scannedTitle.interlaceDetected
         ))
         #expect(selection.filter == .none)
+        // #0035: the chosen title's own scanned duration travels with the
+        // selection, for the MakeMKV fallback to match against.
+        #expect(selection.featureDurationSeconds == scannedTitle.durationSeconds)
     }
 
     @Test func makeReturnsNilForAFeatureTitleNotOnTheDisc() throws {
@@ -88,5 +91,9 @@ struct EncodeSelectionTests {
         #expect(EncodeSelection.phase1 == EncodeSelection(
             title: .mainFeature, audio: .sourceDefault, fallbackAudio: .sourceDefault, filter: .none
         ))
+        // #0035: `.phase1` never had a scan, so there's no known duration —
+        // `MakeMKVRipper.rip` falls back to its pre-#0035 "pick the longest"
+        // behaviour whenever this is `nil`.
+        #expect(EncodeSelection.phase1.featureDurationSeconds == nil)
     }
 }

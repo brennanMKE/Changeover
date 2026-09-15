@@ -24,6 +24,18 @@ nonisolated struct EncodeSelection: Equatable, Sendable {
     /// until the joe check passes.
     var fallbackAudio: EncodeController.AudioSelection
     var filter: DeinterlaceFilter
+    /// The chosen feature title's duration, straight from HandBrake's own
+    /// scan (`DiscTitle.durationSeconds`) — #0035's fix for the MakeMKV
+    /// fallback silently substituting its longest title for whatever the
+    /// user picked. HandBrake and MakeMKV number titles differently, so an
+    /// index can't cross from one tool to the other; duration is the one
+    /// signal both tools report for the same physical title, and
+    /// `MakeMKVRipper.rip` matches its own `info` scan against this value
+    /// (`MakeMKVRipper.matchTitle`) instead of just picking the longest.
+    /// `nil` only for `.phase1` (`.mainFeature`, no scan happened) — the
+    /// fallback then keeps its pre-#0035 "pick the longest" behaviour, the
+    /// same as when no explicit title was ever chosen.
+    var featureDurationSeconds: Int? = nil
 
     /// The pre-#0027 behaviour, byte for byte: HandBrake's own
     /// `--main-feature` scan picks the title, HandBrake's own default picks
@@ -70,10 +82,11 @@ nonisolated struct EncodeSelection: Equatable, Sendable {
         )
 
         return EncodeSelection(
-            title:         .index(request.featureTitleIndex),
-            audio:         audio,
-            fallbackAudio: fallbackAudio,
-            filter:        filter
+            title:                  .index(request.featureTitleIndex),
+            audio:                  audio,
+            fallbackAudio:          fallbackAudio,
+            filter:                 filter,
+            featureDurationSeconds: title.durationSeconds
         )
     }
 }
