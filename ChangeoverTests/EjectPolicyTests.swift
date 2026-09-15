@@ -44,12 +44,23 @@ struct EjectPolicyTests {
         }
     }
 
-    /// #0045 review: a `HandBrakeCLI --scan` holds the disc and cannot be
-    /// cancelled yet (#0046), so an eject mid-scan is refused.
-    @Test func aScanInProgressRefusesForTheScan() {
+    /// #0051: a scan in progress no longer refuses. It is the one blocker
+    /// the caller can clear itself — cancel the scan, wait, then eject — so
+    /// `decide` says so as a typed case, not a reason string.
+    @Test func aScanInProgressAloneAsksToCancelTheScanThenEject() {
         let decision = EjectPolicy.decide(isRunning: false, isScanning: true, isEjecting: false, hasDisc: true)
-        #expect(decision == .refuse(reason: "The disc is still being scanned — wait for the scan to finish before ejecting."))
-        #expect(decision.refusalReason == "The disc is still being scanned — wait for the scan to finish before ejecting.")
+        #expect(decision == .cancelScanThenEject)
+        #expect(decision.refusalReason == nil)
+    }
+
+    /// #0051: a running job or an eject in flight still wins over a scan, so
+    /// a scan alongside either is never cancelled for an eject that can't
+    /// proceed anyway.
+    @Test func aScanAlongsideAJobOrAnEjectStillRefusesForThoseAndNeverCancelsTheScan() {
+        #expect(EjectPolicy.decide(isRunning: true, isScanning: true, isEjecting: false, hasDisc: true)
+                == .refuse(reason: EjectPolicy.jobRunningReason))
+        #expect(EjectPolicy.decide(isRunning: false, isScanning: true, isEjecting: true, hasDisc: true)
+                == .refuse(reason: EjectPolicy.alreadyEjectingReason))
     }
 
     // MARK: - canEjectManually — full truth table
@@ -59,7 +70,8 @@ struct EjectPolicyTests {
             for scanning in Self.bools {
                 for ejecting in Self.bools {
                     for hasDisc in Self.bools {
-                        let expected = hasDisc && !running && !scanning && !ejecting
+                        // #0051: scanning no longer blocks — Eject cancels the scan first.
+                        let expected = hasDisc && !running && !ejecting
                         #expect(
                             EjectPolicy.canEjectManually(isRunning: running, isScanning: scanning, isEjecting: ejecting, hasDisc: hasDisc) == expected,
                             "running: \(running), scanning: \(scanning), ejecting: \(ejecting), hasDisc: \(hasDisc)"

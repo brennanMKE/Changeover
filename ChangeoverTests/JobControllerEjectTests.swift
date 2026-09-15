@@ -189,11 +189,12 @@ struct JobControllerEjectTests {
         var calls = 0
     }
 
-    /// A `HandBrakeCLI --scan` holds the disc and can't be cancelled yet
-    /// (#0046). Ejecting mid-scan must be refused, not attempted: the eject
-    /// would fail as busy, or unmount the volume without removing the disc
-    /// and turn the scan's I/O error into a misleading scan failure.
-    @Test func ejectDiscRefusesWhileTheDiscIsBeingScanned() async {
+    /// #0051: a scan no longer refuses the eject outright — `ejectDisc()`
+    /// cancels it and waits. But if a scan is *still* running after that
+    /// (here `scanState` is hand-set with no scan `Task` behind it, so
+    /// nothing can settle it), the eject must still refuse, never run under
+    /// the scan, and must not leave `isEjecting` stuck on.
+    @Test func ejectDiscStillRefusesIfTheScanIsStillRunningAfterTheCancel() async {
         let ejector = RecordingEjector()
         let controller = JobController(ejector: { url in await ejector.eject(url) })
         controller.insertedDisc = Self.testDisc
@@ -203,7 +204,8 @@ struct JobControllerEjectTests {
 
         #expect(result == false)
         #expect(ejector.calls.isEmpty)
-        #expect(controller.logLines.contains("⚠︎ The disc is still being scanned — wait for the scan to finish before ejecting."))
+        #expect(controller.logLines.contains("Cancelling the scan to eject…"))
+        #expect(controller.logLines.contains("⚠︎ \(EjectPolicy.scanStillRunningReason)"))
         #expect(controller.scanState == .scanning)
         #expect(controller.insertedDisc == Self.testDisc)
         #expect(controller.isEjecting == false)

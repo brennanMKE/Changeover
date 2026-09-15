@@ -26,13 +26,13 @@ import Foundation
 /// `decide` still refuses outright while a scan is running — it stays pure
 /// and has no way to cancel anything itself.
 ///
-/// #0051: a scan is no longer a dead end, though. `JobController.ejectDisc()`
-/// checks for exactly this refusal (`scanningReason`) and, only for that
-/// case, cancels the scan (`cancelScan()`, reaching #0046's real
-/// `ProcessRunner` cancellation) and waits for it to actually stop before
-/// re-asking `decide` and proceeding — so the *caller* turns "refuse" into
-/// "cancel, then eject" without this type ever needing to know about
-/// cancellation.
+/// #0051: a scan is no longer a dead end, though. While a scan is the only
+/// thing in the way, `decide` returns `.cancelScanThenEject` rather than a
+/// refusal: the status menu row stays enabled, and `JobController.ejectDisc()`
+/// cancels the scan (`cancelScan()`, reaching #0046's real `ProcessRunner`
+/// cancellation), waits for its process to actually exit, then decides again
+/// and ejects. The branch is keyed on this enum case, never on a reason
+/// string, so rewording a message can't change behaviour.
 nonisolated enum EjectPolicy {
 
     /// The outcome of asking "can the disc be ejected right now?" — a plain
@@ -40,6 +40,9 @@ nonisolated enum EjectPolicy {
     /// show without re-deriving one from the inputs.
     enum Decision: Equatable {
         case eject
+        /// #0051 — a scan is the only thing in the way. The caller cancels
+        /// it, waits for its process to exit, and decides again.
+        case cancelScanThenEject
         case refuse(reason: String)
 
         /// The refusal's reason, or `nil` for `.eject` — what the status
@@ -53,7 +56,12 @@ nonisolated enum EjectPolicy {
     static let noDiscReason = "No disc is mounted."
     static let jobRunningReason = "A job is running — wait for it to finish before ejecting."
     static let alreadyEjectingReason = "The disc is already being ejected."
-    static let scanningReason = "The disc is still being scanned — wait for the scan to finish before ejecting."
+    /// #0051 — only reached when a scan is *still* running after the caller
+    /// has already cancelled it and waited (in production a scan always
+    /// settles once its `Task` finishes, so this is a defensive refusal).
+    static let scanStillRunningReason = "The disc scan did not stop — try Eject again once the scan has ended."
+    /// #0051 — the status menu row's tooltip for `.cancelScanThenEject`.
+    static let cancelScanThenEjectHelp = "Stop the disc scan, then unmount and eject the disc."
 
     /// - Parameters:
     ///   - isRunning: `JobController.isRunning`.
@@ -65,13 +73,14 @@ nonisolated enum EjectPolicy {
         guard hasDisc else { return .refuse(reason: noDiscReason) }
         guard !isRunning else { return .refuse(reason: jobRunningReason) }
         guard !isEjecting else { return .refuse(reason: alreadyEjectingReason) }
-        guard !isScanning else { return .refuse(reason: scanningReason) }
+        guard !isScanning else { return .cancelScanThenEject }
         return .eject
     }
 
     /// Convenience for view gating: the full truth table collapses to one
-    /// boolean, with `decide` as the single source of truth.
+    /// boolean, with `decide` as the single source of truth. `true` for
+    /// `.cancelScanThenEject` too (#0051): Eject is offered during a scan.
     static func canEjectManually(isRunning: Bool, isScanning: Bool, isEjecting: Bool, hasDisc: Bool) -> Bool {
-        decide(isRunning: isRunning, isScanning: isScanning, isEjecting: isEjecting, hasDisc: hasDisc) == .eject
+        decide(isRunning: isRunning, isScanning: isScanning, isEjecting: isEjecting, hasDisc: hasDisc).refusalReason == nil
     }
 }

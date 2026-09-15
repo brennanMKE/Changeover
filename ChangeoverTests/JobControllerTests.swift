@@ -1134,6 +1134,135 @@ struct JobControllerScanTests {
         #expect(controller.scanState == .scanned(DiscScanner.Result(disc: secondDisc, mainFeatureIndex: 3, warnings: [])))
         #expect(controller.insertedDisc == otherDisc)
     }
+
+    // MARK: - #0051 review: Eject waits for the scan process to exit
+
+    /// The eject must not run while the scan's `HandBrakeCLI` still holds the
+    /// disc. A real process through the real `DiscScanner.scan` /
+    /// `ProcessRunner` path: the stand-in catches SIGTERM, keeps running for
+    /// 2 s (a scan slow to let go), writes a marker, and only then exits. The
+    /// ejector records whether the marker existed and whether the pid was
+    /// still alive at the moment it was called.
+    @Test func ejectDiscMidScanWaitsForTheScanProcessToExitBeforeEjecting() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("JobControllerScanTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pidFile = root.appendingPathComponent("scan.pid").path
+        let marker = root.appendingPathComponent("scan.exited").path
+        let script = root.appendingPathComponent("slow-to-exit-HandBrakeCLI.sh").path
+        try """
+        #!/bin/sh
+        echo $$ > '\(pidFile)'
+        trap 'sleep 2; touch "\(marker)"; exit 143' TERM
+        while :; do sleep 0.1; done
+        """.write(toFile: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script)
+
+        final class Probe { var markerAtEject: Bool?; var pidAliveAtEject: Bool? }
+        let probe = Probe()
+        let controller = JobController(
+            scanRunner: { discPath, _, volumeName, driveName, log in
+                await DiscScanner.scan(discPath: discPath, handbrakePath: script,
+                                       volumeName: volumeName, driveName: driveName, log: log)
+            },
+            ejector: { _ in
+                probe.markerAtEject = FileManager.default.fileExists(atPath: marker)
+                if let text = try? String(contentsOfFile: pidFile, encoding: .utf8),
+                   let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                    probe.pidAliveAtEject = kill(pid, 0) == 0
+                }
+                return .ejected
+            }
+        )
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+        #expect(controller.scanState == .scanning)
+
+        // Wait for the process to launch (and install its trap), so the
+        // cancel lands mid-scan rather than before launch.
+        let launchDeadline = Date().addingTimeInterval(10)
+        while !FileManager.default.fileExists(atPath: pidFile) && Date() < launchDeadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        if !FileManager.default.fileExists(atPath: pidFile) { controller.removeDisc() }
+        try #require(FileManager.default.fileExists(atPath: pidFile), "the scan process never launched")
+        try await Task.sleep(for: .milliseconds(200))
+
+        let start = Date()
+        let result = await controller.ejectDisc()
+        let elapsed = Date().timeIntervalSince(start)
+
+        #expect(result == true)
+        #expect(probe.markerAtEject == true, "ejected before the scan process finished its SIGTERM handling")
+        #expect(probe.pidAliveAtEject == false, "ejected while the scan process was still alive")
+        #expect(elapsed >= 1.5, "took \(elapsed)s — the eject can't have waited out the 2 s the scan took to exit")
+        #expect(controller.scanState == .failed(.cancelled))
+        #expect(controller.logLines.contains("Disc ejected."))
+    }
+
+    /// A scan runner that sees its cancellation, then holds on until `gate`
+    /// opens — a scan process slow to exit, without a real process.
+    private static func slowToStopScanRunner(_ gate: ScanGate) -> JobController.ScanRunner {
+        { _, _, _, _, _ in
+            while !Task.isCancelled { await Task.yield() }
+            await gate.wait()
+            return .failure(.cancelled)
+        }
+    }
+
+    /// While Eject waits for a cancelled scan to stop, `isEjecting` is held:
+    /// a second Eject and a Rescan are refused and nothing reaches the
+    /// ejector until the scan has actually ended.
+    @Test func whileEjectWaitsForTheScanASecondEjectAndARescanAreRefused() async throws {
+        let gate = ScanGate()
+        let ejector = RecordingEjector()
+        let controller = JobController(scanRunner: Self.slowToStopScanRunner(gate),
+                                       ejector: { url in await ejector.eject(url) })
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+
+        let eject = Task { await controller.ejectDisc() }
+        var spins = 0
+        while !controller.isEjecting && spins < 100_000 { await Task.yield(); spins += 1 }
+        try #require(controller.isEjecting)
+        #expect(controller.scanState == .scanning)
+
+        #expect(await controller.ejectDisc() == false)
+        #expect(controller.logLines.contains("⚠︎ \(EjectPolicy.alreadyEjectingReason)"))
+        #expect(controller.startScan(settings: AppSettings()) == false)
+        for _ in 0..<1000 { await Task.yield() }
+        #expect(ejector.calls.isEmpty)
+        #expect(controller.logLines.filter { $0 == "Cancelling the scan to eject…" }.count == 1)
+
+        gate.open()
+        #expect(await eject.value == true)
+        #expect(ejector.calls == [Self.testDisc.mountURL])
+        #expect(controller.scanState == .failed(.cancelled))
+    }
+
+    /// A disc pulled while Eject waits for its scan to stop: nothing is
+    /// ejected, and the removal's cleared state stands.
+    @Test func aDiscRemovedWhileEjectWaitsForTheScanIsNotEjected() async throws {
+        let gate = ScanGate()
+        let ejector = RecordingEjector()
+        let controller = JobController(scanRunner: Self.slowToStopScanRunner(gate),
+                                       ejector: { url in await ejector.eject(url) })
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+
+        let eject = Task { await controller.ejectDisc() }
+        var spins = 0
+        while !controller.isEjecting && spins < 100_000 { await Task.yield(); spins += 1 }
+        try #require(controller.isEjecting)
+
+        controller.removeDisc()
+        gate.open()
+
+        #expect(await eject.value == false)
+        #expect(ejector.calls.isEmpty)
+        #expect(controller.logLines.contains("⚠︎ The disc was removed or replaced while its scan was stopping — nothing was ejected."))
+        #expect(controller.insertedDisc == nil)
+        #expect(controller.isEjecting == false)
+        #expect(controller.scanState == .idle)
+    }
 }
 
 /// `JobController.insertedDisc` is only useful if something writes it. The

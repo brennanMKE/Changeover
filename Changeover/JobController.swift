@@ -624,18 +624,33 @@ final class JobController {
         // #0051: when a scan is the *only* thing blocking the eject, cancel
         // it first rather than refuse — the scan can now be stopped cleanly
         // (#0046's `ProcessRunner` cancellation), so there is no reason left
-        // to make the user wait out the watchdog. Checked by the exact
-        // refusal reason (not `scanState` directly) so this only fires for
-        // the case `EjectPolicy` actually means by "scanning": if a job is
-        // *also* running, `EjectPolicy`'s own guard order means `.decide`
-        // already returned the job-running refusal instead, and a scan that
-        // happens to be running alongside a dying job (see `startScan`'s own
-        // doc comment) is left alone.
-        if case .refuse(let reason) = decision, reason == EjectPolicy.scanningReason {
+        // to make the user wait out the watchdog. Keyed on the typed
+        // `.cancelScanThenEject` case, never a reason string. If a job is
+        // *also* running, `EjectPolicy`'s guard order returns the job-running
+        // refusal instead, so a scan alongside a dying job is left alone.
+        //
+        // #0051 review: awaiting the scan `Task`'s value waits for the
+        // `HandBrakeCLI --scan` process to actually exit (`ProcessRunner.run`
+        // resumes only after `terminationHandler`, so up to its SIGTERM →
+        // SIGKILL grace) — the eject never runs while the scan still holds
+        // the disc. `isEjecting` is held for that wait so a second Eject, a
+        // Start or a Rescan can't slip in (a Rescan landing between the
+        // cancelled scan settling and this resuming would start a new scan
+        // under the eject).
+        if decision == .cancelScanThenEject {
             append("Cancelling the scan to eject…")
+            let requestedDisc = insertedDisc
             let inFlightScan = scanTask
+            isEjecting = true
             cancelScan()
             await inFlightScan?.value
+            // A removal or a new insertion landed during the wait (both clear
+            // `isEjecting`): the disc the user asked to eject is gone.
+            guard isEjecting, insertedDisc == requestedDisc else {
+                append("⚠︎ The disc was removed or replaced while its scan was stopping — nothing was ejected.")
+                return false
+            }
+            isEjecting = false
             decision = EjectPolicy.decide(
                 isRunning: isRunning,
                 isScanning: scanState == .scanning,
@@ -647,6 +662,11 @@ final class JobController {
         switch decision {
         case .refuse(let reason):
             append("⚠︎ \(reason)")
+            return false
+        case .cancelScanThenEject:
+            // Still scanning after the cancel and the wait — never eject
+            // under a scan. Not reachable with a real scan `Task`.
+            append("⚠︎ \(EjectPolicy.scanStillRunningReason)")
             return false
         case .eject:
             break

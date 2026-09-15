@@ -227,6 +227,11 @@ struct DiscScannerTests {
             await Task.yield()
             spins += 1
         }
+        if !FileManager.default.fileExists(atPath: argvLog) {
+            // #0051 review: don't leave a 30 s stub running past a failed test.
+            task.cancel()
+            _ = await task.value
+        }
         try #require(FileManager.default.fileExists(atPath: argvLog), "the stub never launched")
 
         let start = Date()

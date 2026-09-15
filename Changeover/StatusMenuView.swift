@@ -49,17 +49,19 @@ struct StatusMenuView: View {
                 appDelegate.showHistory(selecting: nil)
             }
 
-            // #0045: disabled with no disc mounted, while a job or a scan is
-            // running, or while an eject is already in flight. The tooltip
-            // names the reason. `EjectPolicy` is the single source of truth
+            // #0045: disabled with no disc mounted, while a job is running,
+            // or while an eject is already in flight. The tooltip names the
+            // reason. #0051: enabled during a scan — the eject cancels the
+            // scan first (`EjectPolicy.Decision.cancelScanThenEject`). `EjectPolicy` is the single source of truth
             // `JobController.ejectDisc()` re-checks before acting, so a
             // state change between render and tap is still refused (and
             // logged) there.
             MenuRow("Eject Disc", systemImage: "eject") {
                 Task { await jobs.ejectDisc() }
             }
-            .disabled(ejectDecision != .eject)
-            .help(ejectDecision.refusalReason ?? "Unmount and eject the disc.")
+            .disabled(ejectDecision.refusalReason != nil)
+            .help(ejectDecision.refusalReason
+                  ?? (ejectDecision == .cancelScanThenEject ? EjectPolicy.cancelScanThenEjectHelp : "Unmount and eject the disc."))
 
             // #0046: disabled whenever there is no running job to cancel, or
             // it's in `organizing` (the Plex move — too short and unsafe to
