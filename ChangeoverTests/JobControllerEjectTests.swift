@@ -313,4 +313,171 @@ struct JobControllerEjectTests {
         #expect(controller.isEjecting == false)
         #expect(controller.scanState == .scanning)
     }
+
+    // MARK: - #0049: unmounted but not ejected
+
+    /// The bug this ticket fixes: the unmount succeeded but the physical
+    /// eject then failed, leaving the disc unmounted but still in the
+    /// drive. `discUnavailable` records that; `isEjecting` clears so the
+    /// user can retry the eject itself; `insertedDisc` is left alone
+    /// (there is no removal event to react to).
+    @Test func anUnmountedButNotEjectedOutcomeMarksTheDiscUnavailable() async {
+        let ejector = FakeEjector()
+        ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
+        let controller = JobController(ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+
+        let result = await controller.ejectDisc()
+
+        #expect(result == false)
+        #expect(controller.isEjecting == false)
+        #expect(controller.discUnavailable == true)
+        #expect(controller.insertedDisc == Self.testDisc)
+        #expect(controller.logLines.contains("⚠︎ the tray did not open"))
+    }
+
+    /// Start is refused, with a clear reason, once the disc is marked
+    /// unavailable — never left live against a dead mount path.
+    @Test func startIsRefusedAfterAnUnmountedButNotEjectedResult() async throws {
+        let ejector = FakeEjector()
+        ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
+        let controller = JobController(
+            runner: { context, _ in
+                Issue.record("the runner must not be invoked on an unmounted-but-not-ejected disc")
+                return fakeSuccess(context, destination: Self.destination)
+            },
+            ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+        _ = await controller.ejectDisc()
+        #expect(controller.discUnavailable == true)
+
+        let started = controller.start(request: Self.request(try Self.metadata()), settings: AppSettings())
+
+        #expect(started == false)
+        #expect(controller.isRunning == false)
+        #expect(controller.logLines.contains(
+            "⚠︎ The disc was unmounted but could not be ejected — retry Eject or remove the disc before starting."))
+    }
+
+    /// Rescan is refused the same way.
+    @Test func rescanIsRefusedAfterAnUnmountedButNotEjectedResult() async {
+        let ejector = FakeEjector()
+        ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
+        let scans = ScanCounter()
+        let controller = JobController(
+            scanRunner: { _, _, _, _, _ in
+                scans.calls += 1
+                return .failure(.jsonMissing)
+            },
+            ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+        _ = await controller.ejectDisc()
+        #expect(controller.discUnavailable == true)
+
+        let rescanned = controller.startScan(settings: AppSettings())
+
+        #expect(rescanned == false)
+        #expect(scans.calls == 0)
+    }
+
+    /// `JobController.retryDecision` refuses the same way — the #0048
+    /// handoff note this ticket closes: Retry must not stay enabled on a
+    /// dead mount path either.
+    @Test func retryIsRefusedAfterAnUnmountedButNotEjectedResult() async throws {
+        let ejector = FakeEjector()
+        let controller = JobController(
+            runner: { context, _ in
+                context.phase(.encoding)
+                return .failed(JobFailure(stage: .encode, reason: .diskFull))
+            },
+            ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+        let request = Self.request(try Self.metadata())
+        #expect(controller.start(request: request, settings: AppSettings()))
+        var spins = 0
+        while controller.isRunning && spins < 100_000 {
+            await Task.yield()
+            spins += 1
+        }
+        let failedID = try #require(controller.history.last?.id)
+        #expect(controller.retryDecision(id: failedID) == .retry)
+
+        ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
+        _ = await controller.ejectDisc()
+        #expect(controller.discUnavailable == true)
+
+        let decision = controller.retryDecision(id: failedID)
+        #expect(decision != .retry)
+        #expect(decision.refusalReason?.contains("unmounted but could not be ejected") == true)
+    }
+
+    /// A later successful eject — the user retrying Eject from the disabled
+    /// state — clears `discUnavailable`, per the plan's third clearing
+    /// trigger (a removal and a new insertion are covered by the two tests
+    /// above/below).
+    @Test func aLaterSuccessfulEjectClearsDiscUnavailable() async {
+        let ejector = FakeEjector()
+        ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
+        let controller = JobController(ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+        _ = await controller.ejectDisc()
+        #expect(controller.discUnavailable == true)
+
+        ejector.outcome = .ejected
+        let result = await controller.ejectDisc()
+
+        #expect(result == true)
+        #expect(controller.discUnavailable == false)
+    }
+
+    /// A removal (the real `DVDMonitor.onDVDRemoved` path) also clears it.
+    @Test func removeDiscClearsDiscUnavailable() async {
+        let ejector = FakeEjector()
+        ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
+        let controller = JobController(ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+        _ = await controller.ejectDisc()
+        #expect(controller.discUnavailable == true)
+
+        controller.removeDisc()
+
+        #expect(controller.discUnavailable == false)
+    }
+
+    /// A new insertion also clears it, mirroring `aNewInsertionClearsTheEjectingFlag`.
+    @Test func insertDiscClearsDiscUnavailable() async {
+        let ejector = FakeEjector()
+        ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
+        let controller = JobController(
+            scanRunner: { _, _, _, _, _ in .failure(.jsonMissing) },
+            ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+        _ = await controller.ejectDisc()
+        #expect(controller.discUnavailable == true)
+
+        controller.insertDisc(Self.testDisc, settings: AppSettings())
+
+        #expect(controller.discUnavailable == false)
+    }
+
+    /// Eject itself stays enabled/offered while the disc is unavailable —
+    /// `EjectPolicy` never looks at `discUnavailable`, only `isEjecting`
+    /// (which the unmounted-but-not-ejected outcome already clears), so a
+    /// retry of the eject is exactly what's on offer.
+    @Test func ejectRemainsAvailableWhileDiscUnavailable() async {
+        let ejector = FakeEjector()
+        ejector.outcome = .unmountedButNotEjected(message: "the tray did not open")
+        let controller = JobController(ejector: { url in await ejector.eject(url) })
+        Self.mount(controller, disc: Self.testDisc)
+        _ = await controller.ejectDisc()
+        #expect(controller.discUnavailable == true)
+
+        let decision = EjectPolicy.decide(
+            isRunning: controller.isRunning,
+            isScanning: controller.scanState == .scanning,
+            isEjecting: controller.isEjecting,
+            hasDisc: controller.insertedDisc != nil)
+
+        #expect(decision == .eject)
+    }
 }

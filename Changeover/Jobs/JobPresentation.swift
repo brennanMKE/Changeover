@@ -186,11 +186,17 @@ nonisolated struct JobPresentation: Equatable, Sendable {
     ///   disc is usually still in;
     /// - the disc scan has completed, since `start` resolves the recorded
     ///   title and tracks against it.
+    /// - Parameter discUnavailable: `JobController.discUnavailable` (#0049)
+    ///   — an earlier eject unmounted the disc but failed to physically
+    ///   eject it, so `insertedDisc` still names a mount path that no
+    ///   longer resolves. Refused the same as a running eject: retrying
+    ///   against a dead path fails confusingly instead of cleanly.
     nonisolated static func retryDecision(
         _ job: JobSnapshot,
         hasRequest: Bool,
         isRunning: Bool,
         isEjecting: Bool,
+        discUnavailable: Bool = false,
         hasCompletedScan: Bool,
         insertedDisc: DiscInsertion?,
         jobDisc: DiscInsertion?
@@ -206,6 +212,9 @@ nonisolated struct JobPresentation: Equatable, Sendable {
         }
         guard !isEjecting else {
             return .refuse(reason: "the disc is being ejected")
+        }
+        guard !discUnavailable else {
+            return .refuse(reason: "the disc was unmounted but could not be ejected — retry Eject or remove the disc")
         }
         guard let insertedDisc else {
             return .refuse(reason: "no disc is in the drive — insert this job's disc")

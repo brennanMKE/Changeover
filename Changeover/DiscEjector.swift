@@ -45,6 +45,15 @@ nonisolated enum DiscEjector {
         /// show as-is.
         case busy(message: String)
         case failed(message: String)
+        /// #0049 — the unmount succeeded but the physical eject then failed
+        /// (or came back busy). The disc is now unmounted but still sitting
+        /// in the drive: nothing has disappeared, so `DVDMonitor`'s
+        /// disk-disappeared callback never fires and no removal follows.
+        /// Distinct from `.failed`/`.busy` — both of those leave the disc
+        /// mounted and untouched — so a caller can tell "nothing happened"
+        /// from "the disc is now in a dead-mount-path state and needs a
+        /// retry or a physical removal before anything else touches it".
+        case unmountedButNotEjected(message: String)
     }
 
     /// Whether a finished job's outcome should trigger an eject at all.
@@ -101,10 +110,33 @@ nonisolated enum DiscEjector {
         guard unmountOutcome == .ejected else { return unmountOutcome }
 
         let (ejectStatus, ejectMessage) = await ejectFromDrive(disk)
-        return classify(status: ejectStatus, statusString: ejectMessage, action: "eject")
+        let ejectOutcome = classify(status: ejectStatus, statusString: ejectMessage, action: "eject")
+        return combine(unmountOutcome: unmountOutcome, ejectOutcome: ejectOutcome)
     }
 
     // MARK: - Pure decision seam
+
+    /// #0049 — combines the unmount step's outcome with the eject step's
+    /// outcome into what the caller actually sees. Pure, no `DiskArbitration`
+    /// calls of its own, so it's exercised directly by `DiscEjectorTests`
+    /// with no drive attached.
+    ///
+    /// `unmountOutcome` is only ever `.ejected` (unmount succeeded) or
+    /// something else (unmount itself failed/was busy, and the disc is
+    /// still mounted and untouched — passed straight through). Once the
+    /// unmount has succeeded, any non-`.ejected` result from the eject step
+    /// becomes `.unmountedButNotEjected`, never the eject step's own
+    /// `.busy`/`.failed` — those two only ever mean "the disc is still
+    /// mounted", which is no longer true once the unmount has gone through.
+    static func combine(unmountOutcome: Outcome, ejectOutcome: Outcome) -> Outcome {
+        guard unmountOutcome == .ejected else { return unmountOutcome }
+        switch ejectOutcome {
+        case .ejected:
+            return .ejected
+        case .busy(let message), .failed(let message), .unmountedButNotEjected(let message):
+            return .unmountedButNotEjected(message: message)
+        }
+    }
 
     /// Turns a raw `DAReturn` plus the dissenter's (optional) status string
     /// into an `Outcome`, with no `DiskArbitration` calls of its own — plain

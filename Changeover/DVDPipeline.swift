@@ -811,6 +811,14 @@ struct DVDPipeline {
             log("⚠︎ \(message)")
         case .failed(let message):
             log("⚠︎ \(message)")
+        case .unmountedButNotEjected(let message):
+            // #0049: the disc unmounted but the tray didn't open — it's
+            // still physically in the drive on a path that no longer
+            // resolves. `JobController` has no way to hear about this from
+            // inside the pipeline, so this stays a log-only surface here;
+            // a manual Eject retry (or physically pulling the disc) is what
+            // actually clears it on the controller side.
+            log("⚠︎ Disc unmounted but not ejected — it's still in the drive: \(message)")
         }
 
         log("── Done. Scan your Plex Movies library to pick up the new title.")

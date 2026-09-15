@@ -213,6 +213,21 @@ final class JobController {
     /// gone. Cleared by `removeDisc`, `insertDisc`, or a failed eject.
     private(set) var isEjecting = false
 
+    /// #0049 — the unmount half of an eject succeeded but the physical
+    /// eject then failed (`DiscEjector.Outcome.unmountedButNotEjected`), so
+    /// the disc is unmounted but still sitting in the drive. No
+    /// `DVDMonitor` removal event ever fires for that — only the media
+    /// actually disappearing does — so nothing else would ever notice.
+    /// While set, `start`, `startScan` and `retryDecision` all refuse with
+    /// a clear reason rather than act on a mount path that no longer
+    /// resolves. Eject itself stays enabled: `EjectPolicy` only looks at
+    /// `insertedDisc`/`isRunning`/`isScanning`/`isEjecting`, none of which
+    /// this touches, so the user's own retry of the eject is exactly what's
+    /// offered. Cleared by a later successful eject, by `removeDisc` (a
+    /// manual or physical removal), and by `insertDisc` (a fresh disc makes
+    /// any stale state moot).
+    private(set) var discUnavailable = false
+
     /// #0026: where the scan for `insertedDisc` stands. `AppDelegate` never
     /// writes this directly — `insertDisc(_:settings:)` starts the scan that
     /// drives it, and `removeDisc()` clears it. Plain `var`, not
@@ -420,6 +435,16 @@ final class JobController {
             return false
         }
 
+        // #0049: an earlier eject unmounted the disc and then failed to
+        // physically eject it. `insertedDisc` still names it (clearing it
+        // here would claim the disc is gone when it isn't), but the mount
+        // path is dead — refuse rather than let a scan or an encode fail
+        // confusingly against a path that no longer resolves.
+        guard !discUnavailable else {
+            append("⚠︎ The disc was unmounted but could not be ejected — retry Eject or remove the disc before starting.")
+            return false
+        }
+
         guard let currentDisc = insertedDisc else {
             append("⚠︎ No disc is mounted — insert a DVD before starting.")
             return false
@@ -574,7 +599,10 @@ final class JobController {
         switch await ejector(disc.mountURL) {
         case .ejected:
             // `isEjecting` stays set: the disc is out, but `insertedDisc`
-            // still names it until `removeDisc()` runs.
+            // still names it until `removeDisc()` runs. A successful eject
+            // — including a retry of one that previously left the disc
+            // unmounted-but-not-ejected — always clears `discUnavailable`.
+            discUnavailable = false
             append("Disc ejected.")
             return true
         case .busy(let message):
@@ -583,6 +611,18 @@ final class JobController {
             return false
         case .failed(let message):
             isEjecting = false
+            append("⚠︎ \(message)")
+            return false
+        case .unmountedButNotEjected(let message):
+            // #0049: the disc is now unmounted but still physically in the
+            // drive, on a mount path that no longer resolves. `isEjecting`
+            // clears so the user can retry the eject itself (`EjectPolicy`
+            // only needs a disc and nothing else in flight); `discUnavailable`
+            // blocks Start/Rescan/Retry from acting on the dead path until
+            // that retry succeeds, a removal is observed, or a new disc is
+            // inserted.
+            isEjecting = false
+            discUnavailable = true
             append("⚠︎ \(message)")
             return false
         }
@@ -642,6 +682,7 @@ final class JobController {
             hasRequest: job.request != nil,
             isRunning: isRunning,
             isEjecting: isEjecting,
+            discUnavailable: discUnavailable,
             hasCompletedScan: hasCompletedScan,
             insertedDisc: insertedDisc,
             jobDisc: job.metadata.selectionDisc
@@ -678,6 +719,7 @@ final class JobController {
     /// `applyingSuggestedRoles` existed but nothing ever called them.
     func insertDisc(_ disc: DiscInsertion, settings: AppSettings) {
         isEjecting = false
+        discUnavailable = false
         insertedDisc = disc
         startScan(settings: settings)
     }
@@ -687,6 +729,7 @@ final class JobController {
     func removeDisc() {
         insertedDisc = nil
         isEjecting = false
+        discUnavailable = false
         scanGeneration += 1
         scanState = .idle
         selectedTitleIndex = nil
@@ -703,10 +746,11 @@ final class JobController {
     /// disc checks below.
     ///
     /// - Returns: `false` with no state change if there is no disc to scan,
-    ///   or it is being ejected (#0045 review).
+    ///   it is being ejected (#0045 review), or it was unmounted but could
+    ///   not be ejected (#0049) — a dead mount path is never rescanned.
     @discardableResult
     func startScan(settings: AppSettings) -> Bool {
-        guard let disc = insertedDisc, !isEjecting else { return false }
+        guard let disc = insertedDisc, !isEjecting, !discUnavailable else { return false }
 
         scanGeneration += 1
         let generation = scanGeneration

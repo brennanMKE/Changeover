@@ -25,6 +25,7 @@ struct StartGateTests {
         hasMovieSelected: Bool = true,
         isRunning: Bool = false,
         hasDisc: Bool = true,
+        discUnavailable: Bool = false,
         scanState: ScanState,
         selectedTitleIndex: Int?,
         selectedAudioTrackNumbers: [Int] = [],
@@ -35,6 +36,7 @@ struct StartGateTests {
             hasMovieSelected: hasMovieSelected,
             isRunning: isRunning,
             hasDisc: hasDisc,
+            discUnavailable: discUnavailable,
             scanState: scanState,
             selectedTitleIndex: selectedTitleIndex,
             selectedAudioTrackNumbers: selectedAudioTrackNumbers,
@@ -75,6 +77,14 @@ struct StartGateTests {
 
     @Test func refusesWithNoDisc() {
         #expect(canStart(hasDisc: false, scanState: scanned([title(1)]), selectedTitleIndex: 1,
+                          runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB)) == false)
+    }
+
+    /// #0049 — a disc that unmounted but failed to physically eject still
+    /// has `hasDisc: true` (`insertedDisc` isn't cleared for it), so this
+    /// is its own guard, not a duplicate of `refusesWithNoDisc`.
+    @Test func refusesWhileDiscUnavailable() {
+        #expect(canStart(discUnavailable: true, scanState: scanned([title(1)]), selectedTitleIndex: 1,
                           runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB)) == false)
     }
 

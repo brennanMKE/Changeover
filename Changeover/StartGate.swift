@@ -30,6 +30,11 @@ nonisolated enum StartGate {
     ///   - hasMovieSelected: `vm.selectedMovie != nil`.
     ///   - isRunning: a job must not be started on top of another.
     ///   - hasDisc: a disc must be mounted.
+    ///   - discUnavailable: #0049 — `JobController.discUnavailable`. An
+    ///     earlier eject unmounted the disc but failed to physically eject
+    ///     it, so `hasDisc` can still be true against a mount path that no
+    ///     longer resolves. Defaults to `false` so existing callers/tests
+    ///     that don't care about this state don't have to pass it.
     ///   - scanState: the scan for that disc must have completed.
     ///   - selectedTitleIndex: the settled feature title — `nil` until the
     ///     confirmation row's implicit preselection or an explicit table
@@ -47,13 +52,14 @@ nonisolated enum StartGate {
         hasMovieSelected: Bool,
         isRunning: Bool,
         hasDisc: Bool,
+        discUnavailable: Bool = false,
         scanState: ScanState,
         selectedTitleIndex: Int?,
         selectedAudioTrackNumbers: [Int],
         runtimeLookup: RuntimeLookup,
         mismatchAcknowledgement: MismatchAcknowledgement?
     ) -> Bool {
-        guard hasMovieSelected, !isRunning, hasDisc else { return false }
+        guard hasMovieSelected, !isRunning, hasDisc, !discUnavailable else { return false }
 
         guard case .scanned(let result) = scanState else { return false }
         guard let index = selectedTitleIndex,

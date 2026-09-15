@@ -337,12 +337,14 @@ struct JobPresentationTests {
         hasRequest: Bool = true,
         isRunning: Bool = false,
         isEjecting: Bool = false,
+        discUnavailable: Bool = false,
         hasCompletedScan: Bool = true,
         insertedDisc: DiscInsertion? = JobPresentationTests.discA,
         jobDisc: DiscInsertion? = JobPresentationTests.discA
     ) -> JobPresentation.RetryDecision {
         JobPresentation.retryDecision(
             job, hasRequest: hasRequest, isRunning: isRunning, isEjecting: isEjecting,
+            discUnavailable: discUnavailable,
             hasCompletedScan: hasCompletedScan, insertedDisc: insertedDisc, jobDisc: jobDisc)
     }
 
@@ -371,6 +373,16 @@ struct JobPresentationTests {
         #expect(Self.decide(failed, insertedDisc: nil) != .retry)
         #expect(Self.decide(failed, jobDisc: nil) != .retry)
         #expect(Self.decide(failed, insertedDisc: Self.discB).refusalReason?.contains("different disc") == true)
+    }
+
+    /// #0049 — a disc left unmounted-but-not-ejected refuses Retry with a
+    /// clear reason, the same as a running eject, even though `insertedDisc`
+    /// still names it and would otherwise satisfy every other check.
+    @Test func retryDecisionRefusesWhileTheDiscIsUnavailable() throws {
+        let failed = try Self.terminalSnapshot(outcome: .failed(Self.failure(.diskFull)))
+        let decision = Self.decide(failed, discUnavailable: true)
+        #expect(decision != .retry)
+        #expect(decision.refusalReason?.contains("unmounted but could not be ejected") == true)
     }
 
     /// Same rule as `JobController.start` (`SelectionReset.sameDisc`): the

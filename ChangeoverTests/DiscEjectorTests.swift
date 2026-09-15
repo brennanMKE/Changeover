@@ -60,6 +60,45 @@ struct DiscEjectorTests {
         let outcome = DiscEjector.classify(status: status, statusString: nil, action: "eject")
         #expect(outcome == .failed(message: "Could not eject the disc: status \(status)."))
     }
+
+    // MARK: - combine: #0049's unmount-succeeded/eject-failed mapping
+
+    /// If the unmount itself never succeeded, the disc is still mounted and
+    /// untouched — pass the unmount's own outcome straight through, never
+    /// `.unmountedButNotEjected` (that case means the disc genuinely came
+    /// unmounted).
+    @Test func anUnmountThatNeverSucceedsPassesThroughUnchanged() {
+        let busyUnmount = DiscEjector.Outcome.busy(message: "unmount busy")
+        #expect(DiscEjector.combine(unmountOutcome: busyUnmount, ejectOutcome: .ejected) == busyUnmount)
+
+        let failedUnmount = DiscEjector.Outcome.failed(message: "unmount failed")
+        #expect(DiscEjector.combine(unmountOutcome: failedUnmount, ejectOutcome: .ejected) == failedUnmount)
+    }
+
+    @Test func anUnmountFollowedByASuccessfulEjectIsEjected() {
+        #expect(DiscEjector.combine(unmountOutcome: .ejected, ejectOutcome: .ejected) == .ejected)
+    }
+
+    /// The bug this ticket fixes: the unmount succeeded, so the disc is no
+    /// longer mounted, but the physical eject then failed or came back
+    /// busy. Neither of the eject step's own `.busy`/`.failed` is correct
+    /// here — both of those normally mean "the disc is still mounted",
+    /// which is false once the unmount has gone through — so both map to
+    /// the distinct `.unmountedButNotEjected`, carrying the eject step's
+    /// own message.
+    @Test func anUnmountSucceededButEjectFailedIsUnmountedButNotEjected() {
+        let outcome = DiscEjector.combine(
+            unmountOutcome: .ejected,
+            ejectOutcome: .failed(message: "tray jammed"))
+        #expect(outcome == .unmountedButNotEjected(message: "tray jammed"))
+    }
+
+    @Test func anUnmountSucceededButEjectBusyIsUnmountedButNotEjected() {
+        let outcome = DiscEjector.combine(
+            unmountOutcome: .ejected,
+            ejectOutcome: .busy(message: "drive busy"))
+        #expect(outcome == .unmountedButNotEjected(message: "drive busy"))
+    }
 }
 
 /// Real `DiskArbitration` integration, no optical drive required — the same

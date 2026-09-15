@@ -293,6 +293,9 @@ struct MetadataEntryView: View {
                 // #0045 review: a disc being ejected by hand is not a disc
                 // to start on (`start` refuses it too).
                 hasDisc:             jobs.insertedDisc != nil && !jobs.isEjecting,
+                // #0049: an earlier eject unmounted the disc but failed to
+                // physically eject it — `start` refuses this too.
+                discUnavailable:     jobs.discUnavailable,
                 scanState:           jobs.scanState,
                 selectedTitleIndex:  jobs.selectedTitleIndex,
                 selectedAudioTrackNumbers: jobs.selectedAudioTrackNumbers,

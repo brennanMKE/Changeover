@@ -69,7 +69,12 @@ struct DiscTitleListView: View {
                 jobs.startScan(settings: settings)
             }
             // #0045 review: `startScan` refuses a disc being ejected.
-            .disabled(jobs.isEjecting)
+            // #0049: also refuses a disc that unmounted but failed to
+            // physically eject — its mount path no longer resolves.
+            .disabled(jobs.isEjecting || jobs.discUnavailable)
+            .help(jobs.discUnavailable
+                ? "The disc was unmounted but could not be ejected — retry Eject or remove the disc before rescanning."
+                : "Scan the disc again.")
         }
     }
 
