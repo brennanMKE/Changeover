@@ -171,4 +171,180 @@ struct StartGateTests {
         #expect(!StartGate.isAcknowledged(ack, titleIndex: 3, runtimeLookup: .loading(movieID: 7)))
         #expect(!StartGate.isAcknowledged(nil, titleIndex: 3, runtimeLookup: .loaded(movieID: 7, runtimeMinutes: 90)))
     }
+
+    // MARK: - #0053: StartDecision — every refusal, by name, and its ordering
+
+    private func decide(
+        hasMovieSelected: Bool = true,
+        isRunning: Bool = false,
+        hasDisc: Bool = true,
+        discUnavailable: Bool = false,
+        scanState: ScanState,
+        selectedTitleIndex: Int?,
+        selectedAudioTrackNumbers: [Int] = [],
+        runtimeLookup: RuntimeLookup = .idle,
+        mismatchAcknowledgement: MismatchAcknowledgement? = nil
+    ) -> StartDecision {
+        StartGate.decide(
+            hasMovieSelected: hasMovieSelected,
+            isRunning: isRunning,
+            hasDisc: hasDisc,
+            discUnavailable: discUnavailable,
+            scanState: scanState,
+            selectedTitleIndex: selectedTitleIndex,
+            selectedAudioTrackNumbers: selectedAudioTrackNumbers,
+            runtimeLookup: runtimeLookup,
+            mismatchAcknowledgement: mismatchAcknowledgement
+        )
+    }
+
+    /// `.ready` is the only case with no `.reason`; every other case has one,
+    /// non-empty, so the button's caption/tooltip is never blank.
+    @Test func readyHasNoReasonAndEveryOtherCaseDoes() {
+        #expect(StartDecision.ready.reason == nil)
+        let refusals: [StartDecision] = [
+            .jobRunning, .noDisc, .discUnavailable, .scanInProgress, .scanFailed,
+            .noMovieSelected, .noTitleSelected, .noAudioTrackSelected,
+            .runtimeLookupLoading, .runtimeMismatchUnconfirmed
+        ]
+        for decision in refusals {
+            #expect(decision.reason?.isEmpty == false, "\(decision) has no reason")
+        }
+    }
+
+    /// `canStart` is exactly `decide(...) == .ready` — every existing
+    /// `canStart` test above already pins the truth table; this pins the
+    /// equivalence itself against a representative sweep of states.
+    @Test func canStartIsExactlyDecideEqualsReady() {
+        let states: [(ScanState, Int?)] = [
+            (.idle, nil),
+            (.scanning, nil),
+            (.failed(.toolExited(code: 1)), nil),
+            (scanned([title(1)]), nil),
+            (scanned([title(1)]), 1),
+        ]
+        for (scanState, index) in states {
+            for hasMovie in [true, false] {
+                for running in [true, false] {
+                    let decision = decide(hasMovieSelected: hasMovie, isRunning: running,
+                                           scanState: scanState, selectedTitleIndex: index,
+                                           runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB))
+                    let canStart = StartGate.canStart(
+                        hasMovieSelected: hasMovie, isRunning: running, hasDisc: true,
+                        scanState: scanState, selectedTitleIndex: index,
+                        selectedAudioTrackNumbers: [], runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB),
+                        mismatchAcknowledgement: nil)
+                    #expect(canStart == (decision == .ready))
+                }
+            }
+        }
+    }
+
+    @Test func decidesJobRunning() {
+        #expect(decide(isRunning: true, scanState: scanned([title(1)]), selectedTitleIndex: 1,
+                        runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB)) == .jobRunning)
+    }
+
+    @Test func decidesNoDisc() {
+        #expect(decide(hasDisc: false, scanState: scanned([title(1)]), selectedTitleIndex: 1,
+                        runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB)) == .noDisc)
+    }
+
+    @Test func decidesDiscUnavailable() {
+        #expect(decide(discUnavailable: true, scanState: scanned([title(1)]), selectedTitleIndex: 1,
+                        runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB)) == .discUnavailable)
+    }
+
+    @Test func decidesNoMovieSelected() {
+        #expect(decide(hasMovieSelected: false, scanState: scanned([title(1)]), selectedTitleIndex: 1,
+                        runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB)) == .noMovieSelected)
+    }
+
+    @Test func decidesScanInProgress() {
+        #expect(decide(scanState: .idle, selectedTitleIndex: nil) == .scanInProgress)
+        #expect(decide(scanState: .scanning, selectedTitleIndex: nil) == .scanInProgress)
+    }
+
+    @Test func decidesScanFailed() {
+        #expect(decide(scanState: .failed(.toolExited(code: 1)), selectedTitleIndex: nil) == .scanFailed)
+    }
+
+    @Test func decidesNoTitleSelected() {
+        #expect(decide(scanState: scanned([title(1)]), selectedTitleIndex: nil,
+                        runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB)) == .noTitleSelected)
+        // A stale index not on the held scan reads the same way.
+        #expect(decide(scanState: scanned([title(1)]), selectedTitleIndex: 99,
+                        runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB)) == .noTitleSelected)
+    }
+
+    @Test func decidesNoAudioTrackSelected() {
+        #expect(decide(scanState: scanned([titleWithAudio(1)]), selectedTitleIndex: 1,
+                        selectedAudioTrackNumbers: [],
+                        runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB)) == .noAudioTrackSelected)
+    }
+
+    @Test func decidesRuntimeLookupLoading() {
+        #expect(decide(scanState: scanned([title(1)]), selectedTitleIndex: 1, runtimeLookup: .idle) == .runtimeLookupLoading)
+        #expect(decide(scanState: scanned([title(1)]), selectedTitleIndex: 1,
+                        runtimeLookup: .loading(movieID: 1)) == .runtimeLookupLoading)
+    }
+
+    @Test func decidesRuntimeMismatchUnconfirmed() {
+        #expect(decide(scanState: scanned([title(1, 6000)]), selectedTitleIndex: 1,
+                        runtimeLookup: .loaded(movieID: 1, runtimeMinutes: 22)) == .runtimeMismatchUnconfirmed)
+    }
+
+    @Test func decidesReady() {
+        #expect(decide(scanState: scanned([title(1, 6000)]), selectedTitleIndex: 1,
+                        runtimeLookup: .loaded(movieID: 1, runtimeMinutes: 100)) == .ready)
+    }
+
+    /// The ordering rule itself, and the exact scenario from the 2026-09-16
+    /// screenshot: scan done, title picked, audio ticked, no movie chosen.
+    /// The message must name the *first* thing to do — "Choose a movie" —
+    /// not some other true-but-lower-priority refusal.
+    @Test func theScreenshotCaseSaysChooseAMovie() {
+        #expect(decide(hasMovieSelected: false, scanState: scanned([titleWithAudio(1)]), selectedTitleIndex: 1,
+                        selectedAudioTrackNumbers: [1],
+                        runtimeLookup: .unavailable(movieID: 1, reason: .noRuntimeOnTMDB)) == .noMovieSelected)
+    }
+
+    /// Environment blockers outrank content choices: a running job wins over
+    /// a missing movie selection, even though both are independently true.
+    @Test func aRunningJobOutranksAMissingMovieSelection() {
+        #expect(decide(hasMovieSelected: false, isRunning: true, scanState: .idle, selectedTitleIndex: nil) == .jobRunning)
+    }
+
+    /// No disc outranks a missing movie selection.
+    @Test func noDiscOutranksAMissingMovieSelection() {
+        #expect(decide(hasMovieSelected: false, hasDisc: false, scanState: .idle, selectedTitleIndex: nil) == .noDisc)
+    }
+
+    /// A missing movie selection outranks a scan still in progress, and a
+    /// scan in progress outranks a title not yet picked — the window's own
+    /// top-to-bottom reading order (movie, then disc title, then tracks).
+    @Test func aMissingMovieSelectionOutranksAnUnfinishedScan() {
+        #expect(decide(hasMovieSelected: false, scanState: .scanning, selectedTitleIndex: nil) == .noMovieSelected)
+    }
+
+    @Test func anUnfinishedScanOutranksNoTitleSelected() {
+        #expect(decide(scanState: .scanning, selectedTitleIndex: nil) == .scanInProgress)
+    }
+
+    /// A missing title selection outranks a missing audio-track selection —
+    /// there is no title to pick tracks for yet.
+    @Test func noTitleSelectedOutranksNoAudioTrackSelected() {
+        #expect(decide(scanState: scanned([titleWithAudio(1)]), selectedTitleIndex: nil,
+                        selectedAudioTrackNumbers: []) == .noTitleSelected)
+    }
+
+    /// A missing audio-track selection outranks an unconfirmed runtime
+    /// mismatch — fix the picker before being asked to confirm anything.
+    /// `titleWithAudio` (defined above) is already 6000s, a mismatch against
+    /// the 22-minute lookup below.
+    @Test func noAudioTrackSelectedOutranksAnUnconfirmedRuntimeMismatch() {
+        #expect(decide(scanState: scanned([titleWithAudio(1)]), selectedTitleIndex: 1,
+                        selectedAudioTrackNumbers: [],
+                        runtimeLookup: .loaded(movieID: 1, runtimeMinutes: 22)) == .noAudioTrackSelected)
+    }
 }

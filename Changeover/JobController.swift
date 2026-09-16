@@ -455,7 +455,9 @@ final class JobController {
     @discardableResult
     func start(request: RipRequest, settings: AppSettings) -> Bool {
         guard !isRunning else {
-            append("⚠︎ A job is already running — ignoring request to start \(request.metadata.folderName).")
+            // #0053: the same reason `StartDecision.jobRunning` gives the
+            // button's tooltip/caption, so the two can't disagree.
+            append("⚠︎ \(StartDecision.jobRunning.reason!) Ignoring request to start \(request.metadata.folderName).")
             return false
         }
 
@@ -473,12 +475,14 @@ final class JobController {
         // path is dead — refuse rather than let a scan or an encode fail
         // confusingly against a path that no longer resolves.
         guard !discUnavailable else {
-            append("⚠︎ The disc was unmounted but could not be ejected — retry Eject or remove the disc before starting.")
+            // #0053: same wording as `StartDecision.discUnavailable.reason`.
+            append("⚠︎ \(StartDecision.discUnavailable.reason!)")
             return false
         }
 
         guard let currentDisc = insertedDisc else {
-            append("⚠︎ No disc is mounted — insert a DVD before starting.")
+            // #0053: same wording as `StartDecision.noDisc.reason`.
+            append("⚠︎ \(StartDecision.noDisc.reason!)")
             return false
         }
 
@@ -530,7 +534,8 @@ final class JobController {
         // checked. Refuse it on a title that has audio.
         if let title = scan.disc.titles.first(where: { $0.index == request.featureTitleIndex }),
            AudioTrackOptions.isSelectionMissingAudio(title, selected: request.audioTrackNumbers) {
-            append("⚠︎ No audio track selected — choose at least one audio track before starting.")
+            // #0053: same wording as `StartDecision.noAudioTrackSelected.reason`.
+            append("⚠︎ \(StartDecision.noAudioTrackSelected.reason!)")
             return false
         }
 

@@ -281,31 +281,46 @@ struct MetadataEntryView: View {
 
     // MARK: - Action bar
 
+    /// #0053: the single decision behind the Start button — the same
+    /// `StartGate.decide` a Phase 4 remote client will eventually use to
+    /// gate its own Start command. Computed once per body evaluation so the
+    /// `.disabled`, `.help(...)` and caption below can never disagree about
+    /// why the button is greyed.
+    private var startDecision: StartDecision {
+        StartGate.decide(
+            hasMovieSelected:    vm.selectedMovie != nil,
+            isRunning:           jobs.isRunning,
+            // #0045 review: a disc being ejected by hand is not a disc
+            // to start on (`start` refuses it too).
+            hasDisc:             jobs.insertedDisc != nil && !jobs.isEjecting,
+            // #0049: an earlier eject unmounted the disc but failed to
+            // physically eject it — `start` refuses this too.
+            discUnavailable:     jobs.discUnavailable,
+            scanState:           jobs.scanState,
+            selectedTitleIndex:  jobs.selectedTitleIndex,
+            selectedAudioTrackNumbers: jobs.selectedAudioTrackNumbers,
+            runtimeLookup:       vm.runtimeLookup,
+            mismatchAcknowledgement: jobs.mismatchAcknowledgement
+        )
+    }
+
     private var actionBar: some View {
-        HStack {
+        HStack(alignment: .center, spacing: 8) {
             Spacer()
+            // #0053: the caption beside the button — the same sentence
+            // shown as the button's tooltip below, so a disabled Start never
+            // leaves the user guessing why (found twice on a real disc,
+            // 2026-09-16).
+            if let reason = startDecision.reason {
+                Text(reason)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Button("Start Ripping") {
                 startRipping()
             }
-            .disabled(!StartGate.canStart(
-                hasMovieSelected:    vm.selectedMovie != nil,
-                isRunning:           jobs.isRunning,
-                // #0045 review: a disc being ejected by hand is not a disc
-                // to start on (`start` refuses it too).
-                hasDisc:             jobs.insertedDisc != nil && !jobs.isEjecting,
-                // #0049: an earlier eject unmounted the disc but failed to
-                // physically eject it — `start` refuses this too.
-                discUnavailable:     jobs.discUnavailable,
-                scanState:           jobs.scanState,
-                selectedTitleIndex:  jobs.selectedTitleIndex,
-                selectedAudioTrackNumbers: jobs.selectedAudioTrackNumbers,
-                runtimeLookup:       vm.runtimeLookup,
-                mismatchAcknowledgement: jobs.mismatchAcknowledgement
-            ))
-            // #0049 review: name the reason, as the Rescan button does.
-            .help(jobs.discUnavailable
-                ? "The disc was unmounted but could not be ejected — retry Eject or remove the disc before starting."
-                : "Encode the selected title into the Plex library.")
+            .disabled(startDecision != .ready)
+            .help(startDecision.reason ?? "Encode the selected title into the Plex library.")
             .buttonStyle(.borderedProminent)
         }
         .padding()

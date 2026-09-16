@@ -14,6 +14,76 @@ nonisolated struct MismatchAcknowledgement: Equatable, Sendable {
     let movieID: Int
 }
 
+/// #0053 — every reason `StartGate.decide` can refuse, each carrying a
+/// short, user-facing sentence naming the next action. File-scope and
+/// `nonisolated`, not nested inside `StartGate`/`JobController`, matching
+/// the convention `ScanState` (`JobController.swift`) and `RuntimeLookup`
+/// (`MovieSearchViewModel.swift`) already established: a type nested inside
+/// a MainActor-isolated-by-default class or referenced by one of this
+/// project's pure `nonisolated` decision functions needs to stay a plain
+/// value with no actor-isolation crossing.
+///
+/// Before this existed, `canStart` returned a bare `Bool`: a disabled Start
+/// button gave the user no reason, and they reasonably concluded it was
+/// broken (found twice on a real disc, 2026-09-16). `String, Codable` (not
+/// just `Equatable, Sendable`) because #0070 already plans to gate a remote
+/// client's Start the same way this gates the local button, and a typed
+/// decision is exactly what has to cross that wire.
+nonisolated enum StartDecision: String, Equatable, Sendable, Codable {
+    case ready
+    case jobRunning
+    case noDisc
+    case discUnavailable
+    case scanInProgress
+    case scanFailed
+    case noMovieSelected
+    case noTitleSelected
+    case noAudioTrackSelected
+    case runtimeLookupLoading
+    case runtimeMismatchUnconfirmed
+
+    /// A short sentence naming the next action — what `MetadataEntryView`
+    /// shows as the Start button's `.help(...)` tooltip and as a caption
+    /// beside it. `nil` only for `.ready`: there is nothing to tell the user
+    /// once Start is actually enabled.
+    ///
+    /// Where `JobController.start`'s own refusal log lines refuse for
+    /// exactly the same reason (`.noDisc`, `.discUnavailable`,
+    /// `.noAudioTrackSelected`, `.jobRunning`), `start` interpolates this
+    /// same string, so the button's tooltip and the log line can't drift
+    /// apart. `start`'s other guards (a movie picked for a different disc,
+    /// a title/track index that no longer resolves against the held scan)
+    /// have no `StartDecision` case — they are its own failsafe checks at
+    /// the point of harm, not something the UI can ever observe as a
+    /// distinct button state, so they keep their own wording.
+    var reason: String? {
+        switch self {
+        case .ready:
+            return nil
+        case .jobRunning:
+            return "A job is already running."
+        case .noDisc:
+            return "No disc is mounted — insert a DVD before starting."
+        case .discUnavailable:
+            return "The disc was unmounted but could not be ejected — retry Eject or remove the disc before starting."
+        case .scanInProgress:
+            return "Waiting for the disc scan to finish."
+        case .scanFailed:
+            return "The disc scan failed — rescan before starting."
+        case .noMovieSelected:
+            return "Choose a movie."
+        case .noTitleSelected:
+            return "Pick a title."
+        case .noAudioTrackSelected:
+            return "No audio track selected — choose at least one audio track before starting."
+        case .runtimeLookupLoading:
+            return "Waiting on the TMDB runtime lookup."
+        case .runtimeMismatchUnconfirmed:
+            return "Confirm the runtime mismatch."
+        }
+    }
+}
+
 /// #0026 — the single decision behind the Start button's enabled state,
 /// pulled out as a pure function (per `Plan.md`'s "put every decision behind
 /// a pure, plain-value seam") so it's testable with no SwiftUI, no
@@ -48,6 +118,72 @@ nonisolated enum StartGate {
     ///     comes back `.mismatch` for `selectedTitleIndex`, and only counts
     ///     when it names that title and the movie the lookup is for — a
     ///     mismatch is a stop-and-ask, not a warning (#0032's "Decisions").
+    ///
+    /// #0053: ordered so the returned `StartDecision`'s `.reason` names the
+    /// *first* thing the user should do, not an arbitrary one. Environment
+    /// blockers — a job already running, no disc, a disc that unmounted but
+    /// didn't eject — outrank content choices, because none of the content
+    /// choices below can be acted on until those clear. The content checks
+    /// then follow the window's own top-to-bottom reading order: which
+    /// movie → which disc title → which tracks → the runtime cross-check.
+    /// This is what makes the screenshot case ("scan done, title picked,
+    /// audio ticked, no movie chosen") say "Choose a movie": every check
+    /// ahead of `hasMovieSelected` passes for that disc state, so it's the
+    /// first (and only) one that fails.
+    static func decide(
+        hasMovieSelected: Bool,
+        isRunning: Bool,
+        hasDisc: Bool,
+        discUnavailable: Bool = false,
+        scanState: ScanState,
+        selectedTitleIndex: Int?,
+        selectedAudioTrackNumbers: [Int],
+        runtimeLookup: RuntimeLookup,
+        mismatchAcknowledgement: MismatchAcknowledgement?
+    ) -> StartDecision {
+        guard !isRunning else { return .jobRunning }
+        guard !discUnavailable else { return .discUnavailable }
+        guard hasDisc else { return .noDisc }
+        guard hasMovieSelected else { return .noMovieSelected }
+
+        switch scanState {
+        case .idle, .scanning:
+            return .scanInProgress
+        case .failed:
+            return .scanFailed
+        case .scanned(let result):
+            guard let index = selectedTitleIndex,
+                  let title = result.disc.titles.first(where: { $0.index == index }) else {
+                return .noTitleSelected
+            }
+
+            // #0027 review: an empty pick on a title with audio would encode
+            // the disc's first track while the picker shows nothing checked.
+            if AudioTrackOptions.isSelectionMissingAudio(title, selected: selectedAudioTrackNumbers) {
+                return .noAudioTrackSelected
+            }
+
+            switch runtimeLookup {
+            case .loaded, .unavailable:
+                break
+            case .idle, .loading:
+                return .runtimeLookupLoading
+            }
+
+            let verdict = RuntimeCrossCheck.evaluate(discSeconds: title.durationSeconds, lookup: runtimeLookup)
+            if case .mismatch = verdict,
+               !isAcknowledged(mismatchAcknowledgement, titleIndex: index, runtimeLookup: runtimeLookup) {
+                return .runtimeMismatchUnconfirmed
+            }
+
+            return .ready
+        }
+    }
+
+    /// #0053: `canStart` is now derived from `decide`, so the button's
+    /// enabled state and its `.reason` can never disagree — both come from
+    /// the same switch. Kept with its original signature and behaviour so
+    /// every existing call site and test compiles and passes unchanged.
     static func canStart(
         hasMovieSelected: Bool,
         isRunning: Bool,
@@ -59,34 +195,17 @@ nonisolated enum StartGate {
         runtimeLookup: RuntimeLookup,
         mismatchAcknowledgement: MismatchAcknowledgement?
     ) -> Bool {
-        guard hasMovieSelected, !isRunning, hasDisc, !discUnavailable else { return false }
-
-        guard case .scanned(let result) = scanState else { return false }
-        guard let index = selectedTitleIndex,
-              let title = result.disc.titles.first(where: { $0.index == index }) else {
-            return false
-        }
-
-        // #0027 review: an empty pick on a title with audio would encode the
-        // disc's first track while the picker shows nothing checked.
-        if AudioTrackOptions.isSelectionMissingAudio(title, selected: selectedAudioTrackNumbers) {
-            return false
-        }
-
-        switch runtimeLookup {
-        case .loaded, .unavailable:
-            break
-        case .idle, .loading:
-            return false
-        }
-
-        let verdict = RuntimeCrossCheck.evaluate(discSeconds: title.durationSeconds, lookup: runtimeLookup)
-        if case .mismatch = verdict,
-           !isAcknowledged(mismatchAcknowledgement, titleIndex: index, runtimeLookup: runtimeLookup) {
-            return false
-        }
-
-        return true
+        decide(
+            hasMovieSelected: hasMovieSelected,
+            isRunning: isRunning,
+            hasDisc: hasDisc,
+            discUnavailable: discUnavailable,
+            scanState: scanState,
+            selectedTitleIndex: selectedTitleIndex,
+            selectedAudioTrackNumbers: selectedAudioTrackNumbers,
+            runtimeLookup: runtimeLookup,
+            mismatchAcknowledgement: mismatchAcknowledgement
+        ) == .ready
     }
 
     /// Whether `acknowledgement` covers `titleIndex` for the movie
