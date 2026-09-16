@@ -36,6 +36,7 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable {
     case discUnavailable
     case scanInProgress
     case scanFailed
+    case noTitlesOnDisc
     case noMovieSelected
     case noTitleSelected
     case noAudioTrackSelected
@@ -70,6 +71,13 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable {
             return "Waiting for the disc scan to finish."
         case .scanFailed:
             return "The disc scan failed — rescan before starting."
+        case .noTitlesOnDisc:
+            // #0053 review: #0039's zero-title scan succeeds, so this state
+            // lands in `.scanned` with an empty title list and no picker on
+            // screen (`DiscTitleListView.noTitlesView` shows the scan's own
+            // message and a Rescan button instead). "Pick a title." would be
+            // an instruction the user cannot follow — there is no table.
+            return "The scan read no titles from this disc — rescan before starting."
         case .noMovieSelected:
             return "Choose a movie."
         case .noTitleSelected:
@@ -77,9 +85,16 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable {
         case .noAudioTrackSelected:
             return "No audio track selected — choose at least one audio track before starting."
         case .runtimeLookupLoading:
-            return "Waiting on the TMDB runtime lookup."
+            // #0053 review: the window's own caption for this state says
+            // "Checking TMDB runtime…" — say the same thing, not "runtime
+            // lookup", which is our word for it and not the screen's.
+            return "Checking the TMDB runtime — this finishes on its own."
         case .runtimeMismatchUnconfirmed:
-            return "Confirm the runtime mismatch."
+            // #0053 review: name the control the user has to click. The
+            // mismatch line under the picker offers "Rip anyway" (#0032);
+            // a bare "Confirm the runtime mismatch." sends them looking for
+            // a Confirm button that does not exist.
+            return "Confirm the runtime mismatch with Rip anyway."
         }
     }
 }
@@ -152,6 +167,13 @@ nonisolated enum StartGate {
         case .failed:
             return .scanFailed
         case .scanned(let result):
+            // #0053 review, #0039: a scan that read zero titles is a
+            // success with an empty title list, and the window shows it as
+            // a failure with a Rescan button and no picker. Checked before
+            // the title selection below so the caption doesn't tell the
+            // user to pick a title from a table that isn't on screen.
+            guard !result.disc.titles.isEmpty else { return .noTitlesOnDisc }
+
             guard let index = selectedTitleIndex,
                   let title = result.disc.titles.first(where: { $0.index == index }) else {
                 return .noTitleSelected

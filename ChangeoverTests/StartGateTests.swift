@@ -204,7 +204,7 @@ struct StartGateTests {
         #expect(StartDecision.ready.reason == nil)
         let refusals: [StartDecision] = [
             .jobRunning, .noDisc, .discUnavailable, .scanInProgress, .scanFailed,
-            .noMovieSelected, .noTitleSelected, .noAudioTrackSelected,
+            .noTitlesOnDisc, .noMovieSelected, .noTitleSelected, .noAudioTrackSelected,
             .runtimeLookupLoading, .runtimeMismatchUnconfirmed
         ]
         for decision in refusals {
@@ -346,5 +346,41 @@ struct StartGateTests {
         #expect(decide(scanState: scanned([titleWithAudio(1)]), selectedTitleIndex: 1,
                         selectedAudioTrackNumbers: [],
                         runtimeLookup: .loaded(movieID: 1, runtimeMinutes: 22)) == .noAudioTrackSelected)
+    }
+
+    /// The remaining adjacent pair in the chain: a missing audio-track pick
+    /// outranks a runtime lookup that hasn't come back yet — the user can
+    /// tick a track now, and waiting is not something they do.
+    @Test func noAudioTrackSelectedOutranksAWaitingRuntimeLookup() {
+        #expect(decide(scanState: scanned([titleWithAudio(1)]), selectedTitleIndex: 1,
+                        selectedAudioTrackNumbers: [],
+                        runtimeLookup: .loading(movieID: 1)) == .noAudioTrackSelected)
+    }
+
+    // MARK: - #0053 review: #0039's zero-title scan
+
+    /// A scan that read zero titles succeeds with an empty title list, and
+    /// the window renders it as a failure with a Rescan button and *no*
+    /// picker (`DiscTitleListView.noTitlesView`). Telling the user to "Pick
+    /// a title." there names a table that isn't on screen, so this state
+    /// gets its own decision.
+    @Test func decidesNoTitlesOnDisc() {
+        #expect(decide(scanState: scanned([]), selectedTitleIndex: nil) == .noTitlesOnDisc)
+        // A stale index left over from a previous disc reads the same way:
+        // still nothing on this disc to pick.
+        #expect(decide(scanState: scanned([]), selectedTitleIndex: 1) == .noTitlesOnDisc)
+        #expect(StartDecision.noTitlesOnDisc.reason?.contains("rescan") == true)
+    }
+
+    /// Ranked with the other scan-shaped refusals — below the movie choice,
+    /// the same way `.scanFailed` is, so there is one rule and not two.
+    @Test func aMissingMovieSelectionOutranksAZeroTitleScan() {
+        #expect(decide(hasMovieSelected: false, scanState: scanned([]), selectedTitleIndex: nil) == .noMovieSelected)
+    }
+
+    /// #0053 review: the mismatch caption has to name the control #0032
+    /// actually shows ("Rip anyway"), not an imaginary Confirm button.
+    @Test func theMismatchReasonNamesTheRipAnywayButton() {
+        #expect(StartDecision.runtimeMismatchUnconfirmed.reason?.contains("Rip anyway") == true)
     }
 }
