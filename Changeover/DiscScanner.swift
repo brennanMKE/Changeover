@@ -35,6 +35,15 @@ nonisolated enum DiscScanner {
         /// Non-fatal signatures observed in the output, human-readable,
         /// deduplicated with counts. Attached to a success; never fails one.
         var warnings: [String]
+        /// #0039 — the last non-empty line of output, from either stream, so
+        /// a disc that scanned successfully but read zero titles can show
+        /// HandBrake's own last word rather than nothing. `nil` only when
+        /// the scan produced no output at all. Defaulted so every
+        /// pre-existing `Result(disc:mainFeatureIndex:warnings:)`
+        /// construction site (~30 across the test suite) compiles
+        /// unchanged, matching `ProcessRunner.Termination.cancelled`'s
+        /// precedent.
+        var lastLine: String? = nil
     }
 
     /// Scanner-local on purpose: the scan runs before any job exists, and
@@ -55,6 +64,12 @@ nonisolated enum DiscScanner {
         /// Exit 0 but no `JSON Title Set:` — the incomplete scan that
         /// reports success. Never reported as an empty title list.
         case jsonMissing
+        /// #0039 — exit 0, the `JSON Title Set:` marker arrived, but the
+        /// brace-matched block that followed it failed to decode (a
+        /// corrupted or truncated capture — belt-and-braces, in case
+        /// anything other than the #0039 stdout/stderr splice ever produces
+        /// one again). Never reported as an empty title list either.
+        case titleSetCorrupted
         /// #0046 — the calling `Task` was cancelled. Scanner-local, like the
         /// rest of this enum: nothing in this pass wires a cancel button to
         /// a running scan (`JobController.startScan` still launches its own
@@ -93,11 +108,19 @@ nonisolated enum DiscScanner {
         }
 
         var lines: [String] = []
+        // #0039: stdout only, so the JSON payload is parsed from a stream
+        // that HandBrake's chatty stderr log text can never be spliced into
+        // — `lines` above still collects both streams, for warnings and
+        // progress, exactly as before.
+        var stdoutLines: [String] = []
         var lastLoggedPercent = 0
         let result = await ProcessRunner.run(
             executablePath: handbrakePath,
             arguments: scanArguments(discPath: discPath),
-            watchdog: scanWatchdog
+            watchdog: scanWatchdog,
+            onStdout: { line in
+                stdoutLines.append(line)
+            }
         ) { line in
             lines.append(line)
             // Progress arrives as `"Progress": 0.37` inside the Scanning
@@ -128,21 +151,28 @@ nonisolated enum DiscScanner {
                 return .failure(.toolExited(code: termination.status))
             }
 
-            let text = lines.joined(separator: "\n")
-            let output = HandBrakeScanParser.parse(text, volumeName: volumeName, driveName: driveName)
+            let stdoutText = stdoutLines.joined(separator: "\n")
+            let output = HandBrakeScanParser.parse(stdoutText, volumeName: volumeName, driveName: driveName)
 
             // The incomplete-scan-reports-success check: exit 0 with no JSON
             // section is a failure, never an empty title list. A disc that
             // genuinely has no titles parses to an empty DiscInfo and stays
             // a success.
-            guard text.contains(HandBrakeScanParser.jsonMarker) else {
+            guard stdoutText.contains(HandBrakeScanParser.jsonMarker) else {
                 return .failure(.jsonMissing)
+            }
+            // #0039 belt-and-braces: the marker arrived but the JSON block
+            // itself didn't decode — a parse failure, never an empty
+            // title list.
+            guard !output.titleSetCorrupted else {
+                return .failure(.titleSetCorrupted)
             }
 
             return .success(Result(
                 disc: output.disc,
                 mainFeatureIndex: output.mainFeatureIndex,
-                warnings: classify(lines: lines).warnings
+                warnings: classify(lines: lines).warnings,
+                lastLine: lines.last
             ))
         }
     }

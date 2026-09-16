@@ -109,6 +109,53 @@ struct ProcessRunnerTests {
         #expect(splitter.flush().isEmpty)
     }
 
+    // MARK: - #0039: stdout/stderr never interleave within a line
+
+    /// Reproduces the exact shape of the real corruption #0039 was filed
+    /// against — a stdout line left unterminated while stderr writes its own
+    /// unterminated text, back to back with no delay — and proves the fix is
+    /// structural, not timing-dependent: two independent `Pipe`s mean the
+    /// kernel has no way to splice one stream's bytes into the other's line,
+    /// regardless of write order or scheduling. Before #0039, merging both
+    /// onto one pipe let a real disc produce exactly
+    /// `"KeepDuplicateTitles": falseHandBrake has exited.` — a `false`
+    /// literal glued straight into the next line's error text.
+    @Test func stdoutAndStderrNeverInterleaveWithinALine() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = root.appendingPathComponent("split-streams.sh")
+        try """
+        #!/bin/sh
+        printf '%s' '"KeepDuplicateTitles": false'
+        printf '%s' 'HandBrake has exited.' 1>&2
+        printf '%s\\n' ','
+        """.write(toFile: script.path, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+
+        var stdoutLines: [String] = []
+        var allLines: [String] = []
+        let result = await ProcessRunner.run(
+            executablePath: script.path,
+            arguments:      [],
+            watchdog:       .inactivity(10),
+            onStdout:       { stdoutLines.append($0) }
+        ) { allLines.append($0) }
+
+        guard case .success = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        // The stdout-only stream is exactly the intact JSON fragment — never
+        // spliced with stderr's text.
+        #expect(stdoutLines == ["\"KeepDuplicateTitles\": false,"])
+        // stderr's text arrives as its own separate, uncorrupted line (via
+        // the leftover-flush path, since it never gets a trailing newline).
+        #expect(allLines.contains("HandBrake has exited."))
+        // The corruption shape this ticket was filed against — a value
+        // glued straight into stderr's text — must never appear anywhere.
+        #expect(!allLines.contains { $0.contains("falseHandBrake") })
+    }
+
     // MARK: - 2. The drain regression, at the EncodeController level
 
     /// Reproduces the reader/termination race `EncodeController` used to have

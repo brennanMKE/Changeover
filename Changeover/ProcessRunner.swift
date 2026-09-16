@@ -68,6 +68,28 @@ import Foundation
 /// `onReady`'s pipe close would run under a still-live child. So
 /// `markReaderDone()` with no termination recorded simply waits.
 ///
+/// **stdout/stderr are read as two separate pipes (#0039, 2026-09-16), not
+/// merged onto one.** A single shared pipe means the kernel interleaves the
+/// child's two independent write streams at the byte level, with no regard
+/// for line boundaries — on a real disc, HandBrakeCLI's chatty stderr log
+/// text spliced into the middle of its stdout JSON payload
+/// (`"KeepDuplicateTitles": falseHandBrake has exited.`), which
+/// `JSONSerialization` then failed to decode (`issues/0039.md`). Splitting
+/// the pipes closes that at the source: each stream gets its own `Pipe`,
+/// its own `LineSplitter`, and its own readability handler, so a line from
+/// one stream can never be corrupted by bytes from the other arriving
+/// mid-write. Both streams' lines still reach the shared `onLine` callback,
+/// in real arrival order, exactly as before — `MakeMKVRipper` and
+/// `EncodeController` see no behavioural change from this alone. The new
+/// `onStdout` parameter (default a no-op) additionally reports stdout-only
+/// lines, for `DiscScanner`, which must parse HandBrakeCLI's JSON from
+/// stdout alone while still using the merged `onLine` stream for warnings
+/// and progress. "Reader done" now means *both* pipes have reported EOF —
+/// see `DualReaderCompletion` below — before
+/// `RunCompletionGate.markReaderDone()` is ever called, preserving every one
+/// of that gate's documented guarantees (self-retain, grace arming only
+/// from `markProcessDone(_:)`, the broken retain cycle).
+///
 /// `nonisolated` throughout — this has no reason to run on MainActor, and the
 /// module default is MainActor (`CLAUDE.md`).
 nonisolated enum ProcessRunner {
@@ -106,10 +128,13 @@ nonisolated enum ProcessRunner {
         var cancelled: Bool = false
     }
 
-    /// Runs `executablePath` with `arguments`, merging stdout and stderr onto
-    /// one pipe exactly as both current callers do. `onLine` fires once per
-    /// complete, trimmed, non-empty line, in order, synchronously on the
-    /// reader's serial queue — never after the continuation has resumed.
+    /// Runs `executablePath` with `arguments`, reading stdout and stderr as
+    /// two independent pipes (#0039) so a line from one can never be spliced
+    /// with bytes from the other. `onLine` fires once per complete, trimmed,
+    /// non-empty line from **either** stream, in real arrival order,
+    /// synchronously on that stream's own reader queue — never after the
+    /// continuation has resumed. `onStdout` (default a no-op) fires
+    /// additionally, in the same way, for stdout lines only.
     ///
     /// Resumes exactly once, only after **both** pipe EOF and process exit
     /// have been observed (`RunCompletionGate`), having first flushed the
@@ -174,6 +199,7 @@ nonisolated enum ProcessRunner {
         readerDelay:      @escaping () -> Void = {},
         hardCeilingGrace: TimeInterval = 10,
         killGrace:        TimeInterval = 10,
+        onStdout:         @escaping (String) -> Void = { _ in },
         onLine:           @escaping (String) -> Void
     ) async -> Result<Termination, Error> {
         let cancellation = RunCancellation(killGrace: killGrace)
@@ -183,12 +209,23 @@ nonisolated enum ProcessRunner {
             process.executableURL = URL(fileURLWithPath: executablePath)
             process.arguments = arguments
 
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError  = pipe
+            // #0039: two independent pipes, not one merged pipe — see the
+            // file header for why a shared pipe is the actual defect.
+            let stdoutPipe = Pipe()
+            let stderrPipe = Pipe()
+            process.standardOutput = stdoutPipe
+            process.standardError  = stderrPipe
 
-            let splitter = LineSplitter()
+            let stdoutSplitter = LineSplitter()
+            let stderrSplitter = LineSplitter()
             let watchdogState = WatchdogState()
+            // "Reader done" now requires EOF on *both* pipes — see
+            // `DualReaderCompletion` below. Only once both have reported
+            // does `gate.markReaderDone()` ever get called, so every one of
+            // `RunCompletionGate`'s documented guarantees (arms only from
+            // `markProcessDone(_:)`, fires at most once, self-retains) is
+            // unchanged by the split.
+            let readerCompletion = DualReaderCompletion()
 
             // Declared before `gate` so its `onReady` closure (below) can
             // cancel and release them once it runs.
@@ -210,36 +247,66 @@ nonisolated enum ProcessRunner {
                 inactivityTimer?.cancel()
                 inactivityTimer = nil
 
-                let leftover = splitter.flush().trimmingCharacters(in: .whitespaces)
-                if !leftover.isEmpty {
-                    onLine(leftover)
+                let stdoutLeftover = stdoutSplitter.flush().trimmingCharacters(in: .whitespaces)
+                if !stdoutLeftover.isEmpty {
+                    onLine(stdoutLeftover)
+                    onStdout(stdoutLeftover)
                 }
-                pipe.fileHandleForReading.readabilityHandler = nil
-                try? pipe.fileHandleForReading.close()
-                try? pipe.fileHandleForWriting.close()
+                let stderrLeftover = stderrSplitter.flush().trimmingCharacters(in: .whitespaces)
+                if !stderrLeftover.isEmpty {
+                    onLine(stderrLeftover)
+                }
+                stdoutPipe.fileHandleForReading.readabilityHandler = nil
+                stderrPipe.fileHandleForReading.readabilityHandler = nil
+                try? stdoutPipe.fileHandleForReading.close()
+                try? stdoutPipe.fileHandleForWriting.close()
+                try? stderrPipe.fileHandleForReading.close()
+                try? stderrPipe.fileHandleForWriting.close()
                 continuation.resume(returning: .success(termination))
             }
 
-            func handle(_ data: Data) {
+            func handleStdout(_ data: Data) {
                 watchdogState.recordActivity()
-                for line in splitter.feed(data) {
+                for line in stdoutSplitter.feed(data) {
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    guard !trimmed.isEmpty else { continue }
+                    onLine(trimmed)
+                    onStdout(trimmed)
+                }
+            }
+
+            func handleStderr(_ data: Data) {
+                watchdogState.recordActivity()
+                for line in stderrSplitter.feed(data) {
                     let trimmed = line.trimmingCharacters(in: .whitespaces)
                     guard !trimmed.isEmpty else { continue }
                     onLine(trimmed)
                 }
             }
 
-            pipe.fileHandleForReading.readabilityHandler = { fh in
+            stdoutPipe.fileHandleForReading.readabilityHandler = { fh in
                 let data = fh.availableData
                 readerDelay()
                 guard !data.isEmpty else {
                     // Empty availableData is EOF: the child closed its end of
-                    // the pipe. Stop firing and record "reader done."
+                    // this pipe. Stop firing and record this stream done;
+                    // "reader done" as a whole waits for stderr too.
                     fh.readabilityHandler = nil
-                    gate.markReaderDone()
+                    readerCompletion.markStdoutDone { gate.markReaderDone() }
                     return
                 }
-                handle(data)
+                handleStdout(data)
+            }
+
+            stderrPipe.fileHandleForReading.readabilityHandler = { fh in
+                let data = fh.availableData
+                readerDelay()
+                guard !data.isEmpty else {
+                    fh.readabilityHandler = nil
+                    readerCompletion.markStderrDone { gate.markReaderDone() }
+                    return
+                }
+                handleStderr(data)
             }
 
             switch watchdog {
@@ -314,7 +381,8 @@ nonisolated enum ProcessRunner {
                 // launched — break that side of the same retain cycle
                 // `onReady` breaks on every other path.
                 process.terminationHandler = nil
-                pipe.fileHandleForReading.readabilityHandler = nil
+                stdoutPipe.fileHandleForReading.readabilityHandler = nil
+                stderrPipe.fileHandleForReading.readabilityHandler = nil
                 // `gate` was never fired (the process never launched, so
                 // neither `markReaderDone`/`markProcessDone` will ever be
                 // called) — release its self-retain directly rather than
@@ -688,6 +756,39 @@ nonisolated final class LineSplitter: @unchecked Sendable {
         let remainder = String(decoding: carry, as: UTF8.self)
         carry = Data()
         return remainder
+    }
+}
+
+/// #0039 — fires exactly once, only after **both** `markStdoutDone()` and
+/// `markStderrDone()` have been called, whichever arrives second calling the
+/// `onBothDone` closure it's given (synchronously, on that call's thread —
+/// same shape as `RunCompletionGate`, but this class owns no completion
+/// value of its own; it just gates the moment `ProcessRunner.run` calls
+/// `gate.markReaderDone()`). Locked because the two independent pipes'
+/// readability handlers run on their own private queues with no ordering
+/// guarantee between them, same reasoning as `RunCompletionGate`.
+nonisolated private final class DualReaderCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stdoutDone = false
+    private var stderrDone = false
+    private var fired = false
+
+    func markStdoutDone(onBothDone: () -> Void) {
+        lock.lock()
+        stdoutDone = true
+        let ready = stderrDone && !fired
+        if ready { fired = true }
+        lock.unlock()
+        if ready { onBothDone() }
+    }
+
+    func markStderrDone(onBothDone: () -> Void) {
+        lock.lock()
+        stderrDone = true
+        let ready = stdoutDone && !fired
+        if ready { fired = true }
+        lock.unlock()
+        if ready { onBothDone() }
     }
 }
 

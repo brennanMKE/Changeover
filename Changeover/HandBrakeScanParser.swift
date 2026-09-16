@@ -39,6 +39,15 @@ nonisolated enum HandBrakeScanParser {
         var mainFeatureIndex: Int?
         /// From the `Version:` block, e.g. "1.11.2" — diagnostic only.
         var versionString: String?
+        /// #0039 — `true` when the `JSON Title Set:` marker was found but
+        /// the brace-matched block that followed it failed to decode as
+        /// JSON (a corrupted or truncated capture — the belt-and-braces
+        /// guard: a corrupt scan must never again look like an empty disc).
+        /// `false` both when the marker never arrived at all (an unrelated
+        /// case `DiscScanner` already catches as `.jsonMissing`) and when
+        /// the block decoded successfully, including to a genuinely empty
+        /// `TitleList`.
+        var titleSetCorrupted: Bool = false
     }
 
     /// The marker that introduces the JSON payload on stdout.
@@ -51,6 +60,7 @@ nonisolated enum HandBrakeScanParser {
     ) -> Output {
         var titles: [DiscTitle] = []
         var mainFeature: Int?
+        var titleSetCorrupted = false
         // The Version block precedes the JSON and is diagnostic on its own —
         // parse it even when the title set never arrived.
         let version = parseVersionBlock(text)
@@ -59,13 +69,21 @@ nonisolated enum HandBrakeScanParser {
             if let titleSet = parseTitleSet(text[markerRange.upperBound...]) {
                 titles = Self.titles(fromJSON: titleSet)
                 mainFeature = Self.mainFeature(fromJSON: titleSet)
+            } else {
+                // #0039 — the marker arrived but the brace-matched block
+                // that followed it didn't decode. Never silently treated as
+                // an empty disc: `DiscScanner` reports this as its own
+                // failure (`.titleSetCorrupted`), distinct from a genuinely
+                // empty `TitleList`.
+                titleSetCorrupted = true
             }
         }
 
         return Output(
             disc: DiscInfo(volumeName: volumeName, driveName: driveName, titles: titles),
             mainFeatureIndex: mainFeature,
-            versionString: version
+            versionString: version,
+            titleSetCorrupted: titleSetCorrupted
         )
     }
 

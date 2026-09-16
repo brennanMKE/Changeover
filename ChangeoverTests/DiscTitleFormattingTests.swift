@@ -191,4 +191,37 @@ struct DiscTitleFormattingTests {
         // 1200 + 1690 = 2890s = 0:48:10.
         #expect(DiscTitleFormatting.extrasStatusLine(plan) == "Extras: 2 · 0:48:10")
     }
+
+    // MARK: - noTitlesMessage (#0039)
+
+    @Test func noTitlesMessageWithNoWarningsOrLastLineIsJustTheHeadline() {
+        let message = DiscTitleFormatting.noTitlesMessage(warnings: [], lastLine: nil)
+        #expect(message == "The scan read no titles from this disc.")
+        // Never the `.none` wording — a distinct statement about the scan,
+        // not the disc's contents.
+        #expect(!message.contains("no title looks like a feature"))
+    }
+
+    @Test func noTitlesMessageIncludesHandBrakesLastLineWhenPresent() {
+        let message = DiscTitleFormatting.noTitlesMessage(warnings: [], lastLine: "HandBrake has exited.")
+        #expect(message.contains("HandBrake's last line: \"HandBrake has exited.\""))
+    }
+
+    @Test func noTitlesMessageOmitsThePermissionsHintWithoutTheLibdvdcssWarning() {
+        let message = DiscTitleFormatting.noTitlesMessage(
+            warnings: ["3 subtitle decode errors during the scan (non-fatal) — the rip may be missing subtitle data"],
+            lastLine: nil
+        )
+        #expect(!message.contains("Full Disk Access"))
+    }
+
+    /// Worded as a possibility, not a diagnosis, per the Plan.
+    @Test func noTitlesMessageAddsThePermissionsHintOnlyWithTheLibdvdcssWarning() {
+        let message = DiscTitleFormatting.noTitlesMessage(
+            warnings: ["libdvdcss could not open the raw device and fell back to the mounted filesystem — this usually works, but a disc that fails here is a CSS error in disguise"],
+            lastLine: nil
+        )
+        #expect(message.contains("Full Disk Access"))
+        #expect(message.contains("may not have permission"))
+    }
 }

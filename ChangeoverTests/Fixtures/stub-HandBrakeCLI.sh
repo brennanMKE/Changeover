@@ -164,8 +164,17 @@ fi
 # process exits SCAN_EXIT (default 0). Encode invocations are unaffected —
 # they fall through to the behaviour below — and the --help branch above
 # still answers first, so preflight's probe never sees a scan fixture.
+#
+# #0039 adds SCAN_STDERR_FIXTURE: catted verbatim to stderr (2>&1's target),
+# independently of SCAN_FIXTURE going to stdout — a real two-pipe stand-in
+# for a chatty stderr (libdvdcss fallback, subtitle decode errors) arriving
+# alongside a clean stdout JSON payload, so DiscScannerTests can prove the
+# split at the actual process level, not just against a merged text fixture.
 case "$*" in
     *--scan*)
+        if [ -n "$SCAN_STDERR_FIXTURE" ] && [ -f "$SCAN_STDERR_FIXTURE" ]; then
+            cat "$SCAN_STDERR_FIXTURE" 1>&2
+        fi
         if [ -n "$SCAN_FIXTURE" ] && [ -f "$SCAN_FIXTURE" ]; then
             cat "$SCAN_FIXTURE"
         fi

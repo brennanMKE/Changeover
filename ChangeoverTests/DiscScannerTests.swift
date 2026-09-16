@@ -110,6 +110,73 @@ struct DiscScannerTests {
         #expect(outcome == .failure(.jsonMissing))
     }
 
+    // MARK: - #0039: the stdout/stderr split, exercised through a real process
+
+    /// The real Oppenheimer scan that motivated this ticket, replayed
+    /// end to end through an actual two-pipe child process: HandBrakeCLI's
+    /// clean stdout JSON (the `oppenheimer-title0-min1.json` capture)
+    /// arrives alongside chatty stderr text (the libdvdcss fallback line
+    /// and a subtitle decode error, drawn from the real merged capture) on
+    /// a *separate* pipe. Before #0039's fix this would have corrupted the
+    /// JSON when merged onto one pipe; here it must both parse cleanly (8
+    /// titles, `MainFeature: 7`) **and** still classify the stderr-only
+    /// warning, proving the split serves both halves of the plan at once.
+    @Test func scanSplitsStdoutJSONFromStderrWarningsThroughARealProcess() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let stub = try Self.copyStub(into: root)
+
+        let stdoutFixture = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/handbrake-scan/oppenheimer-title0-min1.json")
+            .path
+        // Drawn verbatim from the real merged capture's stderr-only lines
+        // (`oppenheimer-title0-min1-merged.txt`), so this is not an
+        // invented signature.
+        let stderrFixture = root.appendingPathComponent("stderr-noise.txt")
+        try """
+        libdvdread: Could not open /dev/disk4 with libdvdcss.
+        libdvdread: Could not open /dev/disk4 with libdvdcss.
+        ERROR: unable to decode subtitle with 2019 bytes.
+        """.write(to: stderrFixture, atomically: true, encoding: .utf8)
+
+        try Self.writeConf(forStubAt: stub, [
+            "SCAN_FIXTURE=\"\(stdoutFixture)\"",
+            "SCAN_STDERR_FIXTURE=\"\(stderrFixture.path)\"",
+        ])
+
+        let outcome = await Self.scan(stubPath: stub, disc: root.appendingPathComponent("OPPENHEIMER"))
+
+        guard case .success(let result) = outcome else {
+            Issue.record("expected success, got \(outcome)")
+            return
+        }
+        #expect(result.disc.titles.count == 8)
+        #expect(result.mainFeatureIndex == 7)
+        #expect(result.disc.titles.first { $0.index == 7 }?.chapterCount == 21)
+        #expect(result.warnings.count == 2)
+        #expect(result.warnings.contains { $0.contains("libdvdcss") })
+        #expect(result.warnings.contains { $0.contains("subtitle decode error") })
+    }
+
+    /// The belt-and-braces guard end to end: a marker present but
+    /// undecodable JSON block is reported as its own failure, never as an
+    /// empty (zero-title) success.
+    @Test func titleSetCorruptedIsReportedAsItsOwnFailure() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let stub = try Self.copyStub(into: root)
+
+        let broken = root.appendingPathComponent("broken.json")
+        try #"JSON Title Set: {"MainFeature": 1 "TitleList": []}"#
+            .write(to: broken, atomically: true, encoding: .utf8)
+        try Self.writeConf(forStubAt: stub, ["SCAN_FIXTURE=\"\(broken.path)\""])
+
+        let outcome = await Self.scan(stubPath: stub, disc: root.appendingPathComponent("FAKE_DISC"))
+
+        #expect(outcome == .failure(.titleSetCorrupted))
+    }
+
     @Test func toolMissingNeverLaunchesAnything() async throws {
         let root = try Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: root) }

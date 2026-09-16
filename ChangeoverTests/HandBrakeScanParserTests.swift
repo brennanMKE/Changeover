@@ -176,6 +176,70 @@ struct HandBrakeScanParserTests {
         #expect(output.disc.titles.count == 1)
     }
 
+    // MARK: - #0039: the stdout/stderr splice — real Oppenheimer captures
+
+    /// The stdout-only capture of the same real scan that produced the
+    /// corrupted merged capture below: once `ProcessRunner` reads stdout and
+    /// stderr as separate pipes, this is exactly the text `DiscScanner`
+    /// hands the parser. Confirms the ticket's headline facts: 8 titles,
+    /// `MainFeature: 7`, title 7 is 3:00:11 with 21 chapters, 3 audio and 6
+    /// subtitle streams.
+    @Test func oppenheimerStdoutOnlyFixtureParsesCleanly() throws {
+        let path = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/handbrake-scan/oppenheimer-title0-min1.json")
+            .path
+        let text = try String(contentsOfFile: path, encoding: .utf8)
+        let output = Self.parse(text)
+
+        #expect(!output.titleSetCorrupted)
+        #expect(output.mainFeatureIndex == 7)
+        #expect(output.disc.titles.count == 8)
+
+        let feature = try #require(output.disc.titles.first { $0.index == 7 })
+        #expect(feature.durationSeconds == 3 * 3600 + 0 * 60 + 11)
+        #expect(feature.chapterCount == 21)
+        #expect(feature.streams.filter { $0.kind == .audio }.count == 3)
+        #expect(feature.streams.filter { $0.kind == .subtitle }.count == 6)
+    }
+
+    /// The root cause, reproduced exactly: this is the **merged** stdout+
+    /// stderr capture from the same real scan, where HandBrakeCLI's stderr
+    /// log text spliced into the JSON mid-value
+    /// (`"KeepDuplicateTitles": falseHandBrake has exited.`). Brace-matching
+    /// still locates a balanced block (the corruption doesn't touch brace
+    /// counts), but `JSONSerialization` cannot decode it — so this must be
+    /// flagged `titleSetCorrupted`, never silently reported as an empty
+    /// disc. This is the parser-level half of the regression: the
+    /// `ProcessRunnerTests`/`DiscScannerTests` additions cover that the real
+    /// stdout/stderr split now prevents this capture from ever recurring at
+    /// the process level.
+    @Test func oppenheimerMergedCaptureFailsToDecodeAndIsFlaggedCorrupted() throws {
+        let path = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/handbrake-scan/oppenheimer-title0-min1-merged.txt")
+            .path
+        let text = try String(contentsOfFile: path, encoding: .utf8)
+        let output = Self.parse(text)
+
+        #expect(output.titleSetCorrupted)
+        #expect(output.disc.titles.isEmpty)
+        #expect(output.mainFeatureIndex == nil)
+    }
+
+    /// A minimal synthetic case, independent of the real fixture: a
+    /// brace-balanced block that's syntactically invalid JSON (a missing
+    /// comma). The belt-and-braces guard exists so any future corruption
+    /// source — not just the stdout/stderr splice this ticket fixes — is
+    /// still caught rather than silently read as "no titles."
+    @Test func undecodableTitleSetBlockIsFlaggedCorruptedNotEmpty() {
+        let broken = #"JSON Title Set: {"MainFeature": 1 "TitleList": []}"#
+        let output = Self.parse(broken)
+
+        #expect(output.titleSetCorrupted)
+        #expect(output.disc.titles.isEmpty)
+    }
+
     // MARK: - Attribute mapping
 
     @Test func commentaryAndForcedMapIntoTheFlagsBitfield() throws {

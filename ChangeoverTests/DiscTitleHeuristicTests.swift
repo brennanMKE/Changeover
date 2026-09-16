@@ -129,6 +129,21 @@ struct DiscTitleHeuristicTests {
         #expect(DiscTitleHeuristic.classify(Self.disc([Self.title(1, 6_000)]), mainFeatureIndex: 9) == .none)
     }
 
+    /// #0039 — the bug this ticket was filed against: a scan that read zero
+    /// titles must classify as `.noTitles`, never `.none`. `.none` is a
+    /// verdict about the disc's contents ("no title looks like a feature");
+    /// `.noTitles` says the scan never looked at any contents at all. Every
+    /// `mainFeatureIndex` shape is exercised to confirm the empty-title
+    /// check wins regardless — an empty disc with a `mainFeatureIndex` at
+    /// all would itself be a scan-shaped contradiction, but the guard must
+    /// still refuse to fall through to `.none`'s wording.
+    @Test func anEmptyTitleListIsNoTitlesNeverNone() {
+        let empty = Self.disc([])
+        #expect(DiscTitleHeuristic.classify(empty, mainFeatureIndex: nil) == .noTitles)
+        #expect(DiscTitleHeuristic.classify(empty, mainFeatureIndex: 0) == .noTitles)
+        #expect(DiscTitleHeuristic.classify(empty, mainFeatureIndex: 7) == .noTitles)
+    }
+
     @Test func classificationIsDeterministicUnderReordering() {
         let playAll = Self.brooklynNineNineDisc().titles
         let expected = DiscTitleHeuristic.Outcome.playAll(index: 12, episodes: Array(13...20))

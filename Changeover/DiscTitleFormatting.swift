@@ -88,6 +88,25 @@ nonisolated enum DiscTitleFormatting {
         return result
     }
 
+    /// #0039 — the message for `DiscTitleHeuristic.Outcome.noTitles`: a scan
+    /// that exited 0 and produced valid JSON but read zero titles. Distinct
+    /// wording from `.none`'s "no title looks like a feature" on purpose —
+    /// this disc was never actually read. `lastLine` is HandBrake's own
+    /// last line of output (either stream), when there was one. The
+    /// permissions hint appears only when `warnings` names the libdvdcss
+    /// raw-device fallback, worded as a possibility, not a diagnosis — the
+    /// fallback usually works fine on its own.
+    static func noTitlesMessage(warnings: [String], lastLine: String?) -> String {
+        var message = "The scan read no titles from this disc."
+        if let lastLine, !lastLine.trimmingCharacters(in: .whitespaces).isEmpty {
+            message += " HandBrake's last line: \"\(lastLine)\""
+        }
+        if warnings.contains(where: { $0.contains("libdvdcss") }) {
+            message += " This scan fell back to reading the disc through libdvdcss's raw-device workaround — if that keeps failing to find titles, Changeover may not have permission to read the drive (System Settings → Privacy & Security → Files and Folders, or Full Disk Access)."
+        }
+        return message
+    }
+
     /// The Play All refusal's one sentence, e.g. "This looks like a TV
     /// season disc — 8 titles of about 21 minutes that together match the
     /// length of title 12." `episodes` are the indices

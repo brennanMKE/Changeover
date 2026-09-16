@@ -101,12 +101,35 @@ struct DiscTitleListView: View {
             return "The disc scan failed (HandBrakeCLI exited with status \(code))."
         case .jsonMissing:
             return "The disc scan did not complete — no title information came back."
+        case .titleSetCorrupted:
+            return "The disc scan's title data was corrupted and could not be read."
         case .cancelled:
             // #0051: reached from `JobController.cancelScan()` (the "Cancel
             // Scan" button below) and from `ejectDisc()` cancelling a scan
             // before ejecting. Rescan is offered the same as any other
             // failure, via the `Button("Rescan")` in `failedView` above.
             return "The scan was cancelled."
+        }
+    }
+
+    // MARK: - #0039: a successful scan that read zero titles
+
+    /// Rendered exactly like `failedView` — the message, a Rescan button —
+    /// because from the user's point of view a scan with nothing to choose
+    /// from is a failure, even though `DiscScanner` classifies it as a
+    /// success with an empty `DiscInfo`. No table: there is nothing in it.
+    private func noTitlesView(_ result: DiscScanner.Result) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(DiscTitleFormatting.noTitlesMessage(warnings: result.warnings, lastLine: result.lastLine))
+                .font(.subheadline)
+                .foregroundStyle(.red)
+            Button("Rescan") {
+                jobs.startScan(settings: settings)
+            }
+            .disabled(jobs.isEjecting || jobs.discUnavailable)
+            .help(jobs.discUnavailable
+                ? "The disc was unmounted but could not be ejected — retry Eject or remove the disc before rescanning."
+                : "Scan the disc again.")
         }
     }
 
@@ -148,6 +171,16 @@ struct DiscTitleListView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             titleTable(result.disc, badgeIndex: nil)
+
+        case .noTitles:
+            // #0039 — a scan that read zero titles is a failure-shaped
+            // state, not the `.none` picker: there is nothing to choose
+            // from, so no table is shown, only the message (already
+            // distinguishing itself from `.none`'s wording), the scan's own
+            // warnings (rendered above, via the `ForEach` before this
+            // switch) and a Rescan button — the same escape hatch a scan
+            // `.failed` state offers.
+            noTitlesView(result)
         }
 
         // #0031 Step B — the extras opt-in is the same table, in its fourth

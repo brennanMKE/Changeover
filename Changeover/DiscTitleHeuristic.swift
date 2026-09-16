@@ -59,8 +59,16 @@ nonisolated enum DiscTitleHeuristic {
         /// matches. The user can still override via the picker (#0026); the
         /// default must not be "rip it as a movie".
         case playAll(index: Int, episodes: [Int])
-        /// The scan did not identify a feature (absent, zero, or an index
-        /// the title list does not contain) — show the picker and say why.
+        /// #0039 — the scan genuinely read zero titles: a successful
+        /// process exit, valid JSON, an empty `TitleList`. Distinct from
+        /// `.none` on purpose — this is a statement about what the scan
+        /// found (nothing), never a judgement that nothing on the disc
+        /// looks like a feature. `DiscTitleListView` must render it as its
+        /// own failure-shaped state, not the picker `.none` shows.
+        case noTitles
+        /// The scan did identify titles, but did not identify a feature
+        /// among them (absent, zero, or an index the title list does not
+        /// contain) — show the picker and say why.
         case none
     }
 
@@ -70,6 +78,13 @@ nonisolated enum DiscTitleHeuristic {
         _ disc: DiscInfo,
         mainFeatureIndex: Int?
     ) -> Outcome {
+        // #0039 — checked first, and separately from `.none` below: a scan
+        // that read zero titles never looked at the disc's contents in a
+        // way that could support "no title looks like a feature." That
+        // verdict requires titles to look at.
+        guard !disc.titles.isEmpty else {
+            return .noTitles
+        }
         // Absent or zero: the scan did not identify a feature. Zero means
         // the scan was wrong (a single-title scan artefact) — investigate
         // the scan, never fall through to a heuristic.
