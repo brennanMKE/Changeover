@@ -953,8 +953,9 @@ struct PreflightTests {
     /// A required token (`--input`) split across two stdout writes with a
     /// stderr write in between must still be found as a whole token — proof
     /// that `runHelpProbe` reads stdout on its own pipe rather than merging
-    /// it with stderr the way `ProcessRunner.run` does for
-    /// `EncodeController`/`MakeMKVRipper`. Falsifying this (temporarily
+    /// it with stderr — the merge `ProcessRunner.run` still did when this was
+    /// written, and that #0039 later removed there too. Falsifying this
+    /// (temporarily
     /// pointing `process.standardError` at `stdoutPipe` in `runHelpProbe`)
     /// must make it fail.
     @Test func helpProbeFindsATokenSplitAcrossStdoutWritesWithStderrNoiseInBetween() async {

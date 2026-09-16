@@ -90,6 +90,24 @@ import Foundation
 /// of that gate's documented guarantees (self-retain, grace arming only
 /// from `markProcessDone(_:)`, the broken retain cycle).
 ///
+/// **Callback delivery stays serialized (#0039 review, 2026-09-16).** The
+/// split's one behavioural hazard: Foundation runs the two pipes'
+/// `readabilityHandler`s on **two concurrent threads** of its
+/// `com.apple.NSFileHandle.fd_monitoring` queue — measured, not assumed —
+/// so with one pipe per stream `onLine` would be re-entered concurrently,
+/// where the single merged pipe had serialized it by construction. Callers
+/// that accumulate into a plain `var` (`DiscScanner.scan`'s `lines` /
+/// `stdoutLines` / `lastLoggedPercent`) would then be racing an `Array`
+/// append from two threads — memory corruption, not merely out-of-order
+/// lines, on exactly the chatty real disc this ticket was filed against.
+/// `Preflight.runHelpProbe`'s locked `HelpLineAccumulator` is the same
+/// hazard, already handled, for the same two-pipe shape. So a single
+/// `callbackLock` is held across every `onLine`/`onStdout` invocation,
+/// including the leftover flush in `onReady`: callbacks are delivered one
+/// at a time, in arrival order, exactly as callers saw before the split, and
+/// the lock's release/acquire also publishes the reader threads' writes to
+/// the thread that resumes the continuation.
+///
 /// `nonisolated` throughout — this has no reason to run on MainActor, and the
 /// module default is MainActor (`CLAUDE.md`).
 nonisolated enum ProcessRunner {
@@ -132,7 +150,9 @@ nonisolated enum ProcessRunner {
     /// two independent pipes (#0039) so a line from one can never be spliced
     /// with bytes from the other. `onLine` fires once per complete, trimmed,
     /// non-empty line from **either** stream, in real arrival order,
-    /// synchronously on that stream's own reader queue — never after the
+    /// synchronously on that stream's own reader thread but serialized
+    /// against the other stream's (`callbackLock`, see the file header), so
+    /// a caller may accumulate into a plain `var` — and never after the
     /// continuation has resumed. `onStdout` (default a no-op) fires
     /// additionally, in the same way, for stdout lines only.
     ///
@@ -226,6 +246,9 @@ nonisolated enum ProcessRunner {
             // `markProcessDone(_:)`, fires at most once, self-retains) is
             // unchanged by the split.
             let readerCompletion = DualReaderCompletion()
+            // #0039 review: serializes `onLine`/`onStdout` across the two
+            // reader threads (and the leftover flush) — see the file header.
+            let callbackLock = NSLock()
 
             // Declared before `gate` so its `onReady` closure (below) can
             // cancel and release them once it runs.
@@ -248,14 +271,19 @@ nonisolated enum ProcessRunner {
                 inactivityTimer = nil
 
                 let stdoutLeftover = stdoutSplitter.flush().trimmingCharacters(in: .whitespaces)
+                let stderrLeftover = stderrSplitter.flush().trimmingCharacters(in: .whitespaces)
+                // Taken unconditionally, even with nothing to flush: the
+                // release/acquire pair is what publishes the reader threads'
+                // writes to whichever thread resumes the continuation below.
+                callbackLock.lock()
                 if !stdoutLeftover.isEmpty {
                     onLine(stdoutLeftover)
                     onStdout(stdoutLeftover)
                 }
-                let stderrLeftover = stderrSplitter.flush().trimmingCharacters(in: .whitespaces)
                 if !stderrLeftover.isEmpty {
                     onLine(stderrLeftover)
                 }
+                callbackLock.unlock()
                 stdoutPipe.fileHandleForReading.readabilityHandler = nil
                 stderrPipe.fileHandleForReading.readabilityHandler = nil
                 try? stdoutPipe.fileHandleForReading.close()
@@ -267,7 +295,10 @@ nonisolated enum ProcessRunner {
 
             func handleStdout(_ data: Data) {
                 watchdogState.recordActivity()
-                for line in stdoutSplitter.feed(data) {
+                let lines = stdoutSplitter.feed(data)
+                callbackLock.lock()
+                defer { callbackLock.unlock() }
+                for line in lines {
                     let trimmed = line.trimmingCharacters(in: .whitespaces)
                     guard !trimmed.isEmpty else { continue }
                     onLine(trimmed)
@@ -277,7 +308,10 @@ nonisolated enum ProcessRunner {
 
             func handleStderr(_ data: Data) {
                 watchdogState.recordActivity()
-                for line in stderrSplitter.feed(data) {
+                let lines = stderrSplitter.feed(data)
+                callbackLock.lock()
+                defer { callbackLock.unlock() }
+                for line in lines {
                     let trimmed = line.trimmingCharacters(in: .whitespaces)
                     guard !trimmed.isEmpty else { continue }
                     onLine(trimmed)

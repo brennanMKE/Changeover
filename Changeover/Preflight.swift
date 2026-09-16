@@ -190,10 +190,12 @@ nonisolated struct PreflightProbes: Sendable {
 /// #0008 review fix 4: a dedicated, minimal two-pipe runner for the
 /// `--help` probe only — stdout is captured on its own pipe, stderr is
 /// drained on a second pipe and discarded, and the two byte streams are
-/// never merged onto one pipe the way `ProcessRunner.run` merges them for
-/// `EncodeController`/`MakeMKVRipper` (by design, for those: HandBrake's
-/// progress and makemkvcon's robot-mode messages are meant to interleave
-/// with the rest of that tool's output).
+/// never merged onto one pipe. `ProcessRunner.run` merged them that way
+/// when this was written; #0039 (2026-09-16) found the merge corrupting a
+/// real HandBrake scan's JSON in exactly the manner described below and
+/// split those pipes too, so the two runners now agree. This one stays
+/// separate anyway: it needs no exit status and no line callback, only
+/// stdout's text.
 ///
 /// **Why this matters here specifically.** The real H1 capture
 /// (`ChangeoverTests/Fixtures/handbrake/help-hb1.11.2-exit0.txt`) shows

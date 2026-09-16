@@ -156,6 +156,84 @@ struct ProcessRunnerTests {
         #expect(!allLines.contains { $0.contains("falseHandBrake") })
     }
 
+    /// #0039 review — the split's one behavioural hazard, pinned. Foundation
+    /// runs the two pipes' `readabilityHandler`s on **two concurrent
+    /// threads** of `com.apple.NSFileHandle.fd_monitoring` (measured), so
+    /// without `ProcessRunner`'s `callbackLock` a caller that accumulates
+    /// into a plain `var` — `DiscScanner.scan`'s `lines` / `stdoutLines` /
+    /// `lastLoggedPercent`, unchanged from before the split — would be
+    /// racing an `Array` append from two threads on exactly the chatty real
+    /// disc this ticket was filed against.
+    ///
+    /// The child floods both streams at once and each callback holds its
+    /// slot for 2ms, so overlapping delivery is near-certain if delivery is
+    /// not serialized (it was observed on every unlocked run while writing
+    /// this test). With the lock, `maxConcurrent` is 1 by construction.
+    @Test func callbacksFromBothStreamsAreNeverDeliveredConcurrently() async throws {
+        let root = try Self.makeTempDir()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = root.appendingPathComponent("flood-both-streams.sh")
+        try """
+        #!/bin/sh
+        i=0
+        while [ $i -lt 300 ]; do printf 'OUT-%s\\n' $i; i=$((i+1)); done &
+        j=0
+        while [ $j -lt 300 ]; do printf 'ERR-%s\\n' $j 1>&2; j=$((j+1)); done &
+        wait
+        """.write(toFile: script.path, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+
+        let observer = ConcurrencyObserver()
+        // A plain `var`, deliberately: this is the shape `DiscScanner.scan`
+        // uses, and the contract under test is that it is safe.
+        var lineCount = 0
+        let result = await ProcessRunner.run(
+            executablePath: script.path,
+            arguments:      [],
+            watchdog:       .inactivity(30)
+        ) { _ in
+            observer.enter()
+            usleep(2_000)
+            lineCount += 1
+            observer.leave()
+        }
+
+        guard case .success = result else {
+            Issue.record("expected success, got \(result)")
+            return
+        }
+        #expect(observer.maxConcurrent == 1)
+        #expect(lineCount == 600)
+    }
+
+    /// Records the high-water mark of overlapping callback invocations. Its
+    /// own `NSLock` is what makes the observation itself safe; the thing
+    /// under test is whether the count it sees ever exceeds 1.
+    nonisolated final class ConcurrencyObserver: @unchecked Sendable {
+        private let lock = NSLock()
+        private var inFlight = 0
+        private var highWater = 0
+
+        func enter() {
+            lock.lock()
+            inFlight += 1
+            highWater = max(highWater, inFlight)
+            lock.unlock()
+        }
+
+        func leave() {
+            lock.lock()
+            inFlight -= 1
+            lock.unlock()
+        }
+
+        var maxConcurrent: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return highWater
+        }
+    }
+
     // MARK: - 2. The drain regression, at the EncodeController level
 
     /// Reproduces the reader/termination race `EncodeController` used to have
