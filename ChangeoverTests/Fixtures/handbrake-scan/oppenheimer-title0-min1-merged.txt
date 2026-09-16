@@ -1,0 +1,2989 @@
+[15:30:56] Compile-time hardening features are enabled
+[15:30:56] hb_init: starting libhb thread
+[15:30:56] thread 16b457000 started ("libhb")
+HandBrake 1.11.2 (2026060700) - Darwin arm64 - https://handbrake.fr
+8 CPUs detected
+Opening /dev/disk4...
+[15:30:56] OS: macOS 27.0 (26A428)
+[15:30:56] CPU: Apple M1
+[15:30:56]  - logical processor count: 8
+[15:30:56] hb_scan: path=/dev/disk4, title_index=0
+disc.c:333: failed opening UDF image /dev/disk4
+Version: {
+    "Arch": "arm64",
+    "Name": "HandBrake",
+    "Official": true,
+    "RepoDate": "2026-06-07 13:36:41",
+    "RepoHash": "9eb6c936803e8b071035b1a77662cb0db58441ea",
+    "System": "Darwin",
+    "Type": "release",
+    "Version": {
+        "Major": 1,
+        "Minor": 11,
+        "Point": 2
+    },
+    "VersionString": "1.11.2"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+disc.c:437: error opening file BDMV/index.bdmv
+disc.c:437: error opening file BDMV/BACKUP/index.bdmv
+[15:30:58] bd: not a bd - trying as a stream/file instead
+libdvdread: Could not open /dev/disk4 with libdvdcss.
+libdvdread: Can't open /dev/disk4 for reading
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+libdvdnav: Unable to open device file /dev/disk4.
+libdvdread: Attempting to retrieve all CSS keys
+libdvdread: This can take a _long_ time, please be patient
+libdvdread: Get key for /VIDEO_TS/VIDEO_TS.VOB at 0x00000163
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_01_0.VOB at 0x0000c6f9
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_01_1.VOB at 0x0000c700
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_02_0.VOB at 0x0000c7ae
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_02_1.VOB at 0x0000c7b5
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_03_0.VOB at 0x0000c810
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_03_1.VOB at 0x0001480f
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_04_0.VOB at 0x003e5689
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_04_1.VOB at 0x003e5690
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_05_0.VOB at 0x003e5ad9
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_05_1.VOB at 0x003e5ae0
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_06_0.VOB at 0x003e5e05
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_06_1.VOB at 0x003e5e0c
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_07_0.VOB at 0x003e5eb7
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_07_1.VOB at 0x003e5ebe
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_08_0.VOB at 0x003e5eef
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_08_1.VOB at 0x003e5ef6
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_09_0.VOB at 0x003e5f1f
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_09_1.VOB at 0x003e5f26
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_10_0.VOB at 0x003e5f4f
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_10_1.VOB at 0x003e5f56
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_11_0.VOB at 0x003e8257
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_11_1.VOB at 0x003e825e
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_12_0.VOB at 0x003e8287
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_12_1.VOB at 0x003e828e
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_13_0.VOB at 0x003e8484
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_13_1.VOB at 0x003e848b
+libdvdread: Elapsed time 0
+libdvdread: Found 13 VTS's
+libdvdread: Elapsed time 0
+libdvdread: Could not open /dev/disk4 with libdvdcss.
+libdvdread: Can't open /dev/disk4 for reading
+libdvdnav: vm: dvd_read_name failed
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+[15:30:59] scan: DVD has 38 title(s)
+[15:30:59] scan: scanning title 1
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.01315789483487606,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:30:59] scan: duration is 00:00:03 (3000 ms)
+[15:30:59] pgc_id: 1, pgn: 1: pgc: 0x7980dcfc00
+[15:30:59] scan: checking audio 1
+[15:30:59] scan: id=0x80bd, lang=Unknown (AC3), 3cc=und ext=0
+[15:30:59] scan: title 1 has 1 chapters
+[15:30:59] scan: chap 1, 3000 ms
+[15:30:59] scan: aspect = 16:9
+[15:30:59] scan: scanning title 2
+[15:30:59] scan: duration is 00:00:00 (500 ms)
+[15:30:59] scan: ignoring title (too short)
+[15:30:59] scan: scanning title 3
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.03947368264198303,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:30:59] scan: duration is 00:00:00 (500 ms)
+[15:30:59] scan: ignoring title (too short)
+[15:30:59] scan: scanning title 4
+[15:30:59] scan: duration is 00:00:00 (500 ms)
+[15:30:59] scan: ignoring title (too short)
+[15:30:59] scan: scanning title 5
+[15:30:59] scan: duration is 00:00:00 (500 ms)
+[15:30:59] scan: ignoring title (too short)
+[15:30:59] scan: scanning title 6
+[15:30:59] scan: duration is 00:00:00 (500 ms)
+[15:30:59] scan: ignoring title (too short)
+[15:30:59] scan: scanning title 7
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.09210526198148727,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:31:00] scan: duration is 03:00:11 (10811500 ms)
+[15:31:00] pgc_id: 1, pgn: 1: pgc: 0x7980dcfc00
+[15:31:00] scan: checking audio 1
+[15:31:00] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[15:31:00] scan: checking audio 2
+[15:31:00] scan: id=0x81bd, lang=español (AC3), 3cc=spa ext=0
+[15:31:00] scan: checking audio 3
+[15:31:00] scan: id=0x82bd, lang=English (AC3), 3cc=eng ext=0
+[15:31:00] scan: checking subtitle 1
+[15:31:00] scan: id=0x20bd, lang=English (Wide Screen) [VOBSUB], 3cc=eng ext=0
+[15:31:00] scan: checking subtitle 2
+[15:31:00] scan: id=0x21bd, lang=español (Wide Screen) [VOBSUB], 3cc=spa ext=0
+[15:31:00] scan: checking subtitle 3
+[15:31:00] scan: id=0x22bd, lang=中文 (Wide Screen) [VOBSUB], 3cc=zho ext=0
+[15:31:00] scan: checking subtitle 4
+[15:31:00] scan: id=0x23bd, lang=中文 (Wide Screen) [VOBSUB], 3cc=zho ext=0
+[15:31:00] scan: checking subtitle 5
+[15:31:00] scan: id=0x24bd, lang=한국어 (Wide Screen) [VOBSUB], 3cc=kor ext=0
+[15:31:00] scan: checking subtitle 6
+[15:31:00] scan: id=0x25bd, lang=español (Wide Screen) [VOBSUB], 3cc=spa ext=0
+[15:31:00] scan: title 7 has 21 chapters
+[15:31:00] scan: chap 1, 443166 ms
+[15:31:00] scan: chap 2, 552000 ms
+[15:31:00] scan: chap 3, 647166 ms
+[15:31:00] scan: chap 4, 517033 ms
+[15:31:00] scan: chap 5, 409800 ms
+[15:31:00] scan: chap 6, 579333 ms
+[15:31:00] scan: chap 7, 444500 ms
+[15:31:00] scan: chap 8, 656333 ms
+[15:31:00] scan: chap 9, 424200 ms
+[15:31:00] scan: chap 10, 375800 ms
+[15:31:00] scan: chap 11, 712000 ms
+[15:31:00] scan: chap 12, 419500 ms
+[15:31:00] scan: chap 13, 492166 ms
+[15:31:00] scan: chap 14, 538166 ms
+[15:31:00] scan: chap 15, 523333 ms
+[15:31:00] scan: chap 16, 486000 ms
+[15:31:00] scan: chap 17, 895333 ms
+[15:31:00] scan: chap 18, 934834 ms
+[15:31:00] scan: chap 19, 391333 ms
+[15:31:00] scan: chap 20, 369000 ms
+[15:31:00] scan: chap 21, 500 ms
+[15:31:00] scan: aspect = 16:9
+[15:31:00] scan: scanning title 8
+[15:31:00] scan: duration is 00:00:43 (43500 ms)
+[15:31:00] pgc_id: 3, pgn: 1: pgc: 0x7980dcfd40
+[15:31:00] scan: checking audio 1
+[15:31:00] scan: id=0x80bd, lang=Unknown (AC3), 3cc=und ext=0
+[15:31:00] scan: title 8 has 9 chapters
+[15:31:00] scan: chap 1, 7000 ms
+[15:31:00] scan: chap 2, 7000 ms
+[15:31:00] scan: chap 3, 7000 ms
+[15:31:00] scan: chap 4, 7000 ms
+[15:31:00] scan: chap 5, 7000 ms
+[15:31:00] scan: chap 6, 500 ms
+[15:31:00] scan: chap 7, 7000 ms
+[15:31:00] scan: chap 8, 500 ms
+[15:31:00] scan: chap 9, 500 ms
+[15:31:00] scan: aspect = 16:9
+[15:31:00] scan: scanning title 9
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.1184210553765297,
+        "SequenceID": 0,
+        "Title": 9,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:31:00] scan: duration is 00:00:15 (15000 ms)
+[15:31:00] pgc_id: 3, pgn: 1: pgc: 0x7980dcfc00
+[15:31:00] scan: checking audio 1
+[15:31:00] scan: id=0x80bd, lang=Unknown (AC3), 3cc=und ext=0
+[15:31:00] scan: checking subtitle 1
+[15:31:00] scan: subtitle channel is not active
+[15:31:00] scan: checking subtitle 2
+[15:31:00] scan: subtitle channel is not active
+[15:31:00] scan: checking subtitle 3
+[15:31:00] scan: subtitle channel is not active
+[15:31:00] scan: checking subtitle 4
+[15:31:00] scan: subtitle channel is not active
+[15:31:00] scan: checking subtitle 5
+[15:31:00] scan: subtitle channel is not active
+[15:31:00] scan: checking subtitle 6
+[15:31:00] scan: subtitle channel is not active
+[15:31:00] scan: checking subtitle 7
+[15:31:00] scan: subtitle channel is not active
+[15:31:00] scan: checking subtitle 8
+[15:31:00] scan: subtitle channel is not active
+[15:31:00] scan: checking subtitle 9
+[15:31:00] scan: subtitle channel is not active
+[15:31:00] scan: title 9 has 4 chapters
+[15:31:00] scan: chap 1, 7000 ms
+[15:31:00] scan: chap 2, 7000 ms
+[15:31:00] scan: chap 3, 500 ms
+[15:31:00] scan: chap 4, 500 ms
+[15:31:00] scan: aspect = 16:9
+[15:31:00] scan: scanning title 10
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.1315789520740509,
+        "SequenceID": 0,
+        "Title": 10,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.1315789520740509,
+        "SequenceID": 0,
+        "Title": 10,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:31:01] scan: duration is 00:00:07 (7500 ms)
+[15:31:01] pgc_id: 1, pgn: 1: pgc: 0x7980dcfc00
+[15:31:01] scan: checking audio 1
+[15:31:01] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[15:31:01] scan: title 10 has 2 chapters
+[15:31:01] scan: chap 1, 7000 ms
+[15:31:01] scan: chap 2, 500 ms
+[15:31:01] scan: aspect = 16:9
+[15:31:01] scan: scanning title 11
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.14473684132099152,
+        "SequenceID": 0,
+        "Title": 11,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:31:01] scan: duration is 00:00:01 (1000 ms)
+[15:31:01] pgc_id: 3, pgn: 1: pgc: 0x7980dcfd40
+[15:31:01] scan: checking subtitle 1
+[15:31:01] scan: subtitle channel is not active
+[15:31:01] scan: checking subtitle 2
+[15:31:01] scan: subtitle channel is not active
+[15:31:01] scan: checking subtitle 3
+[15:31:01] scan: subtitle channel is not active
+[15:31:01] scan: checking subtitle 4
+[15:31:01] scan: subtitle channel is not active
+[15:31:01] scan: checking subtitle 5
+[15:31:01] scan: subtitle channel is not active
+[15:31:01] scan: checking subtitle 6
+[15:31:01] scan: subtitle channel is not active
+[15:31:01] scan: checking subtitle 7
+[15:31:01] scan: subtitle channel is not active
+[15:31:01] scan: checking subtitle 8
+[15:31:01] scan: subtitle channel is not active
+[15:31:01] scan: checking subtitle 9
+[15:31:01] scan: subtitle channel is not active
+[15:31:01] scan: title 11 has 2 chapters
+[15:31:01] scan: chap 1, 500 ms
+[15:31:01] scan: chap 2, 500 ms
+[15:31:01] scan: aspect = 16:9
+[15:31:01] scan: scanning title 12
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.15789473056793213,
+        "SequenceID": 0,
+        "Title": 12,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:31:01] scan: duration is 00:00:00 (500 ms)
+[15:31:01] scan: ignoring title (too short)
+[15:31:01] scan: scanning title 13
+[15:31:01] scan: duration is 00:00:00 (500 ms)
+[15:31:01] scan: ignoring title (too short)
+[15:31:01] scan: scanning title 14
+[15:31:01] scan: duration is 00:00:00 (500 ms)
+[15:31:01] scan: ignoring title (too short)
+[15:31:01] scan: scanning title 15
+[15:31:01] scan: duration is 00:00:00 (500 ms)
+[15:31:01] scan: ignoring title (too short)
+[15:31:01] scan: scanning title 16
+[15:31:01] scan: duration is 00:00:00 (500 ms)
+[15:31:01] scan: ignoring title (too short)
+[15:31:01] scan: scanning title 17
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.22368420660495758,
+        "SequenceID": 0,
+        "Title": 17,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 18
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 19
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 20
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.2631579041481018,
+        "SequenceID": 0,
+        "Title": 20,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:31:02] scan: duration is 00:00:26 (26467 ms)
+[15:31:02] pgc_id: 1, pgn: 1: pgc: 0x7980dcfd40
+[15:31:02] scan: checking audio 1
+[15:31:02] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[15:31:02] scan: title 20 has 2 chapters
+[15:31:02] scan: chap 1, 25967 ms
+[15:31:02] scan: chap 2, 500 ms
+[15:31:02] scan: aspect = 16:9
+[15:31:02] scan: scanning title 21
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.2763157784938812,
+        "SequenceID": 0,
+        "Title": 21,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 22
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 23
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 24
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 25
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 26
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 27
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 28
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 29
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 30
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 31
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 32
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 33
+[15:31:02] scan: duration is 00:00:00 (500 ms)
+[15:31:02] scan: ignoring title (too short)
+[15:31:02] scan: scanning title 34
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.44736841320991516,
+        "SequenceID": 0,
+        "Title": 34,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:31:03] scan: duration is 00:00:08 (8000 ms)
+[15:31:03] pgc_id: 3, pgn: 1: pgc: 0x7980dcfd40
+[15:31:03] scan: checking audio 1
+[15:31:03] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[15:31:03] scan: checking subtitle 1
+[15:31:03] scan: subtitle channel is not active
+[15:31:03] scan: checking subtitle 2
+[15:31:03] scan: subtitle channel is not active
+[15:31:03] scan: checking subtitle 3
+[15:31:03] scan: subtitle channel is not active
+[15:31:03] scan: checking subtitle 4
+[15:31:03] scan: subtitle channel is not active
+[15:31:03] scan: checking subtitle 5
+[15:31:03] scan: subtitle channel is not active
+[15:31:03] scan: checking subtitle 6
+[15:31:03] scan: subtitle channel is not active
+[15:31:03] scan: checking subtitle 7
+[15:31:03] scan: subtitle channel is not active
+[15:31:03] scan: checking subtitle 8
+[15:31:03] scan: subtitle channel is not active
+[15:31:03] scan: checking subtitle 9
+[15:31:03] scan: subtitle channel is not active
+[15:31:03] scan: title 34 has 3 chapters
+[15:31:03] scan: chap 1, 7000 ms
+[15:31:03] scan: chap 2, 500 ms
+[15:31:03] scan: chap 3, 500 ms
+[15:31:03] scan: aspect = 16:9
+[15:31:03] scan: scanning title 35
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.46052631735801697,
+        "SequenceID": 0,
+        "Title": 35,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:31:03] scan: duration is 00:00:00 (500 ms)
+[15:31:03] scan: ignoring title (too short)
+[15:31:03] scan: scanning title 36
+[15:31:03] scan: duration is 00:00:00 (500 ms)
+[15:31:03] scan: ignoring title (too short)
+[15:31:03] scan: scanning title 37
+[15:31:03] scan: duration is 00:00:00 (500 ms)
+[15:31:03] scan: ignoring title (too short)
+[15:31:03] scan: scanning title 38
+[15:31:03] scan: duration is 00:00:00 (500 ms)
+[15:31:03] scan: ignoring title (too short)
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+libdvdnav: Suspected RCE Region Protection!!!
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+[15:31:12] scan: decoding previews for title 1
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:12] scan: title angle(s) 1
+[15:31:12] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 Unknown (AC3, 2.0 ch, 192 kbps)
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 6,
+        "PreviewCount": 10,
+        "Progress": 0.5375000238418579,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: Error when seeking
+ERROR: dvd: dvdnav_sector_search failed - Error when seeking.
+[15:31:13] using bitstream PAR 32:27
+[15:31:13] scan: 9 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[15:31:13] scan: decoding previews for title 7
+libdvdnav: FIXME: Implement seeking to location 120
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.5625,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:13] scan: title angle(s) 1
+[15:31:13] scan: audio 0x81bd: ac3, rate=48000Hz, bitrate=384000 español (AC3, 5.1 ch, 384 kbps)
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.5687500238418579,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:13] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=448000 English (AC3, 5.1 ch, 448 kbps)
+[15:31:13] scan: audio 0x82bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, 192 kbps)
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.574999988079071,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 4,
+        "PreviewCount": 10,
+        "Progress": 0.5874999761581421,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 5,
+        "PreviewCount": 10,
+        "Progress": 0.59375,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 6,
+        "PreviewCount": 10,
+        "Progress": 0.6000000238418579,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 8,
+        "PreviewCount": 10,
+        "Progress": 0.612500011920929,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 9,
+        "PreviewCount": 10,
+        "Progress": 0.6187499761581421,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 10,
+        "PreviewCount": 10,
+        "Progress": 0.625,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:15] using bitstream PAR 32:27
+[15:31:15] scan: 10 previews, 720x480, 23.976 fps, autocrop = 46/48/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[15:31:15] scan: decoding previews for title 8
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.625,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:16] scan: title angle(s) 1
+[15:31:16] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 Unknown (AC3, 2.0 ch, 192 kbps)
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.6312500238418579,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.6312500238418579,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.6312500238418579,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.637499988079071,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.637499988079071,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 3,
+        "PreviewCount": 10,
+        "Progress": 0.643750011920929,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 4,
+        "PreviewCount": 10,
+        "Progress": 0.6499999761581421,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 5,
+        "PreviewCount": 10,
+        "Progress": 0.65625,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 6,
+        "PreviewCount": 10,
+        "Progress": 0.6625000238418579,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 7,
+        "PreviewCount": 10,
+        "Progress": 0.668749988079071,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 9,
+        "PreviewCount": 10,
+        "Progress": 0.6812499761581421,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:19] using bitstream PAR 32:27
+[15:31:19] scan: 10 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[15:31:19] scan: decoding previews for title 9
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.6875,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:20] scan: title angle(s) 1
+[15:31:20] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 Unknown (AC3, 2.0 ch, 192 kbps)
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.6937500238418579,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.699999988079071,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.699999988079071,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 3,
+        "PreviewCount": 10,
+        "Progress": 0.706250011920929,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 4,
+        "PreviewCount": 10,
+        "Progress": 0.7124999761581421,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 5,
+        "PreviewCount": 10,
+        "Progress": 0.71875,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 6,
+        "PreviewCount": 10,
+        "Progress": 0.7250000238418579,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 8,
+        "PreviewCount": 10,
+        "Progress": 0.737500011920929,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 10,
+        "PreviewCount": 10,
+        "Progress": 0.75,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:22] using bitstream PAR 32:27
+[15:31:22] scan: 10 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[15:31:22] scan: decoding previews for title 10
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.75,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:23] scan: title angle(s) 1
+[15:31:23] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, 192 kbps)
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.7562500238418579,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.762499988079071,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 3,
+        "PreviewCount": 10,
+        "Progress": 0.768750011920929,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 4,
+        "PreviewCount": 10,
+        "Progress": 0.7749999761581421,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 5,
+        "PreviewCount": 10,
+        "Progress": 0.78125,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 8,
+        "PreviewCount": 10,
+        "Progress": 0.800000011920929,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:25] using bitstream PAR 32:27
+[15:31:25] scan: 10 previews, 720x480, 23.976 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[15:31:25] scan: decoding previews for title 11
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.8125,
+        "SequenceID": 0,
+        "Title": 6,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:25] scan: title angle(s) 1
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.8187500238418579,
+        "SequenceID": 0,
+        "Title": 6,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.824999988079071,
+        "SequenceID": 0,
+        "Title": 6,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 3,
+        "PreviewCount": 10,
+        "Progress": 0.831250011920929,
+        "SequenceID": 0,
+        "Title": 6,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 4,
+        "PreviewCount": 10,
+        "Progress": 0.8374999761581421,
+        "SequenceID": 0,
+        "Title": 6,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 7,
+        "PreviewCount": 10,
+        "Progress": 0.856249988079071,
+        "SequenceID": 0,
+        "Title": 6,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:26] using bitstream PAR 32:27
+[15:31:26] scan: 10 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[15:31:26] scan: decoding previews for title 20
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.875,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:27] scan: title angle(s) 1
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.8812500238418579,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:27] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=448000 English (AC3, 5.1 ch, 448 kbps)
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.887499988079071,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 3,
+        "PreviewCount": 10,
+        "Progress": 0.893750011920929,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 5,
+        "PreviewCount": 10,
+        "Progress": 0.90625,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 6,
+        "PreviewCount": 10,
+        "Progress": 0.9125000238418579,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 7,
+        "PreviewCount": 10,
+        "Progress": 0.918749988079071,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 9,
+        "PreviewCount": 10,
+        "Progress": 0.9312499761581421,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:29] using bitstream PAR 32:27
+[15:31:29] scan: 10 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[15:31:29] scan: decoding previews for title 34
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:31] scan: title angle(s) 1
+[15:31:31] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, 192 kbps)
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9437500238418579,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9437500238418579,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9437500238418579,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9437500238418579,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9437500238418579,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.949999988079071,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 3,
+        "PreviewCount": 10,
+        "Progress": 0.956250011920929,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 3,
+        "PreviewCount": 10,
+        "Progress": 0.956250011920929,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 3,
+        "PreviewCount": 10,
+        "Progress": 0.956250011920929,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 4,
+        "PreviewCount": 10,
+        "Progress": 0.9624999761581421,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 7,
+        "PreviewCount": 10,
+        "Progress": 0.981249988079071,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 10,
+        "PreviewCount": 10,
+        "Progress": 1.0,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+[15:31:35] using bitstream PAR 32:27
+[15:31:35] scan: 10 previews, 720x480, 23.976 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[15:31:35] libhb: scan thread found 8 valid title(s)
+JSON Title Set: {
+    "MainFeature": 7,
+    "TitleList": [
+        {
+            "AngleCount": 1,
+            "AudioList": [
+                {
+                    "Attributes": {
+                        "AltCommentary": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Normal": false,
+                        "Secondary": false,
+                        "VisuallyImpaired": false
+                    },
+                    "BitRate": 192000,
+                    "ChannelCount": 2,
+                    "ChannelLayout": "stereo",
+                    "Codec": 2048,
+                    "CodecName": "ac3",
+                    "CodecParam": 86019,
+                    "Description": "Unknown (AC3, 2.0 ch, 192 kbps)",
+                    "LFECount": 0,
+                    "Language": "Unknown",
+                    "LanguageCode": "und",
+                    "SampleRate": 48000,
+                    "TrackNumber": 1
+                }
+            ],
+            "ChapterList": [
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 3,
+                        "Ticks": 270000
+                    },
+                    "Name": "Chapter 1"
+                }
+            ],
+            "Color": {
+                "BitDepth": 8,
+                "ChromaLocation": 1,
+                "ChromaSubsampling": "4:2:0",
+                "Format": 0,
+                "Matrix": 6,
+                "Primary": 6,
+                "Range": 1,
+                "Transfer": 1
+            },
+            "Crop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Duration": {
+                "Hours": 0,
+                "Minutes": 0,
+                "Seconds": 3,
+                "Ticks": 270000
+            },
+            "FrameRate": {
+                "Den": 900900,
+                "Num": 27000000
+            },
+            "Geometry": {
+                "Height": 480,
+                "PAR": {
+                    "Den": 27,
+                    "Num": 32
+                },
+                "Width": 720
+            },
+            "Index": 1,
+            "InterlaceDetected": false,
+            "KeepDuplicateTitles": false,
+            "LooseCrop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Metadata": {},
+            "Name": "OPPENHEIMER",
+            "Path": "/dev/disk4",
+            "Playlist": -1,
+            "SubtitleList": [],
+            "Type": 0,
+            "VideoCodec": "mpeg2video"
+        },
+        {
+            "AngleCount": 1,
+            "AudioList": [
+                {
+                    "Attributes": {
+                        "AltCommentary": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Normal": false,
+                        "Secondary": false,
+                        "VisuallyImpaired": false
+                    },
+                    "BitRate": 448000,
+                    "ChannelCount": 6,
+                    "ChannelLayout": "5.1(side)",
+                    "Codec": 2048,
+                    "CodecName": "ac3",
+                    "CodecParam": 86019,
+                    "Description": "English (AC3, 5.1 ch, 448 kbps)",
+                    "LFECount": 1,
+                    "Language": "English",
+                    "LanguageCode": "eng",
+                    "SampleRate": 48000,
+                    "TrackNumber": 1
+                },
+                {
+                    "Attributes": {
+                        "AltCommentary": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Normal": false,
+                        "Secondary": false,
+                        "VisuallyImpaired": false
+                    },
+                    "BitRate": 384000,
+                    "ChannelCount": 6,
+                    "ChannelLayout": "5.1(side)",
+                    "Codec": 2048,
+                    "CodecName": "ac3",
+                    "CodecParam": 86019,
+                    "Description": "español (AC3, 5.1 ch, 384 kbps)",
+                    "LFECount": 1,
+                    "Language": "español",
+                    "LanguageCode": "spa",
+                    "SampleRate": 48000,
+                    "TrackNumber": 2
+                },
+                {
+                    "Attributes": {
+                        "AltCommentary": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Normal": false,
+                        "Secondary": false,
+                        "VisuallyImpaired": false
+                    },
+                    "BitRate": 192000,
+                    "ChannelCount": 2,
+                    "ChannelLayout": "stereo",
+                    "Codec": 2048,
+                    "CodecName": "ac3",
+                    "CodecParam": 86019,
+                    "Description": "English (AC3, 2.0 ch, 192 kbps)",
+                    "LFECount": 0,
+                    "Language": "English",
+                    "LanguageCode": "eng",
+                    "SampleRate": 48000,
+                    "TrackNumber": 3
+                }
+            ],
+            "ChapterList": [
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 7,
+                        "Seconds": 23,
+                        "Ticks": 39884940
+                    },
+                    "Name": "Chapter 1"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 9,
+                        "Seconds": 12,
+                        "Ticks": 49680000
+                    },
+                    "Name": "Chapter 2"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 10,
+                        "Seconds": 47,
+                        "Ticks": 58244940
+                    },
+                    "Name": "Chapter 3"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 8,
+                        "Seconds": 37,
+                        "Ticks": 46532970
+                    },
+                    "Name": "Chapter 4"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 6,
+                        "Seconds": 50,
+                        "Ticks": 36882000
+                    },
+                    "Name": "Chapter 5"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 9,
+                        "Seconds": 39,
+                        "Ticks": 52139970
+                    },
+                    "Name": "Chapter 6"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 7,
+                        "Seconds": 25,
+                        "Ticks": 40005000
+                    },
+                    "Name": "Chapter 7"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 10,
+                        "Seconds": 56,
+                        "Ticks": 59069970
+                    },
+                    "Name": "Chapter 8"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 7,
+                        "Seconds": 4,
+                        "Ticks": 38178000
+                    },
+                    "Name": "Chapter 9"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 6,
+                        "Seconds": 16,
+                        "Ticks": 33822000
+                    },
+                    "Name": "Chapter 10"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 11,
+                        "Seconds": 52,
+                        "Ticks": 64080000
+                    },
+                    "Name": "Chapter 11"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 7,
+                        "Seconds": 0,
+                        "Ticks": 37755000
+                    },
+                    "Name": "Chapter 12"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 8,
+                        "Seconds": 12,
+                        "Ticks": 44294940
+                    },
+                    "Name": "Chapter 13"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 8,
+                        "Seconds": 58,
+                        "Ticks": 48434940
+                    },
+                    "Name": "Chapter 14"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 8,
+                        "Seconds": 43,
+                        "Ticks": 47099970
+                    },
+                    "Name": "Chapter 15"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 8,
+                        "Seconds": 6,
+                        "Ticks": 43740000
+                    },
+                    "Name": "Chapter 16"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 14,
+                        "Seconds": 55,
+                        "Ticks": 80579970
+                    },
+                    "Name": "Chapter 17"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 15,
+                        "Seconds": 35,
+                        "Ticks": 84135060
+                    },
+                    "Name": "Chapter 18"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 6,
+                        "Seconds": 31,
+                        "Ticks": 35219970
+                    },
+                    "Name": "Chapter 19"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 6,
+                        "Seconds": 9,
+                        "Ticks": 33210000
+                    },
+                    "Name": "Chapter 20"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 1,
+                        "Ticks": 45000
+                    },
+                    "Name": "Chapter 21"
+                }
+            ],
+            "Color": {
+                "BitDepth": 8,
+                "ChromaLocation": 1,
+                "ChromaSubsampling": "4:2:0",
+                "Format": 0,
+                "Matrix": 6,
+                "Primary": 6,
+                "Range": 1,
+                "Transfer": 1
+            },
+            "Crop": [
+                46,
+                48,
+                0,
+                0
+            ],
+            "Duration": {
+                "Hours": 3,
+                "Minutes": 0,
+                "Seconds": 11,
+                "Ticks": 973035000
+            },
+            "FrameRate": {
+                "Den": 1126125,
+                "Num": 27000000
+            },
+            "Geometry": {
+                "Height": 480,
+                "PAR": {
+                    "Den": 27,
+                    "Num": 32
+                },
+                "Width": 720
+            },
+            "Index": 7,
+            "InterlaceDetected": false,
+            "KeepDuplicateTitles": false,
+            "LooseCrop": [
+                46,
+                48,
+                0,
+                0
+            ],
+            "Metadata": {},
+            "Name": "OPPENHEIMER",
+            "Path": "/dev/disk4",
+            "Playlist": -1,
+            "SubtitleList": [
+                {
+                    "Attributes": {
+                        "4By3": false,
+                        "Children": false,
+                        "ClosedCaption": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Forced": false,
+                        "Large": false,
+                        "Letterbox": false,
+                        "Normal": false,
+                        "PanScan": false,
+                        "Wide": true
+                    },
+                    "Format": "bitmap",
+                    "Language": "English (Wide Screen) [VOBSUB]",
+                    "LanguageCode": "eng",
+                    "Source": 0,
+                    "SourceName": "VOBSUB",
+                    "TrackNumber": 1
+                },
+                {
+                    "Attributes": {
+                        "4By3": false,
+                        "Children": false,
+                        "ClosedCaption": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Forced": false,
+                        "Large": false,
+                        "Letterbox": false,
+                        "Normal": false,
+                        "PanScan": false,
+                        "Wide": true
+                    },
+                    "Format": "bitmap",
+                    "Language": "español (Wide Screen) [VOBSUB]",
+                    "LanguageCode": "spa",
+                    "Source": 0,
+                    "SourceName": "VOBSUB",
+                    "TrackNumber": 2
+                },
+                {
+                    "Attributes": {
+                        "4By3": false,
+                        "Children": false,
+                        "ClosedCaption": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Forced": false,
+                        "Large": false,
+                        "Letterbox": false,
+                        "Normal": false,
+                        "PanScan": false,
+                        "Wide": true
+                    },
+                    "Format": "bitmap",
+                    "Language": "中文 (Wide Screen) [VOBSUB]",
+                    "LanguageCode": "zho",
+                    "Source": 0,
+                    "SourceName": "VOBSUB",
+                    "TrackNumber": 3
+                },
+                {
+                    "Attributes": {
+                        "4By3": false,
+                        "Children": false,
+                        "ClosedCaption": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Forced": false,
+                        "Large": false,
+                        "Letterbox": false,
+                        "Normal": false,
+                        "PanScan": false,
+                        "Wide": true
+                    },
+                    "Format": "bitmap",
+                    "Language": "中文 (Wide Screen) [VOBSUB]",
+                    "LanguageCode": "zho",
+                    "Source": 0,
+                    "SourceName": "VOBSUB",
+                    "TrackNumber": 4
+                },
+                {
+                    "Attributes": {
+                        "4By3": false,
+                        "Children": false,
+                        "ClosedCaption": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Forced": false,
+                        "Large": false,
+                        "Letterbox": false,
+                        "Normal": false,
+                        "PanScan": false,
+                        "Wide": true
+                    },
+                    "Format": "bitmap",
+                    "Language": "한국어 (Wide Screen) [VOBSUB]",
+                    "LanguageCode": "kor",
+                    "Source": 0,
+                    "SourceName": "VOBSUB",
+                    "TrackNumber": 5
+                },
+                {
+                    "Attributes": {
+                        "4By3": false,
+                        "Children": false,
+                        "ClosedCaption": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Forced": false,
+                        "Large": false,
+                        "Letterbox": false,
+                        "Normal": false,
+                        "PanScan": false,
+                        "Wide": true
+                    },
+                    "Format": "bitmap",
+                    "Language": "español (Wide Screen) [VOBSUB]",
+                    "LanguageCode": "spa",
+                    "Source": 0,
+                    "SourceName": "VOBSUB",
+                    "TrackNumber": 6
+                }
+            ],
+            "Type": 0,
+            "VideoCodec": "mpeg2video"
+        },
+        {
+            "AngleCount": 1,
+            "AudioList": [
+                {
+                    "Attributes": {
+                        "AltCommentary": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Normal": false,
+                        "Secondary": false,
+                        "VisuallyImpaired": false
+                    },
+                    "BitRate": 192000,
+                    "ChannelCount": 2,
+                    "ChannelLayout": "stereo",
+                    "Codec": 2048,
+                    "CodecName": "ac3",
+                    "CodecParam": 86019,
+                    "Description": "Unknown (AC3, 2.0 ch, 192 kbps)",
+                    "LFECount": 0,
+                    "Language": "Unknown",
+                    "LanguageCode": "und",
+                    "SampleRate": 48000,
+                    "TrackNumber": 1
+                }
+            ],
+            "ChapterList": [
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 7,
+                        "Ticks": 630000
+                    },
+                    "Name": "Chapter 1"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 7,
+                        "Ticks": 630000
+                    },
+                    "Name": "Chapter 2"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 7,
+                        "Ticks": 630000
+                    },
+                    "Name": "Chapter 3"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 7,
+                        "Ticks": 630000
+                    },
+                    "Name": "Chapter 4"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 7,
+                        "Ticks": 630000
+                    },
+                    "Name": "Chapter 5"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 1,
+                        "Ticks": 45000
+                    },
+                    "Name": "Chapter 6"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 7,
+                        "Ticks": 630000
+                    },
+                    "Name": "Chapter 7"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 1,
+                        "Ticks": 45000
+                    },
+                    "Name": "Chapter 8"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 1,
+                        "Ticks": 45000
+                    },
+                    "Name": "Chapter 9"
+                }
+            ],
+            "Color": {
+                "BitDepth": 8,
+                "ChromaLocation": 1,
+                "ChromaSubsampling": "4:2:0",
+                "Format": 0,
+                "Matrix": 6,
+                "Primary": 6,
+                "Range": 1,
+                "Transfer": 1
+            },
+            "Crop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Duration": {
+                "Hours": 0,
+                "Minutes": 0,
+                "Seconds": 43,
+                "Ticks": 3915000
+            },
+            "FrameRate": {
+                "Den": 900900,
+                "Num": 27000000
+            },
+            "Geometry": {
+                "Height": 480,
+                "PAR": {
+                    "Den": 27,
+                    "Num": 32
+                },
+                "Width": 720
+            },
+            "Index": 8,
+            "InterlaceDetected": false,
+            "KeepDuplicateTitles": false,
+            "LooseCrop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Metadata": {},
+            "Name": "OPPENHEIMER",
+            "Path": "/dev/disk4",
+            "Playlist": -1,
+            "SubtitleList": [],
+            "Type": 0,
+            "VideoCodec": "mpeg2video"
+        },
+        {
+            "AngleCount": 1,
+            "AudioList": [
+                {
+                    "Attributes": {
+                        "AltCommentary": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Normal": false,
+                        "Secondary": false,
+                        "VisuallyImpaired": false
+                    },
+                    "BitRate": 192000,
+                    "ChannelCount": 2,
+                    "ChannelLayout": "stereo",
+                    "Codec": 2048,
+                    "CodecName": "ac3",
+                    "CodecParam": 86019,
+                    "Description": "Unknown (AC3, 2.0 ch, 192 kbps)",
+                    "LFECount": 0,
+                    "Language": "Unknown",
+                    "LanguageCode": "und",
+                    "SampleRate": 48000,
+                    "TrackNumber": 1
+                }
+            ],
+            "ChapterList": [
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 7,
+                        "Ticks": 630000
+                    },
+                    "Name": "Chapter 1"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 7,
+                        "Ticks": 630000
+                    },
+                    "Name": "Chapter 2"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 1,
+                        "Ticks": 45000
+                    },
+                    "Name": "Chapter 3"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 1,
+                        "Ticks": 45000
+                    },
+                    "Name": "Chapter 4"
+                }
+            ],
+            "Color": {
+                "BitDepth": 8,
+                "ChromaLocation": 1,
+                "ChromaSubsampling": "4:2:0",
+                "Format": 0,
+                "Matrix": 6,
+                "Primary": 6,
+                "Range": 1,
+                "Transfer": 1
+            },
+            "Crop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Duration": {
+                "Hours": 0,
+                "Minutes": 0,
+                "Seconds": 15,
+                "Ticks": 1350000
+            },
+            "FrameRate": {
+                "Den": 900900,
+                "Num": 27000000
+            },
+            "Geometry": {
+                "Height": 480,
+                "PAR": {
+                    "Den": 27,
+                    "Num": 32
+                },
+                "Width": 720
+            },
+            "Index": 9,
+            "InterlaceDetected": false,
+            "KeepDuplicateTitles": false,
+            "LooseCrop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Metadata": {},
+            "Name": "OPPENHEIMER",
+            "Path": "/dev/disk4",
+            "Playlist": -1,
+            "SubtitleList": [],
+            "Type": 0,
+            "VideoCodec": "mpeg2video"
+        },
+        {
+            "AngleCount": 1,
+            "AudioList": [
+                {
+                    "Attributes": {
+                        "AltCommentary": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Normal": false,
+                        "Secondary": false,
+                        "VisuallyImpaired": false
+                    },
+                    "BitRate": 192000,
+                    "ChannelCount": 2,
+                    "ChannelLayout": "stereo",
+                    "Codec": 2048,
+                    "CodecName": "ac3",
+                    "CodecParam": 86019,
+                    "Description": "English (AC3, 2.0 ch, 192 kbps)",
+                    "LFECount": 0,
+                    "Language": "English",
+                    "LanguageCode": "eng",
+                    "SampleRate": 48000,
+                    "TrackNumber": 1
+                }
+            ],
+            "ChapterList": [
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 7,
+                        "Ticks": 630000
+                    },
+                    "Name": "Chapter 1"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 1,
+                        "Ticks": 45000
+                    },
+                    "Name": "Chapter 2"
+                }
+            ],
+            "Color": {
+                "BitDepth": 8,
+                "ChromaLocation": 1,
+                "ChromaSubsampling": "4:2:0",
+                "Format": 0,
+                "Matrix": 6,
+                "Primary": 6,
+                "Range": 1,
+                "Transfer": 1
+            },
+            "Crop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Duration": {
+                "Hours": 0,
+                "Minutes": 0,
+                "Seconds": 7,
+                "Ticks": 675000
+            },
+            "FrameRate": {
+                "Den": 1126125,
+                "Num": 27000000
+            },
+            "Geometry": {
+                "Height": 480,
+                "PAR": {
+                    "Den": 27,
+                    "Num": 32
+                },
+                "Width": 720
+            },
+            "Index": 10,
+            "InterlaceDetected": false,
+            "KeepDuplicateTitles": false,
+            "LooseCrop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Metadata": {},
+            "Name": "OPPENHEIMER",
+            "Path": "/dev/disk4",
+            "Playlist": -1,
+            "SubtitleList": [],
+            "Type": 0,
+            "VideoCodec": "mpeg2video"
+        },
+        {
+            "AngleCount": 1,
+            "AudioList": [],
+            "ChapterList": [
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 1,
+                        "Ticks": 45000
+                    },
+                    "Name": "Chapter 1"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 1,
+                        "Ticks": 45000
+                    },
+                    "Name": "Chapter 2"
+                }
+            ],
+            "Color": {
+                "BitDepth": 8,
+                "ChromaLocation": 1,
+                "ChromaSubsampling": "4:2:0",
+                "Format": 0,
+                "Matrix": 6,
+                "Primary": 6,
+                "Range": 1,
+                "Transfer": 1
+            },
+            "Crop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Duration": {
+                "Hours": 0,
+                "Minutes": 0,
+                "Seconds": 1,
+                "Ticks": 90000
+            },
+            "FrameRate": {
+                "Den": 900900,
+                "Num": 27000000
+            },
+            "Geometry": {
+                "Height": 480,
+                "PAR": {
+                    "Den": 27,
+                    "Num": 32
+                },
+                "Width": 720
+            },
+            "Index": 11,
+            "InterlaceDetected": false,
+            "KeepDuplicateTitles": false,
+            "LooseCrop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Metadata": {},
+            "Name": "OPPENHEIMER",
+            "Path": "/dev/disk4",
+            "Playlist": -1,
+            "SubtitleList": [],
+            "Type": 0,
+            "VideoCodec": "mpeg2video"
+        },
+        {
+            "AngleCount": 1,
+            "AudioList": [
+                {
+                    "Attributes": {
+                        "AltCommentary": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Normal": false,
+                        "Secondary": false,
+                        "VisuallyImpaired": false
+                    },
+                    "BitRate": 448000,
+                    "ChannelCount": 6,
+                    "ChannelLayout": "5.1(side)",
+                    "Codec": 2048,
+                    "CodecName": "ac3",
+                    "CodecParam": 86019,
+                    "Description": "English (AC3, 5.1 ch, 448 kbps)",
+                    "LFECount": 1,
+                    "Language": "English",
+                    "LanguageCode": "eng",
+                    "SampleRate": 48000,
+                    "TrackNumber": 1
+                }
+            ],
+            "ChapterList": [
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 26,
+                        "Ticks": 2337030
+                    },
+                    "Name": "Chapter 1"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 1,
+                        "Ticks": 45000
+                    },
+                    "Name": "Chapter 2"
+                }
+            ],
+            "Color": {
+                "BitDepth": 8,
+                "ChromaLocation": 1,
+                "ChromaSubsampling": "4:2:0",
+                "Format": 0,
+                "Matrix": 6,
+                "Primary": 6,
+                "Range": 1,
+                "Transfer": 1
+            },
+            "Crop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Duration": {
+                "Hours": 0,
+                "Minutes": 0,
+                "Seconds": 26,
+                "Ticks": 2382030
+            },
+            "FrameRate": {
+                "Den": 900900,
+                "Num": 27000000
+            },
+            "Geometry": {
+                "Height": 480,
+                "PAR": {
+                    "Den": 27,
+                    "Num": 32
+                },
+                "Width": 720
+            },
+            "Index": 20,
+            "InterlaceDetected": false,
+            "KeepDuplicateTitles": false,
+            "LooseCrop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Metadata": {},
+            "Name": "OPPENHEIMER",
+            "Path": "/dev/disk4",
+            "Playlist": -1,
+            "SubtitleList": [],
+            "Type": 0,
+            "VideoCodec": "mpeg2video"
+        },
+        {
+            "AngleCount": 1,
+            "AudioList": [
+                {
+                    "Attributes": {
+                        "AltCommentary": false,
+                        "Commentary": false,
+                        "Default": false,
+                        "Normal": false,
+                        "Secondary": false,
+                        "VisuallyImpaired": false
+                    },
+                    "BitRate": 192000,
+                    "ChannelCount": 2,
+                    "ChannelLayout": "stereo",
+                    "Codec": 2048,
+                    "CodecName": "ac3",
+                    "CodecParam": 86019,
+                    "Description": "English (AC3, 2.0 ch, 192 kbps)",
+                    "LFECount": 0,
+                    "Language": "English",
+                    "LanguageCode": "eng",
+                    "SampleRate": 48000,
+                    "TrackNumber": 1
+                }
+            ],
+            "ChapterList": [
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 7,
+                        "Ticks": 630000
+                    },
+                    "Name": "Chapter 1"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 1,
+                        "Ticks": 45000
+                    },
+                    "Name": "Chapter 2"
+                },
+                {
+                    "Duration": {
+                        "Hours": 0,
+                        "Minutes": 0,
+                        "Seconds": 1,
+                        "Ticks": 45000
+                    },
+                    "Name": "Chapter 3"
+                }
+            ],
+            "Color": {
+                "BitDepth": 8,
+                "ChromaLocation": 1,
+                "ChromaSubsampling": "4:2:0",
+                "Format": 0,
+                "Matrix": 6,
+                "Primary": 6,
+                "Range": 1,
+                "Transfer": 1
+            },
+            "Crop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Duration": {
+                "Hours": 0,
+                "Minutes": 0,
+                "Seconds": 8,
+                "Ticks": 720000
+            },
+            "FrameRate": {
+                "Den": 1126125,
+                "Num": 27000000
+            },
+            "Geometry": {
+                "Height": 480,
+                "PAR": {
+                    "Den": 27,
+                    "Num": 32
+                },
+                "Width": 720
+            },
+            "Index": 34,
+            "InterlaceDetected": false,
+            "KeepDuplicateTitles": falseHandBrake has exited.
+,
+            "LooseCrop": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "Metadata": {},
+            "Name": "OPPENHEIMER",
+            "Path": "/dev/disk4",
+            "Playlist": -1,
+            "SubtitleList": [],
+            "Type": 0,
+            "VideoCodec": "mpeg2video"
+        }
+    ]
+}
+
