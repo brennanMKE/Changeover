@@ -41,7 +41,12 @@ struct StatusMenuView: View {
 
             // #0048 — never gated on `isConfigured`: a user whose settings
             // broke mid-session still needs to see why their jobs failed.
-            MenuRow("History…", systemImage: "clock.arrow.circlepath") {
+            //
+            // Name, glyph and tooltip come from `WindowChrome.Destination`,
+            // the same value the rip window's header buttons read, so the
+            // popover and the window cannot disagree about what History is
+            // (`docs/window-chrome.md`).
+            MenuRow(WindowChrome.Destination.history) {
                 guard let appDelegate = AppDelegate.shared else {
                     print("Warning: AppDelegate.shared is not defined")
                     return
@@ -88,7 +93,7 @@ struct StatusMenuView: View {
                 .help(cancelDecision.refusalReason ?? "Stop the running job.")
             }
 
-            MenuRow("Settings…", systemImage: "gearshape") {
+            MenuRow(WindowChrome.Destination.settings) {
                 guard let appDelegate = AppDelegate.shared else {
                     print("Warning: AppDelegate.shared is not defined")
                     return
@@ -162,17 +167,45 @@ struct StatusMenuView: View {
 private struct MenuRow: View {
     let title:       String
     let systemImage: String
+    let help:        String?
     let action:      () -> Void
 
     @State private var isHovered = false
 
-    init(_ title: String, systemImage: String, action: @escaping () -> Void) {
+    init(_ title: String, systemImage: String, help: String? = nil, action: @escaping () -> Void) {
         self.title       = title
         self.systemImage = systemImage
+        self.help        = help
         self.action      = action
     }
 
+    /// A row for one of the window's two destinations, taking its name,
+    /// glyph (with the same fallback the window resolves) and tooltip from
+    /// `WindowChrome` — one source for both surfaces
+    /// (`docs/window-chrome.md`). The "…" is the popover's own convention
+    /// for "opens a window"; it is not part of the name.
+    init(_ destination: WindowChrome.Destination, action: @escaping () -> Void) {
+        self.init(
+            destination.title + "…",
+            systemImage: WindowChrome.resolvedSymbolName(for: destination) {
+                NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil
+            },
+            help: destination.help,
+            action: action
+        )
+    }
+
+    @ViewBuilder
     var body: some View {
+        let row = rowButton
+        if let help {
+            row.help(help)
+        } else {
+            row
+        }
+    }
+
+    private var rowButton: some View {
         Button(action: action) {
             HStack(spacing: 9) {
                 Image(systemName: systemImage)

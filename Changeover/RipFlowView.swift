@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// #0061 — the rip window. One step at a time, derived (never stored) by
@@ -68,21 +69,70 @@ struct RipFlowView: View {
 
     // MARK: - Header
 
+    /// The step title, the disc subtitle where there is one, and the window's
+    /// two chrome buttons (`docs/window-chrome.md`). The buttons are here —
+    /// not in the step views — because this strip is the one region every
+    /// step has, so no step can forget them and a step added later inherits
+    /// them. `WindowChrome` decides which they are and what they look like.
+    ///
+    /// Nothing here may push the action bar's primary button off-screen at
+    /// the 560-point minimum (#0140): the buttons are `.fixedSize()` and the
+    /// title has the layout priority, so the disc subtitle is the only
+    /// element that yields — it already truncates in the middle.
     private func header(_ step: FlowStep) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(step.title)
-                .font(.headline)
-            Spacer(minLength: 12)
-            if let subtitle = subtitle(for: step) {
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        HStack(alignment: .center, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(step.title)
+                    .font(.headline)
                     .lineLimit(1)
-                    .truncationMode(.middle)
+                    .layoutPriority(1)
+                Spacer(minLength: 12)
+                if let subtitle = subtitle(for: step) {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            ForEach(WindowChrome.items(for: step), id: \.self) { destination in
+                chromeButton(destination)
             }
         }
         .padding(.horizontal)
-        .padding(.vertical, 10)
+        // 6, not the 10 this strip used before: the bordered buttons are
+        // taller than the title alone, and the strip must not grow.
+        .padding(.vertical, 6)
+    }
+
+    /// Icon-only, bordered, always enabled — including mid-job: History is
+    /// the only place the log lives (#0061), and Settings is safe during a
+    /// job because `DVDPipeline` captured its paths when the job started.
+    private func chromeButton(_ destination: WindowChrome.Destination) -> some View {
+        let symbolName = WindowChrome.resolvedSymbolName(for: destination) {
+            NSImage(systemSymbolName: $0, accessibilityDescription: nil) != nil
+        }
+        return Button {
+            open(destination)
+        } label: {
+            Label(destination.title, systemImage: symbolName)
+                .labelStyle(.iconOnly)
+        }
+        .buttonStyle(.bordered)
+        .help(destination.help)
+        .accessibilityLabel(destination.title)
+        .keyboardShortcut(KeyEquivalent(destination.shortcutKey), modifiers: .command)
+        .fixedSize()
+    }
+
+    /// `nil` selection for History: `JobPresentation.historySelection`
+    /// resolves that to the running job, or the newest finished one — which
+    /// is where the job-specific "Show log…" would have landed anyway.
+    private func open(_ destination: WindowChrome.Destination) {
+        switch destination {
+        case .history:  AppDelegate.shared?.showHistory(selecting: nil)
+        case .settings: AppDelegate.shared?.showSettings()
+        }
     }
 
     /// The disc's volume name, on the two steps where "which disc is this?"
@@ -134,8 +184,14 @@ extension FlowStep {
 
 // MARK: - Shared pieces
 
-/// The pinned bottom bar every step shares. The only view in the window with
-/// a natural minimum height (#0140), so it is always reachable.
+/// The pinned bottom bar every step with an action of its own shares — the
+/// province of *this step's* actions (Continue, Start Ripping, Cancel Job,
+/// Next Disc, "Show log…"). The window's two destinations are not among
+/// them; they live in the header (`docs/window-chrome.md`), which is why
+/// *Insert a disc* has no bar at all.
+///
+/// The only view in the window with a natural minimum height (#0140), so it
+/// is always reachable.
 struct StepActionBar<Content: View>: View {
     @ViewBuilder let content: Content
 

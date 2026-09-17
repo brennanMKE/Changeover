@@ -145,12 +145,16 @@ struct AppDelegateJobActionsTests {
 
     /// Every SF Symbol name the job UI uses must resolve on the OS the tests
     /// run on — a bad name returns `nil` silently at runtime.
+    /// `WindowChrome.Destination`'s names come in through `allCases` rather
+    /// than as literals: the window's and the popover's glyphs, *and* the
+    /// fallbacks each falls back to, so adding a destination cannot add an
+    /// unchecked symbol name.
     @Test func everySymbolNameTheJobUIUsesResolves() {
         let names = [
             JobPresentation.statusSymbolName(isRunning: true),
             JobPresentation.statusSymbolName(isRunning: false),
-            "clock.arrow.circlepath", "list.bullet.rectangle", "xmark.circle", "eject",
-        ]
+            "list.bullet.rectangle", "xmark.circle", "eject",
+        ] + WindowChrome.Destination.allCases.flatMap { [$0.symbolName, $0.fallbackSymbolName] }
         for name in names {
             #expect(NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil, "\(name)")
         }

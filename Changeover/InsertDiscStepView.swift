@@ -16,40 +16,34 @@ struct InsertDiscStepView: View {
 
     let reason: FlowStep.InsertReason
 
+    /// No `Divider` + `StepActionBar` here: History and Settings moved to the
+    /// window's header strip as icon buttons (`docs/window-chrome.md`), and
+    /// this step has no action of its own — the `.discUnavailable` Eject
+    /// belongs with the sentence that explains it, in the body. An empty
+    /// pinned bar is 50 points of dead space.
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 12) {
-                Spacer(minLength: 0)
-                Image(systemName: "opticaldisc")
-                    .font(.system(size: 42))
+        VStack(spacing: 12) {
+            Spacer(minLength: 0)
+            Image(systemName: "opticaldisc")
+                .font(.system(size: 42))
+                .foregroundStyle(.secondary)
+            message
+            if reason == .discUnavailable {
+                Button("Eject") {
+                    Task { await jobs.ejectDisc() }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            if let lastJob = lastJobLine {
+                Text(lastJob)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                message
-                if reason == .discUnavailable {
-                    Button("Eject") {
-                        Task { await jobs.ejectDisc() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                if let lastJob = lastJobLine {
-                    Text(lastJob)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                Spacer(minLength: 0)
+                    .multilineTextAlignment(.center)
             }
-            .padding(.horizontal, 32)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Divider()
-            StepActionBar {
-                Button("History…") { AppDelegate.shared?.showHistory(selecting: nil) }
-                    .buttonStyle(.link)
-                Button("Settings…") { AppDelegate.shared?.showSettings() }
-                    .buttonStyle(.link)
-                Spacer()
-            }
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
