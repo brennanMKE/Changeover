@@ -61,6 +61,13 @@ final class RipFlowController {
     /// uses for a superseded disc scan.
     private var libraryCheckGeneration = 0
 
+    /// The disc a search-term prefill has already been attempted for
+    /// (`SearchPrefill.decide`'s `alreadyAttemptedFor`), whether or not it
+    /// actually filled the field — so a disc is only ever offered one
+    /// automatic prefill per insertion, and clearing the field is never
+    /// fought.
+    private(set) var prefillAttemptedFor: DiscInsertion?
+
     /// `search` is optional rather than defaulted to `MovieSearchViewModel()`
     /// in the signature: a default argument expression is evaluated in a
     /// `nonisolated` context, and the view model is explicitly `@MainActor`.
@@ -256,7 +263,12 @@ final class RipFlowController {
     /// A `.reset` also clears `movieConfirmed`: the Confirm step's whole
     /// content (title, tracks, runtime verdict) belonged to the disc that
     /// just left.
-    func reconcile(jobs: JobController) {
+    ///
+    /// `apiKey` is only needed for the search-prefill below (`fill` runs the
+    /// search); it defaults to `""` so every existing caller — including the
+    /// tests that predate the prefill — keeps compiling. The real call site,
+    /// `RipFlowView`, always passes `settings.tmdbAPIKey`.
+    func reconcile(jobs: JobController, apiKey: String = "") {
         switch SelectionReset.reconcile(
             selectionDisc: selectionDisc,
             hasSelection: selectedMovieID != nil,
@@ -276,6 +288,35 @@ final class RipFlowController {
             // the library answer and its confirmation exactly as it wipes
             // `selectionDisc`.
             clearLibraryCheck()
+        }
+        attemptSearchPrefill(jobs: jobs, apiKey: apiKey)
+    }
+
+    // MARK: - Search prefill from the disc name
+
+    /// The disc-name auto-search: turns the volume name of the disc now in
+    /// the drive into a TMDB search term (`DiscNameSearchTerm.derive`) and,
+    /// if `SearchPrefill.decide` says to, fills the search field with it and
+    /// runs the search immediately — so results are waiting by the time the
+    /// user looks at the Choose-movie step, the way typing the title by hand
+    /// used to make them wait for it.
+    ///
+    /// A no-op with no disc in the drive. Runs on every `reconcile` (every
+    /// insertion, and every job start/finish), but `SearchPrefill.decide`'s
+    /// `alreadyAttemptedFor` check makes every call after the first for a
+    /// given disc a no-op too.
+    private func attemptSearchPrefill(jobs: JobController, apiKey: String) {
+        guard let disc = jobs.insertedDisc else { return }
+        let term = DiscNameSearchTerm.derive(volumeName: disc.mountURL.lastPathComponent)
+        switch SearchPrefill.decide(disc: disc, term: term, query: search.query, alreadyAttemptedFor: prefillAttemptedFor) {
+        case .skip:
+            break
+        case .markAttempted:
+            prefillAttemptedFor = disc
+        case .fill(let term):
+            prefillAttemptedFor = disc
+            search.query = term
+            runSearchNow(apiKey: apiKey)
         }
     }
 

@@ -417,6 +417,87 @@ struct RipFlowControllerTests {
         }
     }
 
+    // MARK: - Search prefill from the disc name
+
+    private static let armyOfDarkness = DiscInsertion(
+        mountURL: URL(fileURLWithPath: "/Volumes/ARMY_OF_DARKNESS"), deviceNode: "disk9", discID: "army")
+    private static let oppenheimer = DiscInsertion(
+        mountURL: URL(fileURLWithPath: "/Volumes/OPPENHEIMER"), deviceNode: "disk10", discID: "oppy")
+
+    /// The screenshot that started this: the user typed "Army of Darkness"
+    /// by hand for `ARMY_OF_DARKNESS`. A disc arriving with nothing typed
+    /// yet fills the field itself and runs the search.
+    @Test func aFreshDiscPrefillsTheSearchFieldFromItsVolumeName() {
+        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
+        let flow = RipFlowController()
+        jobs.insertedDisc = Self.armyOfDarkness
+        flow.reconcile(jobs: jobs)
+        #expect(flow.search.query == "Army of Darkness")
+        #expect(flow.prefillAttemptedFor == Self.armyOfDarkness)
+    }
+
+    /// "Never overwrite what the user typed" — text already in the field
+    /// when the disc's own prefill would otherwise run is left exactly as
+    /// the user left it.
+    @Test func textAlreadyTypedIsNeverOverwritten() {
+        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
+        let flow = RipFlowController()
+        flow.search.query = "Evil Dead"
+        jobs.insertedDisc = Self.armyOfDarkness
+        flow.reconcile(jobs: jobs)
+        #expect(flow.search.query == "Evil Dead")
+    }
+
+    /// "Never fight them if they clear the field": once a disc has been
+    /// prefilled, clearing the box and having `reconcile` run again for the
+    /// *same* disc (e.g. a job starting/finishing with nothing else
+    /// changing) must not refill it.
+    @Test func clearingTheFieldIsNeverFoughtForTheSameDisc() {
+        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
+        let flow = RipFlowController()
+        jobs.insertedDisc = Self.armyOfDarkness
+        flow.reconcile(jobs: jobs)
+        #expect(flow.search.query == "Army of Darkness")
+
+        flow.search.query = ""
+        flow.reconcile(jobs: jobs)
+        #expect(flow.search.query.isEmpty)
+    }
+
+    /// A disc whose volume name derives no usable term (`DiscNameSearchTerm
+    /// .derive` returns `nil` for the plain `DISC_A`/`DISC_B` fixtures used
+    /// throughout this file) never touches the search field.
+    @Test func aDiscWithNoUsableNameLeavesTheFieldAlone() {
+        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
+        let flow = RipFlowController()
+        jobs.insertedDisc = Self.discA
+        flow.reconcile(jobs: jobs)
+        #expect(flow.search.query.isEmpty)
+        #expect(flow.prefillAttemptedFor == Self.discA)
+    }
+
+    /// "Reset per disc the way `SelectionReset` already defines": a disc
+    /// swap that goes through `SelectionReset`'s own `.reset` (a selection
+    /// had been made, so the swap really is a new disc, not just a second
+    /// `reconcile` call for the one already in the drive) clears the query
+    /// the same way it always has, and the new disc gets its own fresh
+    /// prefill — riding the existing mechanism rather than a new one.
+    @Test func aGenuineDiscSwapWithASelectionGetsAFreshPrefillForTheNewDisc() throws {
+        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
+        let flow = RipFlowController()
+        jobs.insertedDisc = Self.armyOfDarkness
+        flow.reconcile(jobs: jobs)
+        #expect(flow.search.query == "Army of Darkness")
+
+        pick(flow, jobs: jobs, movie: try Self.movie())
+        #expect(flow.selectionDisc == Self.armyOfDarkness)
+
+        jobs.insertedDisc = Self.oppenheimer
+        flow.reconcile(jobs: jobs)
+        #expect(flow.search.query == "Oppenheimer")
+        #expect(flow.prefillAttemptedFor == Self.oppenheimer)
+    }
+
     /// The probe re-runs only when the movie or the library root changes.
     @Test func theTaskKeyIsTheMovieAndTheLibraryRoot() throws {
         let jobs = Self.mountedController()

@@ -47,8 +47,8 @@ struct RipFlowView: View {
         // the drive on every insertion and whenever a job stops. The
         // observation trigger stays in SwiftUI; the decision is
         // `SelectionReset.reconcile`, inside `RipFlowController`.
-        .onChange(of: jobs.insertedDisc) { flow.reconcile(jobs: jobs) }
-        .onChange(of: jobs.isRunning) { flow.reconcile(jobs: jobs) }
+        .onChange(of: jobs.insertedDisc) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey) }
+        .onChange(of: jobs.isRunning) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey) }
     }
 
     // MARK: - Header
