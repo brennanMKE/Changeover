@@ -29,7 +29,7 @@ nonisolated struct MismatchAcknowledgement: Equatable, Sendable {
 /// just `Equatable, Sendable`) because #0070 already plans to gate a remote
 /// client's Start the same way this gates the local button, and a typed
 /// decision is exactly what has to cross that wire.
-nonisolated enum StartDecision: String, Equatable, Sendable, Codable {
+nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterable {
     case ready
     case jobRunning
     case noDisc
@@ -42,6 +42,14 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable {
     case noAudioTrackSelected
     case runtimeLookupLoading
     case runtimeMismatchUnconfirmed
+    /// #0062 — the "already in Plex" probe hasn't answered yet. Bounded by
+    /// `LibraryProbe.defaultTimeout`, so this state always clears on its own.
+    case libraryCheckInProgress
+    /// #0062 — the movie is already in the library and the user hasn't said
+    /// to replace it. `PlexOrganizer.move` replaces on purpose (#0012's
+    /// staged `replaceItemAt`), so without this a re-rip silently overwrites
+    /// a good library copy *after* a 40-minute encode.
+    case duplicateUnacknowledged
 
     /// A short sentence naming the next action — what `ConfirmStepView`
     /// shows as the Start button's `.help(...)` tooltip and as a caption
@@ -95,6 +103,12 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable {
             // a bare "Confirm the runtime mismatch." sends them looking for
             // a Confirm button that does not exist.
             return "Confirm the runtime mismatch with Rip anyway."
+        case .libraryCheckInProgress:
+            return "Checking the Plex library for this movie."
+        case .duplicateUnacknowledged:
+            // Name the control, the way `.runtimeMismatchUnconfirmed` does:
+            // the notice above the action bar offers exactly this button.
+            return "This movie is already in Plex — choose Replace the Existing File to rip it again."
         }
     }
 }
@@ -154,7 +168,9 @@ nonisolated enum StartGate {
         selectedTitleIndex: Int?,
         selectedAudioTrackNumbers: [Int],
         runtimeLookup: RuntimeLookup,
-        mismatchAcknowledgement: MismatchAcknowledgement?
+        mismatchAcknowledgement: MismatchAcknowledgement?,
+        libraryCheck: LibraryCheck = .idle,
+        replaceAcknowledgement: ReplaceAcknowledgement? = nil
     ) -> StartDecision {
         guard !isRunning else { return .jobRunning }
         guard !discUnavailable else { return .discUnavailable }
@@ -198,6 +214,34 @@ nonisolated enum StartGate {
                 return .runtimeMismatchUnconfirmed
             }
 
+            // #0062, checked **last**, after every other check passes: the
+            // caption must name the first thing to do, and a duplicate must
+            // never be reported before the disc has even been scanned.
+            return libraryDecision(libraryCheck, replaceAcknowledgement: replaceAcknowledgement)
+        }
+    }
+
+    /// The #0062 half of `decide`, split out so its ordering-independent
+    /// truth table is readable on its own.
+    ///
+    /// `.unreachable` is deliberately **fail-soft**: an unmounted NAS must not
+    /// turn into a rip that cannot start, for a check that #0012's staged
+    /// replace already makes non-destructive-until-success. The Confirm step
+    /// keeps the uncertainty on screen with a "Check again" link instead.
+    static func libraryDecision(
+        _ libraryCheck: LibraryCheck,
+        replaceAcknowledgement: ReplaceAcknowledgement?
+    ) -> StartDecision {
+        switch libraryCheck {
+        case .idle:
+            return .ready
+        case .checking:
+            return .libraryCheckInProgress
+        case .done(let tmdbID, .present(let entries)):
+            guard let first = entries.first else { return .ready }
+            let expected = ReplaceAcknowledgement(movieID: Int(tmdbID) ?? -1, folderPath: first.folderPath)
+            return replaceAcknowledgement == expected ? .ready : .duplicateUnacknowledged
+        case .done(_, .absent), .done(_, .unreachable):
             return .ready
         }
     }
@@ -215,7 +259,9 @@ nonisolated enum StartGate {
         selectedTitleIndex: Int?,
         selectedAudioTrackNumbers: [Int],
         runtimeLookup: RuntimeLookup,
-        mismatchAcknowledgement: MismatchAcknowledgement?
+        mismatchAcknowledgement: MismatchAcknowledgement?,
+        libraryCheck: LibraryCheck = .idle,
+        replaceAcknowledgement: ReplaceAcknowledgement? = nil
     ) -> Bool {
         decide(
             hasMovieSelected: hasMovieSelected,
@@ -226,7 +272,9 @@ nonisolated enum StartGate {
             selectedTitleIndex: selectedTitleIndex,
             selectedAudioTrackNumbers: selectedAudioTrackNumbers,
             runtimeLookup: runtimeLookup,
-            mismatchAcknowledgement: mismatchAcknowledgement
+            mismatchAcknowledgement: mismatchAcknowledgement,
+            libraryCheck: libraryCheck,
+            replaceAcknowledgement: replaceAcknowledgement
         ) == .ready
     }
 

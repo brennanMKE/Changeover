@@ -45,6 +45,22 @@ final class RipFlowController {
     /// its own card shows without anything resetting this.
     private(set) var dismissedJobID: JobID?
 
+    /// #0062 — where the "already in Plex" check stands for the selected
+    /// movie. Never stored across selections: every event that changes what
+    /// was checked resets it (see `clearLibraryCheck`).
+    private(set) var libraryCheck: LibraryCheck = .idle
+
+    /// #0062 — the user's "Replace the Existing File", keyed on the movie
+    /// *and* the folder it was shown for (#0032's `MismatchAcknowledgement`
+    /// pattern). A confirmation for one film must never enable Start for
+    /// another.
+    private(set) var replaceAcknowledgement: ReplaceAcknowledgement?
+
+    /// Bumped by every `checkLibrary`, so a result for a movie that is no
+    /// longer selected is discarded — the same generation guard `startScan`
+    /// uses for a superseded disc scan.
+    private var libraryCheckGeneration = 0
+
     /// `search` is optional rather than defaulted to `MovieSearchViewModel()`
     /// in the signature: a default argument expression is evaluated in a
     /// `nonisolated` context, and the view model is explicitly `@MainActor`.
@@ -89,6 +105,16 @@ final class RipFlowController {
     func select(movieID: Int?, jobs: JobController, apiKey: String) {
         if movieID != selectedMovieID {
             movieConfirmed = false
+            // #0062: a different film is a different library question. The
+            // #0026 lesson, keyed the same way.
+            clearLibraryCheck()
+        } else {
+            // A re-pick of the same row still drops the confirmation: a round
+            // trip through the results list is not proof the user meant the
+            // same replacement again. The check itself still stands — it is
+            // for this movie, and the view's `.task(id:)` key hasn't changed,
+            // so nothing would re-run it.
+            replaceAcknowledgement = nil
         }
         selectedMovieID = movieID
         search.select(movieID: movieID, apiKey: apiKey)
@@ -107,6 +133,11 @@ final class RipFlowController {
     /// query, the results and the same row still selected.
     func changeMovie() {
         movieConfirmed = false
+        // #0062: the library answer still applies (same movie, same root, so
+        // the view's `.task(id:)` key is unchanged and nothing re-lists), but
+        // the confirmation is given on the Confirm step and does not survive
+        // leaving it.
+        replaceAcknowledgement = nil
     }
 
     /// "Next Disc" on the Done step — dismisses that job's outcome card, so
@@ -161,6 +192,59 @@ final class RipFlowController {
     private func clearSelection() {
         selectedMovieID = nil
         movieConfirmed = false
+        clearLibraryCheck()
+    }
+
+    // MARK: - "Already in Plex" (#0062)
+
+    /// What `ConfirmStepView.task(id:)` keys on: the probe re-runs only when
+    /// the movie or the library root changes. `nil` with no movie selected —
+    /// there is nothing to look up.
+    func libraryCheckKey(settings: AppSettings) -> LibraryCheckKey? {
+        guard let movie = search.selectedMovie else { return nil }
+        return LibraryCheckKey(movieID: movie.id, moviesPath: settings.plexMoviesPath)
+    }
+
+    /// Runs the probe for the movie currently selected, and stores the answer
+    /// — unless the selection moved on while it was in flight, in which case
+    /// the result is dropped (the generation guard `startScan` established).
+    ///
+    /// Called from the Confirm step's `.task(id:)`, which fires the moment
+    /// the step appears for a movie. That is the whole point: the answer is on
+    /// screen seconds after the film is chosen, tens of minutes before an
+    /// encode would have found out.
+    func checkLibrary(settings: AppSettings, probe: LibraryProbeRunner = LibraryProbe.defaultRunner) async {
+        guard let movie = search.selectedMovie else { return }
+        let tmdbID = String(movie.id)
+        let moviesPath = settings.plexMoviesPath
+
+        libraryCheckGeneration += 1
+        let generation = libraryCheckGeneration
+        libraryCheck = .checking(tmdbID: tmdbID)
+
+        let lookup = await probe(moviesPath, tmdbID)
+
+        guard generation == libraryCheckGeneration, search.selectedMovie?.id == movie.id else { return }
+        libraryCheck = .done(tmdbID: tmdbID, lookup)
+    }
+
+    /// "Replace the Existing File" — records the movie *and* the folder the
+    /// notice was showing, which is what `StartGate` compares. A no-op unless
+    /// there is a completed check with a match in it, so the button can never
+    /// record a confirmation for something that isn't on screen.
+    func acknowledgeReplace() {
+        guard case .done(let tmdbID, .present(let entries)) = libraryCheck,
+              let first = entries.first,
+              let movieID = Int(tmdbID) else { return }
+        replaceAcknowledgement = ReplaceAcknowledgement(movieID: movieID, folderPath: first.folderPath)
+    }
+
+    /// Both halves, together: the answer and any confirmation given for it.
+    /// Bumps the generation so a probe already in flight lands on nothing.
+    private func clearLibraryCheck() {
+        libraryCheckGeneration += 1
+        libraryCheck = .idle
+        replaceAcknowledgement = nil
     }
 
     // MARK: - Disc swap (#0034)
@@ -188,6 +272,10 @@ final class RipFlowController {
             selectedMovieID = nil
             selectionDisc = nil
             movieConfirmed = false
+            // #0062: "per disc" comes from living here — a disc swap wipes
+            // the library answer and its confirmation exactly as it wipes
+            // `selectionDisc`.
+            clearLibraryCheck()
         }
     }
 

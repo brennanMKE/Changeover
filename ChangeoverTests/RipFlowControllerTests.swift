@@ -273,4 +273,162 @@ struct RipFlowControllerTests {
         flow.reconcile(jobs: jobs)
         #expect(flow.step(jobs: jobs) == .insertDisc(.noDisc))
     }
+
+    // MARK: - "Already in Plex" (#0062)
+
+    private static let entry = LibraryEntry(
+        folderName: "Fargo (1996) {tmdb-275}",
+        folderPath: "/m/Movies/Fargo (1996) {tmdb-275}",
+        files: [LibraryFile(name: "Fargo (1996).mp4")]
+    )
+
+    /// A fake probe: `RipFlowControllerTests` never lists a real directory.
+    private static func fakeProbe(_ lookup: LibraryLookup) -> LibraryProbeRunner {
+        { _, _ in lookup }
+    }
+
+    @Test func checkLibraryStoresTheAnswerForTheSelectedMovie() async throws {
+        let jobs = Self.mountedController()
+        let flow = RipFlowController()
+        pick(flow, jobs: jobs, movie: try Self.movie())
+
+        await flow.checkLibrary(settings: AppSettings(), probe: Self.fakeProbe(.present([Self.entry])))
+
+        #expect(flow.libraryCheck == .done(tmdbID: "275", .present([Self.entry])))
+        #expect(flow.replaceAcknowledgement == nil)
+    }
+
+    /// The generation guard, the same one `startScan` uses: a result for a
+    /// movie that is no longer selected is dropped, never shown against the
+    /// film that replaced it.
+    @Test func aResultForAMovieTheUserHasLeftIsDiscarded() async throws {
+        let jobs = Self.mountedController()
+        let flow = RipFlowController()
+        let first = try Self.movie()
+        let second = try Self.movie(id: 78, title: "Blade Runner", year: "1982-06-25")
+        flow.search.results = [first, second]
+        flow.select(movieID: first.id, jobs: jobs, apiKey: "")
+
+        // A probe that stays in flight long enough for the selection to move
+        // on underneath it. Builds its own value so the closure captures
+        // nothing MainActor-isolated.
+        let probe: LibraryProbeRunner = { _, _ in
+            for _ in 0..<200 { await Task.yield() }
+            return .present([LibraryEntry(folderName: "F", folderPath: "/m/F", files: [LibraryFile(name: "F.mp4")])])
+        }
+        let inFlight = Task { await flow.checkLibrary(settings: AppSettings(), probe: probe) }
+
+        var spins = 0
+        while flow.libraryCheck == .idle, spins < 100_000 {
+            await Task.yield()
+            spins += 1
+        }
+        try #require(flow.libraryCheck == .checking(tmdbID: "275"))
+
+        flow.select(movieID: second.id, jobs: jobs, apiKey: "")
+        await inFlight.value
+
+        #expect(flow.libraryCheck == .idle, "a superseded answer must never land")
+    }
+
+    @Test func acknowledgeReplaceRecordsTheMovieAndTheFolderItWasShownFor() async throws {
+        let jobs = Self.mountedController()
+        let flow = RipFlowController()
+        pick(flow, jobs: jobs, movie: try Self.movie())
+        await flow.checkLibrary(settings: AppSettings(), probe: Self.fakeProbe(.present([Self.entry])))
+
+        flow.acknowledgeReplace()
+        #expect(flow.replaceAcknowledgement == ReplaceAcknowledgement(movieID: 275, folderPath: Self.entry.folderPath))
+
+        // Nothing to acknowledge is a no-op, so the button can never record a
+        // confirmation for something that is not on screen.
+        let empty = RipFlowController()
+        empty.acknowledgeReplace()
+        #expect(empty.replaceAcknowledgement == nil)
+    }
+
+    /// The #0026 lesson: a confirmation given for one film can never carry to
+    /// another.
+    @Test func pickingADifferentMovieClearsBothTheAnswerAndTheConfirmation() async throws {
+        let jobs = Self.mountedController()
+        let flow = RipFlowController()
+        let fargo = try Self.movie()
+        let other = try Self.movie(id: 78, title: "Blade Runner", year: "1982-06-25")
+        flow.search.results = [fargo, other]
+        flow.select(movieID: fargo.id, jobs: jobs, apiKey: "")
+        await flow.checkLibrary(settings: AppSettings(), probe: Self.fakeProbe(.present([Self.entry])))
+        flow.acknowledgeReplace()
+
+        flow.select(movieID: other.id, jobs: jobs, apiKey: "")
+
+        #expect(flow.libraryCheck == .idle)
+        #expect(flow.replaceAcknowledgement == nil)
+    }
+
+    /// A re-pick of the *same* row still drops the confirmation — a round
+    /// trip through the results list is not proof the user meant the same
+    /// replacement again — while the answer itself stands, because nothing
+    /// would re-run it (the view's `.task(id:)` key is unchanged).
+    @Test func rePickingTheSameMovieDropsOnlyTheConfirmation() async throws {
+        let jobs = Self.mountedController()
+        let flow = RipFlowController()
+        let fargo = try Self.movie()
+        pick(flow, jobs: jobs, movie: fargo)
+        await flow.checkLibrary(settings: AppSettings(), probe: Self.fakeProbe(.present([Self.entry])))
+        flow.acknowledgeReplace()
+
+        flow.select(movieID: fargo.id, jobs: jobs, apiKey: "")
+
+        #expect(flow.libraryCheck == .done(tmdbID: "275", .present([Self.entry])))
+        #expect(flow.replaceAcknowledgement == nil)
+    }
+
+    @Test func changeMovieKeepsTheAnswerButDropsTheConfirmation() async throws {
+        let jobs = Self.mountedController()
+        let flow = RipFlowController()
+        pick(flow, jobs: jobs, movie: try Self.movie())
+        flow.continueToConfirm()
+        await flow.checkLibrary(settings: AppSettings(), probe: Self.fakeProbe(.present([Self.entry])))
+        flow.acknowledgeReplace()
+
+        flow.changeMovie()
+
+        #expect(flow.libraryCheck == .done(tmdbID: "275", .present([Self.entry])))
+        #expect(flow.replaceAcknowledgement == nil)
+    }
+
+    @Test func aQueryChangeAndADiscSwapBothClearEverything() async throws {
+        for clear in ["query", "disc"] {
+            let jobs = Self.mountedController()
+            let flow = RipFlowController()
+            pick(flow, jobs: jobs, movie: try Self.movie())
+            await flow.checkLibrary(settings: AppSettings(), probe: Self.fakeProbe(.present([Self.entry])))
+            flow.acknowledgeReplace()
+
+            if clear == "query" {
+                flow.queryChanged(apiKey: "")
+            } else {
+                jobs.insertedDisc = Self.discB
+                flow.reconcile(jobs: jobs)
+            }
+
+            #expect(flow.libraryCheck == .idle, "\(clear) should clear the library answer")
+            #expect(flow.replaceAcknowledgement == nil, "\(clear) should clear the confirmation")
+        }
+    }
+
+    /// The probe re-runs only when the movie or the library root changes.
+    @Test func theTaskKeyIsTheMovieAndTheLibraryRoot() throws {
+        let jobs = Self.mountedController()
+        let flow = RipFlowController()
+        let settings = AppSettings()
+        settings.plexMediaRoot = "/m"
+
+        #expect(flow.libraryCheckKey(settings: settings) == nil)
+        pick(flow, jobs: jobs, movie: try Self.movie())
+        #expect(flow.libraryCheckKey(settings: settings) == LibraryCheckKey(movieID: 275, moviesPath: "/m/Movies"))
+
+        settings.plexMediaRoot = "/other"
+        #expect(flow.libraryCheckKey(settings: settings) == LibraryCheckKey(movieID: 275, moviesPath: "/other/Movies"))
+    }
 }

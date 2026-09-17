@@ -183,7 +183,9 @@ struct StartGateTests {
         selectedTitleIndex: Int?,
         selectedAudioTrackNumbers: [Int] = [],
         runtimeLookup: RuntimeLookup = .idle,
-        mismatchAcknowledgement: MismatchAcknowledgement? = nil
+        mismatchAcknowledgement: MismatchAcknowledgement? = nil,
+        libraryCheck: LibraryCheck = .idle,
+        replaceAcknowledgement: ReplaceAcknowledgement? = nil
     ) -> StartDecision {
         StartGate.decide(
             hasMovieSelected: hasMovieSelected,
@@ -194,22 +196,112 @@ struct StartGateTests {
             selectedTitleIndex: selectedTitleIndex,
             selectedAudioTrackNumbers: selectedAudioTrackNumbers,
             runtimeLookup: runtimeLookup,
-            mismatchAcknowledgement: mismatchAcknowledgement
+            mismatchAcknowledgement: mismatchAcknowledgement,
+            libraryCheck: libraryCheck,
+            replaceAcknowledgement: replaceAcknowledgement
         )
     }
 
     /// `.ready` is the only case with no `.reason`; every other case has one,
     /// non-empty, so the button's caption/tooltip is never blank.
+    ///
+    /// #0062 made `StartDecision` `CaseIterable`, so this is now exhaustive by
+    /// construction — a case added without a reason fails here rather than
+    /// showing a blank caption beside a greyed-out Start.
     @Test func readyHasNoReasonAndEveryOtherCaseDoes() {
         #expect(StartDecision.ready.reason == nil)
-        let refusals: [StartDecision] = [
-            .jobRunning, .noDisc, .discUnavailable, .scanInProgress, .scanFailed,
-            .noTitlesOnDisc, .noMovieSelected, .noTitleSelected, .noAudioTrackSelected,
-            .runtimeLookupLoading, .runtimeMismatchUnconfirmed
-        ]
-        for decision in refusals {
+        for decision in StartDecision.allCases where decision != .ready {
             #expect(decision.reason?.isEmpty == false, "\(decision) has no reason")
         }
+        #expect(StartDecision.allCases.count == 14)
+    }
+
+    // MARK: - #0062: the "already in Plex" check
+
+    private static let entry = LibraryEntry(
+        folderName: "Fargo (1996) {tmdb-275}",
+        folderPath: "/m/Movies/Fargo (1996) {tmdb-275}",
+        files: [LibraryFile(name: "Fargo (1996).mp4")]
+    )
+
+    private func ready(
+        libraryCheck: LibraryCheck = .idle,
+        replaceAcknowledgement: ReplaceAcknowledgement? = nil
+    ) -> StartDecision {
+        decide(
+            scanState: scanned([title(1)]), selectedTitleIndex: 1,
+            runtimeLookup: .unavailable(movieID: 275, reason: .noRuntimeOnTMDB),
+            libraryCheck: libraryCheck, replaceAcknowledgement: replaceAcknowledgement
+        )
+    }
+
+    /// Bounded by `LibraryProbe.defaultTimeout`, so this clears on its own —
+    /// the `.runtimeLookupLoading` precedent.
+    @Test func aCheckStillInFlightHoldsStart() {
+        #expect(ready(libraryCheck: .checking(tmdbID: "275")) == .libraryCheckInProgress)
+    }
+
+    /// The user's own decision: a found duplicate blocks Start until the
+    /// replacement is confirmed. `PlexOrganizer.move` replaces on purpose, so
+    /// without this a re-rip overwrites a good library copy after a 40-minute
+    /// encode.
+    @Test func aFoundDuplicateBlocksStartUntilItIsAcknowledged() {
+        let check = LibraryCheck.done(tmdbID: "275", .present([Self.entry]))
+        #expect(ready(libraryCheck: check) == .duplicateUnacknowledged)
+        #expect(ready(
+            libraryCheck: check,
+            replaceAcknowledgement: ReplaceAcknowledgement(movieID: 275, folderPath: Self.entry.folderPath)
+        ) == .ready)
+    }
+
+    /// #0032's lesson, keyed the same way: a confirmation for one film — or
+    /// for another folder of the same film — must never enable Start here.
+    @Test func anAcknowledgementForAnotherMovieOrFolderIsStillRefused() {
+        let check = LibraryCheck.done(tmdbID: "275", .present([Self.entry]))
+        #expect(ready(
+            libraryCheck: check,
+            replaceAcknowledgement: ReplaceAcknowledgement(movieID: 78, folderPath: Self.entry.folderPath)
+        ) == .duplicateUnacknowledged)
+        #expect(ready(
+            libraryCheck: check,
+            replaceAcknowledgement: ReplaceAcknowledgement(movieID: 275, folderPath: "/m/Movies/somewhere else")
+        ) == .duplicateUnacknowledged)
+    }
+
+    /// Fail-soft: an unmounted NAS must not turn into a rip that cannot
+    /// start. The Confirm step keeps the uncertainty on screen instead.
+    @Test func anUnreachableOrAbsentLibraryNeverBlocksStart() {
+        #expect(ready(libraryCheck: .done(tmdbID: "275", .absent)) == .ready)
+        #expect(ready(libraryCheck: .done(tmdbID: "275", .unreachable(reason: "gone"))) == .ready)
+        #expect(ready(libraryCheck: .idle) == .ready)
+    }
+
+    /// Checked **last**: the caption must name the first thing to do, and a
+    /// duplicate must never be reported before the disc has even been
+    /// scanned.
+    @Test func theDuplicateCheckIsOrderedAfterEveryOtherRefusal() {
+        let check = LibraryCheck.done(tmdbID: "275", .present([Self.entry]))
+        #expect(decide(
+            scanState: scanned([title(1)]), selectedTitleIndex: nil,
+            runtimeLookup: .unavailable(movieID: 275, reason: .noRuntimeOnTMDB),
+            libraryCheck: check
+        ) == .noTitleSelected)
+        #expect(decide(
+            hasMovieSelected: false, scanState: scanned([title(1)]), selectedTitleIndex: 1,
+            runtimeLookup: .unavailable(movieID: 275, reason: .noRuntimeOnTMDB),
+            libraryCheck: check
+        ) == .noMovieSelected)
+        #expect(decide(
+            scanState: .scanning, selectedTitleIndex: nil, libraryCheck: check
+        ) == .scanInProgress)
+    }
+
+    /// The defaults keep every pre-#0062 call site and test unchanged.
+    @Test func theNewParametersDefaultToNoOpinion() {
+        #expect(canStart(
+            scanState: scanned([title(1)]), selectedTitleIndex: 1,
+            runtimeLookup: .unavailable(movieID: 275, reason: .noRuntimeOnTMDB)
+        ))
     }
 
     /// `canStart` is exactly `decide(...) == .ready` — every existing
