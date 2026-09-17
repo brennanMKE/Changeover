@@ -390,14 +390,15 @@ enum EncodeController {
     /// the first place). Pure and `nonisolated`, with no dependency on
     /// `JobLog` — the seam #0041's `JobState.progress` can call once a
     /// progress source exists.
+    ///
+    /// #0061: now one line of delegation to `HandBrakeProgressParser`, which
+    /// parses the same shapes plus the task numbers, fps and ETA. Kept with
+    /// its original signature and `.encoding`-only behaviour so every
+    /// existing call site and test is unaffected — there is exactly one
+    /// implementation of "what does this progress line say".
     nonisolated static func progressFraction(fromLogLine line: String) -> Double? {
-        guard line.hasPrefix("Encoding: task"), isProgressOnly(line) else { return nil }
-        guard let percentIndex = line.firstIndex(of: "%") else { return nil }
-        guard let commaIndex = line[..<percentIndex].lastIndex(of: ",") else { return nil }
-        let numberText = line[line.index(after: commaIndex)..<percentIndex]
-            .trimmingCharacters(in: .whitespaces)
-        guard let value = Double(numberText) else { return nil }
-        return value / 100.0
+        guard let progress = HandBrakeProgressParser.parse(line), progress.stage == .encoding else { return nil }
+        return progress.fraction
     }
 
     /// The output volume's available capacity, read after the process exits
