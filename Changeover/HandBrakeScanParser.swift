@@ -10,7 +10,7 @@ import Foundation
 /// The output is not a single JSON document: a `Version:` block, many
 /// `Progress:` blocks, and libdvdnav log lines all arrive on stdout before
 /// `JSON Title Set:` (verified against the real capture
-/// `Fixtures/handbrake-scan/dragon-tattoo-title0-min1.json`). This parser
+/// `Fixtures/discs/dragon-tattoo/scan.json`). This parser
 /// tolerates arbitrary non-JSON lines anywhere and locates the
 /// `JSON Title Set:` section specifically.
 ///

@@ -99,6 +99,24 @@ struct DiscCorpusTests {
             .sorted()
     }
 
+    /// Every subdirectory of `Fixtures/discs/`, whether or not it is a
+    /// complete corpus disc — the denominator `discSlugs()` is checked
+    /// against, so a capture that lost (or never got) its `disc.json` is
+    /// named out loud instead of quietly dropping out of the sweep.
+    private static func allDiscDirectories() -> [String] {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: fixturesRoot, includingPropertiesForKeys: [.isDirectoryKey]
+        ) else { return [] }
+        return entries
+            .filter { url in
+                var isDirectory: ObjCBool = false
+                return fm.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+            }
+            .map(\.lastPathComponent)
+            .sorted()
+    }
+
     private static func loadManifest(_ slug: String) throws -> DiscManifest {
         let data = try Data(contentsOf: fixturesRoot.appendingPathComponent(slug).appendingPathComponent("disc.json"))
         return try JSONDecoder().decode(DiscManifest.self, from: data)
@@ -120,6 +138,19 @@ struct DiscCorpusTests {
         let slugs = Self.discSlugs()
         #expect(Set(["dragon-tattoo", "oppenheimer", "tv-season-playall"]).isSubset(of: Set(slugs)))
         #expect(slugs.count >= 3)
+    }
+
+    /// The other half of the same guard: `discSlugs()` only picks up a
+    /// directory that has **both** `scan.json` and `disc.json`, so a capture
+    /// committed without its manifest — or one whose manifest was deleted —
+    /// would drop out of the sweep entirely and take its coverage with it,
+    /// with nothing red to show for it. Name the offender instead.
+    @Test func everyCapturedDiscDirectoryIsACompleteCorpusDisc() {
+        let missing = Set(Self.allDiscDirectories()).subtracting(Self.discSlugs())
+        #expect(
+            missing.isEmpty,
+            "Fixtures/discs/ holds \(missing.sorted()) without both scan.json and disc.json, so they are silently excluded from the corpus sweep. Complete the capture (Tools/capture-disc.sh) or remove the directory."
+        )
     }
 
     // MARK: - The sweep
