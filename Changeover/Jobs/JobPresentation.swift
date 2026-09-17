@@ -94,7 +94,12 @@ nonisolated struct JobPresentation: Equatable, Sendable {
     /// never disagree. `.indeterminate` when neither is known — an encode
     /// that hasn't printed a percentage yet is genuinely unmeasured.
     private static func progressMode(for snapshot: JobSnapshot) -> ProgressMode {
-        guard let fraction = snapshot.progress?.encode.fraction ?? snapshot.state.progress else {
+        // HandBrake scans the disc itself before every encode, and those
+        // lines carry their own percentage. Showing it would run the bar
+        // 0→100 and then start again, so the pre-encode read is
+        // indeterminate — `progressSummary` labels it "Reading the disc".
+        let live = snapshot.progress.flatMap { $0.encode.stage == .scanning ? nil : $0.encode.fraction }
+        guard let fraction = live ?? snapshot.state.progress else {
             return .indeterminate
         }
         return .determinate(fraction)
