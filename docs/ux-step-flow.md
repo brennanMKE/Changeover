@@ -749,3 +749,99 @@ could take 1–2 while the first takes 3–5.
    failed job now takes one extra click to see the HandBrake tail. The
    `FailurePresenter` headline and details are on the Done card, so the
    common failures are readable without it.
+
+---
+
+## Review
+
+Reviewed 2026-09-17 against `9ba44d5 ec057c9 9deba83 b261807 a005ad9 0cc61c6
+894e1e4` (plus the fix below). **Verdict: ship it to joe.**
+
+Verification re-run by the reviewer, not taken on trust: `./run-remote-tests.sh
+gordon` — 952 tests in 76 suites passed, no continuation leaks, all seven new
+suites named in the log (`FlowStepTests`, `HandBrakeProgressParserTests`,
+`JobProgressTests`, `JobPresentationStepsTests`, `RipFlowControllerTests`,
+`ScanStatusLineTests`, `DVDPipelineProgressReportingTests`). A local
+`xcodebuild … build` succeeded; the only warning is the pre-existing
+`Info.plist in Copy Bundle Resources` one, unchanged by this work.
+
+### What was fixed
+
+`ceb1597` — `FlowStep.derive`'s rows 2–5 had no test pinning their order,
+and the #0005 automatic end-of-job eject makes that ordering load-bearing:
+it runs *while* the outcome card is going up, so `isEjecting` is true for
+the first seconds of every successful rip. Two tests added
+(`theOutcomeCardOutranksAnEjectInFlight`,
+`theOutcomeCardOutranksAPartialEjectUntilDismissed`), falsified on gordon by
+swapping the two blocks in `derive`: both fail, none of the existing 18 do.
+
+### What was checked and found intact
+
+Every behaviour a real disc has already proved still has a place and still
+works. #0053's Start reasons and #0027's audio gate are `ConfirmStepView`'s
+action bar, `StartGate` untouched. #0026's confirmation row, #0025's Play All
+refusal and the full title table, #0039's no-titles state, #0032's mismatch
+verdict and "Rip anyway", #0031's extras picker, #0059's audio picker and its
+preferred-language notice are `DiscTitleListView`/`TrackSelectionView`
+unchanged, now the Confirm step's disc panel. #0051's Cancel scan and the
+Rescan buttons are additionally surfaced on Choose movie via
+`ScanStatusLine`. #0046's cancel keeps `CancelPolicy` and the `NSAlert`.
+#0045/#0049's refusals are `.insertDisc(.ejecting)`/`(.discUnavailable)` plus
+the Eject action on the outcome card. #0052's disc-removed job lands on Done
+with `discRemovedDetail`. #0043's log is one click away on Ripping and Done.
+
+The derivation's awkward states were walked: a job running while the disc is
+ejecting stays `.ripping`; a disc pulled mid-encode and re-inserted keeps the
+selection (`SelectionReset` returns `.keep` on a removal and on the same disc
+coming back), so "Next Disc" lands on Confirm with the movie intact rather
+than stranding; a cancel that loses the race to a finishing encode shows the
+success card; a fast disc swap resets through `reconcile` whether or not the
+two `insertedDisc` changes coalesce. The progress parser is pinned to the
+captured HandBrake corpus — every line in the fixtures that `isProgressOnly`
+accepts (>100) must parse, and `progressFraction` must agree with it on every
+line. `0cc61c6` hides only the *pre-encode scan's* percentage, never the
+encode's: the first `Encoding:` line replaces the `.scanning` report. #0140 is
+met — every step puts its body in a `List`/`ScrollView` with no `minHeight`
+and its action bar outside it, and Confirm is strictly shorter than the old
+window (no search results, no log pane) with no new nested scroller.
+
+### Known, accepted, not fixed
+
+1. **#0052's card denies a Retry that `retryDecision` would allow.**
+   `outcomeCard`'s `.cancelled where discRemovedDuringJob` branch hard-codes
+   `[.showLog, .nextDisc]`. Its comment says `retryDecision` already refuses —
+   true while the drive is empty, but not once the disc is back and rescanned.
+   Not a stranding: "Next Disc" lands on Confirm with the movie, title, tracks
+   and extras intact, so it costs one extra click, not a re-search.
+2. **`DoneStepView` has no scroller.** Its content is bounded
+   (`FailurePresenter.details` is at most a few lines), so it is the one step
+   whose body could in principle contribute to the window's minimum height.
+   Worth a `ScrollView` if a failure card ever looks cramped.
+3. **HandBrake's own multi-title pre-encode scan shows an indeterminate
+   spinner** labelled "Reading the disc", although `task n of m` is known.
+   Honest, but on a USB 2.0 drive that spinner can sit for a while.
+4. **Muxing reports fraction 1.0**, so the bar sits at "100 %" still labelled
+   "Encoding the feature" while HandBrake muxes.
+
+### Manually unverified
+
+Everything visual. No UI tests were run or written (forbidden here), no disc,
+drive or HandBrakeCLI was touched. The five step views, the window's real
+minimum size, the progress bar's live behaviour and the ETA's plausibility
+have only been exercised through their pure seams.
+
+### What to check on joe first
+
+1. **The Ripping step against a real encode.** Does the bar move and the ETA
+   look plausible, or does it stay indeterminate? That is the one path whose
+   inputs have only ever been captured text. Watch the handoff out of
+   "Reading the disc" into "Encoding the feature".
+2. **The Confirm step on the 7-audio/21-subtitle disc.** Start, and its #0053
+   reason caption, must stay on screen at the 560×560 minimum, and a trackpad
+   scroll over the audio checkboxes must move the outer scroller.
+3. **A full loop end to end:** insert → search → Continue → Start → Done →
+   "Next Disc" → insert the next disc, confirming the outcome card is
+   superseded without a click when a *different* disc goes in.
+4. Then, if there is time: pull a disc mid-encode (#0052) and confirm Done
+   says "Disc removed"; and let a job fail to confirm "Show log…" opens
+   History on that job.
