@@ -15,6 +15,53 @@ nonisolated struct LogLine: Codable, Sendable, Hashable, Identifiable {
     let timestamp: Date
     let text: String
     let isMilestone: Bool
+    /// #0062 — the richer classification `isMilestone` is derived from. The
+    /// `Bool` stays a stored field, always equal to `category.isMilestone`, so
+    /// every reader and test written against it is untouched.
+    let category: LogCategory
+
+    init(id: Int, timestamp: Date, text: String, category: LogCategory) {
+        self.id = id
+        self.timestamp = timestamp
+        self.text = text
+        self.category = category
+        self.isMilestone = category.isMilestone
+    }
+
+    /// Back-compat for call sites (and tests) that predate `category`: the
+    /// category is classified from the text, and only kept when its
+    /// `isMilestone` agrees with what the caller asked for — otherwise the
+    /// caller's `Bool` wins, as the least surprising of the two, mapped onto
+    /// the generic category with that milestone-ness.
+    init(id: Int, timestamp: Date, text: String, isMilestone: Bool) {
+        let classified = LogClassifier.category(for: text, previousCategory: nil)
+        self.init(
+            id: id,
+            timestamp: timestamp,
+            text: text,
+            category: classified.isMilestone == isMilestone ? classified : (isMilestone ? .detail : .plain)
+        )
+    }
+
+    /// #0062 — a payload encoded before `category` existed (a Phase 4 host on
+    /// an older build) still decodes: the field is optional on the wire and
+    /// falls back to the classifier's answer for the line's own text.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let text = try container.decode(String.self, forKey: .text)
+        let isMilestone = try container.decode(Bool.self, forKey: .isMilestone)
+        let decoded = try container.decodeIfPresent(LogCategory.self, forKey: .category)
+        self.id = try container.decode(Int.self, forKey: .id)
+        self.timestamp = try container.decode(Date.self, forKey: .timestamp)
+        self.text = text
+        self.isMilestone = isMilestone
+        if let decoded {
+            self.category = decoded
+        } else {
+            let classified = LogClassifier.category(for: text, previousCategory: nil)
+            self.category = classified.isMilestone == isMilestone ? classified : (isMilestone ? .detail : .plain)
+        }
+    }
 }
 
 /// #0043 — a per-job, capped log buffer.
@@ -91,6 +138,10 @@ final class JobLog {
     /// chatter), never something `DVDPipeline` interleaves between a
     /// milestone headline and its detail lines.
     private var previousLineWasMilestone = false
+    /// #0062 — the same one bit of state, widened: `LogClassifier` needs the
+    /// previous line's `LogCategory` (not just its milestone-ness) to apply
+    /// the continuation rule. Progress lines never touch it, as before.
+    private var previousCategory: LogCategory?
 
     /// Independent of `capacity` on purpose: tying it to the ring's size
     /// would evict milestones exactly when a long encode fills the ring.
@@ -117,16 +168,21 @@ final class JobLog {
         let id = nextID
         nextID += 1
 
-        if JobLog.isProgressOnly(text) {
-            let line = LogLine(id: id, timestamp: now, text: text, isMilestone: false)
+        // #0062: one classification, made here, carried on the line — the
+        // window never re-derives it while scrolling.
+        let category = LogClassifier.category(for: text, previousCategory: previousCategory)
+
+        if category == .progress {
+            let line = LogLine(id: id, timestamp: now, text: text, category: .progress)
             latestProgress = line
             return line
         }
 
-        let isMilestone = JobLog.classify(text, previousLineWasMilestone: previousLineWasMilestone)
+        previousCategory = category
+        let isMilestone = category.isMilestone
         previousLineWasMilestone = isMilestone
 
-        let line = LogLine(id: id, timestamp: now, text: text, isMilestone: isMilestone)
+        let line = LogLine(id: id, timestamp: now, text: text, category: category)
         lines.append(line)
         if isMilestone {
             milestones.append(line)
@@ -148,6 +204,23 @@ final class JobLog {
     func snapshot(limit: Int? = nil) -> [String] {
         guard let limit, limit < lines.count else { return lines.map(\.text) }
         return lines.suffix(limit).map(\.text)
+    }
+
+    /// #0062 — every retained line in id order, unfiltered and unfolded:
+    /// `displayLines` minus the coalesced progress line, with a
+    /// "… N earlier lines dropped" header when the ring has evicted any.
+    ///
+    /// This is the one raw-text affordance the History window offers (**Copy
+    /// Log**), and it is deliberately never subject to the window's filter —
+    /// what gets pasted into a bug report has to be what HandBrake actually
+    /// printed.
+    func exportText() -> String {
+        var rows: [String] = []
+        if droppedCount > 0 {
+            rows.append("… \(droppedCount) earlier lines dropped")
+        }
+        rows.append(contentsOf: JobLog.mergedForDisplay(lines: lines, milestones: milestones, latestProgress: nil).map(\.text))
+        return rows.joined(separator: "\n")
     }
 
     /// #0043 review — the rows a log view renders, and what

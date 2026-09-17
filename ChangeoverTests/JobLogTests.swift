@@ -341,6 +341,68 @@ struct JobLogTests {
         let decoded = try JSONDecoder().decode(LogLine.self, from: data)
 
         #expect(decoded == line)
+        #expect(decoded.category == .success)
+    }
+
+    // MARK: - #0062: categories, and the raw export
+
+    @Test func appendStoresTheCategoryAndKeepsIsMilestoneInAgreementWithIt() {
+        let log = JobLog(capacity: 2000)
+        log.append("── Starting: Foo (1999)")
+        log.append("x265 [info]: HEVC encoder version 4.1")
+        log.append("✗ HandBrakeCLI exited with status 3")
+        log.append("   Clean the disc and try again.")
+        log.append("Encode failed (error 3).")
+
+        #expect(log.lines.map(\.category) == [.section, .encoder, .failure, .detail, .toolError])
+        #expect(log.lines.allSatisfy { $0.isMilestone == $0.category.isMilestone })
+        // The `⚠` chatter question the screenshot got wrong: `libdvdread`
+        // prints on every successful run and must never be a warning.
+        let clean = JobLog(capacity: 10)
+        clean.append("libdvdread: Couldn't find device name.")
+        #expect(clean.lines.first?.category == .encoder)
+        #expect(clean.lines.first?.isMilestone == false)
+    }
+
+    /// A Phase 4 payload from a host that predates `category` still decodes:
+    /// the field is optional on the wire and falls back to the classifier.
+    @Test func aLogLineJSONWithoutACategoryDecodesWithTheClassifiersAnswer() throws {
+        let json = """
+        {"id": 7, "timestamp": 0, "text": "x265 [info]: build info", "isMilestone": false}
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(LogLine.self, from: json)
+
+        #expect(decoded.category == .encoder)
+        #expect(decoded.isMilestone == false)
+        #expect(decoded.id == 7)
+    }
+
+    @Test func exportTextIsEveryLineInIDOrderWithNoProgressAndTheDroppedHeader() {
+        let log = JobLog(capacity: 3)
+        log.append("── Starting")
+        log.append("a")
+        log.append("Encoding: task 1 of 1, 12.00 %")
+        log.append("b")
+        log.append("c")
+        log.append("✓ Moved to: /x.mp4")
+
+        let rows = log.exportText().components(separatedBy: "\n")
+        // "── Starting" and "a" both fell out of the 3-line ring.
+        #expect(rows.first == "… 2 earlier lines dropped")
+        // The evicted `── Starting` survives through `milestones`; the
+        // coalesced progress line is never in the export.
+        #expect(rows.contains("── Starting"))
+        #expect(rows.contains("✓ Moved to: /x.mp4"))
+        #expect(rows.allSatisfy { !$0.hasPrefix("Encoding: task") })
+        #expect(rows == rows.filter { !$0.isEmpty })
+    }
+
+    @Test func exportTextHasNoDroppedHeaderWhenNothingWasEvicted() {
+        let log = JobLog(capacity: 100)
+        log.append("── Starting")
+        log.append("✓ Done")
+
+        #expect(log.exportText() == "── Starting\n✓ Done")
     }
 }
 
