@@ -1,0 +1,209 @@
+import Foundation
+
+/// #0061 — what the Ripping and Done steps show (`docs/ux-step-flow.md`
+/// §3.3). Both are pure functions of a `JobSnapshot` plus the handful of
+/// host-only facts that deliberately aren't on the wire shape
+/// (`Job.discRemovedDuringJob`, `JobController.discUnavailable`), exactly as
+/// `JobPresentation.make(for:isCancelling:discRemovedDuringJob:)` already
+/// takes them.
+///
+/// Nothing here touches SwiftUI: since UI tests are forbidden in this project
+/// (`docs/ui-test-crash-prevention.md`), these functions are the coverage for
+/// two of the five screens.
+extension JobPresentation {
+
+    // MARK: - Ripping
+
+    nonisolated struct ProgressSummary: Equatable, Sendable {
+        /// "Encoding the feature" / "Encoding extra 2 of 3 — title 7" /
+        /// "Retrying with MakeMKV" / "Moving into Plex" / "Cancelling…".
+        let unitLabel: String
+        /// "31 %" — `nil` while the bar is indeterminate.
+        let percentText: String?
+        /// "ETA 45 min" — `nil` when HandBrake hasn't reported one.
+        let etaText: String?
+        /// "56 fps" — the *average*, not the instantaneous number, which
+        /// swings by tens of frames a second between lines.
+        let rateText: String?
+        /// "12m 08s" since the job started.
+        let elapsedText: String
+        let isDeterminate: Bool
+    }
+
+    /// - Parameter now: passed in rather than read from `Date()` so the
+    ///   elapsed string is pinnable in a test.
+    nonisolated static func progressSummary(
+        for snapshot: JobSnapshot,
+        now: Date,
+        isCancelling: Bool = false
+    ) -> ProgressSummary {
+        let presentation = make(for: snapshot, isCancelling: isCancelling)
+        let fraction: Double?
+        if case .determinate(let value) = presentation.progress {
+            fraction = value
+        } else {
+            fraction = nil
+        }
+
+        return ProgressSummary(
+            unitLabel: unitLabel(for: snapshot, isCancelling: isCancelling, fallback: presentation.label),
+            percentText: fraction.map { "\(Int(($0 * 100).rounded())) %" },
+            etaText: fraction == nil ? nil : snapshot.progress?.encode.etaSeconds.map(formatETA(seconds:)),
+            rateText: fraction == nil ? nil : snapshot.progress?.encode.averageFPS.map { "\(Int($0.rounded())) fps" },
+            elapsedText: formatElapsed(now.timeIntervalSince(snapshot.startDate)),
+            isDeterminate: fraction != nil
+        )
+    }
+
+    /// The Ripping step names the *encode*, not the movie — the movie is
+    /// already the line above the bar. "Encoding extra 2 of 3 — title 7"
+    /// needs `JobProgress.Unit`, which is the only place that count lives.
+    private static func unitLabel(for snapshot: JobSnapshot, isCancelling: Bool, fallback: String) -> String {
+        if isCancelling, !snapshot.state.phase.isTerminal { return "Cancelling…" }
+        switch snapshot.state.phase {
+        case .encoding:
+            // HandBrake scans the disc itself before it encodes; saying
+            // "Encoding" through that read would be a lie the bar can't back
+            // up (it has no percentage to show either).
+            if snapshot.progress?.encode.stage == .scanning { return "Reading the disc" }
+            return "Encoding the feature"
+        case .extras:
+            guard case .extra(let index, let count, let titleIndex)? = snapshot.progress?.unit else {
+                return "Encoding extras"
+            }
+            return "Encoding extra \(index) of \(count) — title \(titleIndex)"
+        default:
+            return fallback
+        }
+    }
+
+    /// HandBrake's own per-task ETA, rounded to minutes and shown raw: no
+    /// smoothing, and no summing across extras — "ETA" on the Ripping step
+    /// always means *this* encode, and the "Then: N extras" line says more
+    /// is coming.
+    nonisolated static func formatETA(seconds: Int) -> String {
+        guard seconds >= 60 else { return "ETA under a minute" }
+        let minutes = (seconds + 30) / 60
+        if minutes < 60 { return "ETA \(minutes) min" }
+        return String(format: "ETA %dh %02dm", minutes / 60, minutes % 60)
+    }
+
+    // MARK: - Done
+
+    nonisolated struct OutcomeCard: Equatable, Sendable {
+        nonisolated enum Action: Equatable, Sendable {
+            case nextDisc
+            case retry
+            case adjustAndRetry
+            case eject
+            case revealInFinder(URL)
+            case showLog
+        }
+
+        /// "Fargo (1996)" / "Fargo (1996) — Failed" / "Disc removed".
+        let headline: String
+        let tone: Tone
+        /// Where the file landed, how long it took, what the eject did, or
+        /// the failure's headline and details.
+        let lines: [String]
+        /// In display order; the primary action is last.
+        let actions: [Action]
+    }
+
+    /// - Parameters:
+    ///   - retryDecision: `JobController.retryDecision(id:)` — Retry and
+    ///     Adjust & Retry are offered only when it says `.retry` (same disc
+    ///     still in the drive, scan held, nothing running).
+    ///   - discEjected: `JobController.insertedDisc == nil`, i.e. the #0005
+    ///     end-of-job eject actually took the disc out.
+    ///   - discUnavailable: #0049 — the disc unmounted but stayed in the
+    ///     drive, so Eject is offered again.
+    nonisolated static func outcomeCard(
+        for snapshot: JobSnapshot,
+        discRemovedDuringJob: Bool = false,
+        retryDecision: RetryDecision,
+        discEjected: Bool,
+        discUnavailable: Bool = false
+    ) -> OutcomeCard {
+        let name = snapshot.metadata.baseName
+        let elapsed = elapsedLine(snapshot, discEjected: discEjected, discUnavailable: discUnavailable)
+
+        switch snapshot.state.phase {
+        case .succeeded:
+            var lines: [String] = []
+            if let destination = snapshot.outcome?.destination {
+                lines.append("Filed as \(destination.path)")
+            }
+            lines.append(elapsed)
+            if discUnavailable {
+                lines.append("⚠︎ The disc was unmounted but could not be ejected — retry Eject or remove it by hand.")
+            }
+            var actions: [OutcomeCard.Action] = [.showLog]
+            if let destination = snapshot.outcome?.destination {
+                actions.append(.revealInFinder(destination))
+            }
+            if discUnavailable { actions.append(.eject) }
+            actions.append(.nextDisc)
+            return OutcomeCard(headline: name, tone: .success, lines: lines, actions: actions)
+
+        case .failed:
+            var lines = make(for: snapshot).detail
+            lines.append(elapsed)
+            return OutcomeCard(
+                headline: "\(name) — Failed",
+                tone: .failure,
+                lines: lines,
+                actions: retryActions(retryDecision: retryDecision, discUnavailable: discUnavailable)
+            )
+
+        case .cancelled where discRemovedDuringJob:
+            // #0052: the disc was pulled. There is nothing to retry until it
+            // is back in the drive, and `retryDecision` already refuses —
+            // so this card offers only the way forward.
+            return OutcomeCard(
+                headline: "Disc removed",
+                tone: .neutral,
+                lines: [discRemovedDetail, elapsed],
+                actions: [.showLog, .nextDisc]
+            )
+
+        case .cancelled:
+            return OutcomeCard(
+                headline: "\(name) — Cancelled",
+                tone: .neutral,
+                lines: [elapsed],
+                actions: retryActions(retryDecision: retryDecision, discUnavailable: discUnavailable)
+            )
+
+        case .starting, .encoding, .fallback, .organizing, .extras:
+            // Not reachable through `FlowStep.derive` (a job in a
+            // non-terminal phase is either `current`, hence `.ripping`, or a
+            // runner that broke the #0041 contract). Never a crash: show
+            // what is known and offer the way forward.
+            return OutcomeCard(
+                headline: name,
+                tone: .neutral,
+                lines: [make(for: snapshot).label],
+                actions: [.showLog, .nextDisc]
+            )
+        }
+    }
+
+    private static func retryActions(retryDecision: RetryDecision, discUnavailable: Bool) -> [OutcomeCard.Action] {
+        var actions: [OutcomeCard.Action] = [.showLog]
+        if retryDecision == .retry {
+            actions.append(.adjustAndRetry)
+            actions.append(.retry)
+        }
+        if discUnavailable { actions.append(.eject) }
+        actions.append(.nextDisc)
+        return actions
+    }
+
+    private static func elapsedLine(_ snapshot: JobSnapshot, discEjected: Bool, discUnavailable: Bool) -> String {
+        let duration = snapshot.endDate.map { formatElapsed($0.timeIntervalSince(snapshot.startDate)) }
+        let head = duration.map { "Finished in \($0)" } ?? "Finished"
+        if discUnavailable { return "\(head) · the disc could not be ejected" }
+        return discEjected ? "\(head) · disc ejected" : "\(head) · the disc is still in the drive"
+    }
+}

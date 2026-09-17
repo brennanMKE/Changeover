@@ -255,4 +255,56 @@ struct DiscTitleFormattingTests {
         // function itself should still read grammatically for 0.
         #expect(DiscTitleFormatting.subtitleSummary(count: 0) == "0 subtitle tracks, none carried into the output")
     }
+
+    // MARK: - runtimeCaption (#0061 — moved off the retired MetadataEntryView)
+
+    @Test func noRuntimeCaptionBeforeAMovieIsChosen() {
+        #expect(DiscTitleFormatting.runtimeCaption(.idle) == nil)
+    }
+
+    @Test func aLoadingLookupSaysSo() {
+        #expect(DiscTitleFormatting.runtimeCaption(.loading(movieID: 275)) == "Checking TMDB runtime…")
+    }
+
+    @Test func aLoadedRuntimeIsShownInHoursAndMinutes() {
+        #expect(DiscTitleFormatting.runtimeCaption(.loaded(movieID: 275, runtimeMinutes: 98)) == "TMDB runtime 1h 38m")
+        #expect(DiscTitleFormatting.runtimeCaption(.loaded(movieID: 275, runtimeMinutes: 45)) == "TMDB runtime 45m")
+        #expect(DiscTitleFormatting.runtimeCaption(.loaded(movieID: 275, runtimeMinutes: 120)) == "TMDB runtime 2h 0m")
+    }
+
+    /// #0032's rule: the caption must never read like a pass when the check
+    /// did not run. Every `.unavailable` reason says "will not run".
+    @Test func anUnavailableLookupNeverReadsLikeAPass() {
+        let reasons: [RuntimeCrossCheck.NotRunReason] = [
+            .missingAPIKey, .pending, .lookupFailed("timed out"), .noRuntimeOnTMDB, .noFeatureTitle,
+        ]
+        for reason in reasons {
+            let caption = DiscTitleFormatting.runtimeCaption(.unavailable(movieID: 275, reason: reason))
+            #expect(caption?.hasPrefix("Runtime cross-check will not run — ") == true)
+            #expect(caption?.contains("TMDB runtime ") != true)
+        }
+        #expect(
+            DiscTitleFormatting.runtimeCaption(.unavailable(movieID: 275, reason: .lookupFailed("timed out")))
+                == "Runtime cross-check will not run — timed out"
+        )
+    }
+
+    // MARK: - scanFailureMessage (#0061 — moved off DiscTitleListView)
+
+    @Test func everyScanFailureHasItsOwnSentence() {
+        let failures: [DiscScanner.Failure] = [
+            .toolMissing(path: "/opt/homebrew/bin/HandBrakeCLI"),
+            .launchFailure("permission denied"),
+            .toolExited(code: 3),
+            .jsonMissing,
+            .titleSetCorrupted,
+            .cancelled,
+        ]
+        let messages = failures.map(DiscTitleFormatting.scanFailureMessage)
+        #expect(Set(messages).count == failures.count)
+        #expect(messages.allSatisfy { !$0.isEmpty })
+        #expect(messages[0].contains("/opt/homebrew/bin/HandBrakeCLI"))
+        #expect(messages[2] == "The disc scan failed (HandBrakeCLI exited with status 3).")
+        #expect(messages[5] == "The scan was cancelled.")
+    }
 }

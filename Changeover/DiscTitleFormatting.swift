@@ -88,6 +88,67 @@ nonisolated enum DiscTitleFormatting {
         return result
     }
 
+    /// The sentence for a scan failure. Moved here from
+    /// `DiscTitleListView.message(for:)` by #0061 so the Choose-movie step's
+    /// one-line status strip (`ScanStatusLine`) and the Confirm step's disc
+    /// panel say exactly the same thing, and so it gains tests.
+    static func scanFailureMessage(_ failure: DiscScanner.Failure) -> String {
+        switch failure {
+        case .toolMissing(let path):
+            return "HandBrakeCLI was not found at \(path). Check the path in Settings."
+        case .launchFailure(let message):
+            return "Could not launch HandBrakeCLI: \(message)"
+        case .toolExited(let code):
+            return "The disc scan failed (HandBrakeCLI exited with status \(code))."
+        case .jsonMissing:
+            return "The disc scan did not complete — no title information came back."
+        case .titleSetCorrupted:
+            return "The disc scan's title data was corrupted and could not be read."
+        case .cancelled:
+            // #0051: reached from `JobController.cancelScan()` and from
+            // `ejectDisc()` cancelling a scan before ejecting. Rescan is
+            // offered the same as any other failure.
+            return "The scan was cancelled."
+        }
+    }
+
+    /// #0032's one-line status for the runtime cross-check, moved here from
+    /// `MetadataEntryView` by #0061 (the view it lived on is gone) so it is
+    /// unit-tested rather than merely compiled.
+    ///
+    /// Must never read like a pass when the check did not run —
+    /// `.unavailable` always says "will not run", never silently mirrors
+    /// `.loaded`'s text.
+    static func runtimeCaption(_ lookup: RuntimeLookup) -> String? {
+        switch lookup {
+        case .idle:
+            return nil
+        case .loading:
+            return "Checking TMDB runtime…"
+        case .loaded(_, let minutes):
+            return "TMDB runtime \(runtime(minutes))"
+        case .unavailable(_, let reason):
+            return "Runtime cross-check will not run — \(runtimeNotRunText(reason))"
+        }
+    }
+
+    /// TMDB reports a runtime in whole minutes: 98 → "1h 38m", 45 → "45m".
+    static func runtime(_ minutes: Int) -> String {
+        let hours = minutes / 60
+        let remaining = minutes % 60
+        return hours > 0 ? "\(hours)h \(remaining)m" : "\(remaining)m"
+    }
+
+    static func runtimeNotRunText(_ reason: RuntimeCrossCheck.NotRunReason) -> String {
+        switch reason {
+        case .missingAPIKey:         return "TMDB API key is not configured."
+        case .pending:               return "waiting on TMDB."
+        case .lookupFailed(let msg): return msg
+        case .noRuntimeOnTMDB:       return "TMDB has no runtime for this title."
+        case .noFeatureTitle:        return "no disc feature title yet."
+        }
+    }
+
     /// #0039 — the message for `DiscTitleHeuristic.Outcome.noTitles`: a scan
     /// that exited 0 and produced valid JSON but read zero titles. Distinct
     /// wording from `.none`'s "no title looks like a feature" on purpose —

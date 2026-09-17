@@ -75,7 +75,7 @@ struct DiscTitleListView: View {
 
     private func failedView(_ failure: DiscScanner.Failure) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(Self.message(for: failure))
+            Text(DiscTitleFormatting.scanFailureMessage(failure))
                 .font(.subheadline)
                 .foregroundStyle(.red)
             Button("Rescan") {
@@ -88,27 +88,6 @@ struct DiscTitleListView: View {
             .help(jobs.discUnavailable
                 ? "The disc was unmounted but could not be ejected — retry Eject or remove the disc before rescanning."
                 : "Scan the disc again.")
-        }
-    }
-
-    private static func message(for failure: DiscScanner.Failure) -> String {
-        switch failure {
-        case .toolMissing(let path):
-            return "HandBrakeCLI was not found at \(path). Check the path in Settings."
-        case .launchFailure(let message):
-            return "Could not launch HandBrakeCLI: \(message)"
-        case .toolExited(let code):
-            return "The disc scan failed (HandBrakeCLI exited with status \(code))."
-        case .jsonMissing:
-            return "The disc scan did not complete — no title information came back."
-        case .titleSetCorrupted:
-            return "The disc scan's title data was corrupted and could not be read."
-        case .cancelled:
-            // #0051: reached from `JobController.cancelScan()` (the "Cancel
-            // Scan" button below) and from `ejectDisc()` cancelling a scan
-            // before ejecting. Rescan is offered the same as any other
-            // failure, via the `Button("Rescan")` in `failedView` above.
-            return "The scan was cancelled."
         }
     }
 
