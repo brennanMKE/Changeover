@@ -24,6 +24,7 @@ struct ConfirmStepView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     movieCard
+                    duplicateNotice
                     Divider()
                     DiscTitleListView(jobs: jobs, settings: settings, runtimeLookup: flow.search.runtimeLookup)
                     trackSelectionSection
@@ -32,6 +33,37 @@ struct ConfirmStepView: View {
 
             Divider()
             actionBar
+        }
+        // #0062 — the check starts the moment this step appears for a movie,
+        // and re-fires only when the movie or the library root changes.
+        // `continueToConfirm`, `adjustAndRetry` and a new movie after "Change
+        // movie" all arrive here, so the answer is on screen seconds after
+        // the film is chosen — tens of minutes before an encode would have
+        // found out.
+        .task(id: flow.libraryCheckKey(settings: settings)) {
+            guard flow.libraryCheckKey(settings: settings) != nil else { return }
+            await flow.checkLibrary(settings: settings)
+        }
+    }
+
+    // MARK: - Already in Plex (#0062)
+
+    @ViewBuilder
+    private var duplicateNotice: some View {
+        if let movie = flow.search.selectedMovie,
+           let notice = DuplicatePresentation.notice(
+               check: flow.libraryCheck,
+               acknowledgement: flow.replaceAcknowledgement,
+               metadata: MovieMetadata(from: movie),
+               now: Date()
+           ) {
+            DuplicateNoticeView(
+                notice: notice,
+                onReplace: { flow.acknowledgeReplace() },
+                onRecheck: { Task { await flow.checkLibrary(settings: settings) } }
+            )
+            .padding(.horizontal)
+            .padding(.bottom, 10)
         }
     }
 
@@ -125,7 +157,12 @@ struct ConfirmStepView: View {
             selectedTitleIndex:  jobs.selectedTitleIndex,
             selectedAudioTrackNumbers: jobs.selectedAudioTrackNumbers,
             runtimeLookup:       flow.search.runtimeLookup,
-            mismatchAcknowledgement: jobs.mismatchAcknowledgement
+            mismatchAcknowledgement: jobs.mismatchAcknowledgement,
+            // #0062: checked last, so the caption still names the first thing
+            // to do and a duplicate is never reported before the disc has
+            // even been scanned.
+            libraryCheck:            flow.libraryCheck,
+            replaceAcknowledgement:  flow.replaceAcknowledgement
         )
     }
 

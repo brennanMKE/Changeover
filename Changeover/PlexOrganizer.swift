@@ -137,6 +137,19 @@ enum PlexOrganizer {
                              reason: .destinationUnwritable(path: folderPath))
         }
 
+        // #0062 — a replacement is never invisible in the log. `replaceItemAt`
+        // below overwrites an existing library copy on purpose (#0012), which
+        // is exactly what the Confirm step's duplicate check warns about
+        // *before* a 40-minute encode; this is the same fact stated at the
+        // point of harm, so a log read after the fact still shows it. Checked
+        // here rather than in `DVDPipeline.run()` because this function is
+        // already `@concurrent` and already about to stat this path — the
+        // pipeline is MainActor, and a `fileExists` against a slow SMB mount
+        // there would block the UI.
+        if let warning = replaceWarning(destinationPath: destPath, exists: fm.fileExists(atPath: destPath)) {
+            await log(warning)
+        }
+
         do {
             try fm.createDirectory(atPath: folderPath,
                                    withIntermediateDirectories: true)
@@ -217,6 +230,16 @@ enum PlexOrganizer {
 
         await log("✓ Moved to: \(destPath)")
         return destURL
+    }
+
+    /// #0062 — the warning logged when the move is about to replace a file
+    /// that is already in the library. Pure, so the wording and the "only
+    /// when something is actually there" rule are unit-tested without a
+    /// filesystem. `⚠︎` (U+FE0E), so `LogClassifier` files it as `.warning`
+    /// and the History window paints it orange.
+    nonisolated static func replaceWarning(destinationPath: String, exists: Bool) -> String? {
+        guard exists else { return nil }
+        return "⚠︎ Replacing the existing copy at \(destinationPath)"
     }
 
     /// Maps a Cocoa file error to a `FailureReason`. Deliberately minimal —
