@@ -26,9 +26,22 @@ struct MetadataEntryView: View {
         // button. `actionBar` now sits outside the `ScrollView`, pinned to
         // the bottom; everything above it — search, the disc title
         // section, the failure banner, the log — scrolls as one region.
-        // The individual unbounded lists inside that region (search
-        // results, the title table, the audio list) still cap their own
-        // height rather than relying on the outer scroll alone.
+        //
+        // What actually fixes the window growth is that this `ScrollView`
+        // has no minimum height: `NSHostingView` publishes the root view's
+        // minimum size as the window's `contentMinSize`, and the old flat
+        // `VStack`'s minimum was the sum of every section's, so 21 subtitle
+        // rows forced the window taller than the screen. Now the only
+        // minimum is `actionBar`'s.
+        //
+        // #0140 review: this is meant to be the *one* general scroll
+        // region. The nested scrollers left inside it are the ones that
+        // cannot be anything else — two `List`s (search results, the title
+        // table) and #0043's fixed-height log pane — each with an explicit
+        // height. Everything else, the audio checkboxes especially, lays
+        // out at natural height so there is always a wide area of the
+        // window where a trackpad gesture reaches this scroll view rather
+        // than being swallowed by an inner one.
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 0) {
@@ -333,6 +346,17 @@ struct MetadataEntryView: View {
                 Text(reason)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    // #0140 review: the action bar is now pinned outside the
+                    // scroll view, so this caption shares a fixed-width row
+                    // with the button. The longest reason (#0049's partial
+                    // eject, 103 characters) needs more width than that row
+                    // has at `minSize`, and a `Text` squeezed inside an
+                    // `HStack` truncates rather than wraps. Since #0053 made
+                    // this sentence the only on-screen explanation of a
+                    // greyed-out Start, it must never be the thing that gets
+                    // clipped — take the height instead.
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.trailing)
             }
             Button("Start Ripping") {
                 startRipping()

@@ -41,13 +41,20 @@ struct TrackSelectionView: View {
 
     // MARK: - Audio
 
-    /// #0140: the list itself gets a sensible maximum height (a disc with
-    /// many audio tracks — the filing disc had 7 — otherwise grows this
-    /// section without bound, same failure mode as the subtitle list). A
-    /// nested `ScrollView` rather than a `List`: these rows are checkbox
-    /// toggles, not a selectable table, and the outer window body already
-    /// nests one scroll region inside another for the #0043 log pane, so
-    /// this isn't a new pattern in this view tree.
+    /// #0140 review: **deliberately not scrollable and not height-capped.**
+    /// The first pass put these rows in a nested `ScrollView` capped at 160
+    /// points, which traded one bug for two: the disc that filed the issue
+    /// has 7 audio tracks, which do not fit in 160 points, so ticking the
+    /// last one meant scrolling a box inside a box; and on macOS a nested
+    /// scroller swallows the wheel/trackpad gesture while the pointer is
+    /// over it, so a window full of inner scrollers is a window the user
+    /// cannot scroll. These rows are the one control on this screen the
+    /// user *must* operate, so they lay out at natural height and the
+    /// window body's single `ScrollView` (`MetadataEntryView.body`) carries
+    /// them. That is safe now in a way it was not before this issue: the
+    /// outer scroll view's *minimum* height is nil, so however many tracks
+    /// the disc has, the section can no longer push the window past the
+    /// screen — which was the whole bug.
     private var audioSection: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Audio")
@@ -62,17 +69,14 @@ struct TrackSelectionView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(audioOptions) { option in
-                        Toggle(isOn: audioBinding(for: option)) {
-                            audioLabel(for: option)
-                        }
-                        .toggleStyle(.checkbox)
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(audioOptions) { option in
+                    Toggle(isOn: audioBinding(for: option)) {
+                        audioLabel(for: option)
                     }
+                    .toggleStyle(.checkbox)
                 }
             }
-            .frame(maxHeight: 160)
         }
     }
 
