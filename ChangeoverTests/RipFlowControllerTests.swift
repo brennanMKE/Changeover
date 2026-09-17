@@ -464,6 +464,37 @@ struct RipFlowControllerTests {
         #expect(flow.search.query.isEmpty)
     }
 
+    /// The `RipFlowView.onAppear` bug (found on a real disc, 2026-09-17): a
+    /// disc insertion is what *causes* the window to open, so `jobs
+    /// .insertedDisc` is already set by the time the view (and its
+    /// `onChange`) exist — no change event ever arrives. This proves the
+    /// controller side of the fix without SwiftUI: a *brand-new* controller
+    /// that has never seen a prior `reconcile` call still prefills the very
+    /// first time `reconcile` runs, for a disc that was already present
+    /// before that first call — exactly the appear-time path (`onAppear`
+    /// calling `reconcile` once, same as `onChange` would have). Also checks
+    /// that this first call never disturbs a selection — there is none yet,
+    /// so `SelectionReset.reconcile` must see `hasSelection == false` and
+    /// return `.keep`, not wrongly reset anything.
+    @Test func aDiscAlreadyPresentAtTheFirstEverReconcileCallStillPrefills() {
+        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
+        // The disc arrives (as it would via `DVDMonitor`) before anything
+        // ever calls `reconcile` — modelling the window opening with the
+        // disc already in the drive, not a later change.
+        jobs.insertedDisc = Self.armyOfDarkness
+        let flow = RipFlowController()
+
+        // The one and only call this controller has ever seen — the
+        // `onAppear` path, not a second call after some earlier `onChange`.
+        flow.reconcile(jobs: jobs, apiKey: "")
+
+        #expect(flow.search.query == "Army of Darkness")
+        #expect(flow.prefillAttemptedFor == Self.armyOfDarkness)
+        #expect(flow.selectedMovieID == nil, "nothing was selected yet; the first reconcile must not invent a reset")
+        #expect(flow.selectionDisc == nil)
+        #expect(flow.movieConfirmed == false)
+    }
+
     /// A disc whose volume name derives no usable term (`DiscNameSearchTerm
     /// .derive` returns `nil` for the plain `DISC_A`/`DISC_B` fixtures used
     /// throughout this file) never touches the search field.

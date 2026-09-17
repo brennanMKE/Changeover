@@ -47,6 +47,21 @@ struct RipFlowView: View {
         // the drive on every insertion and whenever a job stops. The
         // observation trigger stays in SwiftUI; the decision is
         // `SelectionReset.reconcile`, inside `RipFlowController`.
+        //
+        // Also on `.onAppear`: the disc insertion is what *causes*
+        // `AppDelegate` to open this window in the first place, so by the
+        // time the view is in the hierarchy `jobs.insertedDisc` is already
+        // set and no `onChange` ever fires for it — the search field stayed
+        // empty for a disc named "SUPERTROOPERS" on a real run (2026-09-17)
+        // because the prefill in `attemptSearchPrefill` never got a first
+        // call. Calling `reconcile` here too is safe to run twice for the
+        // same disc: `SelectionReset.reconcile` returns `.keep` whenever
+        // `hasSelection` is false (true here — the view has just appeared,
+        // nothing has been picked yet), and `SearchPrefill.decide` is keyed
+        // on `prefillAttemptedFor` by disc identity, not on call count, so a
+        // second call for the same disc after `onAppear` already prefilled
+        // it is a no-op (`.skip`).
+        .onAppear { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey) }
         .onChange(of: jobs.insertedDisc) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey) }
         .onChange(of: jobs.isRunning) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey) }
     }
