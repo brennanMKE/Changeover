@@ -129,7 +129,9 @@ struct EncodeControllerTests {
             "--encoder",        Config.videoEncoder,
             "--encoder-preset", Config.encoderPreset,
             "--quality",        Config.videoQuality,
-            "--aencoder",       Config.audioEncoder,
+            "--aencoder",       Config.audioAACEncoder,
+            "--mixdown",        Config.audioAACMixdown,
+            "--ab",             Config.audioAACBitrateKbps,
             "--markers",
         ])
         #expect(args.contains("--main-feature"))
@@ -151,7 +153,9 @@ struct EncodeControllerTests {
             "--encoder",        Config.videoEncoder,
             "--encoder-preset", Config.encoderPreset,
             "--quality",        Config.videoQuality,
-            "--aencoder",       Config.audioEncoder,
+            "--aencoder",       Config.audioAACEncoder,
+            "--mixdown",        Config.audioAACMixdown,
+            "--ab",             Config.audioAACBitrateKbps,
             "--markers",
         ])
         #expect(args.contains("--title"))
@@ -166,11 +170,13 @@ struct EncodeControllerTests {
         let mainFeature = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4")
         let indexed      = EncodeController.arguments(source: "/Volumes/X", title: .index(1), output: "/tmp/x.mp4")
         let tracked      = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4", audio: .tracks([1, 4]))
+        let trackedKeep  = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4", audio: .tracks([1, 4], keepOriginal: true))
         let languaged    = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4", audio: .languages(["eng"]))
 
         #expect(!mainFeature.contains("--subtitle"))
         #expect(!indexed.contains("--subtitle"))
         #expect(!tracked.contains("--subtitle"))
+        #expect(!trackedKeep.contains("--subtitle"))
         #expect(!languaged.contains("--subtitle"))
     }
 
@@ -195,7 +201,11 @@ struct EncodeControllerTests {
         #expect(args[qualityIndex + 1] == Config.videoQuality)
 
         let aencoderIndex = try #require(args.firstIndex(of: "--aencoder"))
-        #expect(args[aencoderIndex + 1] == Config.audioEncoder)
+        #expect(args[aencoderIndex + 1] == Config.audioAACEncoder)
+        let mixdownIndex = try #require(args.firstIndex(of: "--mixdown"))
+        #expect(args[mixdownIndex + 1] == Config.audioAACMixdown)
+        let abIndex = try #require(args.firstIndex(of: "--ab"))
+        #expect(args[abIndex + 1] == Config.audioAACBitrateKbps)
 
         let encoderIndex = try #require(args.firstIndex(of: "--encoder"))
         #expect(args[encoderIndex + 1] == Config.videoEncoder)
@@ -258,55 +268,103 @@ struct EncodeControllerTests {
         #expect(!args.contains("--detelecine"))
     }
 
-    // MARK: - AudioSelection (#0029) — arguments(...) with an explicit selection
+    // MARK: - AudioSelection (#0059) — arguments(...) with an explicit selection
 
-    /// `.sourceDefault` must produce exactly today's vector — the same
-    /// assertion `argumentsForMainFeature`/`argumentsForExplicitTitleIndex`
-    /// already make with the default `audio:` argument, spelled out
-    /// explicitly here so a future refactor can't quietly change the default
-    /// without a test noticing.
-    @Test func sourceDefaultAudioSelectionMatchesTodaysVector() {
+    /// `.sourceDefault` is now the AAC-stereo-at-160kbps default (#0059) —
+    /// no `--audio`, so HandBrake picks its own default track (the disc's
+    /// first) and encodes it to AAC stereo instead of copying it verbatim.
+    @Test func sourceDefaultAudioSelectionIsAACStereo160k() {
         let implicit = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4")
         let explicit = EncodeController.arguments(source: "/Volumes/X", title: .mainFeature, output: "/tmp/x.mp4", audio: .sourceDefault)
         #expect(implicit == explicit)
-        #expect(EncodeController.audioArguments(.sourceDefault) == ["--aencoder", Config.audioEncoder])
+        #expect(EncodeController.audioArguments(.sourceDefault) == [
+            "--aencoder", "av_aac",
+            "--mixdown",  "stereo",
+            "--ab",       "160",
+        ])
     }
 
-    /// A single selected track gets the verified AAC-stereo-plus-AC3-5.1
-    /// compatibility pair (#0014/#0017) — the "first selected track only"
-    /// orchestrator decision (2026-09-15, #0029).
-    @Test func singleTrackGetsTheVerifiedCompatibilityPair() {
+    /// #0059: a single selected track defaults to one AAC stereo entry —
+    /// replacing the pre-#0059 "AAC-plus-AC3 compatibility pair" default,
+    /// which copied AC3 at 448 kbps and made audio the majority of a file's
+    /// size (issues/0059.md).
+    @Test func singleSelectedTrackDefaultsToOneAACStereoEntry() {
         let args = EncodeController.audioArguments(.tracks([1]))
-        #expect(args == ["--audio", "1,1", "--aencoder", "copy:aac,copy:ac3"])
+        #expect(args == [
+            "--audio",    "1",
+            "--aencoder", "av_aac",
+            "--mixdown",  "stereo",
+            "--ab",       "160",
+        ])
     }
 
-    /// A second selected track gets one passthrough `--aencoder` entry, so
-    /// the two lists stay the same length.
-    @Test func secondTrackGetsOnePassthroughEncoderEntry() {
+    /// #0059: every selected track gets its own AAC stereo entry — not just
+    /// the first — so ticking a second language track no longer falls back
+    /// to a bare AC3 passthru copy.
+    @Test func multipleSelectedTracksEachGetTheirOwnAACStereoEntry() {
         let args = EncodeController.audioArguments(.tracks([1, 4]))
-        #expect(args == ["--audio", "1,1,4", "--aencoder", "copy:aac,copy:ac3,copy:ac3"])
+        #expect(args == [
+            "--audio",    "1,4",
+            "--aencoder", "av_aac,av_aac",
+            "--mixdown",  "stereo,stereo",
+            "--ab",       "160,160",
+        ])
     }
 
-    /// The `--audio` and `--aencoder` lists always have the same number of
-    /// entries, across several track-count shapes.
-    @Test func audioAndAencoderListsAlwaysMatchInLength() throws {
+    /// #0059: `keepOriginal` (opt-in, `AppSettings.keepOriginalAudioTrack`)
+    /// adds one AC3 passthru entry right after each track's AAC entry — the
+    /// layout #0017 verified on Apple TV, applied per selected track rather
+    /// than only the first.
+    @Test func keepOriginalAddsAC3PassthruAfterEachTracksAACEntry() {
+        let single = EncodeController.audioArguments(.tracks([1], keepOriginal: true))
+        #expect(single == [
+            "--audio",    "1,1",
+            "--aencoder", "av_aac,copy:ac3",
+            "--mixdown",  "stereo,stereo",
+            "--ab",       "160,160",
+        ])
+
+        let multi = EncodeController.audioArguments(.tracks([1, 4], keepOriginal: true))
+        #expect(multi == [
+            "--audio",    "1,1,4,4",
+            "--aencoder", "av_aac,copy:ac3,av_aac,copy:ac3",
+            "--mixdown",  "stereo,stereo,stereo,stereo",
+            "--ab",       "160,160,160,160",
+        ])
+    }
+
+    /// The `--audio`/`--aencoder`/`--mixdown`/`--ab` lists always have the
+    /// same number of entries, across several track-count shapes and both
+    /// values of `keepOriginal` — the positional-list discipline #0029
+    /// established, extended to the two lists #0059 adds.
+    @Test func audioAencoderMixdownAndAbListsAlwaysMatchInLength() throws {
         for tracks in [[1], [1, 4], [2, 3, 5], [1, 2, 3, 4]] {
-            let args = EncodeController.audioArguments(.tracks(tracks))
-            let audioIndex    = try #require(args.firstIndex(of: "--audio"))
-            let aencoderIndex = try #require(args.firstIndex(of: "--aencoder"))
-            let audioCount    = args[audioIndex + 1].split(separator: ",").count
-            let aencoderCount = args[aencoderIndex + 1].split(separator: ",").count
-            #expect(audioCount == aencoderCount, "mismatched for \(tracks)")
+            for keepOriginal in [false, true] {
+                let args = EncodeController.audioArguments(.tracks(tracks, keepOriginal: keepOriginal))
+                let audioIndex    = try #require(args.firstIndex(of: "--audio"))
+                let aencoderIndex = try #require(args.firstIndex(of: "--aencoder"))
+                let mixdownIndex  = try #require(args.firstIndex(of: "--mixdown"))
+                let abIndex       = try #require(args.firstIndex(of: "--ab"))
+                let audioCount    = args[audioIndex + 1].split(separator: ",", omittingEmptySubsequences: false).count
+                let aencoderCount = args[aencoderIndex + 1].split(separator: ",", omittingEmptySubsequences: false).count
+                let mixdownCount  = args[mixdownIndex + 1].split(separator: ",", omittingEmptySubsequences: false).count
+                let abCount       = args[abIndex + 1].split(separator: ",", omittingEmptySubsequences: false).count
+                #expect(audioCount == aencoderCount, "aencoder mismatched for \(tracks) keepOriginal=\(keepOriginal)")
+                #expect(audioCount == mixdownCount,  "mixdown mismatched for \(tracks) keepOriginal=\(keepOriginal)")
+                #expect(audioCount == abCount,       "ab mismatched for \(tracks) keepOriginal=\(keepOriginal)")
+            }
         }
     }
 
     /// An empty or all-non-positive track list behaves exactly like
     /// `.sourceDefault` — never `--audio none`, since a silent movie is the
-    /// worst failure available here.
+    /// worst failure available here. Holds regardless of `keepOriginal`,
+    /// since there's no track to keep the original of.
     @Test func emptyOrZeroTracksFallBackToSourceDefault() {
         let sourceDefault = EncodeController.audioArguments(.sourceDefault)
         #expect(EncodeController.audioArguments(.tracks([])) == sourceDefault)
         #expect(EncodeController.audioArguments(.tracks([0])) == sourceDefault)
+        #expect(EncodeController.audioArguments(.tracks([], keepOriginal: true)) == sourceDefault)
         #expect(!EncodeController.audioArguments(.tracks([])).contains("none"))
     }
 
@@ -314,7 +372,12 @@ struct EncodeControllerTests {
     /// the repeat of `4` does not produce a third `--audio` entry.
     @Test func repeatedTrackNumbersAreDroppedKeepingOrder() {
         let args = EncodeController.audioArguments(.tracks([4, 1, 4]))
-        #expect(args == ["--audio", "4,4,1", "--aencoder", "copy:aac,copy:ac3,copy:ac3"])
+        #expect(args == [
+            "--audio",    "4,1",
+            "--aencoder", "av_aac,av_aac",
+            "--mixdown",  "stereo,stereo",
+            "--ab",       "160,160",
+        ])
     }
 
     /// Language codes are normalized (bibliographic → terminologic, and
@@ -536,9 +599,13 @@ struct EncodeControllerTests {
         let titleIndex = try #require(argv.firstIndex(of: "--title"))
         #expect(argv[titleIndex + 1] == "1")
         let audioIndex = try #require(argv.firstIndex(of: "--audio"))
-        #expect(argv[audioIndex + 1] == "1,1,4")
+        #expect(argv[audioIndex + 1] == "1,4")
         let aencoderIndex = try #require(argv.firstIndex(of: "--aencoder"))
-        #expect(argv[aencoderIndex + 1] == "copy:aac,copy:ac3,copy:ac3")
+        #expect(argv[aencoderIndex + 1] == "av_aac,av_aac")
+        let mixdownIndex = try #require(argv.firstIndex(of: "--mixdown"))
+        #expect(argv[mixdownIndex + 1] == "stereo,stereo")
+        let abIndex = try #require(argv.firstIndex(of: "--ab"))
+        #expect(argv[abIndex + 1] == "160,160")
         #expect(!argv.contains("--main-feature"))
     }
 

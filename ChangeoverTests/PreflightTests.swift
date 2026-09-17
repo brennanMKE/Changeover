@@ -81,6 +81,8 @@ struct PreflightTests {
             "      --encoder-preset <string>",
             "  -q, --quality <number>",
             "  -E, --aencoder <string>",
+            "  -6, --mixdown <string>",
+            "  -B, --ab <number>",
             "      --width <number>",
             "      --height <number>",
             "      --crop <T:B:L:R>",

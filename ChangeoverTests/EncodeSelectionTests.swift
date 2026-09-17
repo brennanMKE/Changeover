@@ -43,6 +43,25 @@ struct EncodeSelectionTests {
         #expect(selection.featureDurationSeconds == scannedTitle.durationSeconds)
     }
 
+    /// #0059: `keepOriginalAudioTrack` defaults to `false` (AAC stereo
+    /// only) and threads through to `AudioSelection.tracks` when the
+    /// caller opts in.
+    @Test func makeDefaultsToNotKeepingTheOriginalTrack() throws {
+        let disc = try Self.fixtureDisc()
+        let request = RipRequest(metadata: Self.metadata(), featureTitleIndex: 1, audioTrackNumbers: [1, 4])
+
+        let selection = try #require(EncodeSelection.make(request: request, disc: disc))
+        #expect(selection.audio == .tracks([1, 4], keepOriginal: false))
+    }
+
+    @Test func makeThreadsKeepOriginalAudioTrackIntoTheAudioSelection() throws {
+        let disc = try Self.fixtureDisc()
+        let request = RipRequest(metadata: Self.metadata(), featureTitleIndex: 1, audioTrackNumbers: [1, 4])
+
+        let selection = try #require(EncodeSelection.make(request: request, disc: disc, keepOriginalAudioTrack: true))
+        #expect(selection.audio == .tracks([1, 4], keepOriginal: true))
+    }
+
     @Test func makeReturnsNilForAFeatureTitleNotOnTheDisc() throws {
         let disc = try Self.fixtureDisc()
         let request = RipRequest(metadata: Self.metadata(), featureTitleIndex: 99, audioTrackNumbers: [1])

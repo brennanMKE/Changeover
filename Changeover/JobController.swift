@@ -519,7 +519,7 @@ final class JobController {
             append("⚠︎ No completed disc scan — wait for the scan to finish before starting.")
             return false
         }
-        guard let selection = EncodeSelection.make(request: request, disc: scan.disc) else {
+        guard let selection = EncodeSelection.make(request: request, disc: scan.disc, keepOriginalAudioTrack: settings.keepOriginalAudioTrack) else {
             append("⚠︎ The selected title or audio tracks don't match the current disc scan — rescan and choose again before starting.")
             return false
         }

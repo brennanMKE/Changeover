@@ -77,6 +77,18 @@ struct SettingsView: View {
                 .padding(6)
             }
 
+            // Audio (#0059)
+            GroupBox("Audio") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Keep the original 5.1 track (larger files)", isOn: $settings.keepOriginalAudioTrack)
+                    Text("Every selected track is always encoded to one AAC stereo track at 160 kbps (roughly 0.5–0.7 GB per film). Off by default; turning this on additionally keeps the original AC3 5.1 track alongside it — the same layout verified to direct-play on Apple TV — at the cost of the disc's own bitrate on top.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(6)
+            }
+
             // TMDB
             GroupBox("Movie Database (TMDB)") {
                 VStack(alignment: .leading, spacing: 8) {

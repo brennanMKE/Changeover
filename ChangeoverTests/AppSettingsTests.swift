@@ -47,6 +47,22 @@ struct AppSettingsTests {
         #expect(reloaded.preferredAudioLanguages == [])
     }
 
+    /// #0059 — AC3 5.1 passthru is opt-in, off by default.
+    @Test func keepOriginalAudioTrackDefaultsToFalse() {
+        let settings = AppSettings(defaults: throwawaySuite())
+        #expect(settings.keepOriginalAudioTrack == false)
+    }
+
+    @Test func keepOriginalAudioTrackRoundTripsThroughPersist() {
+        let defaults = throwawaySuite()
+        let settings = AppSettings(defaults: defaults)
+        settings.keepOriginalAudioTrack = true
+        settings.persist()
+
+        let reloaded = AppSettings(defaults: defaults)
+        #expect(reloaded.keepOriginalAudioTrack == true)
+    }
+
     @Test func bibliographicCodesNormalizeOnSave() {
         let defaults = throwawaySuite()
         let settings = AppSettings(defaults: defaults)

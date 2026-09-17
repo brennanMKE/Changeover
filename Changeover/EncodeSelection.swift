@@ -53,13 +53,21 @@ nonisolated struct EncodeSelection: Equatable, Sendable {
     /// Builds a selection from `request` against `disc` — the scan
     /// `JobController` currently holds, never a stale one.
     ///
+    /// - Parameter keepOriginalAudioTrack: `AppSettings
+    ///   .keepOriginalAudioTrack` (#0059), captured as a plain value by the
+    ///   MainActor caller (`JobController.start(request:settings:)`) and
+    ///   passed in here — the same MainActor-to-`nonisolated` pattern
+    ///   `DVDPipeline` already uses for path strings (`CLAUDE.md`), rather
+    ///   than handing this `nonisolated` function the `AppSettings`
+    ///   reference itself. Defaulted to `false` so every pre-#0059 call site
+    ///   (tests included) keeps compiling unchanged.
     /// - Returns: `nil` when `request.featureTitleIndex` is not a title of
     ///   `disc`, or any of `request.audioTrackNumbers` is not an audio
     ///   stream on that title. This is the enforcement
     ///   `JobController.start(request:settings:)` relies on: a request built
     ///   against an older or different scan fails to resolve here rather
     ///   than silently encoding the wrong title or track.
-    nonisolated static func make(request: RipRequest, disc: DiscInfo) -> EncodeSelection? {
+    nonisolated static func make(request: RipRequest, disc: DiscInfo, keepOriginalAudioTrack: Bool = false) -> EncodeSelection? {
         guard let title = disc.titles.first(where: { $0.index == request.featureTitleIndex }) else {
             return nil
         }
@@ -70,7 +78,7 @@ nonisolated struct EncodeSelection: Equatable, Sendable {
             return nil
         }
 
-        let audio = EncodeController.AudioSelection.tracks(request.audioTrackNumbers)
+        let audio = EncodeController.AudioSelection.tracks(request.audioTrackNumbers, keepOriginal: keepOriginalAudioTrack)
 
         // See `fallbackAudio`'s doc comment: the fallback keeps HandBrake's
         // default audio until `.languages` is verified on joe.

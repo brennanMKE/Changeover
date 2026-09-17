@@ -22,6 +22,13 @@ final class AppSettings {
     /// empty list is a valid preference (no default) and survives a round
     /// trip — see `init(defaults:)`.
     var preferredAudioLanguages: [String] = ["eng", "spa"]
+    /// #0059 — opt-in AC3 5.1 passthrough alongside the default AAC stereo
+    /// track. Off by default: measured against the user's own library,
+    /// copying every selected AC3 track at its own bitrate (448 kbps for
+    /// 5.1) made audio 59-76% of a file's size. When on, each selected
+    /// track also carries the original AC3 mix — the layout #0017 verified
+    /// direct-plays on Apple TV — at the cost of the extra bitrate.
+    var keepOriginalAudioTrack: Bool = false
 
     // MARK: - Derived Plex paths (standard Plex folder structure under root)
 
@@ -73,6 +80,7 @@ final class AppSettings {
         if let v = d.stringArray(forKey: Keys.preferredAudioLanguages) {
             preferredAudioLanguages = v.compactMap(LanguageCode.normalize)
         }
+        keepOriginalAudioTrack = d.bool(forKey: Keys.keepOriginalAudioTrack)
     }
 
     // MARK: - Persistence
@@ -85,6 +93,7 @@ final class AppSettings {
         d.set(handbrakePath,  forKey: Keys.handbrakePath)
         d.set(tmdbAPIKey,     forKey: Keys.tmdbAPIKey)
         d.set(preferredAudioLanguages.compactMap(LanguageCode.normalize), forKey: Keys.preferredAudioLanguages)
+        d.set(keepOriginalAudioTrack, forKey: Keys.keepOriginalAudioTrack)
     }
 
     // MARK: - UserDefaults keys
@@ -95,5 +104,6 @@ final class AppSettings {
         static let handbrakePath  = "handbrakePath"
         static let tmdbAPIKey     = "tmdbAPIKey"
         static let preferredAudioLanguages = "preferredAudioLanguages"
+        static let keepOriginalAudioTrack = "keepOriginalAudioTrack"
     }
 }

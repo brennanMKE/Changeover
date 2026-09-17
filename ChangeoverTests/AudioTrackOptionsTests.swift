@@ -60,12 +60,16 @@ struct AudioTrackOptionsTests {
         #expect(AudioTrackOptions.isUntagged(title1) == false)
     }
 
+    /// #0059: preselection now picks **one** track by default, even when
+    /// several options match the preferred languages — track 2 (the other
+    /// English offering) is available in the picker but no longer
+    /// preselected alongside track 1.
     @Test func fixtureTitle1PreselectionMatchesPreferredLanguages() throws {
         let disc = try Self.fixtureDisc()
         let title1 = try #require(disc.titles.first { $0.index == 1 })
         let options = AudioTrackOptions.options(for: title1)
 
-        #expect(AudioTrackOptions.preselection(options, preferred: ["eng", "spa"], untagged: false) == [1, 2])
+        #expect(AudioTrackOptions.preselection(options, preferred: ["eng", "spa"], untagged: false) == [1])
         #expect(AudioTrackOptions.preselection(options, preferred: ["fra"], untagged: false) == [4])
         // Nothing matches "spa" on this disc — falls back to the first option.
         #expect(AudioTrackOptions.preselection(options, preferred: ["spa"], untagged: false) == [1])
@@ -113,7 +117,7 @@ struct AudioTrackOptionsTests {
     /// "first track only" (which looks identical in the UI and is wrong on
     /// a disc with an English and a Spanish track under the hood) or to
     /// nothing at all (a preference filter matching zero tracks).
-    @Test func syntheticUntaggedTitleNeverMergesAndKeepsBothTracks() {
+    @Test func syntheticUntaggedTitleNeverMergesAndKeepsBothTracksAvailable() {
         let untitled = title([
             audioStream(1, languageCode: nil, displayName: "DD Surround 5.1"),
             audioStream(2, languageCode: nil, displayName: "DD Surround 5.1"),
@@ -126,8 +130,12 @@ struct AudioTrackOptionsTests {
         #expect(options.allSatisfy { $0.duplicateTrackNumbers.isEmpty })
         #expect(AudioTrackOptions.isUntagged(untitled) == true)
 
+        // #0059: both tracks stay available (never merged), but only the
+        // first is preselected by default — Hornet's Nest's two untagged
+        // 448 kbps tracks became two near-gigabyte copies under the old
+        // "keep every match" rule. The user can still tick track 2.
         let preselected = AudioTrackOptions.preselection(options, preferred: ["eng", "spa"], untagged: true)
-        #expect(Set(preselected) == Set([1, 2]))
+        #expect(preselected == [1])
     }
 
     /// A *single* untagged stream among tagged siblings is not the

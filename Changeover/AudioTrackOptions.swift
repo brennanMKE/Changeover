@@ -95,10 +95,24 @@ nonisolated enum AudioTrackOptions {
 
     /// Which track numbers should be preselected.
     ///
-    /// - On an untagged title, every non-commentary option is selected (or,
-    ///   if every option happens to be flagged commentary, every option).
-    /// - Otherwise, the non-commentary options in `preferred` (normalized)
-    ///   are selected.
+    /// #0059 re-examined this against the user's own evidence: Hornet's
+    /// Nest's two untagged 448 kbps tracks became two copies of nearly a
+    /// gigabyte each under the old "keep every match" rule, because
+    /// `EncodeController` used to copy every selected track at its own
+    /// bitrate. Now that every selected track is instead encoded to one AAC
+    /// stereo track (#0059's `AudioSelection.tracks`), a second preselected
+    /// track is cheaper than it was — but still doubles a file's audio for
+    /// no reason on the common case, which is a duplicate mix, not a second
+    /// language. So the rule is now **one track by default, on every
+    /// title, tagged or not** — the user can still tick more in the picker;
+    /// only the *default* changed.
+    ///
+    /// - On an untagged title, the first non-commentary option is selected
+    ///   (or, if every option happens to be flagged commentary, the first
+    ///   option). Previously this selected *every* non-commentary option —
+    ///   see above.
+    /// - Otherwise, the first non-commentary option in `preferred`
+    ///   (normalized) is selected — previously every matching option was.
     /// - If nothing matches, the first non-commentary option is selected —
     ///   silently producing a movie with no audio is the worst outcome
     ///   available here.
@@ -112,17 +126,18 @@ nonisolated enum AudioTrackOptions {
         let nonCommentary = options.filter { !$0.isCommentary }
 
         if untagged {
-            let selected = nonCommentary.isEmpty ? options : nonCommentary
-            return selected.map(\.trackNumber)
+            if let first = nonCommentary.first { return [first.trackNumber] }
+            if let first = options.first { return [first.trackNumber] }
+            return []
         }
 
         let normalizedPreferred = Set(preferred.compactMap(LanguageCode.normalize))
-        let matched = nonCommentary.filter { option in
+        let matched = nonCommentary.first { option in
             guard let code = option.languageCode else { return false }
             return normalizedPreferred.contains(code)
         }
-        if !matched.isEmpty {
-            return matched.map(\.trackNumber)
+        if let matched {
+            return [matched.trackNumber]
         }
         if let first = nonCommentary.first {
             return [first.trackNumber]
@@ -178,7 +193,7 @@ nonisolated enum AudioTrackOptions {
             return "No audio track selected. Choose at least one to start."
         }
         if untagged {
-            return "This disc does not tag its audio languages, so every non-commentary track starts selected."
+            return "This disc does not tag its audio languages, so only the first track starts selected. Tick more if this disc carries more than one language."
         }
         let normalizedPreferred = preferred.compactMap(LanguageCode.normalize)
         let matchesPreference = options.contains { option in

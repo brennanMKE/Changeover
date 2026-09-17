@@ -26,43 +26,64 @@ enum EncodeController {
     /// Which audio tracks HandBrakeCLI encodes, and how.
     ///
     /// `nonisolated` + `Sendable` for the same reason as `TitleSelection`.
-    /// #0029: the encoder previously always took HandBrake's own default (the
-    /// disc's first audio track); this makes an explicit selection possible
-    /// while keeping `.sourceDefault` byte-identical to that old behaviour.
+    /// #0059 replaced the old default (copy every selected AC3 track at the
+    /// disc's own bitrate) with one AAC stereo track at 160 kbps per
+    /// selected track — see `audioArguments(_:)` for the exact vectors.
     nonisolated enum AudioSelection: Equatable, Sendable {
-        /// No `--audio`; `--aencoder Config.audioEncoder`. Today's vector,
-        /// byte for byte — every existing call site defaults to this.
+        /// No `--audio`; encodes whatever HandBrake picks as the disc's
+        /// default track to one AAC stereo track at 160 kbps
+        /// (`Config.audioAACEncoder`/`.audioAACMixdown`/`.audioAACBitrateKbps`).
+        /// `#0059`: this used to be a byte-for-byte AC3 copy
+        /// (`copy:aac,copy:ac3`, which silently fell back to a plain AC3
+        /// copy — #0058); it no longer is, so this case's *vector* changed
+        /// even though its role (the harmless default for `.phase1`/tests
+        /// and the `.tracks([])`/empty-selection fallback) did not.
         case sourceDefault
         /// Explicit HandBrake `TrackNumber`s from the same scan the `title`
         /// selection came from (i.e. the disc path, not the #0015 MakeMKV
-        /// fallback's renumbered `.mkv`).
-        case tracks([Int])
+        /// fallback's renumbered `.mkv`). `keepOriginal` is
+        /// `AppSettings.keepOriginalAudioTrack` (#0059), threaded in by
+        /// `EncodeSelection.make`.
+        case tracks(_ tracks: [Int], keepOriginal: Bool = false)
         /// For the MakeMKV fallback's `.mkv`, whose track numbers don't match
         /// the disc's. Empty means "every track" (no language filter).
+        /// Unchanged by #0059: `EncodeSelection.fallbackAudio` is always
+        /// `.sourceDefault` (#0027 review), so this case is unused in
+        /// production today, and inherits the new AAC-stereo default for
+        /// free through `.sourceDefault` rather than through this case.
         case languages([String])
     }
 
-    /// Builds the `--audio`/`--audio-lang-list`/`--all-audio`/`--aencoder`
-    /// argument group for `selection`. Pure and `nonisolated` for the same
-    /// reason as `arguments(...)`.
+    /// Builds the `--audio`/`--audio-lang-list`/`--all-audio`/`--aencoder`/
+    /// `--mixdown`/`--ab` argument group for `selection`. Pure and
+    /// `nonisolated` for the same reason as `arguments(...)`.
     ///
-    /// - `.sourceDefault` → `["--aencoder", Config.audioEncoder]`, unchanged
-    ///   from before this type existed.
+    /// - `.sourceDefault` → `["--aencoder", Config.audioAACEncoder,
+    ///   "--mixdown", Config.audioAACMixdown, "--ab",
+    ///   Config.audioAACBitrateKbps]` — no `--audio`, so HandBrake picks its
+    ///   own default track (the disc's first) and this encodes it to AAC
+    ///   stereo at 160 kbps.
     /// - `.tracks`: repeated and non-positive track numbers are dropped,
     ///   keeping first-occurrence order. An empty result (including
     ///   `.tracks([])` and `.tracks([0])`) falls back to `.sourceDefault` —
     ///   **`--audio none` is never emitted**, because a silent movie is the
-    ///   worst failure available here. Otherwise the first track gets the
-    ///   verified AAC-stereo-plus-AC3-5.1 compatibility pair
-    ///   (`Config.audioCompatibilityEncoders`, #0014/#0017) and every later
-    ///   track gets one `Config.audioPassthroughEncoder` entry, so the
-    ///   `--audio` and `--aencoder` lists always have the same length and
-    ///   HandBrake's "reuse the last `--aencoder` entry" behaviour for a
-    ///   short list is never exercised. Which selected tracks get the AAC
-    ///   copy is a user-facing playback-compatibility question the code
-    ///   can't answer on its own; "first selected track only" is the
-    ///   orchestrator's decision (2026-09-15, #0029), because it keeps a
-    ///   single-track output identical to the file #0017 verified on Apple TV.
+    ///   worst failure available here. Otherwise **every** selected track
+    ///   gets one AAC-stereo entry (`Config.audioAACEncoder`/
+    ///   `.audioAACMixdown`/`.audioAACBitrateKbps`) — #0059 replaced the old
+    ///   "first track only" compatibility-pair rule now that every track is
+    ///   already a real AAC encode, not a passthru gambling on the source
+    ///   codec. When `keepOriginal` is true (`AppSettings
+    ///   .keepOriginalAudioTrack`, opt-in, off by default), **each** selected
+    ///   track additionally gets one `Config.audioPassthroughEncoder` entry
+    ///   for the original AC3 mix, right after its AAC entry — the
+    ///   AAC-stereo-plus-AC3-5.1 layout #0017 verified on Apple TV, now
+    ///   applied per track rather than only the first. `--audio`,
+    ///   `--aencoder`, `--mixdown` and `--ab` always end up the same length
+    ///   — the last two carry `Config.audioAACMixdown`/`.audioAACBitrateKbps`
+    ///   at every position, including a `copy:ac3` entry's, because
+    ///   HandBrake ignores mixdown/bitrate for a copy track and this avoids
+    ///   inventing an undocumented placeholder value; **unverified on real
+    ///   HandBrake output**, see `issues/0059.md`'s manual `ffprobe` step.
     /// - `.languages`: codes are normalized (`LanguageCode.normalize`) and
     ///   deduplicated. A non-empty result selects every matching track with
     ///   `--audio-lang-list` + `--all-audio`; an empty result (no codes, or
@@ -72,22 +93,49 @@ enum EncodeController {
     ///   positional `--aencoder` list can't be matched to an a-priori unknown
     ///   number of tracks, and whether HandBrake reuses the last entry for
     ///   every match is unverified (checked by hand on joe, not here).
+    ///   Left as-is by #0059: unused in production (see the case's doc
+    ///   comment).
     nonisolated static func audioArguments(_ selection: AudioSelection) -> [String] {
         switch selection {
         case .sourceDefault:
-            return ["--aencoder", Config.audioEncoder]
+            return [
+                "--aencoder", Config.audioAACEncoder,
+                "--mixdown",  Config.audioAACMixdown,
+                "--ab",       Config.audioAACBitrateKbps,
+            ]
 
-        case .tracks(let tracks):
+        case .tracks(let tracks, let keepOriginal):
             var seen = Set<Int>()
             let unique = tracks.filter { $0 > 0 && seen.insert($0).inserted }
-            guard let first = unique.first else {
-                return ["--aencoder", Config.audioEncoder]
+            guard !unique.isEmpty else {
+                return audioArguments(.sourceDefault)
             }
-            let rest = unique.dropFirst()
-            let audioList = ([first, first] + rest).map(String.init).joined(separator: ",")
-            let aencoderList = (Config.audioCompatibilityEncoders + rest.map { _ in Config.audioPassthroughEncoder })
-                .joined(separator: ",")
-            return ["--audio", audioList, "--aencoder", aencoderList]
+            var audioList: [String] = []
+            var aencoderList: [String] = []
+            var mixdownList: [String] = []
+            var abList: [String] = []
+            for track in unique {
+                audioList.append(String(track))
+                aencoderList.append(Config.audioAACEncoder)
+                mixdownList.append(Config.audioAACMixdown)
+                abList.append(Config.audioAACBitrateKbps)
+                if keepOriginal {
+                    audioList.append(String(track))
+                    aencoderList.append(Config.audioPassthroughEncoder)
+                    // HandBrake ignores --mixdown/--ab for a "copy" track;
+                    // reuse the AAC values here rather than invent an
+                    // undocumented placeholder (e.g. an unlisted "auto"
+                    // mixdown) — see the doc comment above.
+                    mixdownList.append(Config.audioAACMixdown)
+                    abList.append(Config.audioAACBitrateKbps)
+                }
+            }
+            return [
+                "--audio",    audioList.joined(separator: ","),
+                "--aencoder", aencoderList.joined(separator: ","),
+                "--mixdown",  mixdownList.joined(separator: ","),
+                "--ab",       abList.joined(separator: ","),
+            ]
 
         case .languages(let languages):
             var seen = Set<String>()
