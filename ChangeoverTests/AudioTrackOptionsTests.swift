@@ -245,4 +245,41 @@ struct AudioTrackOptionsTests {
         #expect(caption.contains("does not tag its audio languages"))
         #expect(!caption.contains("keeping all tracks"))
     }
+
+    /// #0059 review: on a **tagged** title carrying two of the user's
+    /// preferred languages, #0059's one-track default selects the first and
+    /// the second language is dropped — so the caption has to say so.
+    /// Fixture title 1 is `eng` (tracks 1, 2) plus `fra` (track 4).
+    @Test func noticeNamesAPreferredLanguageThatIsPresentButUnselected() throws {
+        let disc = try Self.fixtureDisc()
+        let title1 = try #require(disc.titles.first { $0.index == 1 })
+        let options = AudioTrackOptions.options(for: title1)
+
+        // French is on the disc and preferred, but the default picks eng only.
+        let caption = try #require(AudioTrackOptions.notice(
+            options: options, preferred: ["eng", "fra"], untagged: false, selected: [1]
+        ))
+        #expect(caption.contains("fra"))
+        #expect(caption.contains("tick it to keep it too"))
+
+        // Ticking it clears the caption.
+        #expect(AudioTrackOptions.notice(
+            options: options, preferred: ["eng", "fra"], untagged: false, selected: [1, 4]
+        ) == nil)
+
+        // Two tracks in the *same* preferred language (a 5.1 and a stereo
+        // downmix) are not a lost language — dropping the second is exactly
+        // what #0059 wants, so this stays quiet.
+        #expect(AudioTrackOptions.notice(
+            options: options, preferred: ["eng"], untagged: false, selected: [1]
+        ) == nil)
+
+        // A preferred language that isn't on the disc at all keeps the
+        // pre-existing "none of your preferred languages" wording, not this
+        // one — that message is about a *missed* preference, this is about a
+        // present-but-unticked one.
+        #expect(AudioTrackOptions.notice(
+            options: options, preferred: ["spa"], untagged: false, selected: [1]
+        )?.contains("None of your preferred languages (spa)") == true)
+    }
 }

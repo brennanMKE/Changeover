@@ -84,9 +84,14 @@ nonisolated enum AudioTrackOptions {
 
     /// True when no audio stream on `title` carries a language tag at all —
     /// the whole-title fallback (Hornets' Nest): the language preference
-    /// does not apply, and every non-commentary track should be kept rather
-    /// than falling back to "first track only", which would silently drop a
-    /// language on a disc with (say) an English and a Spanish track.
+    /// does not apply, so `preselection` cannot use it and `notice` says so
+    /// instead. #0059 review: this used to go on to say every non-commentary
+    /// track is kept on such a title. It no longer is — #0059 made the
+    /// default one track everywhere — and the compensating honesty is
+    /// `notice`'s untagged message, which tells the user to tick more if the
+    /// disc carries a second language. Do not read this flag as "keep
+    /// everything"; it only means "the language preference has nothing to
+    /// match against here".
     nonisolated static func isUntagged(_ title: DiscTitle) -> Bool {
         !title.streams.contains {
             $0.kind == .audio && LanguageCode.normalize($0.languageCode) != nil
@@ -162,10 +167,14 @@ nonisolated enum AudioTrackOptions {
     /// The selection after the user toggles `trackNumber`, in the order
     /// `options` lists the tracks (disc order).
     ///
-    /// Order matters: the first selected track is the one that gets the AAC
-    /// stereo copy (#0029). Appending in click order would let unchecking and
-    /// re-checking English move French into that slot with nothing on screen
-    /// to show it.
+    /// Order matters: it is the order of `--audio`, and so the order of the
+    /// output file's audio streams — the first selected track becomes the
+    /// first stream, which is the one many players pick by default.
+    /// Appending in click order would let unchecking and re-checking English
+    /// move French into that slot with nothing on screen to show it.
+    /// (Pre-#0059 this mattered for a second reason: the first track was the
+    /// only one that got an AAC copy. #0059 gives every selected track its
+    /// own AAC encode, so only the stream order still rides on this.)
     nonisolated static func toggling(
         _ selected: [Int],
         trackNumber: Int,
@@ -206,7 +215,59 @@ nonisolated enum AudioTrackOptions {
             }
             return "None of your preferred languages (\(normalizedPreferred.joined(separator: ", "))) is on this title, so the first track starts selected."
         }
+        if let missing = unselectedPreferredLanguages(
+            options: options,
+            normalizedPreferred: normalizedPreferred,
+            selected: selected
+        ) {
+            return "\(missing.joined(separator: ", ")) is also on this title and one of your preferred languages, but only one track starts selected — tick it to keep it too."
+        }
         return nil
+    }
+
+    /// #0059 review — the tagged-disc half of "don't drop a second language
+    /// silently".
+    ///
+    /// #0059 made `preselection` pick exactly **one** track, which is right
+    /// for the common case (a duplicate mix) and is the user's measured
+    /// decision. But on a title that genuinely carries two of the languages
+    /// the user asked for — `preferredAudioLanguages` defaults to
+    /// `["eng", "spa"]`, and a Region 1 DVD with an English and a Spanish
+    /// track is ordinary — the old rule selected both and the new one
+    /// selects the first, with nothing on screen to say the other was
+    /// dropped. `notice` said nothing here, because before #0059 there was
+    /// nothing to say. The untagged case got a reworded caption; this is the
+    /// same honesty for the tagged case.
+    ///
+    /// - Returns: the preferred language codes present on a non-commentary
+    ///   option but absent from `selected`, in disc order — or `nil` when
+    ///   every preferred language present is already covered. Keyed on
+    ///   *language*, not track, so two English tracks (a 5.1 and a 2.0
+    ///   downmix — Oppenheimer's shape) stay quiet: dropping the second is
+    ///   exactly what #0059 wants, and it is not a lost language.
+    nonisolated private static func unselectedPreferredLanguages(
+        options: [AudioTrackOption],
+        normalizedPreferred: [String],
+        selected: [Int]
+    ) -> [String]? {
+        let preferredSet = Set(normalizedPreferred)
+        let selectedSet = Set(selected)
+        var selectedCodes = Set<String>()
+        for option in options where selectedSet.contains(option.trackNumber) {
+            if let code = option.languageCode { selectedCodes.insert(code) }
+        }
+
+        var missing: [String] = []
+        var seen = Set<String>()
+        for option in options where !option.isCommentary {
+            guard let code = option.languageCode,
+                  preferredSet.contains(code),
+                  !selectedCodes.contains(code),
+                  seen.insert(code).inserted
+            else { continue }
+            missing.append(code)
+        }
+        return missing.isEmpty ? nil : missing
     }
 
     private struct MergeKey: Hashable {
