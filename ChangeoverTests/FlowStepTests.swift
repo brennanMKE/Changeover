@@ -159,6 +159,22 @@ struct FlowStepTests {
         #expect(FlowStep.derive(inputs) == .chooseMovie)
     }
 
+    // MARK: - Titles
+
+    /// Every step names itself in the window's header, and no two steps say
+    /// the same thing — the title is the only breadcrumb the first cut has.
+    @Test func everyStepHasItsOwnTitle() {
+        let id = JobID.make()
+        let titles = [
+            FlowStep.insertDisc(.noDisc), .chooseMovie, .confirm, .ripping(id), .done(id),
+        ].map(\.title)
+        #expect(titles == ["Insert a disc", "Choose the movie", "Confirm the rip", "Ripping", "Done"])
+        #expect(Set(titles).count == titles.count)
+        // The three insert-disc variants share one title: they differ in
+        // what the body says, not in which step the user is on.
+        #expect(FlowStep.insertDisc(.ejecting).title == FlowStep.insertDisc(.noDisc).title)
+    }
+
     // MARK: - Wire shape (Phase 4)
 
     @Test func everyStepRoundTripsThroughJSON() throws {

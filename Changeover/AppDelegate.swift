@@ -11,6 +11,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// The one job that can be in flight. Owned here so it outlives every
     /// window — see #0002.
     let jobs: JobController
+    /// #0061 — the rip window's own state (the picked movie, the disc it was
+    /// picked for, whether Continue was pressed). Owned here for the same
+    /// reason `jobs` is: closing the window must not throw the selection
+    /// away mid-job, and Phase 4 drives this with no window at all.
+    let flow = RipFlowController()
 
     /// #0048 review — asks the user to confirm a cancel. Production runs an
     /// app-modal `NSAlert` (`runCancelAlert`); tests inject a closure so the
@@ -136,22 +141,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             return
         }
 
-        // #0026: widened and made resizable to fit the disc-title section
-        // (a confirmation row plus, on disclosure or a Play All/unidentified
-        // disc, the full title table) between the folder preview and the
-        // log. `minSize` keeps the two lists from being crushed.
+        // #0026: resizable to fit the disc-title section (a confirmation
+        // row plus, on disclosure or a Play All/unidentified disc, the full
+        // title table). `minSize` keeps the lists from being crushed.
         //
-        // #0140: `MetadataEntryView` now pins `Start Ripping` (and its
-        // #0053 reason caption) below a `ScrollView` that holds everything
-        // else, so the button is reachable at this `minSize` — or any
-        // size — regardless of how much the disc's own content (audio
-        // tracks, subtitle tracks, log lines) would otherwise have grown
-        // the window past the screen (the bug: 7 audio/21 subtitle tracks
-        // pushed Start off-screen with no way to reach it). 620x760/560x560
-        // were already generous enough that they don't need to change for
-        // this fix; left as-is.
+        // #0140: every step view pins its action bar below a scrolling body
+        // slot that has no minimum height, so the primary button is
+        // reachable at this `minSize` — or any size — regardless of how much
+        // the disc's own content (audio tracks, subtitle tracks) would
+        // otherwise have grown the window past the screen (the bug: 7
+        // audio/21 subtitle tracks pushed Start off-screen with no way to
+        // reach it).
+        //
+        // #0061: 760 points tall was sized for the old one-screen stack,
+        // which also carried the search results and a 130-point log. A step
+        // shows one of those at a time, so 680 is the new default; the
+        // minimum is unchanged.
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 760),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 680),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
@@ -160,7 +167,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         window.minSize = NSSize(width: 560, height: 560)
         window.center()
         window.contentView = NSHostingView(
-            rootView: MetadataEntryView().environment(settings).environment(jobs)
+            rootView: RipFlowView().environment(settings).environment(jobs).environment(flow)
         )
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)

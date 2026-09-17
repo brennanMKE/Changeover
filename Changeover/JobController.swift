@@ -498,7 +498,7 @@ final class JobController {
         // disc other than the one actually in the drive, refuse — this is
         // the failsafe for the data-loss bug (a stale selection filing the
         // new disc under the previous movie's name and overwriting it in
-        // Plex), in case the UI-level reset in `MetadataEntryView` didn't
+        // Plex), in case the UI-level reset in `RipFlowController` didn't
         // run.
         //
         // Fails closed: metadata with no `selectionDisc` is refused rather

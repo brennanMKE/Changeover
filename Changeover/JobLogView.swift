@@ -7,7 +7,7 @@ import SwiftUI
 /// Rows key on `LogLine.id`, which is unique only *within this log* — never
 /// mixed into the same `ForEach` as another job's lines, unlike
 /// `JobController.logDisplayRows` (the live/idle view in
-/// `MetadataEntryView`), which merges two sources and needs the wider
+/// the retired `MetadataEntryView`), which merges two sources and needs the wider
 /// `LogDisplayRow.ID`. A history row always shows exactly one job's own
 /// `JobLog`, so the plain `LogLine.id` is enough here.
 struct JobLogView: View {

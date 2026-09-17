@@ -20,7 +20,7 @@ nonisolated struct MovieMetadata: Codable, Hashable, Sendable {
     /// The disc identity this selection was made for, when the caller has
     /// one to attach — #0034. `JobController.start` compares this against
     /// the disc actually in the drive as a defence-in-depth check, backing
-    /// up `MetadataEntryView`'s own reset-on-disc-swap. `start` refuses `nil`
+    /// up `RipFlowController`'s own reset-on-disc-swap. `start` refuses `nil`
     /// (fails closed); it stays optional only for metadata that never reaches
     /// `start`, such as the folder-name preview and pipeline tests.
     let selectionDisc: DiscInsertion?

@@ -8,13 +8,14 @@ import Foundation
 //
 // `SelectionReset` is the pure "what happens to the selection?" decision,
 // free of `MovieSearchViewModel`/SwiftUI so it's unit-testable with plain
-// `DiscInsertion` values and no window. `MetadataEntryView` is the only
-// caller that actually performs it (it owns the `@State` that needs
-// clearing); `JobController.start` reuses `sameDisc` as a second, independent
-// check at the point of harm.
+// `DiscInsertion` values and no window. `RipFlowController.reconcile` is the
+// only caller that actually performs it (#0061 — it owns the selection state
+// that needs clearing; before that it was `MetadataEntryView`'s `@State`);
+// `JobController.start` reuses `sameDisc` as a second, independent check at
+// the point of harm.
 nonisolated enum SelectionReset {
 
-    /// What `MetadataEntryView` should do with its selection now that the
+    /// What `RipFlowController` should do with its selection now that the
     /// disc in the drive (or the running state) has changed.
     nonisolated enum Action: Equatable, Sendable {
         /// Leave the selection and the disc it is bound to alone.
@@ -49,7 +50,7 @@ nonisolated enum SelectionReset {
     /// - A job in flight is never disturbed: its log and metadata belong to
     ///   the disc it started with, and a disc-swap notification racing the
     ///   encode must not clobber them out from under the user.
-    ///   (`MetadataEntryView` re-runs `reconcile` when the job stops, so a
+    ///   (`RipFlowView` re-runs `reconcile` when the job stops, so a
     ///   swap that landed mid-job still resets afterwards.)
     /// - No prior selection (`previousDisc == nil`) means nothing to reset.
     /// - No new disc (`newDisc == nil`, i.e. a removal) means nothing to

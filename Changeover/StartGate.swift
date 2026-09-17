@@ -43,7 +43,7 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable {
     case runtimeLookupLoading
     case runtimeMismatchUnconfirmed
 
-    /// A short sentence naming the next action — what `MetadataEntryView`
+    /// A short sentence naming the next action — what `ConfirmStepView`
     /// shows as the Start button's `.help(...)` tooltip and as a caption
     /// beside it. `nil` only for `.ready`: there is nothing to tell the user
     /// once Start is actually enabled.

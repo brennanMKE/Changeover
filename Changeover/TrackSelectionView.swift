@@ -50,7 +50,7 @@ struct TrackSelectionView: View {
     /// over it, so a window full of inner scrollers is a window the user
     /// cannot scroll. These rows are the one control on this screen the
     /// user *must* operate, so they lay out at natural height and the
-    /// window body's single `ScrollView` (`MetadataEntryView.body`) carries
+    /// window body's single `ScrollView` (`ConfirmStepView.body`) carries
     /// them. That is safe now in a way it was not before this issue: the
     /// outer scroll view's *minimum* height is nil, so however many tracks
     /// the disc has, the section can no longer push the window past the
