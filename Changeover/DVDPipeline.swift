@@ -102,6 +102,16 @@ struct DVDPipeline {
     /// `JobOutcome` this method returns, through `JobState.finishing(with:)`.
     var reportPhase: @MainActor (JobPhase) -> Void = { _ in }
 
+    /// #0061 — reports one parsed HandBrake progress line, tagged with which
+    /// encode of this job it belongs to. This type is the only thing that
+    /// knows whether a given `HandBrakeCLI` is the feature, the fallback's
+    /// second pass, or extra *i* of *n* — `task 1 of 1` says nothing about
+    /// that — so the tagging happens here rather than in `EncodeController`.
+    /// Defaulted to a no-op so every existing construction site compiles
+    /// unchanged; production passes `JobContext.progress`, bound to the
+    /// job's own `Job.reportProgress(_:)`.
+    var reportProgress: @MainActor (JobProgress) -> Void = { _ in }
+
     /// #0049 review — the end-of-job eject (#0005). Production passes
     /// `JobContext.eject`, which goes through `JobController`'s ejector seam
     /// and applies a partial eject to controller state. Defaulted to
@@ -125,6 +135,17 @@ struct DVDPipeline {
     /// `decision: "discRemoved"` override in the reliability record, never
     /// counted as a disc read failure.
     var discRemoved: @MainActor () -> Bool = { false }
+
+    /// #0061 — the closure handed to one `EncodeController.encode` call,
+    /// tagging everything it parses as `unit`. Reads `reportProgress` into a
+    /// local first so the returned closure captures the closure value rather
+    /// than `self` (a struct that also carries `AppSettings`).
+    private func progressReporter(_ unit: JobProgress.Unit) -> @MainActor (HandBrakeProgress) -> Void {
+        let report = reportProgress
+        return { encode in
+            report(JobProgress(unit: unit, encode: encode, receivedAt: Date()))
+        }
+    }
 
     // MARK: - Run
 
@@ -478,6 +499,7 @@ struct DVDPipeline {
             handbrakePath: handbrakePath,
             filter:        deinterlaceFilter,
             audio:         selection.audio,
+            progress:      progressReporter(.feature),
             log:           log
         )
 
@@ -746,6 +768,9 @@ struct DVDPipeline {
                     handbrakePath: handbrakePath,
                     filter:        extraFilter,
                     audio:         .sourceDefault,
+                    progress:      progressReporter(
+                        .extra(index: index + 1, count: extras.items.count, titleIndex: item.titleIndex)
+                    ),
                     log:           log
                 ) {
                 case .failure(let extraFailure):
@@ -977,6 +1002,7 @@ struct DVDPipeline {
                 handbrakePath: handbrakePath,
                 filter:        fallbackFilter,
                 audio:         fallbackAudio,
+                progress:      progressReporter(.fallback),
                 log:           log
             )
 

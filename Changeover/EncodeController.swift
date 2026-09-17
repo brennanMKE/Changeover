@@ -249,6 +249,11 @@ enum EncodeController {
         hangTimeout:      TimeInterval = 30 * 60,
         readerDelay:      @escaping () -> Void = {},
         hardCeilingGrace: TimeInterval = 10,
+        /// #0061 — every parsed HandBrake progress line, hopped to MainActor
+        /// exactly like `log`. Defaulted to a no-op so every existing call
+        /// site (and test) is unaffected; `DVDPipeline` passes a closure that
+        /// tags the report with which encode it is (`JobProgress.Unit`).
+        progress:         @escaping @MainActor (HandBrakeProgress) -> Void = { _ in },
         log:              @escaping @MainActor (String) -> Void
     ) async -> Result<URL, JobFailure> {
         Task { @MainActor in log("▶ Starting HandBrakeCLI encode…") }
@@ -291,6 +296,12 @@ enum EncodeController {
                 tail.append(line)
             }
             Task { @MainActor in log(line) }
+            // #0061: the same line, parsed, for the Ripping step's bar and
+            // ETA. Hops to MainActor the same way `log` does; a line that
+            // isn't whole progress parses to `nil` and reports nothing.
+            if let parsed = HandBrakeProgressParser.parse(line) {
+                Task { @MainActor in progress(parsed) }
+            }
             // Defensive, evidence-based visibility for G1: a wrong
             // main-feature pick costs a 20-40 minute encode with no way to
             // interrupt it (no `cancel()`, by design — `JobController.swift`).

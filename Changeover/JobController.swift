@@ -74,6 +74,13 @@ final class JobController {
         /// `.organizing`/`.extras` — validated by `Job.advance(to:)` before
         /// ever touching this job's `state`.
         let phase: @MainActor (JobPhase) -> Void
+        /// #0061 — one parsed HandBrake progress line, tagged by
+        /// `DVDPipeline` with which encode of this job it belongs to. Bound
+        /// by `start` to this job's own `Job.reportProgress(_:)`, the same
+        /// job-bound shape as `log`/`phase`, so a late report can never land
+        /// on the wrong job. Defaulted to a no-op so a hand-built context in
+        /// a test needn't supply one.
+        var progress: @MainActor (JobProgress) -> Void = { _ in }
         /// #0049 review — the #0005 automatic end-of-job eject. Bound by
         /// `start` to the controller's own `ejector` seam, so the pipeline
         /// ejects through the same fake a test injects, and the outcome
@@ -405,6 +412,7 @@ final class JobController {
             extras:      context.extras,
             log:         context.log,
             reportPhase: context.phase,
+            reportProgress: context.progress,
             eject:       context.eject,
             discRemoved: context.discRemoved
         ).run()
@@ -577,6 +585,10 @@ final class JobController {
             extras: extrasPlan,
             log: { [job] line in job.log.append(line) },
             phase: { [job] phase in job.advance(to: phase) },
+            // #0061: bound to this job the same way, so a progress line that
+            // drains out of HandBrake's pipe after the job settled lands on
+            // the job it belongs to, which drops it (`Job.reportProgress`).
+            progress: { [job] progress in job.reportProgress(progress) },
             // #0049 review: the automatic end-of-job eject goes through the
             // same `ejector` seam as the manual one, and its outcome is
             // applied to controller state — a partial eject here leaves the

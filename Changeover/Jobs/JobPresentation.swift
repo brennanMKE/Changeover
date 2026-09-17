@@ -58,15 +58,18 @@ nonisolated struct JobPresentation: Equatable, Sendable {
             return JobPresentation(
                 label: "Encoding \(snapshot.metadata.baseName)",
                 tone: .active,
-                progress: progressMode(for: snapshot.state.progress),
+                progress: progressMode(for: snapshot),
                 detail: []
             )
         case .fallback:
-            return JobPresentation(label: "Retrying with MakeMKV", tone: .warning, progress: .indeterminate, detail: [])
+            // #0061: MakeMKV's own `PRGV:` lines are not parsed, so the rip
+            // half of the fallback stays indeterminate; the second HandBrake
+            // pass over the `.mkv` does report.
+            return JobPresentation(label: "Retrying with MakeMKV", tone: .warning, progress: progressMode(for: snapshot), detail: [])
         case .organizing:
             return JobPresentation(label: "Moving into Plex", tone: .active, progress: .indeterminate, detail: [])
         case .extras:
-            return JobPresentation(label: "Encoding extras", tone: .active, progress: .indeterminate, detail: [])
+            return JobPresentation(label: "Encoding extras", tone: .active, progress: progressMode(for: snapshot), detail: [])
         case .succeeded:
             return JobPresentation(label: elapsedLabel(snapshot), tone: .success, progress: .none, detail: [])
         case .failed:
@@ -84,9 +87,17 @@ nonisolated struct JobPresentation: Equatable, Sendable {
     /// in wording.
     static let discRemovedDetail = "The disc was removed while the job was running."
 
-    private static func progressMode(for progress: Double?) -> ProgressMode {
-        guard let progress else { return .indeterminate }
-        return .determinate(progress)
+    /// #0061 — the live HandBrake fraction (`JobSnapshot.progress`, parsed
+    /// from the encode's own output) first, then `JobState.progress`, which
+    /// is still always `nil` and still wire-compatible. One place decides,
+    /// so the history window's percentage and the Ripping step's bar can
+    /// never disagree. `.indeterminate` when neither is known — an encode
+    /// that hasn't printed a percentage yet is genuinely unmeasured.
+    private static func progressMode(for snapshot: JobSnapshot) -> ProgressMode {
+        guard let fraction = snapshot.progress?.encode.fraction ?? snapshot.state.progress else {
+            return .indeterminate
+        }
+        return .determinate(fraction)
     }
 
     /// `snapshot.outcome`, never `snapshot.state.outcome` — #0042's review

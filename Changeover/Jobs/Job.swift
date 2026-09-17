@@ -51,6 +51,11 @@ final class Job {
     let request: RipRequest?
 
     private(set) var state: JobState = .initial
+    /// #0061 — the most recent HandBrake progress line for this job, tagged
+    /// with which encode it belongs to (`JobProgress`). Cleared by every
+    /// successful `advance(to:)` below, so the `organizing` bar never shows
+    /// the feature encode's last 100 %.
+    private(set) var progress: JobProgress?
     /// Set once, in `finish(with:)`, to whatever `JobOutcome` the runner
     /// actually returned — independent of whether that outcome's mapped
     /// terminal phase was a *legal* edge from `state.phase` at the time (see
@@ -102,7 +107,19 @@ final class Job {
             return false
         }
         state = next
+        progress = nil
         return true
+    }
+
+    /// #0061 — records one parsed HandBrake progress line. Dropped once the
+    /// job is terminal, mirroring `advance(to:)`'s stance: a report that
+    /// arrives after the job settled (HandBrake's pipe drains
+    /// asynchronously) must not repaint a finished job as if it were still
+    /// encoding. Never logged on the drop path — progress is several lines a
+    /// second, and a late one is ordinary, not an anomaly.
+    func reportProgress(_ progress: JobProgress) {
+        guard !state.phase.isTerminal else { return }
+        self.progress = progress
     }
 
     /// The single terminal transition, applied once by
@@ -148,7 +165,7 @@ final class Job {
     /// (`RemoteControl.md:333`'s "full state"). Never holds a reference back
     /// to this `Job` or its `JobLog`: a client gets a value, not a live view.
     var snapshot: JobSnapshot {
-        JobSnapshot(id: id, metadata: metadata, state: state, outcome: outcome, startDate: startDate, endDate: endDate)
+        JobSnapshot(id: id, metadata: metadata, state: state, outcome: outcome, startDate: startDate, endDate: endDate, progress: progress)
     }
 }
 
@@ -166,4 +183,12 @@ nonisolated struct JobSnapshot: Codable, Sendable, Equatable {
     let outcome: JobOutcome?
     let startDate: Date
     let endDate: Date?
+    /// #0061 — the job's latest HandBrake progress report, or `nil` when
+    /// none has arrived (or the phase edge since cleared it). Additive and
+    /// optional on purpose: a payload encoded before this field decodes to
+    /// `nil` rather than failing, and the memberwise initializer's default
+    /// keeps every existing construction site compiling. `var`, not `let`,
+    /// so the synthesized decoder actually reads the wire value — the same
+    /// gotcha `DiscInsertion.insertionID` records.
+    var progress: JobProgress?
 }
