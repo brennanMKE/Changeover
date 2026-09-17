@@ -23,6 +23,18 @@ struct HandBrakeProgressParserTests {
         #expect(progress.etaSeconds == 2729)
     }
 
+    /// An x265 encode of a feature routinely starts with an ETA over an
+    /// hour, so the hours field has to actually be read: falsification on
+    /// gordon (2026-09-17) showed the 45-minute sample above passes even
+    /// with `h * 3600` mutated to `h * 60`, because its hours field is 00.
+    @Test func parsesAnETAOverAnHour() throws {
+        let progress = try #require(HandBrakeProgressParser.parse(
+            "Encoding: task 1 of 1, 2.00 % (12.00 fps, avg 11.50 fps, ETA 01h05m00s)"
+        ))
+        #expect(progress.etaSeconds == 3900)
+        #expect(JobPresentation.formatETA(seconds: try #require(progress.etaSeconds)) == "ETA 1h 05m")
+    }
+
     @Test func encodingLineWithoutTheParentheticalHasNoRateOrETA() throws {
         let progress = try #require(HandBrakeProgressParser.parse("Encoding: task 1 of 1, 45.12 %"))
         #expect(progress.stage == .encoding)
