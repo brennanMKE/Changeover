@@ -1058,7 +1058,7 @@ final class JobController {
             // `.playAll`/`.none` leave `selectedTitleIndex` nil so Start stays
             // disabled until the user picks explicitly — the whole point of
             // the guard is that nothing here defaults to "rip it".
-            if case .single(let index) = DiscTitleHeuristic.classify(result.disc, mainFeatureIndex: result.mainFeatureIndex) {
+            if case .single(let index, _) = DiscTitleHeuristic.classify(result.disc, mainFeatureIndex: result.mainFeatureIndex) {
                 selectedTitleIndex = index
                 selectedAudioTrackNumbers = Self.preselectedAudioTracks(titleIndex: index, scanState: scanState, settings: settings)
             }

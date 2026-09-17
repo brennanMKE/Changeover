@@ -117,16 +117,78 @@ struct DiscTitleHeuristicTests {
     @Test func mainFeatureIndexBecomesASingleAnswer() {
         let outcome = DiscTitleHeuristic.classify(Self.disc([Self.title(3, 6_645), Self.title(1, 600)]),
                                                   mainFeatureIndex: 3)
-        #expect(outcome == .single(index: 3))
+        #expect(outcome == .single(index: 3, source: .scanner))
     }
 
-    @Test func absentZeroAndUnknownMainFeatureAllAskTheUser() {
-        #expect(DiscTitleHeuristic.classify(Self.disc([Self.title(1, 6_000)]), mainFeatureIndex: nil) == .none)
+    /// #0056: absent, zero, negative or an unknown index are all "the
+    /// scanner gave no answer" — one case. When *no* title clears the
+    /// 45-minute fallback either, the result is still `.none`, exactly as
+    /// before this ticket. (The case where the fallback *does* find exactly
+    /// one candidate is covered by
+    /// `noScannerAnswerFallsBackToLengthWhenExactlyOneTitleClearsTheThreshold`
+    /// below — this disc's one title is kept under threshold on purpose so
+    /// this test still exercises the "no answer at all" tail.)
+    @Test func absentZeroNegativeAndUnknownMainFeatureAllAskTheUserWhenLengthFallsThroughToo() {
+        let shortDisc = Self.disc([Self.title(1, 600)]) // 10 min — well under 45
+        #expect(DiscTitleHeuristic.classify(shortDisc, mainFeatureIndex: nil) == .none)
         // Zero means the scan was wrong (single-title scan artefact), never
         // an answer.
-        #expect(DiscTitleHeuristic.classify(Self.disc([Self.title(1, 6_000)]), mainFeatureIndex: 0) == .none)
+        #expect(DiscTitleHeuristic.classify(shortDisc, mainFeatureIndex: 0) == .none)
+        // #0056: a real disc (Hornets' Nest) reported -1 — HandBrake naming
+        // no feature at all — which must be treated the same as absent/zero,
+        // not fall through some other path.
+        #expect(DiscTitleHeuristic.classify(shortDisc, mainFeatureIndex: -1) == .none)
         // An index the title list does not contain: ask, don't guess.
-        #expect(DiscTitleHeuristic.classify(Self.disc([Self.title(1, 6_000)]), mainFeatureIndex: 9) == .none)
+        #expect(DiscTitleHeuristic.classify(shortDisc, mainFeatureIndex: 9) == .none)
+    }
+
+    /// #0056's headline behavior, synthetic: no scanner answer, but exactly
+    /// one title clears `featureMinimumSeconds` — promote it, and record
+    /// that the choice came from length, not the scan.
+    @Test func noScannerAnswerFallsBackToLengthWhenExactlyOneTitleClearsTheThreshold() {
+        let disc = Self.disc([Self.title(1, 50 * 60), Self.title(2, 600)])
+        let expected = DiscTitleHeuristic.Outcome.single(index: 1, source: .length)
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: nil) == expected)
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: 0) == expected)
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: -1) == expected)
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: 99) == expected)
+    }
+
+    /// The Plan's explicit "zero or two-or-more stays `.none`" guard on the
+    /// fallback: two titles both clear 45 minutes and the scanner gave no
+    /// answer — a theatrical/extended pair or a double feature, not a
+    /// decision the threshold may make alone.
+    @Test func twoTitlesAtOrAboveTheThresholdWithNoScannerAnswerStayNone() {
+        let disc = Self.disc([Self.title(1, 50 * 60), Self.title(2, 60 * 60)])
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: nil) == .none)
+    }
+
+    /// A TV-shaped disc — several episode-length titles, none individually
+    /// reaching 45 minutes, and no concatenated Play All title for the guard
+    /// to catch — must not be turned into a movie by the length fallback
+    /// just because the scanner gave no answer. Zero candidates clear the
+    /// threshold, so `.none` is the only correct answer here, but it is
+    /// worth pinning: the fallback's job is to find a confident single
+    /// answer, not to reach for the longest title on a disc that has none.
+    @Test func tvShapedDiscWithNoScannerAnswerAndNoPlayAllTitleStaysNone() {
+        var titles: [DiscTitle] = []
+        for index in 1...8 { titles.append(Self.title(index, 22 * 60, chapters: 4)) }
+        #expect(DiscTitleHeuristic.classify(Self.disc(titles), mainFeatureIndex: nil) == .none)
+    }
+
+    /// "Run the Play All guard on the fallback candidate exactly as on a
+    /// scanner-provided one": no `MainFeature` at all on a Brooklyn
+    /// Nine-Nine-shaped disc. The length fallback finds exactly one
+    /// candidate (the 10,398 s concatenation; the eight ~21:40 episodes are
+    /// each well under 45 minutes), and the guard must still refuse it.
+    @Test func fallbackCandidateStillRunsThroughThePlayAllGuard() {
+        let outcome = DiscTitleHeuristic.classify(Self.brooklynNineNineDisc(), mainFeatureIndex: nil)
+        guard case .playAll(let index, let episodes) = outcome else {
+            Issue.record("expected .playAll, got \(outcome)")
+            return
+        }
+        #expect(index == 12)
+        #expect(episodes == Array(13...20))
     }
 
     /// #0039 — the bug this ticket was filed against: a scan that read zero
@@ -155,7 +217,7 @@ struct DiscTitleHeuristicTests {
         #expect(DiscTitleHeuristic.classify(Self.disc(interleaved), mainFeatureIndex: 12) == expected)
 
         let trap = Self.sumAllTrapDisc().titles
-        #expect(DiscTitleHeuristic.classify(Self.disc(trap.reversed()), mainFeatureIndex: 1) == .single(index: 1))
+        #expect(DiscTitleHeuristic.classify(Self.disc(trap.reversed()), mainFeatureIndex: 1) == .single(index: 1, source: .scanner))
     }
 
     // MARK: - Against the real scan capture
@@ -168,10 +230,34 @@ struct DiscTitleHeuristicTests {
     @Test func classifiesTheRealDragonTattooCaptureAsASingleFeature() throws {
         let output = try Self.dragonTattooFixtureOutput()
         let outcome = DiscTitleHeuristic.classify(output.disc, mainFeatureIndex: output.mainFeatureIndex)
-        #expect(outcome == .single(index: 1))
+        #expect(outcome == .single(index: 1, source: .scanner))
 
         let roles = DiscTitleHeuristic.applyingSuggestedRoles(to: output.disc, mainFeatureIndex: output.mainFeatureIndex)
         #expect(roles.titles.first { $0.index == 1 }?.suggestedRole == .mainFeature)
+        #expect(roles.titles.filter { $0.suggestedRole == .mainFeature }.count == 1)
+    }
+
+    /// #0056's real fixture, and the bug this ticket exists to fix:
+    /// HandBrake reports `MainFeature: -1` on this disc — no answer at all —
+    /// yet title 11 runs 2:26:53 across 16 chapters and nothing else on the
+    /// disc exceeds ten minutes (titles 1–3 run 8–10 minutes). The
+    /// 45-minute fallback must promote title 11 and record that the choice
+    /// came from length, not the scan; `applyingSuggestedRoles` must agree.
+    @Test func classifiesTheRealHornetsNestCaptureAsASingleFeatureByLength() throws {
+        let text = try String(
+            contentsOfFile: Self.fixturePath("discs/hornets-nest/scan.json"), encoding: .utf8
+        )
+        let output = HandBrakeScanParser.parse(text, volumeName: "HORNETS_NEST", driveName: "joe")
+
+        #expect(!output.titleSetCorrupted)
+        #expect(output.disc.titles.count == 11)
+        #expect(output.mainFeatureIndex == -1)
+
+        let outcome = DiscTitleHeuristic.classify(output.disc, mainFeatureIndex: output.mainFeatureIndex)
+        #expect(outcome == .single(index: 11, source: .length))
+
+        let roles = DiscTitleHeuristic.applyingSuggestedRoles(to: output.disc, mainFeatureIndex: output.mainFeatureIndex)
+        #expect(roles.titles.first { $0.index == 11 }?.suggestedRole == .mainFeature)
         #expect(roles.titles.filter { $0.suggestedRole == .mainFeature }.count == 1)
     }
 
@@ -313,7 +399,7 @@ struct DiscTitleHeuristicTests {
         #expect(abs(sumAll - feature.durationSeconds) * 100
                 <= feature.durationSeconds * DiscTitleHeuristic.playAllDurationTolerancePercent)
 
-        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: 1) == .single(index: 1))
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: 1) == .single(index: 1, source: .scanner))
         // The guard does find a ≥ 3 cluster here (five titles, 3,154 s); it
         // is the cluster's total missing the 2% match that returns nil.
         #expect(DiscTitleHeuristic.playAllEpisodes(for: feature, among: disc.titles) == nil)
@@ -327,7 +413,7 @@ struct DiscTitleHeuristicTests {
             Self.title(3, 1_250),   // within 15% of title 2 — but only two of them
             Self.title(4, 300),
         ])
-        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: 1) == .single(index: 1))
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: 1) == .single(index: 1, source: .scanner))
         #expect(DiscTitleHeuristic.playAllEpisodes(for: Self.title(1, 5_955, chapters: 25),
                                                    among: disc.titles) == nil)
     }
@@ -358,13 +444,29 @@ struct DiscTitleHeuristicTests {
         #expect(roles.titles.first { $0.index == 5 }?.suggestedRole == .ignore)
     }
 
-    /// MainFeature 0 is a scan problem, never an answer — nothing may be
-    /// marked as the feature.
-    @Test func mainFeatureZeroNeverMarksAFeature() {
-        let disc = Self.disc([Self.title(1, 9_478), Self.title(2, 600)])
+    /// MainFeature 0 is a scan problem, never a scanner answer on its own —
+    /// but #0056 folds it into "the scanner gave no answer" like an absent
+    /// or unknown index, so it still falls back to the length threshold
+    /// rather than refusing to promote anything at all. With nothing on the
+    /// disc long enough to clear that bar either, nothing is marked the
+    /// feature.
+    @Test func mainFeatureZeroWithNoTitleClearingTheThresholdNeverMarksAFeature() {
+        let disc = Self.disc([Self.title(1, 600), Self.title(2, 600)])
         let roles = DiscTitleHeuristic.applyingSuggestedRoles(to: disc, mainFeatureIndex: 0)
         #expect(!roles.titles.contains { $0.suggestedRole == .mainFeature })
         #expect(roles.titles.first { $0.index == 1 }?.suggestedRole == .extra)
+    }
+
+    /// The flip side, and the behavior change #0056 makes deliberately:
+    /// MainFeature 0 no longer holds back promotion when exactly one title
+    /// clears 45 minutes — it falls back exactly like an absent or unknown
+    /// index would, because a scan artefact and "the scanner didn't answer"
+    /// are the same case now.
+    @Test func mainFeatureZeroStillFallsBackToLengthWhenExactlyOneTitleClearsTheThreshold() {
+        let disc = Self.disc([Self.title(1, 9_478), Self.title(2, 600)])
+        let roles = DiscTitleHeuristic.applyingSuggestedRoles(to: disc, mainFeatureIndex: 0)
+        #expect(roles.titles.first { $0.index == 1 }?.suggestedRole == .mainFeature)
+        #expect(roles.titles.filter { $0.suggestedRole == .mainFeature }.count == 1)
     }
 
     /// The regression this ticket exists to prevent: `applyingSuggestedRoles`

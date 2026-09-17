@@ -195,7 +195,7 @@ struct DiscCorpusTests {
         slug: String
     ) {
         switch (expect.outcome, outcome) {
-        case ("single", .single(let index)):
+        case ("single", .single(let index, _)):
             #expect(index == expect.outcomeIndex, "\(slug): .single index")
         case ("playAll", .playAll(let index, let episodes)):
             #expect(index == expect.outcomeIndex, "\(slug): .playAll index")

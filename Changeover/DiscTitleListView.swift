@@ -149,8 +149,8 @@ struct DiscTitleListView: View {
         }
 
         switch outcome {
-        case .single(let index):
-            confirmationRow(index: index, disc: result.disc)
+        case .single(let index, let source):
+            confirmationRow(index: index, source: source, disc: result.disc)
             if showFullTable {
                 titleTable(result.disc, badgeIndex: index)
             }
@@ -211,7 +211,7 @@ struct DiscTitleListView: View {
 
     // MARK: - Confirmation row (the primary control on almost every disc)
 
-    private func confirmationRow(index: Int, disc: DiscInfo) -> some View {
+    private func confirmationRow(index: Int, source: DiscTitleHeuristic.FeatureSource, disc: DiscInfo) -> some View {
         let title = disc.titles.first { $0.index == index }
         let extrasPlan = jobs.selectedExtrasPlan
         return VStack(alignment: .leading, spacing: 2) {
@@ -227,6 +227,14 @@ struct DiscTitleListView: View {
                     showFullTable.toggle()
                 }
                 .buttonStyle(.link)
+            }
+            // #0056: the length fallback chose this title, not HandBrake's
+            // own MainFeature answer — say so, rather than presenting a
+            // guess with the same confidence as a scanner answer.
+            if let caption = DiscTitleFormatting.featureSourceCaption(source) {
+                Text(caption)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
             // #0038: extras must be reachable without first disagreeing with
             // the detected feature — "Not this one?" said the opposite of

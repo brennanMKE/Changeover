@@ -4,10 +4,9 @@ import Foundation
 ///
 /// The Re-triage settled the design: **HandBrake's `MainFeature` is the
 /// answer** — a first-class field from the scanner, correct on the measured
-/// disc (Fargo: 1 among 8) — and the heuristic this ticket was originally
-/// written for (a 45-minute threshold with scorecard tiebreaks) is gone.
-/// What survives is the one guard `MainFeature` cannot provide: the
-/// **Play All** case.
+/// disc (Fargo: 1 among 8) — and the answer is preferred whenever the
+/// scanner supplies one. What `MainFeature` cannot provide is the one guard
+/// this type also runs on every candidate: the **Play All** case.
 ///
 /// The Play All failure is the worst available in this phase: a TV-season
 /// disc authors one title concatenating every episode. It is the longest,
@@ -17,15 +16,22 @@ import Foundation
 /// pure integer comparison, verified against the fixture corpus with an
 /// enormous margin (the nearest movie misses by 80 percentage points).
 ///
-/// `MainFeature: 0` is a scan problem, not an answer: an earlier scan
+/// `MainFeature: 0` is a scan problem, not a real absence: an earlier scan
 /// reported 0 as an artefact of scanning a single title (`--title 0`
 /// omitted); on a full scan a zero means the scan was wrong
-/// (`MakeMKVReplacement-Results.md` §2). It is reported as `.none` — ask the
-/// user — never fallen through to a heuristic.
+/// (`MakeMKVReplacement-Results.md` §2). #0056 — a real disc (*The Girl Who
+/// Kicked The Hornets' Nest*) surfaced a second, more common shape of "no
+/// answer": `MainFeature: -1`, HandBrake naming no feature at all. Zero, a
+/// negative index, an absent field, and an index the title list doesn't
+/// contain are all treated as one case — the scanner gave no answer — and
+/// fall back to a 45-minute length threshold (`featureMinimumSeconds`)
+/// rather than giving up. The threshold promotes a title only when exactly
+/// one clears it; it never overrides a scanner answer.
 ///
-/// No LLM, no scoring, no weights: one numeric fact from the scanner plus
-/// one pure comparison. A wrong index here means ripping the wrong thing for
-/// forty minutes; determinism and explainability win by construction.
+/// No LLM, no scoring, no weights: one numeric fact from the scanner, or
+/// failing that a single length threshold, plus one pure comparison. A wrong
+/// index here means ripping the wrong thing for forty minutes; determinism
+/// and explainability win by construction.
 nonisolated enum DiscTitleHeuristic {
 
     /// Titles shorter than this are `.ignore` — menu loops, FBI warnings,
@@ -50,10 +56,36 @@ nonisolated enum DiscTitleHeuristic {
     /// an episode cluster.
     static let playAllEpisodeMinimumSeconds = 300
 
+    /// #0056 — the fallback used when the scanner gives no answer at all
+    /// (`MainFeature` absent, `<= 0`, or naming an index the title list
+    /// doesn't contain). Reinstates the threshold #0025's Re-triage deleted,
+    /// on new evidence: HandBrake reported `MainFeature: -1` on a real disc
+    /// (*The Girl Who Kicked The Hornets' Nest*) whose feature (title 11,
+    /// 2:26:53) is otherwise unambiguous — nothing else on the disc exceeds
+    /// ten minutes. The threshold's own evidence is #0025's fixture table:
+    /// across nine captured discs, exactly one title per disc ran ≥ 45
+    /// minutes, and the longest non-feature title in the corpus was 39:46
+    /// (Super Troopers 2's behind-the-scenes featurette) — 5:14 of margin.
+    /// Only used as a fallback: a scanner answer is always preferred.
+    static let featureMinimumSeconds = 45 * 60
+
+    /// Records *how* a `.single` outcome's feature was chosen — a plain
+    /// value threaded onto the outcome so a caller (the confirmation row,
+    /// #0026; the wiring #0054 hooks into) can say when the app is guessing
+    /// from length rather than repeating the scanner's own answer.
+    enum FeatureSource: Equatable {
+        /// HandBrake's `MainFeature` named this title directly.
+        case scanner
+        /// The scanner gave no answer; this title was the only one at or
+        /// above `featureMinimumSeconds`.
+        case length
+    }
+
     enum Outcome: Equatable {
-        /// Exactly one answer from the scanner, and the Play All guard did
-        /// not fire — no user interaction needed.
-        case single(index: Int)
+        /// Exactly one answer, and the Play All guard did not fire — no
+        /// user interaction needed. `source` says whether the answer came
+        /// from the scanner or from the length fallback.
+        case single(index: Int, source: FeatureSource)
         /// A probable TV-season disc: refuse to call it a movie and say why.
         /// `index` is the suspicious title; `episodes` are the cluster it
         /// matches. The user can still override via the picker (#0026); the
@@ -66,9 +98,11 @@ nonisolated enum DiscTitleHeuristic {
         /// looks like a feature. `DiscTitleListView` must render it as its
         /// own failure-shaped state, not the picker `.none` shows.
         case noTitles
-        /// The scan did identify titles, but did not identify a feature
-        /// among them (absent, zero, or an index the title list does not
-        /// contain) — show the picker and say why.
+        /// The scan did identify titles, but no feature was identified: the
+        /// scanner gave no answer (absent, `<= 0`, or an index the title
+        /// list does not contain) *and* the #0056 length fallback found
+        /// zero or two-or-more titles at or above `featureMinimumSeconds` —
+        /// show the picker and say why.
         case none
     }
 
@@ -85,22 +119,44 @@ nonisolated enum DiscTitleHeuristic {
         guard !disc.titles.isEmpty else {
             return .noTitles
         }
-        // Absent or zero: the scan did not identify a feature. Zero means
-        // the scan was wrong (a single-title scan artefact) — investigate
-        // the scan, never fall through to a heuristic.
-        guard let mainFeatureIndex, mainFeatureIndex != 0 else {
-            return .none
-        }
-        guard let candidate = disc.titles.first(where: { $0.index == mainFeatureIndex }) else {
-            // The scanner named a title the list does not contain — same
-            // answer: ask, don't guess.
-            return .none
+
+        // #0056 — absent, `<= 0` (zero means the scan was wrong, a
+        // single-title scan artefact; a negative index, seen on a real
+        // disc, means HandBrake named no feature at all), or naming a title
+        // the list doesn't contain: these are all "the scanner gave no
+        // answer", one case, handled by the length fallback below rather
+        // than three separate short-circuits to `.none`.
+        if let mainFeatureIndex, mainFeatureIndex > 0,
+           let candidate = disc.titles.first(where: { $0.index == mainFeatureIndex }) {
+            return outcome(for: candidate, source: .scanner, among: disc.titles)
         }
 
-        if let episodes = playAllEpisodes(for: candidate, among: disc.titles) {
+        return classifyByLength(disc)
+    }
+
+    /// #0056's fallback, run only when the scanner gave no answer: promote
+    /// a title by the `featureMinimumSeconds` threshold only when **exactly
+    /// one** title clears it. Zero or two-or-more both stay `.none` — the
+    /// threshold is confident only in the single-candidate case; ties and
+    /// double features still need a person, exactly as the scanner-answer
+    /// path already asks for a person on a scan problem.
+    private static func classifyByLength(_ disc: DiscInfo) -> Outcome {
+        let candidates = disc.titles.filter { $0.durationSeconds >= featureMinimumSeconds }
+        guard candidates.count == 1, let candidate = candidates.first else {
+            return .none
+        }
+        return outcome(for: candidate, source: .length, among: disc.titles)
+    }
+
+    /// Shared tail of both paths: the Play All guard runs on the candidate
+    /// exactly the same way whether it came from the scanner or from the
+    /// length fallback — a TV season disc must be refused by the guard
+    /// regardless of which path found its Play All title.
+    private static func outcome(for candidate: DiscTitle, source: FeatureSource, among titles: [DiscTitle]) -> Outcome {
+        if let episodes = playAllEpisodes(for: candidate, among: titles) {
             return .playAll(index: candidate.index, episodes: episodes.map(\.index))
         }
-        return .single(index: candidate.index)
+        return .single(index: candidate.index, source: source)
     }
 
     /// Pure, testable on its own: does `candidate` look like a Play All
@@ -171,7 +227,7 @@ nonisolated enum DiscTitleHeuristic {
     ) -> DiscInfo {
         var disc = disc
         let featureIndex: Int?
-        if case .single(let index) = classify(disc, mainFeatureIndex: mainFeatureIndex) {
+        if case .single(let index, _) = classify(disc, mainFeatureIndex: mainFeatureIndex) {
             featureIndex = index
         } else {
             featureIndex = nil

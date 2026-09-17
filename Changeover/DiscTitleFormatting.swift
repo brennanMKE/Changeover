@@ -107,6 +107,19 @@ nonisolated enum DiscTitleFormatting {
         return message
     }
 
+    /// #0056 — the confirmation row's addendum for `DiscTitleHeuristic
+    /// .FeatureSource`: `nil` when HandBrake's own `MainFeature` supplied
+    /// the answer (the ordinary case needs no extra line), or a caption
+    /// naming the length fallback when it didn't.
+    static func featureSourceCaption(_ source: DiscTitleHeuristic.FeatureSource) -> String? {
+        switch source {
+        case .scanner:
+            return nil
+        case .length:
+            return "HandBrake did not name a main feature — chosen because it is the only title at or above 45 minutes."
+        }
+    }
+
     /// The Play All refusal's one sentence, e.g. "This looks like a TV
     /// season disc — 8 titles of about 21 minutes that together match the
     /// length of title 12." `episodes` are the indices

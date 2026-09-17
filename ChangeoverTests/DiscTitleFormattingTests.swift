@@ -120,6 +120,18 @@ struct DiscTitleFormattingTests {
         #expect(DiscTitleFormatting.streamSummary(for: title) == "1 audio (eng)")
     }
 
+    // MARK: - featureSourceCaption (#0056)
+
+    @Test func featureSourceCaptionIsNilForAScannerAnswer() {
+        #expect(DiscTitleFormatting.featureSourceCaption(.scanner) == nil)
+    }
+
+    @Test func featureSourceCaptionNamesTheLengthFallbackForALengthAnswer() {
+        let caption = DiscTitleFormatting.featureSourceCaption(.length)
+        #expect(caption != nil)
+        #expect(caption?.contains("45 minutes") == true)
+    }
+
     // MARK: - playAllMessage
 
     @Test func playAllMessageNamesTheClusterCountApproximateLengthAndSuspiciousTitle() {
