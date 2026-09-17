@@ -20,6 +20,12 @@ struct TrackSelectionView: View {
     let settings: AppSettings
     let title: DiscTitle
 
+    /// #0140 — the subtitle list is reference-only (#0036) and was the
+    /// worst offender for pushing `Start Ripping` off-screen (21 rows on
+    /// the disc that filed this issue). Collapsed by default; only its
+    /// one-line `DiscTitleFormatting.subtitleSummary` shows until expanded.
+    @State private var subtitlesExpanded = false
+
     private var audioOptions: [AudioTrackOption] { AudioTrackOptions.options(for: title) }
     private var isUntagged: Bool { AudioTrackOptions.isUntagged(title) }
     private var subtitleGroups: [SubtitleGroup] { SubtitleGrouping.groups(for: title) }
@@ -35,6 +41,13 @@ struct TrackSelectionView: View {
 
     // MARK: - Audio
 
+    /// #0140: the list itself gets a sensible maximum height (a disc with
+    /// many audio tracks — the filing disc had 7 — otherwise grows this
+    /// section without bound, same failure mode as the subtitle list). A
+    /// nested `ScrollView` rather than a `List`: these rows are checkbox
+    /// toggles, not a selectable table, and the outer window body already
+    /// nests one scroll region inside another for the #0043 log pane, so
+    /// this isn't a new pattern in this view tree.
     private var audioSection: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Audio")
@@ -49,12 +62,17 @@ struct TrackSelectionView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            ForEach(audioOptions) { option in
-                Toggle(isOn: audioBinding(for: option)) {
-                    audioLabel(for: option)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(audioOptions) { option in
+                        Toggle(isOn: audioBinding(for: option)) {
+                            audioLabel(for: option)
+                        }
+                        .toggleStyle(.checkbox)
+                    }
                 }
-                .toggleStyle(.checkbox)
             }
+            .frame(maxHeight: 160)
         }
     }
 
@@ -94,18 +112,25 @@ struct TrackSelectionView: View {
 
     // MARK: - Subtitles (read-only, #0033 — #0036 makes these selectable)
 
+    /// #0140: collapsed by default behind a disclosure — a disc with many
+    /// subtitle tracks (21 on the disc that filed this issue, each its own
+    /// "cannot become an MP4 track" row) was the single biggest contributor
+    /// to the window growing past the screen. The label alone, from
+    /// `DiscTitleFormatting.subtitleSummary` (unit-tested), carries the
+    /// "purely informational" fact that used to be a separate caption line.
     private var subtitleSection: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("Subtitles")
-                .font(.headline)
-            Text("Not carried into the output yet — shown for reference.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            ForEach(subtitleGroups) { group in
-                Text(Self.subtitleRowText(for: group))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        DisclosureGroup(isExpanded: $subtitlesExpanded) {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(subtitleGroups) { group in
+                    Text(Self.subtitleRowText(for: group))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
+            .padding(.top, 3)
+        } label: {
+            Text(DiscTitleFormatting.subtitleSummary(count: subtitleGroups.count))
+                .font(.subheadline)
         }
     }
 

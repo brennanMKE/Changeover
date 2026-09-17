@@ -19,16 +19,31 @@ struct MetadataEntryView: View {
     @State private var selectionDisc: DiscInsertion?
 
     var body: some View {
+        // #0140: `Start Ripping` and its #0053 reason caption must stay
+        // reachable on any disc, at any window size — the disc that filed
+        // this issue (7 audio, 21 subtitle tracks) grew the old single
+        // `VStack` past the screen with no way to scroll down to the
+        // button. `actionBar` now sits outside the `ScrollView`, pinned to
+        // the bottom; everything above it — search, the disc title
+        // section, the failure banner, the log — scrolls as one region.
+        // The individual unbounded lists inside that region (search
+        // results, the title table, the audio list) still cap their own
+        // height rather than relying on the outer scroll alone.
         VStack(spacing: 0) {
-            searchBar
+            ScrollView {
+                VStack(spacing: 0) {
+                    searchBar
+                    Divider()
+                    statusRow
+                    resultsList
+                    Divider()
+                    folderPreview
+                    titlesSection
+                    failureBanner
+                    logArea
+                }
+            }
             Divider()
-            statusRow
-            resultsList
-            Divider()
-            folderPreview
-            titlesSection
-            failureBanner
-            logArea
             actionBar
         }
         .frame(minWidth: 560, idealWidth: 620)
@@ -114,13 +129,16 @@ struct MetadataEntryView: View {
 
     // MARK: - Results list
 
+    // #0140: capped at both ends — `maxHeight` stops a long TMDB result set
+    // from growing the section without bound now that the window itself no
+    // longer grows with its content (the middle scrolls instead).
     private var resultsList: some View {
         List(vm.results, selection: $selectedID) { movie in
             MovieRow(movie: movie, posterURL: vm.posterURL(for: movie))
                 .tag(movie.id)
         }
         .listStyle(.inset)
-        .frame(minHeight: 220)
+        .frame(minHeight: 220, maxHeight: 220)
     }
 
     // MARK: - Folder name preview

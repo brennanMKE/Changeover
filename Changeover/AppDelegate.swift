@@ -140,6 +140,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // (a confirmation row plus, on disclosure or a Play All/unidentified
         // disc, the full title table) between the folder preview and the
         // log. `minSize` keeps the two lists from being crushed.
+        //
+        // #0140: `MetadataEntryView` now pins `Start Ripping` (and its
+        // #0053 reason caption) below a `ScrollView` that holds everything
+        // else, so the button is reachable at this `minSize` — or any
+        // size — regardless of how much the disc's own content (audio
+        // tracks, subtitle tracks, log lines) would otherwise have grown
+        // the window past the screen (the bug: 7 audio/21 subtitle tracks
+        // pushed Start off-screen with no way to reach it). 620x760/560x560
+        // were already generous enough that they don't need to change for
+        // this fix; left as-is.
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 620, height: 760),
             styleMask: [.titled, .closable, .resizable],

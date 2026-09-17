@@ -120,6 +120,19 @@ nonisolated enum DiscTitleFormatting {
         }
     }
 
+    /// #0140 — the collapsed disclosure's one-line summary for the
+    /// (purely informational, #0036) subtitle list, e.g. "21 subtitle
+    /// tracks, none carried into the output". `count` is the number of
+    /// `SubtitleGrouping.groups(for:)` groups, matching `streamSummary`'s
+    /// "N sub(s)" count so the two never disagree about how many subtitle
+    /// tracks the disc has. The trailing clause is constant regardless of
+    /// `count` — it states a fact about the *output* (#0036's decision:
+    /// Phase 2 carries no subtitles at all), not a per-track count, so it
+    /// reads correctly whether one track or many were found.
+    static func subtitleSummary(count: Int) -> String {
+        "\(count) subtitle track\(count == 1 ? "" : "s"), none carried into the output"
+    }
+
     /// The Play All refusal's one sentence, e.g. "This looks like a TV
     /// season disc — 8 titles of about 21 minutes that together match the
     /// length of title 12." `episodes` are the indices

@@ -236,4 +236,23 @@ struct DiscTitleFormattingTests {
         #expect(message.contains("Full Disk Access"))
         #expect(message.contains("may not have permission"))
     }
+
+    // MARK: - subtitleSummary (#0140 — the collapsed-disclosure one-liner)
+
+    @Test func subtitleSummaryMatchesTheIssuesWorkedExample() {
+        // The Girl in the Spider's Web, 2026-09-16 — the disc that motivated
+        // #0140: 21 subtitle rows pushed Start Ripping off the screen.
+        #expect(DiscTitleFormatting.subtitleSummary(count: 21) == "21 subtitle tracks, none carried into the output")
+    }
+
+    @Test func subtitleSummarySingularizesOneTrack() {
+        #expect(DiscTitleFormatting.subtitleSummary(count: 1) == "1 subtitle track, none carried into the output")
+    }
+
+    @Test func subtitleSummaryPluralizesZeroTracks() {
+        // Not reachable through the view today (`TrackSelectionView` only
+        // shows the section when `subtitleGroups` is non-empty), but the
+        // function itself should still read grammatically for 0.
+        #expect(DiscTitleFormatting.subtitleSummary(count: 0) == "0 subtitle tracks, none carried into the output")
+    }
 }
