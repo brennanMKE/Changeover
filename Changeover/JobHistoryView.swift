@@ -1,14 +1,19 @@
+import AppKit
 import SwiftUI
 
 /// #0048 — the session's job history: the currently running job (if any)
 /// plus every job that finished this session, oldest first, matching
-/// `JobController.snapshots`' ordering. Reads `JobController.current`/
-/// `.history` directly from the environment, never a `JobQueue` — under
-/// #0040's option A there's never more than one job in flight, so this is a
-/// history view, not a live queue of concurrent rows.
+/// `JobController.snapshots`' ordering.
 ///
-/// Stays thin on purpose: every "what does this phase mean" decision lives
-/// in `JobPresentation`, driven off each `Job`'s `.snapshot` — the same
+/// #0062 reworked the detail pane: a fixed summary card (`HistoryDetail`)
+/// instead of a header that the Cancel button overlapped, Cancel and Retry in
+/// the window **toolbar** where AppKit lays them out outside the content, and
+/// the log as filtered, folded rows (`LogPane`). Since #0061 moved the log out
+/// of the rip window, this is the only place it lives, so it has to answer
+/// "what happened to my rip?" on its own.
+///
+/// Stays thin on purpose: every "what does this mean" decision lives in
+/// `JobPresentation`/`LogRows`, driven off each `Job`'s `.snapshot` — the same
 /// value a Phase 4 client renders (#0041/#0042).
 struct JobHistoryView: View {
     @Environment(AppSettings.self) private var settings
@@ -23,12 +28,19 @@ struct JobHistoryView: View {
                 // `JobController.cancellingJobID`, so a cancel accepted from
                 // the status menu shows here too.
                 JobHistoryRow(
-                    job: job,
-                    isCancelling: jobs.cancellingJobID == job.id
+                    row: JobPresentation.sidebarRow(
+                        for: job.snapshot,
+                        isCancelling: jobs.cancellingJobID == job.id,
+                        discRemovedDuringJob: job.discRemovedDuringJob
+                    )
                 )
             }
             .listStyle(.sidebar)
             .navigationTitle("History")
+            // #0062: the sidebar's share of a 560-point window is what
+            // truncated "Encoding Air (202…". A real minimum, and a maximum
+            // so it can never eat the summary card's ~480 points.
+            .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
             .toolbar {
                 ToolbarItem {
                     Button("Clear History", action: jobs.clearHistory)
@@ -50,7 +62,7 @@ struct JobHistoryView: View {
             }
         }
         // Matches the window's own `minSize` (`AppDelegate.showHistory`).
-        .frame(minWidth: 560, minHeight: 420)
+        .frame(minWidth: 720, minHeight: 460)
         .onAppear { applyPendingSelection() }
         .onChange(of: jobs.pendingHistorySelection) { _, _ in applyPendingSelection() }
         // A pruned or cleared selection moves to a row that still exists.
@@ -120,20 +132,18 @@ struct JobHistoryView: View {
 // MARK: - Row
 
 private struct JobHistoryRow: View {
-    let job: Job
-    let isCancelling: Bool
+    let row: JobPresentation.SidebarRow
 
     var body: some View {
-        let presentation = JobPresentation.make(for: job.snapshot, isCancelling: isCancelling, discRemovedDuringJob: job.discRemovedDuringJob)
         HStack(spacing: 8) {
             Circle()
-                .fill(presentation.tone.color)
+                .fill(row.tone.color)
                 .frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 2) {
-                Text(job.metadata.baseName)
+                Text(row.title)
                     .font(.body)
                     .lineLimit(1)
-                Text(presentation.label)
+                Text(row.subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -152,53 +162,154 @@ private struct JobDetailView: View {
     let onCancel: () -> Void
     let onRetry: () -> Void
 
+    /// #0062 — the optional "Size" fact. Fails soft: no probe, no fact, and
+    /// never a spinner (`docs/log-ui-and-duplicate-check.md` §9).
+    @State private var fileFacts: LibraryFile?
+
     var body: some View {
-        let presentation = JobPresentation.make(for: job.snapshot, isCancelling: isCancelling, discRemovedDuringJob: job.discRemovedDuringJob)
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(job.metadata.baseName)
-                    .font(.title2)
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(presentation.tone.color)
-                        .frame(width: 8, height: 8)
-                    Text(presentation.label)
-                        .foregroundStyle(.secondary)
-                    if case .determinate(let value) = presentation.progress {
-                        Text("(\(Int((value * 100).rounded()))%)")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                if !presentation.detail.isEmpty {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(presentation.detail, id: \.self) { line in
-                            Text(line)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                HStack {
-                    if !job.state.phase.isTerminal {
-                        // A non-terminal job is always `JobController.current`.
-                        let cancelDecision = CancelPolicy.decide(requestedID: job.id, currentID: job.id, phase: job.state.phase)
-                        Button(isCancelling ? "Cancelling…" : "Cancel Job", role: .destructive, action: onCancel)
-                            .disabled(cancelDecision != .cancel || isCancelling)
-                            .help(cancelDecision.refusalReason ?? "Stop this job.")
-                    }
-                    if job.state.phase == .failed || job.state.phase == .cancelled {
-                        Button("Retry", action: onRetry)
-                            .disabled(retryDecision != .retry)
-                            .help(retryDecision.refusalReason ?? "Start a new job with this job's movie, title and tracks.")
-                    }
+            // A running job's elapsed time and ETA have to tick; a finished
+            // one is re-rendered once and never again.
+            if job.state.phase.isTerminal {
+                card(now: Date())
+            } else {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    card(now: context.date)
                 }
             }
-            .padding()
 
             Divider()
 
-            JobLogView(log: job.log)
+            LogPane(
+                log: job.log,
+                revealURL: job.state.phase == .succeeded ? job.outcome?.destination : nil,
+                onCopy: { copyLog(now: Date()) }
+            )
         }
+        .toolbar {
+            // #0062: the fix for the screenshot's overlap. Toolbar items are
+            // laid out by AppKit *outside* the content, so they can never
+            // clip the title or sit on top of the progress line, and nothing
+            // can push them off-screen (#0140).
+            ToolbarItemGroup(placement: .primaryAction) {
+                ForEach(Array(detail(now: Date()).actions.enumerated()), id: \.offset) { _, action in
+                    toolbarButton(action)
+                }
+            }
+        }
+        .task(id: job.outcome?.destination) {
+            guard let destination = job.outcome?.destination else { return }
+            fileFacts = await LibraryProbe.fileFacts(at: destination.path)
+        }
+    }
+
+    private func detail(now: Date) -> JobPresentation.HistoryDetail {
+        JobPresentation.historyDetail(
+            for: job.snapshot,
+            request: job.request,
+            discVolumeName: job.disc.lastPathComponent,
+            isCancelling: isCancelling,
+            discRemovedDuringJob: job.discRemovedDuringJob,
+            retryDecision: retryDecision,
+            fileFacts: fileFacts,
+            now: now
+        )
+    }
+
+    private func card(now: Date) -> some View {
+        JobSummaryCard(detail: detail(now: now)).padding()
+    }
+
+    @ViewBuilder
+    private func toolbarButton(_ action: JobPresentation.HistoryDetail.Action) -> some View {
+        switch action {
+        case .cancel(let enabled, let reason):
+            Button(isCancelling ? "Cancelling…" : "Cancel Job", role: .destructive, action: onCancel)
+                .disabled(!enabled)
+                .help(reason ?? "Stop this job.")
+        case .retry(let enabled, let reason):
+            Button("Retry", action: onRetry)
+                .disabled(!enabled)
+                .help(reason ?? "Start a new job with this job's movie, title and tracks.")
+        case .revealInFinder, .copyLog:
+            // Both live on the log pane's own bar, next to the raw text they
+            // are about.
+            EmptyView()
+        }
+    }
+
+    private func copyLog(now: Date) {
+        let text = JobPresentation.bugReportText(detail: detail(now: now), logText: job.log.exportText())
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+/// #0062 — the summary card: outcome, timings, disc, title/tracks, and where
+/// the file landed. Renders `HistoryDetail` and decides nothing.
+private struct JobSummaryCard: View {
+    let detail: JobPresentation.HistoryDetail
+
+    private static let factColumns = [
+        GridItem(.adaptive(minimum: 200, maximum: 460), spacing: 12, alignment: .leading)
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(detail.title)
+                .font(.title2)
+                .lineLimit(2)
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(detail.tone.color)
+                    .frame(width: 8, height: 8)
+                Text(detail.statusText)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let progress = detail.progress {
+                if progress.isDeterminate, let fraction = fraction(of: progress) {
+                    ProgressView(value: fraction)
+                } else {
+                    ProgressView().progressViewStyle(.linear)
+                }
+            }
+            if !detail.failureLines.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(detail.failureLines, id: \.self) { line in
+                        Text(line)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            LazyVGrid(columns: Self.factColumns, alignment: .leading, spacing: 4) {
+                ForEach(detail.facts, id: \.label) { fact in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(fact.label)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(fact.value)
+                            .font(.caption)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// `ProgressSummary` carries the percentage as text; the bar wants the
+    /// number back. Parsed from the same string so the two can never
+    /// disagree by a rounding step.
+    private func fraction(of progress: JobPresentation.ProgressSummary) -> Double? {
+        guard let text = progress.percentText,
+              let value = Double(text.replacingOccurrences(of: " %", with: "")) else { return nil }
+        return value / 100
     }
 }
 

@@ -206,7 +206,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             defer: false
         )
         window.title = "History"
-        window.minSize = NSSize(width: 560, height: 420)
+        // #0062: 560 is what squeezed the sidebar until "Encoding Air (2023)"
+        // truncated to "Encoding Air (202…". The sidebar needs ~200 points to
+        // show a title and a status on two lines, and the summary card wants
+        // ~480.
+        window.minSize = NSSize(width: 720, height: 460)
         window.center()
         window.contentView = NSHostingView(
             rootView: JobHistoryView().environment(settings).environment(jobs)
