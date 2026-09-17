@@ -114,6 +114,45 @@ struct FlowStepTests {
         #expect(FlowStep.derive(inputs) == .done(second))
     }
 
+    /// Row 2 outranks rows 3-5, and the #0005 automatic end-of-job eject is
+    /// why that matters: it runs *while* the job's outcome card is going up,
+    /// so `isEjecting` is true for the first seconds of every successful
+    /// rip. If the blockers won, the card would be replaced by "Ejecting…"
+    /// and the user would never see where the file landed.
+    @Test func theOutcomeCardOutranksAnEjectInFlight() {
+        let id = JobID.make()
+        let a = Self.disc("A")
+        let inputs = FlowStep.Inputs(
+            lastJob: FlowStep.Inputs.LastJob(id: id, disc: a),
+            isEjecting: true,
+            insertedDisc: a
+        )
+        #expect(FlowStep.derive(inputs) == .done(id))
+    }
+
+    /// #0049 — the disc unmounted but would not come out. The outcome card
+    /// is where that is reported (`outcomeCard` adds its own Eject action),
+    /// so it must outrank `.insertDisc(.discUnavailable)` until dismissed —
+    /// and fall through to it once it is.
+    @Test func theOutcomeCardOutranksAPartialEjectUntilDismissed() {
+        let id = JobID.make()
+        let a = Self.disc("A")
+        let showing = FlowStep.Inputs(
+            lastJob: FlowStep.Inputs.LastJob(id: id, disc: a),
+            discUnavailable: true,
+            insertedDisc: a
+        )
+        #expect(FlowStep.derive(showing) == .done(id))
+
+        let dismissed = FlowStep.Inputs(
+            lastJob: FlowStep.Inputs.LastJob(id: id, disc: a),
+            dismissedJobID: id,
+            discUnavailable: true,
+            insertedDisc: a
+        )
+        #expect(FlowStep.derive(dismissed) == .insertDisc(.discUnavailable))
+    }
+
     // MARK: - Rows 3-5: the environment blockers, in order
 
     @Test func ejectingBeatsDiscUnavailableBeatsNoDisc() {
