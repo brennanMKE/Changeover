@@ -267,6 +267,15 @@ between blocks are intentional; do not backfill them.
 | 0100–0119 | Phase 6 — Ship to other people | `0100` |
 | 0120–0139 | Phase 7 — Montages | `0120` |
 
+| 0140–0159 | Overflow — defects found in testing after a phase block filled | — |
+
+**Overflow block (added 2026-09-16).** Phase 2's block (0020–0039) and Phase 3's
+(0040–0059) both filled while testing against real discs, which is a good sign —
+real hardware finds real defects — but it left new work with nowhere to go.
+Defects found after a phase's block is full take the next free id from 0140, and
+carry the `**Phase**` row of the phase they actually belong to, not the block's.
+Say in the issue which phase block overflowed.
+
 The first id in each block is the phase's **umbrella ticket** (see the umbrella
 pattern in the issues skill). Within a block, ids are sequential with no gaps.
 New work discovered inside a phase takes the next free id in that phase's block.
