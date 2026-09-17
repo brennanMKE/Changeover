@@ -32,7 +32,7 @@ struct DiscTitleHeuristicTests {
     /// `classify` accepts what the actual scanner produces, not just
     /// synthetic fixtures shaped to the algorithm.
     private static func dragonTattooFixtureOutput() throws -> HandBrakeScanParser.Output {
-        let text = try String(contentsOfFile: fixturePath("handbrake-scan/dragon-tattoo-title0-min1.json"),
+        let text = try String(contentsOfFile: fixturePath("discs/dragon-tattoo/scan.json"),
                               encoding: .utf8)
         return HandBrakeScanParser.parse(text, volumeName: "DRAGON", driveName: "disk6")
     }
@@ -173,6 +173,49 @@ struct DiscTitleHeuristicTests {
         let roles = DiscTitleHeuristic.applyingSuggestedRoles(to: output.disc, mainFeatureIndex: output.mainFeatureIndex)
         #expect(roles.titles.first { $0.index == 1 }?.suggestedRole == .mainFeature)
         #expect(roles.titles.filter { $0.suggestedRole == .mainFeature }.count == 1)
+    }
+
+    /// #0055's headline pin, and the user's immediate ask: the real TV-season
+    /// disc scanned on joe (#0025's "Real-disc confirmation" section),
+    /// asserted by name for the first time. HandBrake's own `MainFeature`
+    /// names the Play All title itself (14) among 32 titles — proving the
+    /// Play All guard is not merely a hypothetical backstop, HandBrake will
+    /// hand the app exactly the title it must refuse. Title 14 runs 2:53:33
+    /// (10,413 s) with 33 chapters; the eight-title episode cluster
+    /// (15–22, each 20:57–22:48) sums to 10,415 s — 0.02% error, comfortably
+    /// inside the 2% tolerance with 31 other titles (short decoys and menu
+    /// loops) available to be wrongly swept in and were not.
+    @Test func classifiesTheRealTVSeasonCaptureAsPlayAll() throws {
+        let text = try String(
+            contentsOfFile: Self.fixturePath("discs/tv-season-playall/scan.json"), encoding: .utf8
+        )
+        let output = HandBrakeScanParser.parse(text, volumeName: "TV_SEASON", driveName: "joe")
+
+        #expect(!output.titleSetCorrupted)
+        #expect(output.disc.titles.count == 32)
+        #expect(output.mainFeatureIndex == 14)
+
+        let feature = try #require(output.disc.titles.first { $0.index == 14 })
+        #expect(feature.durationSeconds == 2 * 3600 + 53 * 60 + 33) // 10,413 s
+        #expect(feature.chapterCount == 33)
+
+        let outcome = DiscTitleHeuristic.classify(output.disc, mainFeatureIndex: output.mainFeatureIndex)
+        guard case .playAll(let index, let episodes) = outcome else {
+            Issue.record("expected .playAll, got \(outcome)")
+            return
+        }
+        #expect(index == 14)
+        #expect(episodes == Array(15...22))
+
+        let cluster = output.disc.titles.filter { episodes.contains($0.index) }
+        let clusterTotal = cluster.reduce(0) { $0 + $1.durationSeconds }
+        #expect(clusterTotal == 10_415) // 0.02% error against title 14's 10,413 s
+        #expect(abs(clusterTotal - feature.durationSeconds) * 100 <= feature.durationSeconds * 2) // inside the 2% guard tolerance
+
+        // The guard's own refusal, end to end: applyingSuggestedRoles must
+        // never mark title 14 — or anything else — .mainFeature.
+        let roles = DiscTitleHeuristic.applyingSuggestedRoles(to: output.disc, mainFeatureIndex: output.mainFeatureIndex)
+        #expect(roles.titles.allSatisfy { $0.suggestedRole != .mainFeature })
     }
 
     // MARK: - The Play All guard against the real makemkvcon corpus

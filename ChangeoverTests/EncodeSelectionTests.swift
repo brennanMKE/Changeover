@@ -4,7 +4,7 @@ import Testing
 
 /// Covers #0027's `EncodeSelection.make(request:disc:)` — the one place a
 /// `RipRequest` meets the scan it was made against — using the real
-/// `Fixtures/handbrake-scan/dragon-tattoo-title0-min1.json` capture for the
+/// `Fixtures/discs/dragon-tattoo/scan.json` capture for the
 /// success case and both of its failure modes.
 struct EncodeSelectionTests {
 
@@ -15,7 +15,7 @@ struct EncodeSelectionTests {
     private static func fixtureDisc() throws -> DiscInfo {
         let path = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/handbrake-scan/dragon-tattoo-title0-min1.json")
+            .appendingPathComponent("Fixtures/discs/dragon-tattoo/scan.json")
             .path
         let text = try String(contentsOfFile: path, encoding: .utf8)
         return HandBrakeScanParser.parse(text, volumeName: "DRAGON", driveName: "disk6").disc

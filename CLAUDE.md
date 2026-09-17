@@ -62,6 +62,19 @@ Unit tests in `ChangeoverTests/` use the **Swift Testing** framework (`import Te
 1. Copy `Changeover/Secrets.xcconfig.example` → `Changeover/Secrets.xcconfig` (gitignored) and set `TMDB_API_KEY`. The xcconfig is wired as the project's `baseConfigurationReference`; the key flows in via `INFOPLIST_KEY_TMDB_API_KEY = $(TMDB_API_KEY)`.
 2. Install the CLI tool the app shells out to: `brew install handbrake` (default path `/opt/homebrew/bin/HandBrakeCLI` on Apple Silicon, user-editable in Settings). `makemkvcon` (`brew install --cask makemkv`) is optional and not currently invoked; its Settings path is kept for the #0015 fallback. `lsdvd` (`brew install lsdvd`) is optional and only strengthens disc identity.
 
+### Capturing a real disc into the test corpus (#0055)
+
+Every real disc that goes through joe should be captured before it leaves the drive — it is free regression coverage against real HandBrake output, not just synthetic fixtures shaped to the algorithm. From a shell with SSH access to joe:
+
+```bash
+Tools/capture-disc.sh              # slug guessed from the mounted volume name
+Tools/capture-disc.sh dragon-tattoo  # or name it explicitly
+```
+
+This writes `ChangeoverTests/Fixtures/discs/<slug>/scan.json` (HandBrakeCLI's stdout), `scan.stderr.txt` (its stderr, on a **separate** file — #0039 found that a merged stdout+stderr capture can splice HandBrake's log text into the JSON and corrupt it), and a `disc.json` manifest. The script fills in what it can compute on its own (title count, `MainFeature`, the feature title's raw duration/chapter count) and marks the manifest `reviewed: false` for everything it can't (whether the disc is a Play All/TV-season disc, and the deduplicated audio-track/subtitle-group counts from `AudioTrackOptions`/`SubtitleGrouping`) — review `disc.json` by hand and flip `reviewed` to `true` before `DiscCorpusTests` will accept it. `DiscCorpusTests` sweeps every reviewed disc in `Fixtures/discs/` and asserts its manifest in one parameterized test, so a new disc adds coverage without a new test function.
+
+Don't run this against real hardware on your own initiative — only when the user asks for a specific disc in the moment, the same standard as any other physical-Mac/hardware action (see the UI-test rule above for the stricter case, running UI tests, which stays off-limits even then).
+
 ## Architecture
 
 The pipeline is a linear async flow orchestrated by `DVDPipeline.run()`: **encode → move**. There is no rip stage and no intermediate `.mkv` — HandBrakeCLI reads the disc's mount root directly (#0014). Each stage reports a typed `JobOutcome` / `JobFailure` (#0007), and a single `log` callback is threaded through so progress streams to the UI.

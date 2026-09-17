@@ -1,0 +1,22 @@
+{
+  "slug": "tv-season-playall",
+  "volumeName": "TV_SEASON",
+  "driveName": "joe",
+  "discId": null,
+  "driveModel": null,
+  "handbrakeVersion": "1.11.2",
+  "capturedDate": "2026-09-16",
+  "reviewed": true,
+  "notes": "The real TV-season disc scanned on joe that #0025's 'Real-disc confirmation' section describes: the Play All guard fired correctly against a real disc for the first time, and this fixture is the evidence. HandBrake names the Play All title itself as MainFeature (14) among 32 titles; the eight-episode cluster (titles 15-22, 20:57-22:48 each) sums to 10,415s against title 14's 10,413s duration -- 0.02% error, comfortably inside the 2% tolerance. This is #0055's headline pin (the user's immediate ask): before this ticket, nothing asserted this fixture at all. The actual disc volume name was not recorded at capture time (predates disc.json); 'TV_SEASON' is a placeholder -- volumeName/driveName are parser passthrough only and never affect classify()/AudioTrackOptions/SubtitleGrouping output. No separate scan.stderr.txt was captured for this scan either. Expectations derived the same way as dragon-tattoo's -- see its notes.",
+  "expect": {
+    "titleCount": 32,
+    "mainFeatureIndex": 14,
+    "outcome": "playAll",
+    "outcomeIndex": 14,
+    "outcomeEpisodes": [15, 16, 17, 18, 19, 20, 21, 22],
+    "featureDurationSeconds": 10413,
+    "featureChapterCount": 33,
+    "audioTrackCount": 1,
+    "subtitleGroupCount": 1
+  }
+}

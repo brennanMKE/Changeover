@@ -1,0 +1,22 @@
+{
+  "slug": "hornets-nest",
+  "volumeName": "HORNETS_NEST",
+  "driveName": "joe",
+  "discId": null,
+  "driveModel": "PLDS DVD+-RW DS-8A8SH",
+  "handbrakeVersion": "HandBrake 1.11.2",
+  "capturedDate": "2026-09-16",
+  "reviewed": true,
+  "notes": "Real disc scanned on joe with Tools/capture-disc.sh (2026-09-16) while the user had it in the drive; the first live use of the script and the run that found four bugs in it (fixed in this same pass -- negative MainFeature was copied through as outcomeIndex instead of being treated as none, handbrakeVersion came from a HandBrakeCLI --version banner line instead of scan.json's own Version block, and lsdvd's failure to produce a discId was a silent null instead of a diagnosed one -- see Tools/capture-disc.sh's own comments). HandBrake reports MainFeature: -1 on this disc -- it identifies NO main feature at all, which DiscTitleHeuristic.classify falls through to .none for (the guard against index 0/absent doesn't special-case negative, but no title has a negative index either, so the lookup simply fails and classify still answers correctly; a related gap -- classify has no fallback heuristic when MainFeature is absent/invalid -- is being filed as its own issue, NOT fixed here). Every audio stream on every title is untagged (languageCode nil) -- this is the disc #0027's 'never merge untagged tracks' rule was written for. Title 11 is the actual movie (2:26:53, 16 chapters) but is not asserted through the corpus sweep's feature fields, because outcome is none/outcomeIndex is null; AudioTrackOptionsTests.realHornetsNestFeatureTitleKeepsBothUntaggedAudioTracksSeparate pins title 11's shape directly instead (duration, chapters, isUntagged, and AudioTrackOptions.options(for:).count == 2 -- the two untagged AC3 5.1 streams staying separate rather than merging).",
+  "expect": {
+    "titleCount": 11,
+    "mainFeatureIndex": -1,
+    "outcome": "none",
+    "outcomeIndex": null,
+    "outcomeEpisodes": null,
+    "featureDurationSeconds": null,
+    "featureChapterCount": null,
+    "audioTrackCount": null,
+    "subtitleGroupCount": null
+  }
+}

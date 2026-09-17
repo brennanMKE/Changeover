@@ -1,0 +1,22 @@
+{
+  "slug": "oppenheimer",
+  "volumeName": "OPPENHEIMER",
+  "driveName": "joe",
+  "discId": null,
+  "driveModel": null,
+  "handbrakeVersion": "1.11.2",
+  "capturedDate": "2026-09-16",
+  "reviewed": true,
+  "notes": "Migrated from the pre-#0055 Fixtures/handbrake-scan/ layout — the disc that motivated #0039 (a merged stdout+stderr capture spliced HandBrake's stderr log text into the JSON mid-value). scan.json here is the clean, stdout-only re-derivation of that same scan. scan.merged.txt is the deliberate NEGATIVE fixture for #0039 (must fail to decode with titleSetCorrupted=true) and is intentionally NOT swept by DiscCorpusTests — see HandBrakeScanParserTests.oppenheimerMergedCaptureFailsToDecodeAndIsFlaggedCorrupted, which still asserts it directly. No separate scan.stderr.txt exists for the clean capture (it predates the two-file capture discipline this ticket introduces). Expectations derived the same way as dragon-tattoo's — see its notes.",
+  "expect": {
+    "titleCount": 8,
+    "mainFeatureIndex": 7,
+    "outcome": "single",
+    "outcomeIndex": 7,
+    "outcomeEpisodes": null,
+    "featureDurationSeconds": 10811,
+    "featureChapterCount": 21,
+    "audioTrackCount": 3,
+    "subtitleGroupCount": 6
+  }
+}

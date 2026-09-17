@@ -38,6 +38,9 @@
 		};
 		265E2BA42F51801E00FF97DF /* ChangeoverTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				745BC057ED3017F63CB95595 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
 			path = ChangeoverTests;
 			sourceTree = "<group>";
 		};
@@ -47,6 +50,25 @@
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		745BC057ED3017F63CB95595 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			target = 265E2BA02F51801E00FF97DF /* ChangeoverTests */;
+			membershipExceptions = (
+				"Fixtures/discs/dragon-tattoo/scan.json",
+				"Fixtures/discs/dragon-tattoo/disc.json",
+				"Fixtures/discs/oppenheimer/scan.json",
+				"Fixtures/discs/oppenheimer/disc.json",
+				"Fixtures/discs/oppenheimer/scan.merged.txt",
+				"Fixtures/discs/tv-season-playall/scan.json",
+				"Fixtures/discs/tv-season-playall/disc.json",
+				"Fixtures/discs/hornets-nest/scan.json",
+				"Fixtures/discs/hornets-nest/disc.json",
+				"Fixtures/discs/hornets-nest/scan.stderr.txt",
+			);
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		265E2B912F51801C00FF97DF /* Frameworks */ = {

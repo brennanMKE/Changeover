@@ -3,7 +3,7 @@ import Testing
 @testable import Changeover
 
 /// Covers #0023: the HandBrake `--scan --json` parser, tested against the
-/// real capture `Fixtures/handbrake-scan/dragon-tattoo-title0-min1.json`
+/// real capture `Fixtures/discs/dragon-tattoo/scan.json`
 /// (scanned from the mounted disc on joe, 2026-09-14) plus synthetic edge
 /// cases. Pure function — no disc, no process.
 struct HandBrakeScanParserTests {
@@ -13,7 +13,7 @@ struct HandBrakeScanParserTests {
     private static func fixtureText() throws -> String {
         let path = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/handbrake-scan/dragon-tattoo-title0-min1.json")
+            .appendingPathComponent("Fixtures/discs/dragon-tattoo/scan.json")
             .path
         return try String(contentsOfFile: path, encoding: .utf8)
     }
@@ -187,7 +187,7 @@ struct HandBrakeScanParserTests {
     @Test func oppenheimerStdoutOnlyFixtureParsesCleanly() throws {
         let path = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/handbrake-scan/oppenheimer-title0-min1.json")
+            .appendingPathComponent("Fixtures/discs/oppenheimer/scan.json")
             .path
         let text = try String(contentsOfFile: path, encoding: .utf8)
         let output = Self.parse(text)
@@ -217,7 +217,7 @@ struct HandBrakeScanParserTests {
     @Test func oppenheimerMergedCaptureFailsToDecodeAndIsFlaggedCorrupted() throws {
         let path = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/handbrake-scan/oppenheimer-title0-min1-merged.txt")
+            .appendingPathComponent("Fixtures/discs/oppenheimer/scan.merged.txt")
             .path
         let text = try String(contentsOfFile: path, encoding: .utf8)
         let output = Self.parse(text)

@@ -283,7 +283,7 @@ struct MakeMKVFallbackTests {
     /// the 14 s/15 s pair (within 2 s of each other) is refused, never
     /// guessed.
     @Test func matchTitleMapsHandBrakeScanDurationsOntoMakeMKVTitlesForDragonTattoo() throws {
-        let scanText = try String(contentsOfFile: Self.fixturePath("handbrake-scan/dragon-tattoo-title0-min1.json"), encoding: .utf8)
+        let scanText = try String(contentsOfFile: Self.fixturePath("discs/dragon-tattoo/scan.json"), encoding: .utf8)
         let scanned = HandBrakeScanParser.parse(scanText, volumeName: "DRAGON", driveName: "disk6").disc
         let hb = Dictionary(uniqueKeysWithValues: scanned.titles.map { ($0.index, $0.durationSeconds) })
         #expect(hb == [1: 9478, 2: 14, 3: 9, 4: 15, 5: 29])

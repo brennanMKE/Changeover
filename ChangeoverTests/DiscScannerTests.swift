@@ -35,7 +35,7 @@ struct DiscScannerTests {
     private static func scanFixturePath() -> String {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/handbrake-scan/dragon-tattoo-title0-min1.json")
+            .appendingPathComponent("Fixtures/discs/dragon-tattoo/scan.json")
             .path
     }
 
@@ -114,7 +114,7 @@ struct DiscScannerTests {
 
     /// The real Oppenheimer scan that motivated this ticket, replayed
     /// end to end through an actual two-pipe child process: HandBrakeCLI's
-    /// clean stdout JSON (the `oppenheimer-title0-min1.json` capture)
+    /// clean stdout JSON (the `Fixtures/discs/oppenheimer/scan.json` capture)
     /// arrives alongside chatty stderr text (the libdvdcss fallback line
     /// and a subtitle decode error, drawn from the real merged capture) on
     /// a *separate* pipe. Before #0039's fix this would have corrupted the
@@ -128,10 +128,10 @@ struct DiscScannerTests {
 
         let stdoutFixture = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/handbrake-scan/oppenheimer-title0-min1.json")
+            .appendingPathComponent("Fixtures/discs/oppenheimer/scan.json")
             .path
         // Drawn verbatim from the real merged capture's stderr-only lines
-        // (`oppenheimer-title0-min1-merged.txt`), so this is not an
+        // (`Fixtures/discs/oppenheimer/scan.merged.txt`), so this is not an
         // invented signature.
         let stderrFixture = root.appendingPathComponent("stderr-noise.txt")
         try """

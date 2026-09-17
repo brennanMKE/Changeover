@@ -4,7 +4,7 @@ import Testing
 
 /// Covers #0033: collapsing HandBrake's per-variant subtitle stream pairs
 /// into logical tracks — against the real
-/// `Fixtures/handbrake-scan/dragon-tattoo-title0-min1.json` capture plus
+/// `Fixtures/discs/dragon-tattoo/scan.json` capture plus
 /// synthetic cases for shapes that fixture cannot exercise. `synthetic…`
 /// tests are hand-built, not observed on a real disc — Fargo itself (the
 /// twelve-into-six case from `MakeMKVReplacement-Results.md` §6) has not
@@ -38,7 +38,7 @@ struct SubtitleGroupingTests {
     private static func fixtureDisc() throws -> DiscInfo {
         let path = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/handbrake-scan/dragon-tattoo-title0-min1.json")
+            .appendingPathComponent("Fixtures/discs/dragon-tattoo/scan.json")
             .path
         let text = try String(contentsOfFile: path, encoding: .utf8)
         return HandBrakeScanParser.parse(text, volumeName: "DRAGON", driveName: "disk6").disc

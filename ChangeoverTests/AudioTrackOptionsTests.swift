@@ -3,7 +3,7 @@ import Testing
 @testable import Changeover
 
 /// Covers #0027's audio-track picker rules: deduplication of tagged tracks
-/// against the real `Fixtures/handbrake-scan/dragon-tattoo-title0-min1.json`
+/// against the real `Fixtures/discs/dragon-tattoo/scan.json`
 /// capture, plus synthetic cases for shapes that fixture cannot exercise —
 /// most importantly the untagged whole-title fallback (the Hornets' Nest
 /// silent-MP4 risk this issue's Description calls out first).
@@ -37,7 +37,7 @@ struct AudioTrackOptionsTests {
     private static func fixtureDisc() throws -> DiscInfo {
         let path = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/handbrake-scan/dragon-tattoo-title0-min1.json")
+            .appendingPathComponent("Fixtures/discs/dragon-tattoo/scan.json")
             .path
         let text = try String(contentsOfFile: path, encoding: .utf8)
         return HandBrakeScanParser.parse(text, volumeName: "DRAGON", driveName: "disk6").disc
@@ -69,6 +69,41 @@ struct AudioTrackOptionsTests {
         #expect(AudioTrackOptions.preselection(options, preferred: ["fra"], untagged: false) == [4])
         // Nothing matches "spa" on this disc — falls back to the first option.
         #expect(AudioTrackOptions.preselection(options, preferred: ["spa"], untagged: false) == [1])
+    }
+
+    // MARK: - Fixture: the real Hornets' Nest capture (#0055)
+
+    /// The real disc behind the synthetic test below, captured on joe with
+    /// `Tools/capture-disc.sh` (2026-09-16): every audio stream on every
+    /// title is untagged. HandBrake also reports `MainFeature: -1` on this
+    /// disc — it names no main feature at all — so `DiscCorpusTests`'s sweep
+    /// never reaches title 11 (its `disc.json` records `outcome: "none"`,
+    /// `outcomeIndex: null`). Title 11 is nonetheless the actual movie
+    /// (2:26:53, 16 chapters, by inspection), so this test pins its shape
+    /// directly: two untagged `DD Surround 5.1` streams that must stay two
+    /// options, never merged — the exact silent-dub risk the synthetic test
+    /// below was written against, now confirmed on real disc data.
+    @Test func realHornetsNestFeatureTitleKeepsBothUntaggedAudioTracksSeparate() throws {
+        let path = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/discs/hornets-nest/scan.json")
+            .path
+        let text = try String(contentsOfFile: path, encoding: .utf8)
+        let output = HandBrakeScanParser.parse(text, volumeName: "HORNETS_NEST", driveName: "joe")
+
+        #expect(!output.titleSetCorrupted)
+        #expect(output.disc.titles.count == 11)
+        #expect(output.mainFeatureIndex == -1) // HandBrake's own "no main feature" signal
+
+        let feature = try #require(output.disc.titles.first { $0.index == 11 })
+        #expect(feature.durationSeconds == 2 * 3600 + 26 * 60 + 53) // 8,813 s
+        #expect(feature.chapterCount == 16)
+
+        #expect(AudioTrackOptions.isUntagged(feature) == true)
+        let options = AudioTrackOptions.options(for: feature)
+        #expect(options.count == 2)
+        #expect(options.map(\.trackNumber) == [1, 2])
+        #expect(options.allSatisfy { $0.languageCode == nil && $0.duplicateTrackNumbers.isEmpty })
     }
 
     // MARK: - Synthetic: the whole-title no-language fallback (Hornets' Nest)

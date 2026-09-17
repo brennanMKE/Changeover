@@ -1,0 +1,22 @@
+{
+  "slug": "dragon-tattoo",
+  "volumeName": "DRAGON",
+  "driveName": "joe",
+  "discId": null,
+  "driveModel": null,
+  "handbrakeVersion": "1.11.2",
+  "capturedDate": "2026-09-14",
+  "reviewed": true,
+  "notes": "Migrated from the pre-#0055 Fixtures/handbrake-scan/ layout (the original #0023/#0025/#0027/#0033 capture; also used as HandBrakeScanParserTests' primary fixture). discId/driveModel were never recorded at capture time and predate Tools/capture-disc.sh's enrichment step, so they stay null. No separate scan.stderr.txt was captured for this scan either, for the same reason. Expectations below were derived by compiling HandBrakeScanParser/DiscTitleHeuristic/AudioTrackOptions/SubtitleGrouping standalone (outside Xcode) and running them against scan.json directly, per #0055's Fix notes.",
+  "expect": {
+    "titleCount": 5,
+    "mainFeatureIndex": 1,
+    "outcome": "single",
+    "outcomeIndex": 1,
+    "outcomeEpisodes": null,
+    "featureDurationSeconds": 9478,
+    "featureChapterCount": 16,
+    "audioTrackCount": 3,
+    "subtitleGroupCount": 5
+  }
+}

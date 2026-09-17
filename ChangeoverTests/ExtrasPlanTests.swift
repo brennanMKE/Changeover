@@ -99,7 +99,7 @@ struct ExtrasPlanTests {
     private static func dragonTattooDisc() throws -> DiscInfo {
         let path = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/handbrake-scan/dragon-tattoo-title0-min1.json")
+            .appendingPathComponent("Fixtures/discs/dragon-tattoo/scan.json")
             .path
         let text = try String(contentsOfFile: path, encoding: .utf8)
         return HandBrakeScanParser.parse(text, volumeName: "DRAGON", driveName: "disk6").disc
