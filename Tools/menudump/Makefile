@@ -42,6 +42,7 @@ test: $(TARGET)
 	  assert m['vtsm-01-lu1-pgc2']['entryType']=='chapter'; \
 	  assert len(m['vtsm-01-lu1-pgc2']['buttons'])==6; \
 	  print('menudump self-test OK:', len(d['menus']), 'menu PGCs')"
+	python3 check-nav-offsets.py $(BUILD)/test-disc
 
 clean:
 	rm -rf $(BUILD)

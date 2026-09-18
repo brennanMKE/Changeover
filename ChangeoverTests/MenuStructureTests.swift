@@ -54,6 +54,71 @@ struct MenuStructureTests {
         #expect(!structure.menus.isEmpty, "no libdvdcss must still mean a full structure, just no stills")
     }
 
+    // MARK: - The reader's own self-checks
+
+    /// The helper publishes how it found each NAV pack and how it checked
+    /// itself, because the bug that made this necessary produced an empty
+    /// `buttons` array with no stated cause — indistinguishable from a disc
+    /// that genuinely has no buttons.
+    @Test func everyMenuWithButtonsCarriesItsNavDiagnostics() throws {
+        let structure = try Self.load("synthetic-movie")
+        let withButtons = structure.menus.filter { !$0.buttons.isEmpty }
+        #expect(withButtons.count == 4)
+        for menu in withButtons {
+            let nav = try #require(menu.nav, "\(menu.id): no nav block")
+            #expect(nav.error == nil, "\(menu.id): \(nav.error ?? "")")
+            #expect(nav.rectsInsideFrame == true, "\(menu.id)")
+            #expect(nav.groupsAgree == true, "\(menu.id)")
+            #expect((nav.pciOffset ?? -1) >= 0, "\(menu.id): no PCI packet located")
+        }
+    }
+
+    /// The one check that does not share the parser's assumptions: the pack
+    /// carries its own sector address, and it is compared with the sector
+    /// the IFO's cell table sent the reader to. A four-byte slip in the PCI
+    /// structure — the bug that read zero buttons off a real disc — makes
+    /// this number stop being the sector number.
+    @Test func theNavPackSelfReportsTheSectorItWasReadFrom() throws {
+        let structure = try Self.load("synthetic-movie")
+        for menu in structure.menus where !menu.buttons.isEmpty {
+            let nav = try #require(menu.nav)
+            #expect(nav.lbnMatches == true, "\(menu.id): nv_pck_lbn \(nav.lbn as Any) != sector \(nav.sector as Any)")
+            #expect(nav.lbn == nav.sector, "\(menu.id)")
+        }
+    }
+
+    /// A menu PGC no NAV pack could be read from says why in words, rather
+    /// than reporting an empty button list and leaving the reader to guess
+    /// whether the disc or the tool is at fault.
+    @Test func aMenuWithNoReadableNavPackNamesItsReason() throws {
+        let structure = try Self.load("synthetic-movie")
+        let orphan = try #require(structure.menus.first { $0.id == "vtsm-01-lu1-pgc4" })
+        #expect(orphan.buttons.isEmpty)
+        let nav = try #require(orphan.nav)
+        #expect(nav.error?.isEmpty == false, "an empty result with no cause is the failure this block exists to prevent")
+        #expect(nav.pciOffset == -1)
+    }
+
+    /// `btngr_ns` is the number of button *groups* and `btn_ns` the count
+    /// **per group**, so a reader that treats `btn_ns` as the total reads
+    /// half a table and one that ignores groups reads past the end. The
+    /// groups are the same buttons at different rectangles for different
+    /// display aspects, so their commands must agree — which is what makes
+    /// taking group 1 safe for tier 1.
+    @Test func twoButtonGroupsAreCountedAndTheirCommandsAgree() throws {
+        let structure = try Self.load("synthetic-movie")
+        let root = try #require(structure.menus.first { $0.id == "vtsm-01-lu1-pgc1" })
+        #expect(root.buttonGroups == 2)
+        #expect(root.buttons.count == 4, "group 1 only — not 8, and not 2")
+        let nav = try #require(root.nav)
+        #expect(nav.buttonsPerGroup == 4)
+        #expect(nav.groupsAgree == true)
+        #expect(nav.groupDisplayTypes?.prefix(2) == [1, 2], "4:3 then widescreen")
+        // Group 1's rectangles are the ones in `buttons`, and they are the
+        // 4:3 layout — the widescreen group's are 40px wider either side.
+        #expect(root.buttons.first?.rect == PixelRect(minX: 388, minY: 148, maxX: 550, maxY: 178))
+    }
+
     // MARK: - Targets
 
     @Test func everyButtonOnAnEntryMenuResolves() throws {

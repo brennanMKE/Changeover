@@ -48,6 +48,21 @@
                 "entry"
             ],
             "buttonGroups": 1,
+            "nav": {
+                "sector": 0,
+                "pciOffset": 38,
+                "lbn": 0,
+                "lbnMatches": true,
+                "buttonsPerGroup": 1,
+                "groupDisplayTypes": [
+                    1,
+                    0,
+                    0
+                ],
+                "groupsAgree": true,
+                "rectsInsideFrame": true,
+                "error": null
+            },
             "highlight": {
                 "start": null,
                 "buttons": 1,
@@ -91,7 +106,22 @@
             "reachableFrom": [
                 "entry"
             ],
-            "buttonGroups": 1,
+            "buttonGroups": 2,
+            "nav": {
+                "sector": 0,
+                "pciOffset": 38,
+                "lbn": 0,
+                "lbnMatches": true,
+                "buttonsPerGroup": 4,
+                "groupDisplayTypes": [
+                    1,
+                    2,
+                    0
+                ],
+                "groupsAgree": true,
+                "rectsInsideFrame": true,
+                "error": null
+            },
             "highlight": {
                 "start": null,
                 "buttons": 4,
@@ -181,6 +211,21 @@
                 "entry"
             ],
             "buttonGroups": 1,
+            "nav": {
+                "sector": 10,
+                "pciOffset": 38,
+                "lbn": 10,
+                "lbnMatches": true,
+                "buttonsPerGroup": 6,
+                "groupDisplayTypes": [
+                    1,
+                    0,
+                    0
+                ],
+                "groupsAgree": true,
+                "rectsInsideFrame": true,
+                "error": null
+            },
             "highlight": {
                 "start": null,
                 "buttons": 6,
@@ -300,6 +345,21 @@
                 "entry"
             ],
             "buttonGroups": 1,
+            "nav": {
+                "sector": 20,
+                "pciOffset": 38,
+                "lbn": 20,
+                "lbnMatches": true,
+                "buttonsPerGroup": 2,
+                "groupDisplayTypes": [
+                    1,
+                    0,
+                    0
+                ],
+                "groupsAgree": true,
+                "rectsInsideFrame": true,
+                "error": null
+            },
             "highlight": {
                 "start": null,
                 "buttons": 2,
@@ -359,6 +419,21 @@
                 "link"
             ],
             "buttonGroups": 1,
+            "nav": {
+                "sector": 0,
+                "pciOffset": -1,
+                "lbn": 0,
+                "lbnMatches": false,
+                "buttonsPerGroup": 0,
+                "groupDisplayTypes": [
+                    0,
+                    0,
+                    0
+                ],
+                "groupsAgree": true,
+                "rectsInsideFrame": true,
+                "error": "no NAV pack with buttons in the first cell"
+            },
             "highlight": null,
             "buttons": [],
             "stills": [],

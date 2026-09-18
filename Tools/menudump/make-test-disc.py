@@ -71,41 +71,78 @@ def set_stn_audio(stream):
 
 # ---------------------------------------------------------------- nav pack
 
-def nav_pack(buttons):
-    """One 2048-byte NAV pack whose PCI carries `buttons`.
+# Sizes from libdvdread's nav_types.h, written out as a field list rather
+# than as constants, because the whole reason this file exists is that
+# pci_gi was assumed to be 64 bytes when it is 60 — a four-byte slip that
+# made the parser read zero buttons off a disc with 151 NAV packs.
+PCI_GI_FIELDS = [
+    ("nv_pck_lbn", 4), ("vobu_cat", 2), ("zero1", 2), ("vobu_uop_ctl", 4),
+    ("vobu_s_ptm", 4), ("vobu_e_ptm", 4), ("vobu_se_e_ptm", 4),
+    ("e_eltm", 4), ("vobu_isrc", 32),
+]
+PCI_GI_SIZE = sum(size for _, size in PCI_GI_FIELDS)     # 60
+NSML_AGLI_SIZE = 4 * 9                                   # 36
+HL_GI_SIZE = 22
+BTN_COLIT_SIZE = 24
+BTNI_SIZE = 18
+assert PCI_GI_SIZE == 60, PCI_GI_SIZE
 
-    buttons: list of (x0, y0, x1, y1, auto, up, down, left, right, command).
+
+def nav_pack(groups, lbn=0):
+    """One 2048-byte NAV pack whose PCI carries one or more button groups.
+
+    groups: list of button groups; each is a list of
+            (x0, y0, x1, y1, auto, up, down, left, right, command).
+            Every group must hold the same number of buttons — btn_ns is the
+            count *per group* and the groups sit consecutively in btnit.
+    lbn:    the pack's own sector address, written into pci_gi.nv_pck_lbn.
+            menudump checks it against the sector it asked for, which is the
+            one self-check that is independent of this file: if the PCI data
+            offset is wrong, the number read back is not the sector number.
     """
     data = bytearray(BLOCK)
 
     data[0:4] = b"\x00\x00\x01\xBA"                 # pack header, 14 bytes
     data[0x0E:0x12] = b"\x00\x00\x01\xBB"           # system header, 24 bytes
     data[0x12:0x14] = be16(0x0012)
-    data[0x26:0x2A] = b"\x00\x00\x01\xBF"           # PCI PES
-    data[0x2A:0x2C] = be16(0x03D4)
-    data[0x2C] = 0x00                               # substream: PCI
+    pci_start = 0x26
+    data[pci_start:pci_start + 4] = b"\x00\x00\x01\xBF"
+    data[pci_start + 4:pci_start + 6] = be16(0x03D4)
+    data[pci_start + 6] = 0x00                       # substream: PCI
     data[0x400:0x404] = b"\x00\x00\x01\xBF"         # DSI PES
     data[0x404:0x406] = be16(0x03FA)
-    data[0x406] = 0x01                              # substream: DSI
+    data[0x406] = 0x01                               # substream: DSI
 
-    hl_gi = 0x91
-    data[hl_gi + 0x0E] = (1 << 4)                   # 0x09F: btngr_ns = 1
-    data[hl_gi + 0x11] = len(buttons) & 0x3F        # 0x0A2: btn_ns
-    data[hl_gi + 0x14] = 1 if buttons else 0        # 0x0A5: fosl_btnn
+    pci = pci_start + 7
+    data[pci:pci + 4] = be32(lbn)                    # pci_gi.nv_pck_lbn
 
-    for index, (x0, y0, x1, y1, auto, up, down, left, right, command) in enumerate(buttons):
-        base = 0xBF + index * 18
-        data[base + 0] = ((x0 >> 4) & 0x3F)
-        data[base + 1] = ((x0 & 0x0F) << 4) | ((x1 >> 8) & 0x03)
-        data[base + 2] = x1 & 0xFF
-        data[base + 3] = ((auto & 0x03) << 6) | ((y0 >> 4) & 0x3F)
-        data[base + 4] = ((y0 & 0x0F) << 4) | ((y1 >> 8) & 0x03)
-        data[base + 5] = y1 & 0xFF
-        data[base + 6] = up & 0x3F
-        data[base + 7] = down & 0x3F
-        data[base + 8] = left & 0x3F
-        data[base + 9] = right & 0x3F
-        data[base + 10:base + 18] = command
+    hl_gi = pci + PCI_GI_SIZE + NSML_AGLI_SIZE
+    per_group = len(groups[0]) if groups else 0
+    assert all(len(g) == per_group for g in groups), "groups must be the same size"
+    assert len(groups) * per_group <= 36
+
+    data[hl_gi + 0x0E] = (len(groups) << 4) | 0x01   # btngr_ns, btngr1_dsp_ty = 4:3
+    data[hl_gi + 0x0F] = (0x02 << 4) if len(groups) > 1 else 0   # btngr2_dsp_ty = wide
+    data[hl_gi + 0x11] = per_group & 0x3F            # btn_ns, per group
+    data[hl_gi + 0x14] = 1 if per_group else 0       # fosl_btnn
+
+    btnit = hl_gi + HL_GI_SIZE + BTN_COLIT_SIZE
+    index = 0
+    for group in groups:
+        for (x0, y0, x1, y1, auto, up, down, left, right, command) in group:
+            base = btnit + index * BTNI_SIZE
+            data[base + 0] = ((x0 >> 4) & 0x3F)
+            data[base + 1] = ((x0 & 0x0F) << 4) | ((x1 >> 8) & 0x03)
+            data[base + 2] = x1 & 0xFF
+            data[base + 3] = ((auto & 0x03) << 6) | ((y0 >> 4) & 0x3F)
+            data[base + 4] = ((y0 & 0x0F) << 4) | ((y1 >> 8) & 0x03)
+            data[base + 5] = y1 & 0xFF
+            data[base + 6] = up & 0x3F
+            data[base + 7] = down & 0x3F
+            data[base + 8] = left & 0x3F
+            data[base + 9] = right & 0x3F
+            data[base + 10:base + 18] = command
+            index += 1
     return bytes(data)
 
 
@@ -193,7 +230,7 @@ def main(root):
 
     # VMGM menu video: one NAV pack, one button, straight to title 1.
     with open(os.path.join(video_ts, "VIDEO_TS.VOB"), "wb") as f:
-        f.write(nav_pack([(100, 100, 300, 130, 0, 1, 1, 1, 1, jump_tt(1))]))
+        f.write(nav_pack([[(100, 100, 300, 130, 0, 1, 1, 1, 1, jump_tt(1))]], lbn=0))
         f.write(b"\x00" * BLOCK * 9)
 
     # ---- VTSI: root menu, chapter menu, one non-entry PGC
@@ -230,12 +267,20 @@ def main(root):
         (200, 260, 340, 290, 0, 1, 2, 1, 1, set_stn_audio(0)),
         (200, 300, 340, 330, 0, 1, 2, 2, 2, set_stn_audio(1)),
     ]
+    # The root menu declares TWO button groups — a 4:3 layout and a
+    # widescreen one with the same commands at shifted rectangles — because
+    # Bloodsport declares two and a reader that silently took half the table
+    # (or read past it) would otherwise never be caught here.
+    root_wide = [
+        (x0 - 40, y0, x1 + 40, y1, auto, up, down, left, right, command)
+        for (x0, y0, x1, y1, auto, up, down, left, right, command) in root_buttons
+    ]
     with open(os.path.join(video_ts, "VTS_01_0.VOB"), "wb") as f:
-        f.write(nav_pack(root_buttons))
+        f.write(nav_pack([root_buttons, root_wide], lbn=0))
         f.write(b"\x00" * BLOCK * 9)
-        f.write(nav_pack(chapter_buttons))
+        f.write(nav_pack([chapter_buttons], lbn=10))
         f.write(b"\x00" * BLOCK * 9)
-        f.write(nav_pack(language_buttons))
+        f.write(nav_pack([language_buttons], lbn=20))
         f.write(b"\x00" * BLOCK * 9)
         f.write(b"\x00" * BLOCK * 10)
 

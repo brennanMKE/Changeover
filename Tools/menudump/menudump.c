@@ -223,58 +223,170 @@ typedef struct {
 /*
  * The button table inside a NAV pack.
  *
- * Sector layout, from the DVD-Video specification and libdvdread's
- * nav_types.h — every offset below is from the start of the 2048-byte
- * sector:
+ * TWO THINGS THAT WERE WRONG HERE, BOTH FOUND ON A REAL DISC (Bloodsport,
+ * 2026-09-18). The first version of this function read 29 menu PGCs and
+ * zero buttons off a disc whose menus carry 151 NAV packs, every one of
+ * them with buttons. Read this before touching any offset below.
  *
- *   0x000  pack header      00 00 01 BA, 14 bytes
- *   0x00E  system header    00 00 01 BB, 24 bytes
- *   0x026  PCI PES          00 00 01 BF, length 0x03D4
- *   0x02C  substream id     0x00 = PCI
- *   0x02D  pci_gi           64 bytes
- *   0x06D  nsml_agli        36 bytes
- *   0x091  hli.hl_gi        22 bytes  (btn_ns at 0x0A2, btngr_ns at 0x09F)
- *   0x0A7  hli.btn_colit    24 bytes
- *   0x0BF  hli.btnit[36]    18 bytes each
- *   0x400  DSI PES          00 00 01 BF, substream 0x01
+ *  1. `pci_gi` is **60 bytes, not 64**. Its fields are
+ *     nv_pck_lbn(4) vobu_cat(2) zero1(2) vobu_uop_ctl(4) vobu_s_ptm(4)
+ *     vobu_e_ptm(4) vobu_se_e_ptm(4) e_eltm(4) vobu_isrc(32) = 60.
+ *     A four-byte slip put every highlight field inside the next
+ *     structure: `btn_ns` was read from `foac_btnn` (0 on most discs, so
+ *     the answer was a confident, plausible "this menu has no buttons")
+ *     and `fosl_btnn` was read out of the colour table. The sizes are
+ *     named constants below, derived from the field list, so the
+ *     arithmetic has to be confronted rather than re-guessed.
+ *
+ *  2. The PCI packet is **not at a fixed offset**. The pack header can
+ *     carry stuffing bytes and the system header is optional, so the
+ *     packet is located by scanning for its start code — `00 00 01 BF`
+ *     with substream id 0x00 at +6 — rather than by assuming 0x026.
+ *     (0x026 happens to be right on this disc; it is not a rule.)
+ *
+ * Sector layout, from the DVD-Video specification and libdvdread's
+ * nav_types.h. Offsets are shown for the common case where the PCI packet
+ * sits at 0x026, but only the *relative* ones are relied on:
+ *
+ *   0x000  pack header      00 00 01 BA, 14 bytes (+ stuffing)
+ *   0x00E  system header    00 00 01 BB, 24 bytes (optional)
+ *   0x026  PCI PES          00 00 01 BF          <- located by start code
+ *   +4     PES length       2 bytes
+ *   +6     substream id     0x00 = PCI, 0x01 = DSI
+ *   +7     pci_gi           60 bytes             <- PCI data starts here
+ *   +67    nsml_agli        36 bytes
+ *   +103   hli.hl_gi        22 bytes
+ *   +125   hli.btn_colit    24 bytes
+ *   +149   hli.btnit[]      18 bytes each
  *
  * Each 18-byte button packs its rectangle into six bytes of 10-bit fields,
  * its four neighbours into four 6-bit fields, and then carries the VM
  * command verbatim. The command is copied out byte for byte and never
  * interpreted here: decoding is VMCommand.swift's job, pinned by tests
  * against exactly these hex strings.
+ *
+ * BUTTON GROUPS. `btngr_ns` is 1..3 and `btn_ns` is the count **per
+ * group**; the groups sit consecutively in btnit, so group g's button b is
+ * at index (g-1) * btn_ns + (b-1). Bloodsport declares two. The groups are
+ * the same buttons laid out for different display aspects (4:3, wide,
+ * letterbox — `btngr<n>_dsp_ty`), and they carry the *same commands*, so
+ * tier 1 cannot be affected by the choice. Group 1 is taken, because the
+ * still is rendered from the stored frame and group 1's rectangles are in
+ * that same stored space; every group's display type is recorded, and so
+ * is whether the groups' commands actually agree — a disc where they do
+ * not is visible in the archive instead of being silently halved.
  */
-static int parse_nav_pack(const uint8_t *sector, button_t *buttons, int *button_groups, int *forced_select) {
-    if (!(sector[0] == 0x00 && sector[1] == 0x00 && sector[2] == 0x01 && sector[3] == 0xBA)) return -1;
-    if (!(sector[0x26] == 0x00 && sector[0x27] == 0x00 && sector[0x28] == 0x01 && sector[0x29] == 0xBF)) return -1;
-    if (sector[0x2C] != 0x00) return -1;
 
-    const uint8_t *hl_gi = sector + 0x91;
-    int groups = (hl_gi[0x0E] >> 4) & 0x03;   /* 0x09F: zero(2) btngr_ns(2) ... */
-    int count = hl_gi[0x11] & 0x3F;           /* 0x0A2: zero(2) btn_ns(6)      */
-    int fosl = hl_gi[0x14] & 0x3F;            /* 0x0A5: zero(2) fosl_btnn(6)   */
-    if (count < 0 || count > MAX_BUTTONS) return -1;
-    if (button_groups) *button_groups = groups > 0 ? groups : 1;
-    if (forced_select) *forced_select = fosl;
+/* Sizes, from the field lists above. Not to be inlined as literals. */
+#define PCI_GI_SIZE 60
+#define NSML_AGLI_SIZE 36
+#define HL_GI_SIZE 22
+#define BTN_COLIT_SIZE 24
+#define BTNI_SIZE 18
+#define HLI_FROM_PCI_DATA (PCI_GI_SIZE + NSML_AGLI_SIZE)
+#define BTNIT_FROM_HLI (HL_GI_SIZE + BTN_COLIT_SIZE)
 
-    /* Button group 1 only (§1.2 rule 4): groups 2 and 3 are the same buttons
-     * re-laid-out for widescreen and letterbox, and the count is recorded so
-     * a disc whose groups differ shows up in the archive. */
-    for (int i = 0; i < count; i++) {
-        const uint8_t *b = sector + 0xBF + (size_t)i * 18;
-        buttons[i].number = i + 1;
-        buttons[i].x_start = ((b[0] & 0x3F) << 4) | (b[1] >> 4);
-        buttons[i].x_end = ((b[1] & 0x03) << 8) | b[2];
-        buttons[i].auto_action = (b[3] >> 6) & 0x03;
-        buttons[i].y_start = ((b[3] & 0x3F) << 4) | (b[4] >> 4);
-        buttons[i].y_end = ((b[4] & 0x03) << 8) | b[5];
-        buttons[i].up = b[6] & 0x3F;
-        buttons[i].down = b[7] & 0x3F;
-        buttons[i].left = b[8] & 0x3F;
-        buttons[i].right = b[9] & 0x3F;
-        memcpy(buttons[i].command, b + 10, 8);
+typedef struct {
+    int found;
+    int pci_offset;          /* where the 00 00 01 BF start code was found */
+    uint32_t lbn;            /* pci_gi.nv_pck_lbn — the pack's own address */
+    int button_groups;       /* hl_gi.btngr_ns, 1..3                       */
+    int buttons_per_group;   /* hl_gi.btn_ns                               */
+    int forced_select;
+    int group_display[3];
+    int groups_agree;        /* every group's commands match group 1's     */
+    int rects_inside_frame;
+    int count;
+    button_t buttons[MAX_BUTTONS];
+    const char *error;
+} nav_t;
+
+static void unpack_button(const uint8_t *b, int number, button_t *out) {
+    out->number = number;
+    out->x_start = ((b[0] & 0x3F) << 4) | (b[1] >> 4);
+    out->x_end = ((b[1] & 0x03) << 8) | b[2];
+    out->auto_action = (b[3] >> 6) & 0x03;
+    out->y_start = ((b[3] & 0x3F) << 4) | (b[4] >> 4);
+    out->y_end = ((b[4] & 0x03) << 8) | b[5];
+    out->up = b[6] & 0x3F;
+    out->down = b[7] & 0x3F;
+    out->left = b[8] & 0x3F;
+    out->right = b[9] & 0x3F;
+    memcpy(out->command, b + 10, 8);
+}
+
+/* The PCI packet's start code, anywhere in the first pack of the sector.
+ * The DSI packet shares the 00 00 01 BF start code and is told apart by
+ * its substream id, so the id is part of the match rather than a check
+ * made afterwards. */
+static int find_pci_offset(const uint8_t *sector) {
+    for (int offset = 0; offset + 8 < 1024; offset++) {
+        if (sector[offset] == 0x00 && sector[offset + 1] == 0x00
+            && sector[offset + 2] == 0x01 && sector[offset + 3] == 0xBF
+            && sector[offset + 6] == 0x00) {
+            return offset;
+        }
     }
-    return count;
+    return -1;
+}
+
+static void parse_nav_pack(const uint8_t *sector, int frame_w, int frame_h, nav_t *nav) {
+    memset(nav, 0, sizeof *nav);
+    nav->button_groups = 1;
+    nav->groups_agree = 1;
+    nav->rects_inside_frame = 1;
+
+    if (!(sector[0] == 0x00 && sector[1] == 0x00 && sector[2] == 0x01 && sector[3] == 0xBA)) {
+        nav->error = "not a pack (no 00 00 01 BA)";
+        return;
+    }
+    int pci_offset = find_pci_offset(sector);
+    if (pci_offset < 0) {
+        nav->error = "no PCI packet (no 00 00 01 BF with substream 0)";
+        return;
+    }
+    nav->found = 1;
+    nav->pci_offset = pci_offset;
+
+    const uint8_t *pci = sector + pci_offset + 7;
+    nav->lbn = be32(pci);
+
+    const uint8_t *hl_gi = pci + HLI_FROM_PCI_DATA;
+    int groups = (hl_gi[0x0E] >> 4) & 0x03;   /* zero(2) btngr_ns(2) zero(1) btngr1_dsp_ty(3) */
+    int count = hl_gi[0x11] & 0x3F;           /* zero(2) btn_ns(6)                            */
+    nav->forced_select = hl_gi[0x14] & 0x3F;  /* zero(2) fosl_btnn(6)                         */
+    nav->group_display[0] = hl_gi[0x0E] & 0x07;
+    nav->group_display[1] = (hl_gi[0x0F] >> 4) & 0x07;
+    nav->group_display[2] = hl_gi[0x0F] & 0x07;
+    nav->button_groups = groups > 0 ? groups : 1;
+    nav->buttons_per_group = count;
+
+    if (count == 0) return;                   /* a menu PGC with no highlight yet */
+    if (count > MAX_BUTTONS || nav->button_groups * count > MAX_BUTTONS) {
+        nav->error = "implausible button count — the highlight offsets do not fit";
+        nav->buttons_per_group = 0;
+        return;
+    }
+
+    const uint8_t *btnit = hl_gi + BTNIT_FROM_HLI;
+    for (int i = 0; i < count; i++) {
+        unpack_button(btnit + (size_t)i * BTNI_SIZE, i + 1, &nav->buttons[i]);
+        button_t *b = &nav->buttons[i];
+        if (b->x_end <= b->x_start || b->y_end <= b->y_start
+            || b->x_end > frame_w || b->y_end > frame_h) {
+            nav->rects_inside_frame = 0;
+        }
+    }
+    nav->count = count;
+
+    /* Do the other groups really carry the same commands? If they ever do
+     * not, taking group 1 is losing information and the archive says so. */
+    for (int g = 1; g < nav->button_groups; g++) {
+        for (int i = 0; i < count; i++) {
+            const uint8_t *other = btnit + (size_t)(g * count + i) * BTNI_SIZE;
+            if (memcmp(other + 10, nav->buttons[i].command, 8) != 0) nav->groups_agree = 0;
+        }
+    }
 }
 
 /* ------------------------------------------------------------------- IFOs */
@@ -587,19 +699,49 @@ int main(int argc, char **argv) {
                 if (ts == 0) snprintf(id, sizeof id, "vmgm-lu%d-pgc%d", lu + 1, p + 1);
                 else snprintf(id, sizeof id, "vtsm-%02d-lu%d-pgc%d", ts, lu + 1, p + 1);
 
-                button_t buttons[MAX_BUTTONS];
-                memset(buttons, 0, sizeof buttons);
-                int button_count = -1, button_groups = 1, forced_select = 0;
+                nav_t nav;
+                memset(&nav, 0, sizeof nav);
+                nav.button_groups = 1;      /* the defaults a menu with no */
+                nav.groups_agree = 1;       /* readable NAV pack reports,  */
+                nav.rects_inside_frame = 1; /* so "unknown" never reads as a failed check */
+                const char *nav_error = "no cell to read";
+                uint32_t nav_sector = 0;
+                int nav_lbn_matches = 0;
 
                 uint32_t first_sector = 0, last_sector = 0;
                 if (cells && cell_count > 0) {
                     first_sector = be32(cells + 0x08);
                     last_sector = be32(cells + 0x14);
+                    nav_error = have_vob ? "no NAV pack with buttons in the first cell"
+                                         : "could not open the menu VOB";
                     if (have_vob) {
-                        uint8_t sector[DVD_BLOCK];
-                        if (fseek(vob, (long)first_sector * DVD_BLOCK, SEEK_SET) == 0
-                            && fread(sector, 1, DVD_BLOCK, vob) == DVD_BLOCK) {
-                            button_count = parse_nav_pack(sector, buttons, &button_groups, &forced_select);
+                        /* The first VOBU of the cell starts with a NAV pack and
+                         * a still menu repeats its button table in every one, so
+                         * the first is normally enough. A motion menu whose
+                         * highlight starts later (§1.2) has an empty table until
+                         * it does, so keep walking a bounded way into the cell
+                         * rather than reporting "no buttons" — which is exactly
+                         * the answer a reader must never give when it simply has
+                         * not looked yet. */
+                        uint32_t limit = last_sector >= first_sector ? last_sector : first_sector;
+                        if (limit > first_sector + 64) limit = first_sector + 64;
+                        for (uint32_t s = first_sector; s <= limit; s++) {
+                            uint8_t sector[DVD_BLOCK];
+                            if (fseek(vob, (long)s * DVD_BLOCK, SEEK_SET) != 0) {
+                                nav_error = "seek past the end of the menu VOB";
+                                break;
+                            }
+                            if (fread(sector, 1, DVD_BLOCK, vob) != DVD_BLOCK) {
+                                nav_error = "short read from the menu VOB";
+                                break;
+                            }
+                            nav_t candidate;
+                            parse_nav_pack(sector, frame_w, frame_h, &candidate);
+                            if (!candidate.found) continue;
+                            nav = candidate;
+                            nav_sector = s;
+                            nav_lbn_matches = (candidate.lbn == s);
+                            if (candidate.count > 0) { nav_error = candidate.error; break; }
                         }
                     }
                 }
@@ -648,23 +790,41 @@ int main(int argc, char **argv) {
                 }
                 jprintf("],\n");
                 jprintf("      \"reachableFrom\": [\"%s\"],\n", (entry_id & 0x80) ? "entry" : "link");
-                jprintf("      \"buttonGroups\": %d,\n", button_groups);
-                if (button_count >= 0)
+                jprintf("      \"buttonGroups\": %d,\n", nav.button_groups);
+                /* Why there are no buttons is as much a finding as the
+                 * buttons are. The first version of this tool reported an
+                 * empty array for every menu on a disc full of them and
+                 * said nothing about why, so every absence now names its
+                 * own cause and the reader's self-checks are published
+                 * alongside the data they validate. */
+                jprintf("      \"nav\": { \"sector\": %u, \"pciOffset\": %d, \"lbn\": %u, \"lbnMatches\": %s,"
+                        " \"buttonsPerGroup\": %d, \"groupDisplayTypes\": [%d, %d, %d], \"groupsAgree\": %s,"
+                        " \"rectsInsideFrame\": %s, \"error\": ",
+                        nav_sector, nav.found ? nav.pci_offset : -1, nav.lbn,
+                        nav_lbn_matches ? "true" : "false",
+                        nav.buttons_per_group,
+                        nav.group_display[0], nav.group_display[1], nav.group_display[2],
+                        nav.groups_agree ? "true" : "false",
+                        nav.rects_inside_frame ? "true" : "false");
+                if (nav.count > 0 && !nav.error) jprintf("null");
+                else jstring(nav.error ? nav.error : nav_error);
+                jprintf(" },\n");
+                if (nav.found)
                     jprintf("      \"highlight\": { \"start\": null, \"buttons\": %d, \"forcedSelect\": %d },\n",
-                            button_count, forced_select);
+                            nav.count, nav.forced_select);
                 else
                     jprintf("      \"highlight\": null,\n");
                 jprintf("      \"buttons\": [");
-                for (int b = 0; b < button_count; b++) {
+                for (int b = 0; b < nav.count; b++) {
                     jprintf("%s\n        { \"number\": %d, \"rect\": [%d, %d, %d, %d], \"autoAction\": %s, \"command\": \"",
-                            b ? "," : "", buttons[b].number,
-                            buttons[b].x_start, buttons[b].y_start, buttons[b].x_end, buttons[b].y_end,
-                            buttons[b].auto_action ? "true" : "false");
-                    for (int k = 0; k < 8; k++) jprintf("%02x", buttons[b].command[k]);
+                            b ? "," : "", nav.buttons[b].number,
+                            nav.buttons[b].x_start, nav.buttons[b].y_start, nav.buttons[b].x_end, nav.buttons[b].y_end,
+                            nav.buttons[b].auto_action ? "true" : "false");
+                    for (int k = 0; k < 8; k++) jprintf("%02x", nav.buttons[b].command[k]);
                     jprintf("\", \"up\": %d, \"down\": %d, \"left\": %d, \"right\": %d }",
-                            buttons[b].up, buttons[b].down, buttons[b].left, buttons[b].right);
+                            nav.buttons[b].up, nav.buttons[b].down, nav.buttons[b].left, nav.buttons[b].right);
                 }
-                jprintf("%s],\n", button_count > 0 ? "\n      " : "");
+                jprintf("%s],\n", nav.count > 0 ? "\n      " : "");
                 jprintf("      \"stills\": [");
                 if (dumped_cell) { jstring(id); }
                 jprintf("],\n");

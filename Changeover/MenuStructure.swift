@@ -137,6 +137,44 @@ nonisolated struct MenuStructure: Codable, Equatable, Sendable {
         var forcedSelect: Int?
     }
 
+    /// What the helper found when it went looking for this menu's NAV pack,
+    /// and how it checked itself.
+    ///
+    /// This block exists because the first version of the helper reported
+    /// `"buttons": []` for all 29 menu PGCs of a disc carrying 151 NAV packs
+    /// full of buttons, and said nothing whatever about why. An empty result
+    /// with no cause is indistinguishable from a disc that genuinely has no
+    /// buttons, and that is the shape of failure this whole design is
+    /// supposed to make impossible. So every absence now names its reason,
+    /// and the reader publishes its own self-checks beside the data.
+    ///
+    /// `lbnMatches` is the one check that is independent of the reader's
+    /// own assumptions: `pci_gi.nv_pck_lbn` is the sector address the *disc*
+    /// wrote into the pack, and it is compared with the sector the helper
+    /// asked the IFO for. If the PCI data offset were wrong by even four
+    /// bytes — which is exactly the bug that was here — the number read back
+    /// would not be the sector number.
+    nonisolated struct Nav: Codable, Equatable, Sendable {
+        var sector: Int?
+        /// Where the `00 00 01 BF` start code was found. `-1` if no PCI
+        /// packet was located. Not a constant: the pack header may carry
+        /// stuffing and the system header is optional.
+        var pciOffset: Int?
+        var lbn: Int?
+        var lbnMatches: Bool?
+        /// `hl_gi.btn_ns` — the button count **per group**, not the total.
+        var buttonsPerGroup: Int?
+        /// `btngr1/2/3_dsp_ty`: bit 0 4:3, bit 1 wide, bit 2 letterbox.
+        var groupDisplayTypes: [Int]?
+        /// Whether every button group carries the same commands. Groups are
+        /// the same buttons laid out for different display aspects, so this
+        /// should always be true; a disc where it is not means taking group
+        /// 1 has lost something, and the archive says so.
+        var groupsAgree: Bool?
+        var rectsInsideFrame: Bool?
+        var error: String?
+    }
+
     nonisolated struct Button: Codable, Equatable, Sendable {
         var number: Int
         var rect: PixelRect
@@ -164,6 +202,7 @@ nonisolated struct MenuStructure: Codable, Equatable, Sendable {
         var cells: [Cell]?
         var reachableFrom: [String]?
         var buttonGroups: Int?
+        var nav: Nav?
         var highlight: Highlight?
         var buttons: [Button]
         var stills: [String]?
@@ -177,6 +216,12 @@ nonisolated struct MenuStructure: Codable, Equatable, Sendable {
 
         /// The scene-selection menu and the pages it links to.
         var isChapterMenu: Bool { entryType == "chapter" }
+
+        /// This menu has video the helper could have read a NAV pack from.
+        /// A menu with cells and no buttons is a claim that wants checking;
+        /// a menu with no cells has nothing to read and is not evidence of
+        /// anything.
+        var hasCells: Bool { !(cells ?? []).isEmpty }
     }
 
     var format: String

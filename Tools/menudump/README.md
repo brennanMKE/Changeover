@@ -77,6 +77,39 @@ GPL obligation attaches to the app or to this helper. (An earlier draft of
 `docs/menu-intelligence.md` §2 assumed a vendored `libdvdread` inside the
 DMG and made this file GPL-2.0-or-later; that decision was reversed.)
 
+## Reading the NAV packs — the part that was wrong once
+
+Tier 1 lives in the PCI packet of each cell's first NAV pack, and two
+things about finding it are not obvious. Both were found by pointing the
+first version of this tool at a real disc and getting **zero buttons off
+29 menu PGCs** that carry 151 NAV packs full of them:
+
+1. **`pci_gi` is 60 bytes, not 64.** A four-byte slip puts every
+   highlight field inside the next structure, so `btn_ns` is read from
+   `foac_btnn` — normally 0. The failure is silent and entirely
+   plausible: "this menu has no buttons."
+2. **The PCI packet is not at a fixed offset.** The pack header may carry
+   stuffing and the system header is optional, so it is found by scanning
+   for `00 00 01 BF` with substream id `0x00` at +6 (the DSI packet
+   shares the start code and is told apart by that byte).
+
+Every menu therefore carries a `nav` block saying where the packet was
+found, what went wrong if nothing was, and the reader's own checks —
+including `lbnMatches`, which compares `pci_gi.nv_pck_lbn` (the sector
+address the *disc* wrote into the pack) with the sector the IFO sent us
+to. That one is independent of every assumption the parser makes: four
+bytes out and the number read back is not the sector number.
+
+**Button groups.** `btngr_ns` is 1..3 and `btn_ns` is the count *per
+group*; groups sit consecutively in `btnit`. Bloodsport declares two.
+They are the same buttons laid out for different display aspects
+(`btngr<n>_dsp_ty`: 4:3, wide, letterbox) and carry the **same commands**,
+so tier 1 cannot depend on the choice. Group 1 is emitted, because stills
+are rendered from the stored frame and group 1's rectangles are in that
+same space; every group's display type is recorded, and so is whether the
+groups' commands actually agree, so a disc where they do not is visible
+rather than silently halved.
+
 ## Known gaps
 
 * `structure.json` does not yet carry `featurePGC.audioControl` (§8.3). That
