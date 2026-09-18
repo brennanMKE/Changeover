@@ -126,10 +126,15 @@ def nav_pack(groups, lbn=0):
     data[hl_gi + 0x11] = per_group & 0x3F            # btn_ns, per group
     data[hl_gi + 0x14] = 1 if per_group else 0       # fosl_btnn
 
+    # The button table is always 36 entries and the declared groups
+    # partition it equally, so group g starts at index g * (36 // groups) —
+    # NOT at g * btn_ns. Measured on Bloodsport: two groups of 4 occupy
+    # entries 0-3 and 18-21, with 4-17 zeroed.
     btnit = hl_gi + HL_GI_SIZE + BTN_COLIT_SIZE
-    index = 0
-    for group in groups:
-        for (x0, y0, x1, y1, auto, up, down, left, right, command) in group:
+    stride = 36 // len(groups)
+    for group_index, group in enumerate(groups):
+        for button_index, (x0, y0, x1, y1, auto, up, down, left, right, command) in enumerate(group):
+            index = group_index * stride + button_index
             base = btnit + index * BTNI_SIZE
             data[base + 0] = ((x0 >> 4) & 0x3F)
             data[base + 1] = ((x0 & 0x0F) << 4) | ((x1 >> 8) & 0x03)
@@ -142,7 +147,6 @@ def nav_pack(groups, lbn=0):
             data[base + 8] = left & 0x3F
             data[base + 9] = right & 0x3F
             data[base + 10:base + 18] = command
-            index += 1
     return bytes(data)
 
 

@@ -230,6 +230,33 @@ extension MenuIntelligence {
     }
 }
 
+// MARK: - The audio picker's hint
+
+/// What the disc's Languages menu says, shown beside the audio picker
+/// (`docs/menu-intelligence.md` §5.3).
+///
+/// **Advisory, always.** It never changes `AudioTrackOptions.preselection`,
+/// never sets a `languageCode` on an untagged stream and never merges tracks.
+/// Even where the menu's buttons do give a structural stream mapping, the
+/// line stays a line: the list is only as complete as one OCR pass over one
+/// still, and on the measured disc it demonstrably is not complete — the
+/// languages page prints four subtitle entries and no single Vision
+/// configuration read all four (the recommended language list reads 日本語 and
+/// drops "Off"; the defaults do the opposite). So nothing downstream may
+/// treat this as the disc's inventory of anything.
+nonisolated enum MenuAudioHint {
+
+    static func line(_ lists: LanguageHints.Lists?) -> String? {
+        guard let lists, let caption = LanguageHints.caption(lists) else { return nil }
+        switch lists.shape {
+        case .buttons:
+            return caption + " That is what the menu shows; the tracks themselves are untouched."
+        case .listing, .none:
+            return caption
+        }
+    }
+}
+
 // MARK: - What the user reads
 
 /// The Confirm step's menu captions. One pure function per line, so the

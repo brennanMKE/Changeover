@@ -57,6 +57,20 @@ nonisolated struct PixelRect: Codable, Equatable, Hashable, Sendable {
         return w * h
     }
 
+    /// How much of `other` lies inside this rectangle, 0...1 — "is this
+    /// text inside that button?"
+    ///
+    /// A bare "do they touch at all" test is not enough, and the measured
+    /// disc says by how much: on Bloodsport's root menu the four real
+    /// labels lie 96-100% inside their buttons, while the title card clips
+    /// the top button by 3% and is not a label at all. Anything in between
+    /// separates them; the threshold used is 50%.
+    func containsFraction(of other: PixelRect) -> Double {
+        let area = other.width * other.height
+        guard area > 0 else { return 0 }
+        return Double(intersectionArea(other)) / Double(area)
+    }
+
     /// The horizontal overlap of two rects as a fraction of the narrower
     /// one — how the chapter-caption attachment decides "this continuation
     /// sits under that column".
@@ -175,6 +189,16 @@ nonisolated struct MenuStructure: Codable, Equatable, Sendable {
         var error: String?
     }
 
+    nonisolated struct Commands: Codable, Equatable, Sendable {
+        var pre: [String]?
+        var post: [String]?
+        var cell: [String]?
+
+        /// Post first: a `LinkTailPGC` runs the post-commands, and that is
+        /// the shape the measured disc uses.
+        var all: [String] { (post ?? []) + (pre ?? []) + (cell ?? []) }
+    }
+
     nonisolated struct Button: Codable, Equatable, Sendable {
         var number: Int
         var rect: PixelRect
@@ -202,6 +226,12 @@ nonisolated struct MenuStructure: Codable, Equatable, Sendable {
         var cells: [Cell]?
         var reachableFrom: [String]?
         var buttonGroups: Int?
+        /// The PGC's own pre-, post- and cell-command tables, as raw hex.
+        /// A `LinkTailPGC` button runs the post-commands, which is how
+        /// Bloodsport's Play Movie button reaches its title — without this
+        /// the disc's own answer to "which title is the feature" cannot be
+        /// read at all.
+        var commands: Commands?
         var nav: Nav?
         var highlight: Highlight?
         var buttons: [Button]
@@ -216,6 +246,14 @@ nonisolated struct MenuStructure: Codable, Equatable, Sendable {
 
         /// The scene-selection menu and the pages it links to.
         var isChapterMenu: Bool { entryType == "chapter" }
+
+        /// The stills rendered from this menu, or — when none were (no
+        /// libdvdcss, or a structure read without cell dumping) — the menu's
+        /// own id, which is what `Tools/menudump` names its stills after.
+        var stillIDs: [String] {
+            let rendered = stills ?? []
+            return rendered.isEmpty ? [id] : rendered
+        }
 
         /// This menu has video the helper could have read a NAV pack from.
         /// A menu with cells and no buttons is a claim that wants checking;
@@ -287,11 +325,61 @@ extension MenuStructure {
         }
     }
 
+    /// The scene-selection pages: menus whose buttons address chapters.
+    ///
+    /// **Entry type is not enough.** The design assumed the chapter menu is
+    /// the PGC with entry type 0x86, but on the measured disc only the root
+    /// menu is an entry PGC at all — its four scene pages are plain PGCs
+    /// reached by `LinkPGCN`, so a rule keyed on entry type finds nothing
+    /// and reads no chapter names. What actually identifies a scene page is
+    /// what its buttons do: two or more of them jump to chapters.
+    func chapterMenus() -> [Menu] {
+        let chapterButtons = Dictionary(
+            grouping: resolvedButtons().filter { if case .chapter = $0.target { return true } else { return false } },
+            by: { $0.ref.menu }
+        )
+        return menus
+            .filter { (chapterButtons[$0.id]?.count ?? 0) >= 2 }
+            .sorted { ($0.vts ?? 0, $0.pgc) < ($1.vts ?? 0, $1.pgc) }
+    }
+
+    /// The single title this menu PGC's own commands jump to, if there is
+    /// exactly one.
+    ///
+    /// This is §4.1's **one** indirection and no more. A real disc's play
+    /// button is often not a `JumpTT` at all: Bloodsport's is a
+    /// `LinkTailPGC`, which means "run this PGC's post-commands", and those
+    /// end with `JumpVTS_TT 1`. Following that one step is the difference
+    /// between reading the disc's own answer and reading nothing.
+    ///
+    /// Conditional commands are skipped, not evaluated — their destination
+    /// depends on registers this code does not model — and "exactly one"
+    /// is required, so a PGC that branches to two titles resolves to
+    /// neither. The VM is never emulated and chains are never followed.
+    func soleTitleJump(of menu: Menu) -> Int? {
+        let titles = Set(
+            (menu.commands?.all ?? [])
+                .compactMap { VMCommand(hex: $0) }
+                .filter { !$0.isConditional }
+                .map { lift($0.target(inVTS: menu.vts), vts: menu.vts) }
+                .compactMap(\.titleNumber)
+        )
+        return titles.count == 1 ? titles.first : nil
+    }
+
+    func menu(withPGC pgc: Int, inVTS vts: Int?, domain: String?) -> Menu? {
+        menus.first { candidate in
+            candidate.pgc == pgc
+                && candidate.vts == vts
+                && (domain == nil || candidate.domain == domain)
+        }
+    }
+
     /// `JumpVTS_TT` and `JumpVTS_PTT` name a title *within the title set the
     /// menu belongs to*. HandBrake numbers titles by `TT_SRPT`, so the two
     /// only agree after this lookup. Without a `titles` table (an older
     /// capture) the VTS-relative form is kept as-is rather than guessed at.
-    private func lift(_ target: ButtonTarget, vts: Int?) -> ButtonTarget {
+    func lift(_ target: ButtonTarget, vts: Int?) -> ButtonTarget {
         guard let vts, let titles else { return target }
         func vmgTitle(forTTN ttn: Int) -> Int? {
             titles.first { $0.vts == vts && $0.vtsTTN == ttn }?.title

@@ -1,9 +1,505 @@
 {
   "buttons" : [
-
+    {
+      "label" : "Play Movie",
+      "menu" : "vtsm-01-lu1-pgc1",
+      "number" : 1,
+      "target" : "unresolved:LinkTailPGC"
+    },
+    {
+      "label" : "Scene Selections®",
+      "menu" : "vtsm-01-lu1-pgc1",
+      "number" : 2,
+      "target" : "menu:1.pgc6"
+    },
+    {
+      "label" : "Special Features",
+      "menu" : "vtsm-01-lu1-pgc1",
+      "number" : 3,
+      "target" : "menu:1.pgc5"
+    },
+    {
+      "label" : "Languages",
+      "menu" : "vtsm-01-lu1-pgc1",
+      "number" : 4,
+      "target" : "menu:1.pgc3"
+    },
+    {
+      "label" : "Fean Claude Van Damme...Frank Dux",
+      "menu" : "vtsm-01-lu1-pgc2",
+      "number" : 1,
+      "target" : "menu:1.pgc12"
+    },
+    {
+      "label" : "Leah Ayres..",
+      "menu" : "vtsm-01-lu1-pgc2",
+      "number" : 2,
+      "target" : "menu:1.pgc14"
+    },
+    {
+      "label" : "ForestWhitaken.",
+      "menu" : "vtsm-01-lu1-pgc2",
+      "number" : 3,
+      "target" : "menu:1.pgc10"
+    },
+    {
+      "label" : "Story by Sheldon Lettich,",
+      "menu" : "vtsm-01-lu1-pgc2",
+      "number" : 4,
+      "target" : "menu:1.pgc16"
+    },
+    {
+      "label" : "Directed by Newt Arnold",
+      "menu" : "vtsm-01-lu1-pgc2",
+      "number" : 5,
+      "target" : "menu:1.pgc15"
+    },
+    {
+      "label" : "Features",
+      "menu" : "vtsm-01-lu1-pgc2",
+      "number" : 6,
+      "target" : "menu:1.pgc5"
+    },
+    {
+      "label" : "English",
+      "menu" : "vtsm-01-lu1-pgc3",
+      "number" : 1,
+      "target" : "streams:a0s-"
+    },
+    {
+      "label" : "Français",
+      "menu" : "vtsm-01-lu1-pgc3",
+      "number" : 2,
+      "target" : "streams:a1s-"
+    },
+    {
+      "label" : "English",
+      "menu" : "vtsm-01-lu1-pgc3",
+      "number" : 3,
+      "target" : "streams:a-s64"
+    },
+    {
+      "label" : "Français",
+      "menu" : "vtsm-01-lu1-pgc3",
+      "number" : 4,
+      "target" : "streams:a-s65"
+    },
+    {
+      "label" : "日本語",
+      "menu" : "vtsm-01-lu1-pgc3",
+      "number" : 5,
+      "target" : "streams:a-s66"
+    },
+    {
+      "menu" : "vtsm-01-lu1-pgc3",
+      "number" : 6,
+      "target" : "streams:a-s0"
+    },
+    {
+      "label" : "Main Menu, Continue",
+      "menu" : "vtsm-01-lu1-pgc3",
+      "number" : 7,
+      "target" : "menu:1.pgc1"
+    },
+    {
+      "label" : "Main Menu, Continue",
+      "menu" : "vtsm-01-lu1-pgc3",
+      "number" : 8,
+      "target" : "menu:1.pgc4"
+    },
+    {
+      "label" : "Back",
+      "menu" : "vtsm-01-lu1-pgc4",
+      "number" : 1,
+      "target" : "menu:1.pgc3"
+    },
+    {
+      "label" : "Main Menu",
+      "menu" : "vtsm-01-lu1-pgc4",
+      "number" : 2,
+      "target" : "menu:1.pgc1"
+    },
+    {
+      "menu" : "vtsm-01-lu1-pgc4",
+      "number" : 3,
+      "target" : "unresolved:LinkTopPG"
+    },
+    {
+      "label" : "Cast & Crew",
+      "menu" : "vtsm-01-lu1-pgc5",
+      "number" : 1,
+      "target" : "menu:1.pgc2"
+    },
+    {
+      "label" : "Theatrical Trailer",
+      "menu" : "vtsm-01-lu1-pgc5",
+      "number" : 2,
+      "target" : "unresolved:Set"
+    },
+    {
+      "label" : "Main Menu",
+      "menu" : "vtsm-01-lu1-pgc5",
+      "number" : 3,
+      "target" : "menu:1.pgc1"
+    },
+    {
+      "label" : "1World's warriors. 2 Dux ducks out. 3 A mentor:",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 1,
+      "target" : "chapter:1.1"
+    },
+    {
+      "label" : "1World's warriors. 2 Dux ducks out. 3 A mentor:",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 2,
+      "target" : "chapter:1.2"
+    },
+    {
+      "label" : "Tanaka.",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 3,
+      "target" : "chapter:1.3"
+    },
+    {
+      "label" : "4 Training.",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 4,
+      "target" : "chapter:1.4"
+    },
+    {
+      "label" : "5 Ray Jackson.. 6 No man's land.i",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 5,
+      "target" : "chapter:1.5"
+    },
+    {
+      "label" : "5 Ray Jackson.. 6 No man's land.i",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 6,
+      "target" : "chapter:1.6"
+    },
+    {
+      "label" : "1-6 7-12 13-18 19-23",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 7,
+      "target" : "unresolved:LinkTopPG"
+    },
+    {
+      "label" : "1-6 7-12 13-18 19-23",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 8,
+      "target" : "menu:1.pgc7"
+    },
+    {
+      "label" : "1-6 7-12 13-18 19-23",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 9,
+      "target" : "menu:1.pgc8"
+    },
+    {
+      "label" : "1-6 7-12 13-18 19-23",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 10,
+      "target" : "menu:1.pgc9"
+    },
+    {
+      "label" : "Start Movie Main Menu",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 11,
+      "target" : "chapter:1.1"
+    },
+    {
+      "label" : "Start Movie Main Menu",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 12,
+      "target" : "menu:1.pgc1"
+    },
+    {
+      "label" : "End Credits",
+      "menu" : "vtsm-01-lu1-pgc6",
+      "number" : 13,
+      "target" : "chapter:1.23"
+    },
+    {
+      "label" : "7Death touch.",
+      "menu" : "vtsm-01-lu1-pgc7",
+      "number" : 1,
+      "target" : "chapter:1.7"
+    },
+    {
+      "label" : "8 Bet on a woman. 9 The mightiest",
+      "menu" : "vtsm-01-lu1-pgc7",
+      "number" : 2,
+      "target" : "chapter:1.8"
+    },
+    {
+      "label" : "prevail.",
+      "menu" : "vtsm-01-lu1-pgc7",
+      "number" : 3,
+      "target" : "chapter:1.9"
+    },
+    {
+      "label" : "10 First bouts.",
+      "menu" : "vtsm-01-lu1-pgc7",
+      "number" : 4,
+      "target" : "chapter:1.10"
+    },
+    {
+      "label" : "11 Fight to Survive 12 Hong Kong",
+      "menu" : "vtsm-01-lu1-pgc7",
+      "number" : 5,
+      "target" : "chapter:1.11"
+    },
+    {
+      "label" : "chase.",
+      "menu" : "vtsm-01-lu1-pgc7",
+      "number" : 6,
+      "target" : "chapter:1.12"
+    },
+    {
+      "menu" : "vtsm-01-lu1-pgc7",
+      "number" : 7,
+      "target" : "menu:1.pgc6"
+    },
+    {
+      "label" : "7-12",
+      "menu" : "vtsm-01-lu1-pgc7",
+      "number" : 8,
+      "target" : "unresolved:LinkTopPG"
+    },
+    {
+      "label" : "13-18 19-23",
+      "menu" : "vtsm-01-lu1-pgc7",
+      "number" : 9,
+      "target" : "menu:1.pgc8"
+    },
+    {
+      "label" : "13-18 19-23",
+      "menu" : "vtsm-01-lu1-pgc7",
+      "number" : 10,
+      "target" : "menu:1.pgc9"
+    },
+    {
+      "label" : "Main Menu",
+      "menu" : "vtsm-01-lu1-pgc7",
+      "number" : 11,
+      "target" : "menu:1.pgc1"
+    },
+    {
+      "label" : "undercover.",
+      "menu" : "vtsm-01-lu1-pgc8",
+      "number" : 1,
+      "target" : "chapter:1.13"
+    },
+    {
+      "label" : "13 Under covers, 14 Second rounds. 15 Ray vs.",
+      "menu" : "vtsm-01-lu1-pgc8",
+      "number" : 2,
+      "target" : "chapter:1.14"
+    },
+    {
+      "label" : "Chong Li.",
+      "menu" : "vtsm-01-lu1-pgc8",
+      "number" : 3,
+      "target" : "chapter:1.15"
+    },
+    {
+      "label" : "16 Being the best.. 17 Nearly zapped, 18 Dux vs. Paco, *",
+      "menu" : "vtsm-01-lu1-pgc8",
+      "number" : 4,
+      "target" : "chapter:1.16"
+    },
+    {
+      "label" : "16 Being the best.. 17 Nearly zapped, 18 Dux vs. Paco, *",
+      "menu" : "vtsm-01-lu1-pgc8",
+      "number" : 5,
+      "target" : "chapter:1.17"
+    },
+    {
+      "label" : "16 Being the best.. 17 Nearly zapped, 18 Dux vs. Paco, *",
+      "menu" : "vtsm-01-lu1-pgc8",
+      "number" : 6,
+      "target" : "chapter:1.18"
+    },
+    {
+      "menu" : "vtsm-01-lu1-pgc8",
+      "number" : 7,
+      "target" : "menu:1.pgc6"
+    },
+    {
+      "label" : "7-12 13-18 19-23",
+      "menu" : "vtsm-01-lu1-pgc8",
+      "number" : 8,
+      "target" : "menu:1.pgc7"
+    },
+    {
+      "label" : "7-12 13-18 19-23",
+      "menu" : "vtsm-01-lu1-pgc8",
+      "number" : 9,
+      "target" : "unresolved:LinkTopPG"
+    },
+    {
+      "label" : "7-12 13-18 19-23",
+      "menu" : "vtsm-01-lu1-pgc8",
+      "number" : 10,
+      "target" : "menu:1.pgc9"
+    },
+    {
+      "label" : "Main Menu",
+      "menu" : "vtsm-01-lu1-pgc8",
+      "number" : 11,
+      "target" : "menu:1.pgc1"
+    },
+    {
+      "label" : "Chong Li.",
+      "menu" : "vtsm-01-lu1-pgc9",
+      "number" : 1,
+      "target" : "chapter:1.19"
+    },
+    {
+      "label" : "19 Short work for 20 Championship 21Victory out",
+      "menu" : "vtsm-01-lu1-pgc9",
+      "number" : 2,
+      "target" : "chapter:1.20"
+    },
+    {
+      "label" : "of dust.",
+      "menu" : "vtsm-01-lu1-pgc9",
+      "number" : 3,
+      "target" : "chapter:1.21"
+    },
+    {
+      "label" : "22 Goodbye.",
+      "menu" : "vtsm-01-lu1-pgc9",
+      "number" : 4,
+      "target" : "chapter:1.22"
+    },
+    {
+      "label" : "23 Coda and End",
+      "menu" : "vtsm-01-lu1-pgc9",
+      "number" : 5,
+      "target" : "chapter:1.23"
+    },
+    {
+      "menu" : "vtsm-01-lu1-pgc9",
+      "number" : 6,
+      "target" : "menu:1.pgc6"
+    },
+    {
+      "label" : "7-12 13-18",
+      "menu" : "vtsm-01-lu1-pgc9",
+      "number" : 7,
+      "target" : "menu:1.pgc7"
+    },
+    {
+      "label" : "7-12 13-18",
+      "menu" : "vtsm-01-lu1-pgc9",
+      "number" : 8,
+      "target" : "menu:1.pgc8"
+    },
+    {
+      "label" : "19-23",
+      "menu" : "vtsm-01-lu1-pgc9",
+      "number" : 9,
+      "target" : "unresolved:LinkTopPG"
+    },
+    {
+      "label" : "Main Menu",
+      "menu" : "vtsm-01-lu1-pgc9",
+      "number" : 10,
+      "target" : "menu:1.pgc1"
+    },
+    {
+      "label" : "Cast",
+      "menu" : "vtsm-01-lu1-pgc10",
+      "number" : 1,
+      "target" : "menu:1.pgc2"
+    },
+    {
+      "label" : "Continue",
+      "menu" : "vtsm-01-lu1-pgc10",
+      "number" : 2,
+      "target" : "menu:1.pgc11"
+    },
+    {
+      "label" : "Blown Away (1994)",
+      "menu" : "vtsm-01-lu1-pgc10",
+      "number" : 3,
+      "target" : "unresolved:LinkTopPG"
+    },
+    {
+      "label" : "Back",
+      "menu" : "vtsm-01-lu1-pgc11",
+      "number" : 1,
+      "target" : "menu:1.pgc10"
+    },
+    {
+      "menu" : "vtsm-01-lu1-pgc11",
+      "number" : 2,
+      "target" : "menu:1.pgc2"
+    },
+    {
+      "menu" : "vtsm-01-lu1-pgc11",
+      "number" : 3,
+      "target" : "unresolved:LinkTopPG"
+    },
+    {
+      "label" : "Cast",
+      "menu" : "vtsm-01-lu1-pgc12",
+      "number" : 1,
+      "target" : "menu:1.pgc2"
+    },
+    {
+      "label" : "Contini",
+      "menu" : "vtsm-01-lu1-pgc12",
+      "number" : 2,
+      "target" : "menu:1.pgc13"
+    },
+    {
+      "label" : "(also co-story, dir.)",
+      "menu" : "vtsm-01-lu1-pgc12",
+      "number" : 3,
+      "target" : "unresolved:LinkTopPG"
+    },
+    {
+      "label" : "Back",
+      "menu" : "vtsm-01-lu1-pgc13",
+      "number" : 1,
+      "target" : "menu:1.pgc12"
+    },
+    {
+      "label" : "Cas",
+      "menu" : "vtsm-01-lu1-pgc13",
+      "number" : 2,
+      "target" : "menu:1.pgc2"
+    },
+    {
+      "label" : "Bloodsport (1987)",
+      "menu" : "vtsm-01-lu1-pgc13",
+      "number" : 3,
+      "target" : "unresolved:LinkTailPGC"
+    },
+    {
+      "label" : "Cast",
+      "menu" : "vtsm-01-lu1-pgc14",
+      "number" : 1,
+      "target" : "menu:1.pgc2"
+    },
+    {
+      "label" : "Crew",
+      "menu" : "vtsm-01-lu1-pgc15",
+      "number" : 1,
+      "target" : "menu:1.pgc2"
+    },
+    {
+      "label" : "Crew",
+      "menu" : "vtsm-01-lu1-pgc16",
+      "number" : 1,
+      "target" : "menu:1.pgc2"
+    }
   ],
   "chapterMenu" : {
-    "buttons" : 0,
+    "buttons" : 25,
     "csvRows" : 23,
     "names" : [
       {
@@ -173,11 +669,12 @@
       "vtsm-01-lu1-pgc7",
       "vtsm-01-lu1-pgc8",
       "vtsm-01-lu1-pgc9"
-    ]
+    ],
+    "title" : 1
   },
   "format" : "changeover-menu-derived/1",
   "languages" : {
-    "shape" : "listing",
+    "shape" : "buttons",
     "spoken" : [
       "English",
       "Français"
@@ -186,7 +683,19 @@
       "English",
       "Français",
       "日本語"
-    ]
+    ],
+    "trackMapping" : {
+      "0" : "English",
+      "1" : "Français"
+    }
+  },
+  "playButton" : {
+    "candidates" : 1,
+    "label" : "Play Movie",
+    "menu" : "vtsm-01-lu1-pgc1",
+    "number" : 1,
+    "resolvedBy" : "pgcCommands",
+    "title" : 1
   },
   "resolver" : {
     "app" : "slice1",
@@ -198,7 +707,7 @@
     "text" : "Bloodsport"
   },
   "tvSignal" : {
-    "reason" : "no structure.json captured",
+    "reason" : "no menu with ≥3 title-jumping buttons",
     "value" : false
   }
 }

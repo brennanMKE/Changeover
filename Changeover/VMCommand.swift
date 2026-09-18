@@ -196,18 +196,43 @@ nonisolated struct VMCommand: Equatable, Hashable, Sendable {
             }
             return .unresolved(mnemonic: mnemonic)
 
-        case 2:
-            // System set. Sub-operation 1 (bits 59…56) is SetSTN: byte 3
-            // carries the audio stream, byte 4 the sub-picture stream, each
-            // with bit 7 as "this field is being set" and bits 6…0 as the
-            // value. This is the least-verified decode in this file — no
-            // captured disc has exercised it yet — so it only ever produces
-            // a caption beside a picker the user still controls (§5.3).
-            guard bits(59, 4) == 1 else { return .unresolved(mnemonic: mnemonic) }
-            let audio = bits(39, 1) == 1 ? bits(38, 7) : nil
-            let subpicture = bits(31, 1) == 1 ? bits(30, 7) : nil
-            guard audio != nil || subpicture != nil else { return .unresolved(mnemonic: mnemonic) }
-            return .streams(audio: audio, subpicture: subpicture)
+        case 2, 3:
+            // "Set something, then link." Types 2 and 3 carry a **trailing
+            // link instruction** in the same eight bytes, at the same bit
+            // positions the link family uses — libdvdnav prints the set and
+            // then calls print_link_instruction on the very same command.
+            // Bloodsport's "Scene Selections" and "Special Features"
+            // buttons are this shape (`5604…0006` is LinkPGCN 6), and
+            // treating the whole family as opaque made three of the four
+            // root-menu buttons unreadable.
+            if commandType == 2, bits(59, 4) == 1 {
+                // SetSTN: byte 3 carries the audio stream, byte 4 the
+                // sub-picture stream, each with bit 7 as "this field is
+                // being set" and bits 6…0 as the value. Still the
+                // least-verified decode here — no captured disc has
+                // exercised it — so it only ever produces a caption beside
+                // a picker the user still controls (§5.3).
+                // Both values are the raw seven bits, deliberately. The
+                // measured disc's languages page sets sub-picture to 0xc0,
+                // 0xc1, 0xc2 and 0x80 — bit 6 is the "display subtitles"
+                // flag and the stream is the low bits, so 0xc0 means
+                // "stream 0, on" and 0x80 is the Off button. Nothing
+                // consumes the sub-picture number yet (§5.3: Phase 2's
+                // output carries no subtitle track), so it is recorded as
+                // the disc wrote it rather than given an interpretation
+                // that no test and no output would exercise. Only `audio`
+                // feeds LanguageHints' track mapping.
+                let audio = bits(39, 1) == 1 ? bits(38, 7) : nil
+                let subpicture = bits(31, 1) == 1 ? bits(30, 7) : nil
+                if audio != nil || subpicture != nil {
+                    return .streams(audio: audio, subpicture: subpicture)
+                }
+            }
+            if operation == 4 {
+                let pgc = bits(14, 15)
+                if pgc > 0 { return .menu(MenuTargetRef(domain: nil, vts: vts, pgc: pgc, menuID: nil)) }
+            }
+            return .unresolved(mnemonic: mnemonic)
 
         default:
             return .unresolved(mnemonic: mnemonic)

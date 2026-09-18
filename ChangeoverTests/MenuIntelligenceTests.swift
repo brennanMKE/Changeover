@@ -145,14 +145,8 @@ struct MenuIntelligenceTests {
 
     // MARK: - Languages (advisory, never a mapping)
 
-    /// The disc prints its spoken languages; the app repeats them and says
-    /// what they are not.
-    ///
-    /// **And no more than that.** On this disc the languages page lists four
-    /// subtitle entries and no single Vision configuration reads all four —
-    /// the document's recommended language list reads 日本語 and drops "off",
-    /// the defaults do the opposite. So nothing may treat this list as
-    /// complete, which is why it is a caption and never a track assignment.
+    /// The disc prints its spoken languages and the app repeats them beside
+    /// the picker.
     @Test func theLanguagesPageIsReadAsAHint() throws {
         let menu = MenuIntelligence.derive(
             structure: Self.bloodsportStructure,
@@ -161,18 +155,44 @@ struct MenuIntelligenceTests {
         )
         let languages = try #require(menu.languages)
         #expect(languages.spoken.contains("English"))
-        #expect(languages.shape != .buttons)
-        #expect(languages.trackMapping == nil)
+        let line = try #require(MenuAudioHint.line(languages))
+        #expect(line.contains("English"))
     }
 
-    @Test func theLanguageCaptionSaysItIsNotAMapping() throws {
+    /// **The list is not the disc's inventory, and this disc proves it.** Its
+    /// languages page prints four subtitle entries — English, Français, 日本語
+    /// and "Off" — and no single Vision configuration reads all four: the
+    /// recommended language list reads 日本語 and drops "Off", the defaults do
+    /// the opposite. The captured run is one of those two, so the recorded
+    /// list is short by one, and nothing anywhere may treat it as complete.
+    @Test func theSubtitleListIsKnownToBeIncompleteOnThisDisc() throws {
         let menu = MenuIntelligence.derive(
             structure: Self.bloodsportStructure,
             ocr: try Self.bloodsportOCR,
             featureChapterCount: 23
         )
-        let caption = try #require(menu.languages.flatMap(LanguageHints.caption))
-        #expect(caption.contains("not a mapping"))
+        let languages = try #require(menu.languages)
+        #expect(languages.subtitles.count < 4)
+        // And whatever it read, it is only ever a sentence.
+        #expect(MenuAudioHint.line(languages)?.isEmpty == false)
+    }
+
+    /// Whichever shape the menu has, the hint says where the words came from
+    /// — and in the shape that has no mapping at all, it says so outright.
+    @Test func theHintNeverReadsLikeATrackAssignment() throws {
+        let listing = LanguageHints.Lists(
+            shape: .listing, spoken: ["English", "Français"], subtitles: ["English"]
+        )
+        #expect(MenuAudioHint.line(listing)?.contains("not a mapping") == true)
+
+        let mapped = LanguageHints.Lists(
+            shape: .buttons, spoken: ["English", "Français"], subtitles: [],
+            trackMapping: ["1": "English", "2": "Français"]
+        )
+        let line = try #require(MenuAudioHint.line(mapped))
+        #expect(line.contains("the tracks themselves are untouched"))
+
+        #expect(MenuAudioHint.line(nil) == nil)
     }
 
     // MARK: - The captions

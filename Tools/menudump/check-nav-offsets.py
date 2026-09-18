@@ -64,8 +64,9 @@ def main(root):
     command = sector[btnit + 10:btnit + 18].hex()
     assert command == "3002000000010000", f"first button command is {command}"
 
-    # Group 2 sits btn_ns entries later and carries the same command.
-    g2 = btnit + btn_ns * BTNI_SIZE
+    # Group 2 sits at index 36 // btngr_ns — the table is partitioned
+    # equally among the declared groups, not packed at the btn_ns stride.
+    g2 = btnit + (36 // btngr_ns) * BTNI_SIZE
     assert sector[g2 + 10:g2 + 18].hex() == command, "group 2 command differs"
 
     # nv_pck_lbn is the pack's own address: 0 for the first sector.

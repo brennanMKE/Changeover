@@ -362,7 +362,7 @@ struct DiscCorpusTests {
         // ---- tier 2, only where OCR ran
         guard let ocr else { return }
         try Self.assertChapterNames(ocr, structure: structure, expect: expect, slug: slug)
-        Self.assertLanguageLists(ocr, expect: expect, slug: slug)
+        Self.assertLanguageLists(ocr, structure: structure, expect: expect, slug: slug)
         Self.assertTitleTextAvoidsTheFilmographyTrap(ocr, expect: expect, slug: slug)
     }
 
@@ -512,9 +512,12 @@ struct DiscCorpusTests {
         // HandBrake drops sub-second stubs with --min-duration 1, so a menu
         // may legitimately point at a title the scan does not list. The
         // check is therefore a subset check with the shortfall named.
+        // Indirect targets count: a LinkTailPGC whose PGC jumps to a title
+        // names that title just as surely as a bare JumpTT does, and it is
+        // the shape the measured disc's play button actually uses.
         let scanTitles = Set(scan.disc.titles.map(\.index))
         let unmatched = structure.resolvedButtons()
-            .compactMap { $0.target.titleNumber }
+            .compactMap { PlayButtonResolver.title(of: $0, in: structure) }
             .filter { !scanTitles.contains($0) }
         #expect(
             unmatched.isEmpty,
@@ -537,7 +540,7 @@ struct DiscCorpusTests {
         if let ocr = try loadOCR(slug) {
             for menu in structure.menus {
                 let buttons = structure.resolvedButtons().filter { $0.ref.menu == menu.id }
-                for still in menu.stills ?? [menu.id] {
+                for still in menu.stillIDs {
                     guard let observations = ocr.still(still)?.observations else { continue }
                     for (ref, label) in PlayButtonResolver.labels(buttons: buttons, observations: observations) {
                         labels[ref] = label
@@ -578,7 +581,7 @@ struct DiscCorpusTests {
     ) throws {
         guard let expectedRows = expect.chapterNamesEmitted else { return }
         let pages = expect.chapterPages
-            ?? structure?.menus.filter(\.isChapterMenu).flatMap { $0.stills ?? [$0.id] }
+            ?? structure?.chapterMenus().flatMap(\.stillIDs)
             ?? []
         #expect(!pages.isEmpty, "\(slug): expect.menu.chapterNamesEmitted is set but no chapter pages are named")
 
@@ -601,11 +604,18 @@ struct DiscCorpusTests {
 
     private static func assertLanguageLists(
         _ ocr: MenuOCRDocument,
+        structure: MenuStructure?,
         expect: DiscManifest.MenuExpectation,
         slug: String
     ) {
         guard let still = expect.languagesStill, let observations = ocr.still(still)?.observations else { return }
-        let lists = LanguageHints.lists(observations: observations)
+        // The buttons decide the *shape*: a language name inside a SetSTN
+        // button is a real stream mapping, and reading the page without
+        // them can only ever report a listing. The measured disc is shape 1
+        // — six SetSTN buttons, two audio and four sub-picture.
+        let owner = structure?.menus.first { $0.stillIDs.contains(still) }?.id
+        let buttons = (structure?.resolvedButtons() ?? []).filter { $0.ref.menu == owner }
+        let lists = LanguageHints.lists(observations: observations, buttons: buttons)
         if let spoken = expect.spokenLanguages {
             #expect(lists.spoken == spoken, "\(slug): spoken languages from the menu")
         }

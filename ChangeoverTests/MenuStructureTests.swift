@@ -267,6 +267,51 @@ struct MenuStructureTests {
         #expect(PlayButtonResolver.resolve(structure) == nil)
     }
 
+    /// The shape the first real disc actually uses. Bloodsport's Play Movie
+    /// button is a `LinkTailPGC` — "run this PGC's post-commands" — and the
+    /// root PGC's post-commands end with `JumpVTS_TT 1`. A resolver that
+    /// only understands a bare `JumpTT` on the button reads nothing at all,
+    /// which is what it did.
+    @Test func aPlayButtonThatRunsItsPGCsPostCommandsResolves() throws {
+        var structure = try Self.load("synthetic-movie")
+        var root = try #require(structure.menus.first { $0.id == "vtsm-01-lu1-pgc1" })
+        // LinkTailPGC (button 1) in place of the direct jump…
+        root.buttons[0].command = "200100000000040d"
+        // …and the title jump moved into the PGC's own post-commands.
+        root.commands = MenuStructure.Commands(pre: [], post: ["3003000000010000"], cell: [])
+        structure.menus = structure.menus.map { $0.id == root.id ? root : $0 }
+        structure.menus.removeAll { $0.id == "vmgm-lu1-pgc1" }
+
+        #expect(structure.soleTitleJump(of: root) == 1, "JumpVTS_TT 1 lifts to VMG title 1 through TT_SRPT")
+        let resolution = try #require(PlayButtonResolver.resolve(structure))
+        #expect(resolution.title == 1)
+        #expect(resolution.resolvedBy == .pgcCommands)
+    }
+
+    /// One step, never a chain, and never a conditional: a PGC whose
+    /// commands jump to two different titles resolves to neither.
+    @Test func aPGCThatJumpsToTwoTitlesResolvesToNeither() throws {
+        var structure = try Self.load("synthetic-movie")
+        var root = try #require(structure.menus.first { $0.id == "vtsm-01-lu1-pgc1" })
+        root.buttons[0].command = "200100000000040d"
+        root.commands = MenuStructure.Commands(
+            pre: [], post: ["3003000000010000", "3002000000030000"], cell: []
+        )
+        structure.menus = structure.menus.map { $0.id == root.id ? root : $0 }
+        #expect(structure.soleTitleJump(of: root) == nil)
+    }
+
+    /// "Scene Selections" and "Special Features" on the measured disc are
+    /// set-then-link commands: they set a register *and* carry a trailing
+    /// `LinkPGCN` in the same eight bytes. Treating the whole family as
+    /// opaque left three of the four root-menu buttons unreadable.
+    @Test func aSetThenLinkCommandStillNamesItsDestination() {
+        let command = try? #require(VMCommand(hex: "560400002c000006"))
+        #expect(command?.target(inVTS: 1) == .menu(MenuTargetRef(domain: nil, vts: 1, pgc: 6, menuID: nil)))
+        #expect(VMCommand(hex: "5604000004000005")?.target(inVTS: 1)
+                == .menu(MenuTargetRef(domain: nil, vts: 1, pgc: 5, menuID: nil)))
+    }
+
     // MARK: - The TV signal
 
     @Test func aMovieDiscHasNoTVSignal() throws {

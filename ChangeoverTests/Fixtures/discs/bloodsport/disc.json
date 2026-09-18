@@ -16,7 +16,7 @@
   },
   "menus": {
     "captured": true,
-    "structure": false,
+    "structure": true,
     "css": "available",
     "menuCount": 29,
     "stillCount": 16,
@@ -24,7 +24,7 @@
     "judgeRun": false,
     "missing": []
   },
-  "notes": "Captured on joe 2026-09-18 with Tools/capture-disc.sh v2: scan, lsdvd, the five IFO tables, 16 menu stills and their OCR. menus/structure.json from that run was DISCARDED, not committed: the helper's NAV reader had a four-byte error in the PCI structure (pci_gi is 60 bytes, not 64) and reported zero buttons for all 29 menu PGCs of a disc that carries 151 NAV packs full of them. The reader is fixed and now publishes its own self-checks, but no structure.json from this disc has been read with the fixed version yet, so `menus.structure` is false and every tier-1 expectation below is null. Re-capture to fill them in; DiscCorpusTests will then assert the headline invariant (play button target == outcomeIndex == 1) with no new test code. Stills are not committed: copyrighted menu artwork, and docs/menu-intelligence.md 8.7 leaves that to the user; menus/ocr.json carries everything the invariants read. REVIEWED 2026-09-18: expect.menu checked page by page against the 16 stills. audioTrackCount and subtitleGroupCount are still unfilled and are skipped rather than asserted.",
+  "notes": "Captured on joe 2026-09-18 with Tools/capture-disc.sh v2, then re-read on the dev Mac with the fixed NAV reader against a copy of the disc's menu VOB. menus/structure.json here is real disc data: 29 menu PGCs, 16 of them with cells, 84 buttons, every rectangle and every raw 8-byte VM command as the disc wrote them. The first capture's structure.json was discarded -- the reader had a four-byte error in the PCI structure (pci_gi is 60 bytes, not 64) and reported zero buttons for the whole disc. Stills are not committed: copyrighted menu artwork, and docs/menu-intelligence.md 8.7 leaves that to the user; menus/ocr.json carries everything the invariants read. REVIEWED 2026-09-18: expect.menu checked page by page against the 16 stills and against the button commands. audioTrackCount and subtitleGroupCount are still unfilled and are skipped rather than asserted.",
   "expect": {
     "titleCount": 4,
     "mainFeatureIndex": 1,
@@ -36,10 +36,10 @@
     "audioTrackCount": null,
     "subtitleGroupCount": null,
     "menu": {
-      "playButtonTitle": null,
-      "playButtonLabel": null,
-      "playButtonResolvedBy": null,
-      "chapterMenuButtons": null,
+      "playButtonTitle": 1,
+      "playButtonLabel": "Play Movie",
+      "playButtonResolvedBy": "pgcCommands",
+      "chapterMenuButtons": 25,
       "chapterNamesEmitted": 23,
       "chapterPages": [
         "vtsm-01-lu1-pgc6",
@@ -73,10 +73,19 @@
         "Coda and End Credits"
       ],
       "languagesStill": "vtsm-01-lu1-pgc3",
-      "languageShape": "listing",
-      "spokenLanguages": ["English", "Français"],
-      "subtitleLanguages": ["English", "Français", "日本語"],
-      "entryStills": ["vtsm-01-lu1-pgc1"],
+      "languageShape": "buttons",
+      "spokenLanguages": [
+        "English",
+        "Français"
+      ],
+      "subtitleLanguages": [
+        "English",
+        "Français",
+        "日本語"
+      ],
+      "entryStills": [
+        "vtsm-01-lu1-pgc1"
+      ],
       "titleTextCandidate": "Bloodsport",
       "titleTextOffered": false,
       "nonEntryStills": [
@@ -91,9 +100,11 @@
         "vtsm-01-lu1-pgc15",
         "vtsm-01-lu1-pgc16"
       ],
-      "tvSignal": null,
-      "unresolvedMnemonics": [],
-      "notes": "Two things the archive recorded rather than smoothed over. (1) The subtitle list is what the app's own MenuOCR.Settings read, not what the page prints: the page prints English / Francais / Japanese / Off, and Vision reads three of the four whichever way it is configured — with the 1.3 language list it reads the Japanese and drops 'Off', with its defaults it reads 'off' and drops the Japanese. (2) Chapter 6 is recorded as 'No man's land.i'. The trailing '.i' is the decorative glyph after the caption; the first capture's still rendered it such that OCR read '*', which clean() strips, and this capture's still rendered it as 'i', which it does not. That is a wrong name at the right timestamp — the cheap failure of 3.3 — and adding a cleaning rule on one disc's worth of evidence would be the expensive kind. It is also direct evidence that which frame the still comes from matters, which is 1.2's open question. The same re-render read the title card correctly as 'Bloodsport' where the first read 'Bloodiport'."
+      "tvSignal": false,
+      "unresolvedMnemonics": [
+        "LinkTailPGC"
+      ],
+      "notes": "Read with the fixed NAV reader against the disc's own menu VOB. Four things this disc taught, all of which the design had guessed wrong. (1) The play button is not a JumpTT: it is a LinkTailPGC, which runs the root PGC's post-commands, and those end with JumpVTS_TT 1 -- hence resolvedBy 'pgcCommands'. Without following that one indirection the disc's own answer to 'which title is the feature' is unreadable. (2) Only the root menu is an entry PGC; the four scene pages and the languages page are plain PGCs reached by LinkPGCN, so rules keyed on entry type 0x86/0x84 find nothing and the pages are identified by what their buttons do and what their text says. (3) The scene buttons enclose their captions rather than sitting above them. (4) 'Scene Selections' and 'Special Features' are set-then-link commands whose trailing LinkPGCN is the navigation. LinkTailPGC stays in unresolvedMnemonics because its raw target is genuinely not a title -- the title comes from the PGC it runs. Two OCR findings kept rather than smoothed over: the subtitle list is what the app's own MenuOCR.Settings read, not what the page prints -- the page prints English / Francais / Japanese / Off and the disc's own buttons prove it (three SetSTN buttons selecting sub-picture streams plus one turning display off), while Vision reads three of the four whichever way it is configured. And chapter 6 is 'No man's land.i': the trailing '.i' is the decorative glyph, which the first capture's still rendered such that OCR read '*' (which clean() strips) and this one did not. A wrong name at the right timestamp is 3.3's cheap failure; a cleaning rule invented on one disc would be the expensive kind."
     }
   }
 }

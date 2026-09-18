@@ -30,6 +30,9 @@ nonisolated enum PlayButtonResolver {
 
     nonisolated enum ResolvedBy: String, Codable, Equatable, Sendable {
         case structure
+        /// Through one indirection into a PGC's own command table — the
+        /// `LinkTailPGC` shape a real disc turned out to use.
+        case pgcCommands
         case linkedMenu
         case lexicon
         case model
@@ -58,13 +61,46 @@ nonisolated enum PlayButtonResolver {
         }
     }
 
+    /// The title a button starts, following at most **one** indirection.
+    ///
+    /// Most of the discs this was designed against were assumed to put a
+    /// bare `JumpTT` on the play button. The first real disc does not:
+    /// Bloodsport's Play Movie is a `LinkTailPGC`, which runs its own PGC's
+    /// post-commands, and those end with `JumpVTS_TT 1`. So a button
+    /// resolves to a title when
+    ///
+    /// * its own command is a title jump; or
+    /// * it links to the tail/top of its **own** PGC, whose commands hold
+    ///   exactly one title jump; or
+    /// * it links to **another** PGC whose commands hold exactly one.
+    ///
+    /// One step, never a chain, and never a conditional command — those are
+    /// recorded and left alone.
+    static func title(of button: ResolvedButton, in structure: MenuStructure) -> Int? {
+        if let direct = button.target.titleNumber { return direct }
+        guard let menu = structure.menus.first(where: { $0.id == button.ref.menu }) else { return nil }
+
+        switch button.target {
+        case .unresolved(let mnemonic) where mnemonic.hasPrefix("Link"):
+            // LinkTailPGC / LinkTopPGC and friends stay inside this PGC.
+            return structure.soleTitleJump(of: menu)
+        case .menu(let ref):
+            guard let pgc = ref.pgc,
+                  let destination = structure.menu(withPGC: pgc, inVTS: ref.vts ?? menu.vts, domain: ref.domain)
+            else { return nil }
+            return structure.soleTitleJump(of: destination)
+        default:
+            return nil
+        }
+    }
+
     /// Every button that could be the play button, before any tie-break.
     static func titleJumpingButtons(
         _ structure: MenuStructure,
         includingLinkedMenus: Bool = false
     ) -> [ResolvedButton] {
         let all = structure.resolvedButtons()
-        let onEntry = all.filter { $0.onEntryMenu && $0.target.titleNumber != nil }
+        let onEntry = all.filter { $0.onEntryMenu && title(of: $0, in: structure) != nil }
         guard onEntry.isEmpty, includingLinkedMenus else { return onEntry }
 
         // One indirection: the menus an entry menu links to.
@@ -74,7 +110,7 @@ nonisolated enum PlayButtonResolver {
                 return structure.menus.first { $0.pgc == pgc && $0.domain == (ref.domain ?? $0.domain) }?.id
             }
         )
-        return all.filter { linked.contains($0.ref.menu) && $0.target.titleNumber != nil }
+        return all.filter { linked.contains($0.ref.menu) && title(of: $0, in: structure) != nil }
     }
 
     /// Resolve, with whatever labels OCR attached to the buttons.
@@ -104,13 +140,13 @@ nonisolated enum PlayButtonResolver {
         }
         let pool = plausible.isEmpty ? candidates : plausible
 
-        if pool.count == 1, let only = pool.first, let title = only.target.titleNumber {
+        if pool.count == 1, let only = pool.first, let title = title(of: only, in: structure) {
             return Resolution(
                 menu: only.ref.menu,
                 number: only.ref.number,
                 label: labels[only.ref],
                 title: title,
-                resolvedBy: rung,
+                resolvedBy: only.target.titleNumber == nil ? .pgcCommands : rung,
                 candidates: pool.count
             )
         }
@@ -121,7 +157,7 @@ nonisolated enum PlayButtonResolver {
         // confirmation line is the same either way, so the only question is
         // which button to *name* — a lexicon hit first, so the caption reads
         // "Play Movie" rather than going unlabelled.
-        let titles = Set(pool.compactMap { $0.target.titleNumber })
+        let titles = Set(pool.compactMap { title(of: $0, in: structure) })
         if titles.count == 1, let title = titles.first {
             let named = pool.first { labels[$0.ref].map(MenuLexicon.isPlayLabel) ?? false }
             let chosen = named ?? pool.first { labels[$0.ref] != nil } ?? pool[0]
@@ -130,7 +166,7 @@ nonisolated enum PlayButtonResolver {
                 number: chosen.ref.number,
                 label: labels[chosen.ref],
                 title: title,
-                resolvedBy: rung,
+                resolvedBy: chosen.target.titleNumber == nil ? .pgcCommands : rung,
                 candidates: pool.count
             )
         }
@@ -139,7 +175,7 @@ nonisolated enum PlayButtonResolver {
             guard let label = labels[button.ref] else { return false }
             return MenuLexicon.isPlayLabel(label)
         }
-        if lexiconHits.count == 1, let only = lexiconHits.first, let title = only.target.titleNumber {
+        if lexiconHits.count == 1, let only = lexiconHits.first, let title = title(of: only, in: structure) {
             return Resolution(
                 menu: only.ref.menu,
                 number: only.ref.number,
@@ -152,6 +188,12 @@ nonisolated enum PlayButtonResolver {
 
         return nil
     }
+
+    /// How much of an observation must lie inside a button rectangle before
+    /// it counts as that button's label. Measured on Bloodsport's root
+    /// menu: the four real labels are 96-100% inside, the title card clips
+    /// the top button by 3%. Half is comfortably between the two.
+    static let insideButtonFraction = 0.5
 
     /// Attach OCR text to buttons by geometry (§4.2).
     ///
@@ -167,7 +209,7 @@ nonisolated enum PlayButtonResolver {
         var out: [MenuButtonRef: String] = [:]
         for button in buttons {
             if let overlapping = observations
-                .filter({ $0.rect.intersectionArea(button.rect) > 0 })
+                .filter({ button.rect.containsFraction(of: $0.rect) >= Self.insideButtonFraction })
                 .max(by: { $0.rect.intersectionArea(button.rect) < $1.rect.intersectionArea(button.rect) }) {
                 out[button.ref] = overlapping.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 continue

@@ -56,15 +56,28 @@ let volumeName = option("--volume-name") ?? ""
 // which of the two happened.
 func stillIDs(matching predicate: (MenuStructure.Menu) -> Bool, hint: String) -> [String] {
     if let structure {
-        let ids = structure.menus.filter(predicate).flatMap { $0.stills ?? [$0.id] }
+        let ids = structure.menus.filter(predicate).flatMap(\.stillIDs)
         if !ids.isEmpty { return ids }
     }
     return list(hint)
 }
 
-let chapterPages = stillIDs(matching: { $0.isChapterMenu }, hint: "--chapter-pages")
+// Chapter pages are identified by what their buttons do, not by entry
+// type — see MenuStructure.chapterMenus().
+let chapterMenuIDs = Set((structure?.chapterMenus() ?? []).map(\.id))
+let chapterPages = stillIDs(matching: { chapterMenuIDs.contains($0.id) }, hint: "--chapter-pages")
 let entryStillIDs = stillIDs(matching: { $0.isEntryMenu }, hint: "--entry-stills")
-let languageStills = stillIDs(matching: { $0.entryType == "audio" || $0.entryType == "subpicture" }, hint: "--languages-still")
+// The languages page, like the chapter pages, is not reliably declared: on
+// the measured disc only the root menu is an entry PGC, so entry type 0x84
+// finds nothing. Fall back to the text — a page that prints both a spoken
+// heading and a subtitles heading is the languages page, and LanguageHints
+// returns empty for anything that does not.
+var languageStills = stillIDs(matching: { $0.entryType == "audio" || $0.entryType == "subpicture" }, hint: "--languages-still")
+if languageStills.isEmpty {
+    languageStills = (ocr?.stills ?? [])
+        .filter { !LanguageHints.lists(observations: $0.observations).isEmpty }
+        .map(\.id)
+}
 
 func observations(_ id: String) -> [TextObservation] { ocr?.still(id)?.observations ?? [] }
 
@@ -74,7 +87,7 @@ var labels: [MenuButtonRef: String] = [:]
 if ocr != nil {
     for menu in structure?.menus ?? [] {
         let buttons = resolved.filter { $0.ref.menu == menu.id }
-        let stills = menu.stills ?? [menu.id]
+        let stills = menu.stillIDs
         for still in stills {
             for (ref, label) in PlayButtonResolver.labels(buttons: buttons, observations: observations(still)) {
                 labels[ref] = label
@@ -90,7 +103,7 @@ let chapterCandidates: [ChapterNames.Candidate]
 if resolved.contains(where: { if case .chapter = $0.target { return true } else { return false } }) {
     chapterCandidates = chapterPages.flatMap { still in
         ChapterNames.candidates(
-            buttons: resolved.filter { $0.ref.menu == still || (structure?.menus.first { $0.stills?.contains(still) ?? false }?.id == $0.ref.menu) },
+            buttons: resolved.filter { structure?.menus.first { $0.stillIDs.contains(still) }?.id == $0.ref.menu },
             observations: observations(still)
         )
     }
@@ -102,7 +115,7 @@ let markerRows = ChapterNames.markers(chapterCandidates, chapterCount: chapterCo
 // Tier 2: language lists.
 var languages: LanguageHints.Lists?
 for still in languageStills {
-    let menuID = structure?.menus.first { ($0.stills ?? [$0.id]).contains(still) }?.id
+    let menuID = structure?.menus.first { $0.stillIDs.contains(still) }?.id
     let lists = LanguageHints.lists(
         observations: observations(still),
         buttons: resolved.filter { $0.ref.menu == menuID }
@@ -116,7 +129,7 @@ let entryStills = entryStillIDs.map { id in
         id: id,
         observations: observations(id),
         buttons: resolved
-            .filter { button in structure?.menus.first { ($0.stills ?? [$0.id]).contains(id) }?.id == button.ref.menu }
+            .filter { button in structure?.menus.first { $0.stillIDs.contains(id) }?.id == button.ref.menu }
             .map(\.rect)
     )
 }

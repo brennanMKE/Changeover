@@ -74,8 +74,14 @@ nonisolated enum MenuTitleGuess {
             for observation in still.observations {
                 let text = observation.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { continue }
-                // Attached to a button: that is a label, not a title.
-                guard !still.buttons.contains(where: { observation.rect.intersectionArea($0) > 0 }) else { continue }
+                // Attached to a button: that is a label, not a title. The
+                // test is how much of the text lies inside — Bloodsport's
+                // title card clips the top button by 3% and would otherwise
+                // be thrown away as a label, which is the one thing on the
+                // page this rule exists to find.
+                guard !still.buttons.contains(where: {
+                    $0.containsFraction(of: observation.rect) >= PlayButtonResolver.insideButtonFraction
+                }) else { continue }
                 // A word the lexicon knows is a button word even when the
                 // capture has no button rectangles to prove it.
                 guard !MenuLexicon.isKnownLabel(text) else { continue }

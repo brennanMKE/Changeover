@@ -267,10 +267,19 @@ nonisolated enum ChapterNames {
     /// `JumpVTS_PTT` command, and the printed number is only a cross-check.
     ///
     /// A caption belongs to the button whose x-span contains its centre and
-    /// whose bottom edge is the nearest one above it — the same rule the
-    /// continuations use, one level up. A printed number that disagrees with
-    /// the button's chapter marks the candidate `disputed`: the name stays
-    /// for the archive, the CSV never sees it.
+    /// whose rectangle it sits **inside or just below**.
+    ///
+    /// "Just below" alone was wrong, and a real disc said so: Bloodsport's
+    /// scene-selection buttons enclose the thumbnail *and* its caption —
+    /// button 1 is [139,92,285,208] and its caption sits at y 192-208,
+    /// inside it — so a rule requiring the button's bottom edge to be above
+    /// the text attached nothing at all and read zero of the 23 names. The
+    /// caption may therefore start anywhere from the button's top edge to
+    /// one and a half caption heights below its bottom.
+    ///
+    /// A printed number that disagrees with the button's chapter marks the
+    /// candidate `disputed`: the name stays for the archive, the CSV never
+    /// sees it.
     static func candidates(buttons: [ResolvedButton], observations: [TextObservation]) -> [Candidate] {
         let chapterButtons: [(chapter: Int, rect: PixelRect)] = buttons.compactMap { button in
             if case .chapter(_, let ptt) = button.target { return (ptt, button.rect) }
@@ -282,9 +291,14 @@ nonisolated enum ChapterNames {
         for fragment in join(fragments(observations)) {
             let name = clean(fragment.text)
             guard !name.isEmpty else { continue }
+            let reach = Double(max(fragment.rect.height, 1)) * continuationGapFactor
             guard let owner = chapterButtons
-                .filter({ $0.rect.contains(x: fragment.rect.midX) && $0.rect.maxY <= fragment.rect.minY })
-                .min(by: { fragment.rect.minY - $0.rect.maxY < fragment.rect.minY - $1.rect.maxY })
+                .filter({ button in
+                    button.rect.contains(x: fragment.rect.midX)
+                        && fragment.rect.minY >= button.rect.minY
+                        && Double(fragment.rect.minY - button.rect.maxY) <= reach
+                })
+                .min(by: { abs(fragment.rect.minY - $0.rect.maxY) < abs(fragment.rect.minY - $1.rect.maxY) })
             else { continue }
             out.append(Candidate(
                 chapter: owner.chapter,

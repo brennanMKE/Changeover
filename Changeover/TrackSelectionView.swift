@@ -34,7 +34,7 @@ struct TrackSelectionView: View {
     /// the usual answer, because most discs tag their tracks and most menu
     /// reads never happen.
     private var menuLanguageHint: String? {
-        jobs.menuState.intelligence?.languages.flatMap(LanguageHints.caption)
+        MenuAudioHint.line(jobs.menuState.intelligence?.languages)
     }
 
     var body: some View {

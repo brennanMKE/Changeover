@@ -265,9 +265,15 @@ typedef struct {
  * interpreted here: decoding is VMCommand.swift's job, pinned by tests
  * against exactly these hex strings.
  *
- * BUTTON GROUPS. `btngr_ns` is 1..3 and `btn_ns` is the count **per
- * group**; the groups sit consecutively in btnit, so group g's button b is
- * at index (g-1) * btn_ns + (b-1). Bloodsport declares two. The groups are
+ * BUTTON GROUPS. `btngr_ns` is 1..3 and `btn_ns` is the count per group,
+ * but the groups are **not** packed consecutively: the button table is
+ * always 36 entries and the declared groups partition it equally, so group
+ * g starts at index (g-1) * (36 / btngr_ns) — index 18 for the second of
+ * two, not index btn_ns. This was measured on Bloodsport, which declares
+ * two groups of 4 on its root menu: entries 0-3 and 18-21 carry data and
+ * 4-17 are zeros. Reading at the btn_ns stride finds those zeros and
+ * reports "the groups disagree", which is how the wrong stride announces
+ * itself if this is ever changed back. The groups are
  * the same buttons laid out for different display aspects (4:3, wide,
  * letterbox — `btngr<n>_dsp_ty`), and they carry the *same commands*, so
  * tier 1 cannot be affected by the choice. Group 1 is taken, because the
@@ -362,7 +368,7 @@ static void parse_nav_pack(const uint8_t *sector, int frame_w, int frame_h, nav_
     nav->buttons_per_group = count;
 
     if (count == 0) return;                   /* a menu PGC with no highlight yet */
-    if (count > MAX_BUTTONS || nav->button_groups * count > MAX_BUTTONS) {
+    if (count > MAX_BUTTONS || count > MAX_BUTTONS / nav->button_groups) {
         nav->error = "implausible button count — the highlight offsets do not fit";
         nav->buttons_per_group = 0;
         return;
@@ -379,11 +385,17 @@ static void parse_nav_pack(const uint8_t *sector, int frame_w, int frame_h, nav_
     }
     nav->count = count;
 
-    /* Do the other groups really carry the same commands? If they ever do
-     * not, taking group 1 is losing information and the archive says so. */
+    /* Do the other groups really carry the same commands? On Bloodsport
+     * they do — identical commands, wider rectangles for the letterbox
+     * layout — which is what makes taking group 1 safe for tier 1. If a
+     * disc ever disagrees, the archive says so instead of silently
+     * choosing. */
+    int group_stride = MAX_BUTTONS / nav->button_groups;
     for (int g = 1; g < nav->button_groups; g++) {
         for (int i = 0; i < count; i++) {
-            const uint8_t *other = btnit + (size_t)(g * count + i) * BTNI_SIZE;
+            int index = g * group_stride + i;
+            if (index >= MAX_BUTTONS) break;
+            const uint8_t *other = btnit + (size_t)index * BTNI_SIZE;
             if (memcmp(other + 10, nav->buttons[i].command, 8) != 0) nav->groups_agree = 0;
         }
     }
@@ -789,6 +801,43 @@ int main(int argc, char **argv) {
                             c ? ", " : "", be32(cell + 0x08), be32(cell + 0x14));
                 }
                 jprintf("],\n");
+
+                /* The PGC's own command table. Bloodsport's Play Movie
+                 * button is a LinkTailPGC — "run this PGC's post-commands" —
+                 * and those end with JumpVTS_TT 1. Without this table the
+                 * button resolves to nothing and the disc's own answer to
+                 * "which title is the feature" is unreadable, which is
+                 * exactly what happened the first time it was left out.
+                 * Emitted verbatim; §4.1 follows exactly one indirection
+                 * and never emulates the VM. */
+                {
+                    uint16_t cto = be16(pgc + 0xE4);
+                    const uint8_t *ct = cto ? at(&ifo, pgcit_base + pgc_offset + cto, 8) : NULL;
+                    int npre = 0, npost = 0, ncell = 0;
+                    if (ct) { npre = be16(ct); npost = be16(ct + 2); ncell = be16(ct + 4); }
+                    if (ct && !at(&ifo, pgcit_base + pgc_offset + cto + 8,
+                                  (size_t)(npre + npost + ncell) * 8)) ct = NULL;
+                    jprintf("      \"commands\": ");
+                    if (!ct) {
+                        jprintf("null,\n");
+                    } else {
+                        const uint8_t *c = ct + 8;
+                        const char *names[3] = { "pre", "post", "cell" };
+                        int counts[3] = { npre, npost, ncell };
+                        jprintf("{ ");
+                        for (int part = 0; part < 3; part++) {
+                            jprintf("%s\"%s\": [", part ? ", " : "", names[part]);
+                            for (int k = 0; k < counts[part]; k++) {
+                                jprintf("%s\"", k ? ", " : "");
+                                for (int byte = 0; byte < 8; byte++) jprintf("%02x", c[byte]);
+                                jprintf("\"");
+                                c += 8;
+                            }
+                            jprintf("]");
+                        }
+                        jprintf(" },\n");
+                    }
+                }
                 jprintf("      \"reachableFrom\": [\"%s\"],\n", (entry_id & 0x80) ? "entry" : "link");
                 jprintf("      \"buttonGroups\": %d,\n", nav.button_groups);
                 /* Why there are no buttons is as much a finding as the
