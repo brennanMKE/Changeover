@@ -49,6 +49,16 @@ nonisolated enum ChapterMarkerPlan {
         guard !candidates.isEmpty else {
             return .refused(reason: "the disc's menus name no chapters")
         }
+        // The count the *menu* produced, before any filtering, against the
+        // count the disc has. This is the user's rule applied where it bites:
+        // a menu that names 30 chapters for a 23-chapter title has not been
+        // read correctly, and a menu that names 23 for an 18-chapter title is
+        // describing a different title. Trimming either one to fit would
+        // write real names against the wrong timestamps.
+        let extracted = Set(candidates.map(\.chapter))
+        guard extracted.count == chapterCount else {
+            return .refused(reason: "the menu names \(extracted.count) chapters and the disc has \(chapterCount)")
+        }
         guard let rows = ChapterNames.markers(candidates, chapterCount: chapterCount) else {
             return .refused(reason: "fewer than half of the \(chapterCount) chapters were named")
         }

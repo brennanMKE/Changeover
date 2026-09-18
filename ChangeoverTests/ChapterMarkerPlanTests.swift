@@ -43,12 +43,21 @@ struct ChapterMarkerPlanTests {
         #expect(reason.contains("21"))
     }
 
-    /// The other direction: the menu names more chapters than the disc has.
-    /// `ChapterNames.markers` drops the out-of-range rows, and what is left
-    /// no longer equals the count — so still nothing is written.
+    /// The other direction, and the reason the count is taken *before* any
+    /// filtering: a menu that names 30 chapters for a 23-chapter title has
+    /// not been read correctly. Keeping the first 23 and discarding the rest
+    /// would write real names at wrong timestamps, which is precisely the
+    /// trade the equality rule refuses.
     @Test func moreNamesThanChaptersIsRefused() {
         let decision = ChapterMarkerPlan.decide(candidates: Self.candidates(1...30), chapterCount: 23)
         #expect(!decision.isWrite)
+    }
+
+    /// The same rule catches the case the app can actually reach: the names
+    /// were read for the 23-chapter feature and the user then picked an
+    /// 18-chapter title. The first eighteen names would all be wrong.
+    @Test func namesReadForAnotherTitleAreRefused() {
+        #expect(!ChapterMarkerPlan.decide(candidates: Self.candidates(1...23), chapterCount: 18).isWrite)
     }
 
     /// A gap in the middle is a count mismatch too, however close it looks.
@@ -71,15 +80,23 @@ struct ChapterMarkerPlanTests {
         #expect(reason == "the disc's menus name no chapters")
     }
 
-    /// A scene index with highlights only: `ChapterNames.markers` returns
-    /// `nil` below half, and the reason says so rather than reporting a count
-    /// mismatch.
-    @Test func aScenesIndexBelowHalfIsRefusedAsSuch() {
+    /// A scene index with highlights only — five named scenes on a
+    /// 23-chapter disc. Refused, and the reason names both counts so the
+    /// caption can say what happened.
+    @Test func aScenesIndexIsRefusedWithBothCounts() {
         guard case .refused(let reason) = ChapterMarkerPlan.decide(candidates: Self.candidates(1...5), chapterCount: 23) else {
             Issue.record("expected a refusal")
             return
         }
-        #expect(reason.contains("fewer than half"))
+        #expect(reason.contains("5"))
+        #expect(reason.contains("23"))
+    }
+
+    /// `ChapterNames.markers` keeps its own half-count guard underneath, so
+    /// a partial set can never escape through a future change to the rule
+    /// above.
+    @Test func theUnderlyingHalfCountGuardStillHolds() {
+        #expect(ChapterNames.markers(Self.candidates(1...5), chapterCount: 23) == nil)
     }
 
     /// A disputed candidate is dropped by `ChapterNames.markers`, which then

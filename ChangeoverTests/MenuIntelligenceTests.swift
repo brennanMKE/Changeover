@@ -33,15 +33,41 @@ struct MenuIntelligenceTests {
         return try? MenuStructure.decode(data)
     }
 
-    static let expectedNames = [
-        "World's warriors", "Dux ducks out", "A mentor: Tanaka", "Training",
-        "Ray Jackson", "No man's land", "Death touch", "Bet on a woman",
-        "The mightiest prevail", "First bouts", "Fight to Survive montage",
-        "Hong Kong chase", "Under covers, undercover", "Second rounds",
-        "Ray vs. Chong Li", "Being the best", "Nearly zapped", "Dux vs. Paco",
-        "Short work for Chong Li", "Championship", "Victory out of dust",
-        "Goodbye", "Coda and End Credits",
-    ]
+    /// The names slice 1 checked against the stills one by one. Taken from
+    /// `ChapterNamesTests` rather than copied: the disc gets re-captured
+    /// whenever the tooling improves, and two lists of twenty-three strings
+    /// would drift apart at the first re-capture.
+    static var expectedNames: [String] { ChapterNamesTests.expectedNames }
+
+    /// A synthetic two-button root menu — one `JumpTT 1`, one `JumpTT 4` —
+    /// in the helper's own format. Written here rather than read from the
+    /// corpus because the real disc's capture carries no button tables at
+    /// all, and because a fixture being re-captured is not a stable place to
+    /// pin tier 1's behaviour.
+    static func structure(playTitle: Int, trailerTitle: Int) throws -> MenuStructure {
+        let json = """
+        {
+          "format": "changeover-menu-structure/1",
+          "frame": { "width": 720, "height": 480, "standard": "NTSC" },
+          "titles": [
+            { "title": \(playTitle), "vts": 1, "vtsTTN": 1, "ptts": 23, "angles": 1 },
+            { "title": \(trailerTitle), "vts": 1, "vtsTTN": 2, "ptts": 1, "angles": 1 }
+          ],
+          "menus": [
+            {
+              "id": "vtsm-01-lu1-pgc1", "domain": "VTSM", "vts": 1, "languageUnit": 1,
+              "pgc": 1, "entryType": "root", "buttons": [
+                { "number": 1, "rect": [388, 148, 550, 178], "autoAction": false,
+                  "command": "3002000000\(String(format: "%02X", playTitle))0000" },
+                { "number": 2, "rect": [388, 188, 550, 218], "autoAction": false,
+                  "command": "3002000000\(String(format: "%02X", trailerTitle))0000" }
+              ]
+            }
+          ]
+        }
+        """
+        return try MenuStructure.decode(Data(json.utf8))
+    }
 
     // MARK: - The whole disc, as the app sees it
 
@@ -192,13 +218,27 @@ struct MenuIntelligenceTests {
     /// A button pointing at a title the scan never found is dropped rather
     /// than captioned — tier 1 checks itself against the scan.
     @Test func aPlayButtonOutsideTheScanIsNotShown() throws {
-        let structure = try #require(Self.bloodsportStructure)
         let menu = MenuIntelligence.derive(
-            structure: structure,
+            structure: try Self.structure(playTitle: 1, trailerTitle: 4),
             ocr: nil,
             featureChapterCount: nil,
             scanTitles: [99]
         )
         #expect(menu.playButton == nil)
+    }
+
+    /// Two title-jumping buttons with no labels resolve to nothing and ask
+    /// nothing: there is no text for the lexicon to match and none for the
+    /// model to read.
+    @Test func twoUnlabelledButtonsResolveToSilence() throws {
+        let menu = MenuIntelligence.derive(
+            structure: try Self.structure(playTitle: 1, trailerTitle: 4),
+            ocr: nil,
+            featureChapterCount: nil,
+            scanTitles: [1, 4]
+        )
+        #expect(menu.playButton == nil)
+        #expect(menu.judgeQuestion == nil)
+        #expect(MenuStatusLine.lines(.ready(menu), scanFeatureTitle: 1).isEmpty)
     }
 }

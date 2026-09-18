@@ -72,7 +72,7 @@ struct DependencyPanelTests {
     private static func rows(dependencies: MenuDependencies?) -> [DependencyPanel.Row] {
         DependencyPanel.rows(
             handbrake: .ready,
-            makemkvcon: .notSet,
+            makemkvcon: .ready,
             menudump: .ready,
             ffmpeg: .ready,
             lsdvdInstalled: true,

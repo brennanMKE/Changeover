@@ -89,6 +89,43 @@ struct MenuHelperTests {
         #expect(reason.contains("read error at sector 128"))
     }
 
+    // MARK: - The work directory
+
+    /// Menu cells are up to 64 MB per disc and are wanted only until the text
+    /// has been read, so they go to the system temp directory rather than the
+    /// Plex volume's working area — which `WorkingFiles`' sweep would leave
+    /// behind for ever.
+    @Test func theWorkDirectoryIsUnderTheTempRoot() {
+        let path = MenuReader.workDirectory(discIdentity: "abc123", root: "/tmp")
+        #expect(path == "/tmp/changeover-menus/abc123")
+    }
+
+    @Test func aDiscIdentityWithASlashCannotEscapeTheWorkDirectory() {
+        let path = MenuReader.workDirectory(discIdentity: "../../etc", root: "/tmp")
+        #expect(path == "/tmp/changeover-menus/..-..-etc")
+    }
+
+    @Test func theHelpersOwnCellNamingIsUsed() {
+        #expect(MenuReader.cellPath(for: "vtsm-01-lu1-pgc3", in: "/tmp/menus")
+            == "/tmp/menus/cells/vtsm-01-lu1-pgc3.vob")
+    }
+
+    @Test func theStillVectorAsksFFmpegForOneKeyFrame() {
+        let args = MenuReader.ffmpegArguments(cell: "/tmp/c.vob", output: "/tmp/c.png")
+        #expect(args.contains("-frames:v"))
+        #expect(args.contains("select=eq(pict_type\\,I)"))
+        #expect(args.last == "/tmp/c.png")
+    }
+
+    /// No stills, no `ffmpeg`: the caption names the formula rather than
+    /// blaming the disc.
+    @Test func noStillsNamesTheMissingToolWhenThatIsTheCause() {
+        #expect(MenuReader.noStillsReason(ffmpegInstalled: false) == .librariesMissing(["ffmpeg"]))
+        if case .failed = MenuReader.noStillsReason(ffmpegInstalled: true) {} else {
+            Issue.record("with ffmpeg installed the reason is a plain failure")
+        }
+    }
+
     // MARK: - Captions
 
     /// Every unavailable case ends the same way, because that *is* the

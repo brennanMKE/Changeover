@@ -1178,7 +1178,6 @@ final class JobController {
             menudumpPath: helperPath,
             ffmpegPath: settings.ffmpegPath,
             workDirectory: MenuReader.workDirectory(
-                root: settings.workingEncodePath,
                 discIdentity: disc.discID ?? disc.mountURL.lastPathComponent
             )
         )

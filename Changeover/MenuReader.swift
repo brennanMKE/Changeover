@@ -18,10 +18,29 @@ import AVFoundation
 /// no helper is installed.
 nonisolated enum MenuReader {
 
-    /// Where the helper writes and the stills land — inside the same working
-    /// area the encode uses, so `WorkingFiles`' sweep reaches it.
-    static func workDirectory(root: String, discIdentity: String) -> String {
-        (root as NSString).appendingPathComponent("menus-\(discIdentity)")
+    /// Where the helper writes and the stills land.
+    ///
+    /// The system temp directory, not the Plex volume's working area: this
+    /// can hold up to §1.2's 64 MB of menu video per disc, none of it is
+    /// wanted once the text has been read, and nothing in `WorkingFiles`'
+    /// sweep is shaped to clean it up. `read` removes it when it is done, and
+    /// the OS removes it if the app dies first.
+    static func workDirectory(discIdentity: String, root: String = NSTemporaryDirectory()) -> String {
+        let safe = discIdentity.isEmpty
+            ? "disc"
+            : discIdentity.replacingOccurrences(of: "/", with: "-")
+        let base = (root as NSString).appendingPathComponent("changeover-menus")
+        return (base as NSString).appendingPathComponent(safe)
+    }
+
+    /// Why a disc with menus produced no stills. `ffmpeg` is the route proven
+    /// on the capture host; without it the AVFoundation fallback may or may
+    /// not open an MPEG-2 program stream, and the honest caption when it does
+    /// not is the one that names the formula.
+    static func noStillsReason(ffmpegInstalled: Bool) -> MenuUnavailable {
+        ffmpegInstalled
+            ? .failed("no menu still could be rendered from this disc")
+            : .librariesMissing(["ffmpeg"])
     }
 
     /// The paths the read needs, captured on MainActor by the caller and
@@ -89,7 +108,16 @@ nonisolated enum MenuReader {
             featureChapterCount: featureChapterCount,
             scanTitles: scanTitles
         )
-        guard !menu.isEmpty else { return .unavailable(.noMenus) }
+        // The cells and stills have served their purpose the moment the text
+        // is out of them; up to 64 MB of menu video is not worth keeping.
+        try? FileManager.default.removeItem(atPath: tools.workDirectory)
+
+        guard !menu.isEmpty else {
+            guard ocr == nil else { return .unavailable(.noMenus) }
+            return .unavailable(noStillsReason(
+                ffmpegInstalled: FileManager.default.isExecutableFile(atPath: tools.ffmpegPath)
+            ))
+        }
         Task { @MainActor in
             log("▶ Disc menus: \(menu.menuCount) menus, \(menu.stillCount) stills read, \(menu.chapterNames.count) chapter names")
         }
