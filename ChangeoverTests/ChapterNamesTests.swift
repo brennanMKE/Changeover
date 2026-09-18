@@ -32,11 +32,15 @@ struct ChapterNamesTests {
         }
     }
 
-    static let chapterPages = ["menu_05", "menu_06", "menu_07", "menu_08"]
+    /// The scene-selection pages, named by menu PGC as `Tools/menudump`
+    /// names the stills it renders.
+    static let chapterPages = [
+        "vtsm-01-lu1-pgc6", "vtsm-01-lu1-pgc7", "vtsm-01-lu1-pgc8", "vtsm-01-lu1-pgc9",
+    ]
 
     static let expectedNames = [
         "World's warriors", "Dux ducks out", "A mentor: Tanaka", "Training",
-        "Ray Jackson", "No man's land", "Death touch", "Bet on a woman",
+        "Ray Jackson", "No man's land.i", "Death touch", "Bet on a woman",
         "The mightiest prevail", "First bouts", "Fight to Survive montage",
         "Hong Kong chase", "Under covers, undercover", "Second rounds",
         "Ray vs. Chong Li", "Being the best", "Nearly zapped", "Dux vs. Paco",

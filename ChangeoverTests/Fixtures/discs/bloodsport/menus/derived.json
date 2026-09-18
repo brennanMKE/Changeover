@@ -45,7 +45,7 @@
         "chapter" : 6,
         "confidence" : 1,
         "disputed" : false,
-        "name" : "No man's land",
+        "name" : "No man's land.i",
         "printedNumber" : 6
       },
       {
@@ -169,10 +169,10 @@
       }
     ],
     "pages" : [
-      "menu_05",
-      "menu_06",
-      "menu_07",
-      "menu_08"
+      "vtsm-01-lu1-pgc6",
+      "vtsm-01-lu1-pgc7",
+      "vtsm-01-lu1-pgc8",
+      "vtsm-01-lu1-pgc9"
     ]
   },
   "format" : "changeover-menu-derived/1",
@@ -194,8 +194,8 @@
   },
   "titleText" : {
     "confidence" : 1,
-    "still" : "menu_16",
-    "text" : "Bloodiport"
+    "still" : "vtsm-01-lu1-pgc1",
+    "text" : "Bloodsport"
   },
   "tvSignal" : {
     "reason" : "no structure.json captured",

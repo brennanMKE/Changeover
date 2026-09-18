@@ -101,8 +101,63 @@ Progress: {
     },
     "State": "SCANNING"
 }
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
 libdvdnav: vm: dvd_read_name failed
 libdvdnav: DVD disk reports itself with Region mask 0x00000000. Regions: 01 02 03 04 05 06 07 08
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
 Progress: {
     "Scanning": {
         "Preview": 0,
@@ -121,6 +176,17 @@ Progress: {
         "Progress": 0.0833333358168602,
         "SequenceID": 0,
         "Title": 1,
+        "TitleCount": 6
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.25,
+        "SequenceID": 0,
+        "Title": 3,
         "TitleCount": 6
     },
     "State": "SCANNING"
@@ -180,6 +246,17 @@ Progress: {
     },
     "State": "SCANNING"
 }
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.4166666567325592,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 6
+    },
+    "State": "SCANNING"
+}
 libdvdnav: DVD disk reports itself with Region mask 0x00000000. Regions: 01 02 03 04 05 06 07 08
 Progress: {
     "Scanning": {
@@ -337,12 +414,12 @@ Progress: {
 }
 Progress: {
     "Scanning": {
-        "Preview": 1,
-        "PreviewCount": 10,
+        "Preview": 0,
+        "PreviewCount": 1,
         "Progress": 0.5,
         "SequenceID": 0,
-        "Title": 1,
-        "TitleCount": 4
+        "Title": 6,
+        "TitleCount": 6
     },
     "State": "SCANNING"
 }
@@ -362,6 +439,17 @@ Progress: {
     "Scanning": {
         "Preview": 1,
         "PreviewCount": 10,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 4
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
         "Progress": 0.512499988079071,
         "SequenceID": 0,
         "Title": 1,
@@ -382,9 +470,9 @@ Progress: {
 }
 Progress: {
     "Scanning": {
-        "Preview": 2,
+        "Preview": 3,
         "PreviewCount": 10,
-        "Progress": 0.5249999761581421,
+        "Progress": 0.5375000238418579,
         "SequenceID": 0,
         "Title": 1,
         "TitleCount": 4
@@ -404,9 +492,9 @@ Progress: {
 }
 Progress: {
     "Scanning": {
-        "Preview": 5,
+        "Preview": 6,
         "PreviewCount": 10,
-        "Progress": 0.5625,
+        "Progress": 0.574999988079071,
         "SequenceID": 0,
         "Title": 1,
         "TitleCount": 4
@@ -473,7 +561,7 @@ Progress: {
     "Scanning": {
         "Preview": 1,
         "PreviewCount": 10,
-        "Progress": 0.637499988079071,
+        "Progress": 0.625,
         "SequenceID": 0,
         "Title": 2,
         "TitleCount": 4
@@ -482,9 +570,9 @@ Progress: {
 }
 Progress: {
     "Scanning": {
-        "Preview": 4,
+        "Preview": 2,
         "PreviewCount": 10,
-        "Progress": 0.675000011920929,
+        "Progress": 0.6499999761581421,
         "SequenceID": 0,
         "Title": 2,
         "TitleCount": 4
@@ -493,9 +581,9 @@ Progress: {
 }
 Progress: {
     "Scanning": {
-        "Preview": 7,
+        "Preview": 5,
         "PreviewCount": 10,
-        "Progress": 0.7124999761581421,
+        "Progress": 0.6875,
         "SequenceID": 0,
         "Title": 2,
         "TitleCount": 4
@@ -504,27 +592,27 @@ Progress: {
 }
 Progress: {
     "Scanning": {
-        "Preview": 10,
+        "Preview": 8,
         "PreviewCount": 10,
-        "Progress": 0.75,
+        "Progress": 0.7250000238418579,
         "SequenceID": 0,
         "Title": 2,
         "TitleCount": 4
     },
     "State": "SCANNING"
 }
-libdvdnav: DVD disk reports itself with Region mask 0x00000000. Regions: 01 02 03 04 05 06 07 08
 Progress: {
     "Scanning": {
         "Preview": 1,
         "PreviewCount": 10,
-        "Progress": 0.762499988079071,
+        "Progress": 0.75,
         "SequenceID": 0,
         "Title": 3,
         "TitleCount": 4
     },
     "State": "SCANNING"
 }
+libdvdnav: DVD disk reports itself with Region mask 0x00000000. Regions: 01 02 03 04 05 06 07 08
 Progress: {
     "Scanning": {
         "Preview": 4,

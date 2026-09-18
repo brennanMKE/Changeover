@@ -10,21 +10,21 @@
   "reviewed": true,
   "capture": {
     "tool": "Tools/capture-disc.sh",
-    "toolVersion": 1,
-    "ifoFiles": 0,
+    "toolVersion": 2,
+    "ifoFiles": 5,
     "rawArchive": "joe:~/changeover-fixtures/bloodsport"
   },
   "menus": {
     "captured": true,
     "structure": false,
     "css": "available",
-    "menuCount": 16,
+    "menuCount": 29,
     "stillCount": 16,
     "ocrRun": true,
     "judgeRun": false,
     "missing": []
   },
-  "notes": "Captured 2026-09-18 on joe. The menu half is a PRE-HELPER capture: the 16 stills came from a prototype C tool reading the menu VOBs through libdvdread and ffmpeg rendering one frame each, so there is no menus/structure.json and the still ids are ffmpeg's frame order (menu_01...menu_16) rather than menu PGC ids. Re-capture with Tools/capture-disc.sh v2 to get structure.json, PGC-named stills and the tier-1 expectations (playButtonTitle and friends), which are null here for that reason. The stills themselves are not committed: they are copyrighted menu artwork and docs/menu-intelligence.md 8.7 leaves that decision to the user; menus/ocr.json is enough for every invariant below. discId is lsdvd's, recovered by hand from the capture that recorded null because a bare `lsdvd` was not on the non-interactive ssh PATH. REVIEWED 2026-09-18: expect.menu was checked line by line against the 16 stills (all 23 chapter names, the languages page, and the title-card misread 'Bloodiport'). audioTrackCount and subtitleGroupCount are still unfilled and are skipped rather than asserted.",
+  "notes": "Captured on joe 2026-09-18 with Tools/capture-disc.sh v2: scan, lsdvd, the five IFO tables, 16 menu stills and their OCR. menus/structure.json from that run was DISCARDED, not committed: the helper's NAV reader had a four-byte error in the PCI structure (pci_gi is 60 bytes, not 64) and reported zero buttons for all 29 menu PGCs of a disc that carries 151 NAV packs full of them. The reader is fixed and now publishes its own self-checks, but no structure.json from this disc has been read with the fixed version yet, so `menus.structure` is false and every tier-1 expectation below is null. Re-capture to fill them in; DiscCorpusTests will then assert the headline invariant (play button target == outcomeIndex == 1) with no new test code. Stills are not committed: copyrighted menu artwork, and docs/menu-intelligence.md 8.7 leaves that to the user; menus/ocr.json carries everything the invariants read. REVIEWED 2026-09-18: expect.menu checked page by page against the 16 stills. audioTrackCount and subtitleGroupCount are still unfilled and are skipped rather than asserted.",
   "expect": {
     "titleCount": 4,
     "mainFeatureIndex": 1,
@@ -41,14 +41,19 @@
       "playButtonResolvedBy": null,
       "chapterMenuButtons": null,
       "chapterNamesEmitted": 23,
-      "chapterPages": ["menu_05", "menu_06", "menu_07", "menu_08"],
+      "chapterPages": [
+        "vtsm-01-lu1-pgc6",
+        "vtsm-01-lu1-pgc7",
+        "vtsm-01-lu1-pgc8",
+        "vtsm-01-lu1-pgc9"
+      ],
       "chapterNames": [
         "World's warriors",
         "Dux ducks out",
         "A mentor: Tanaka",
         "Training",
         "Ray Jackson",
-        "No man's land",
+        "No man's land.i",
         "Death touch",
         "Bet on a woman",
         "The mightiest prevail",
@@ -67,20 +72,28 @@
         "Goodbye",
         "Coda and End Credits"
       ],
-      "languagesStill": "menu_02",
+      "languagesStill": "vtsm-01-lu1-pgc3",
       "languageShape": "listing",
       "spokenLanguages": ["English", "Français"],
       "subtitleLanguages": ["English", "Français", "日本語"],
-      "entryStills": ["menu_16"],
-      "titleTextCandidate": "Bloodiport",
+      "entryStills": ["vtsm-01-lu1-pgc1"],
+      "titleTextCandidate": "Bloodsport",
       "titleTextOffered": false,
       "nonEntryStills": [
-        "menu_01", "menu_03", "menu_09", "menu_10",
-        "menu_11", "menu_12", "menu_13", "menu_14", "menu_15"
+        "vtsm-01-lu1-pgc2",
+        "vtsm-01-lu1-pgc4",
+        "vtsm-01-lu1-pgc5",
+        "vtsm-01-lu1-pgc10",
+        "vtsm-01-lu1-pgc11",
+        "vtsm-01-lu1-pgc12",
+        "vtsm-01-lu1-pgc13",
+        "vtsm-01-lu1-pgc14",
+        "vtsm-01-lu1-pgc15",
+        "vtsm-01-lu1-pgc16"
       ],
-      "tvSignal": false,
+      "tvSignal": null,
       "unresolvedMnemonics": [],
-      "notes": "The subtitle list is what the CURRENT MenuOCR.Settings read, not what the page prints. The page prints four subtitle entries — English, Français, 日本語, Off — and Vision reads only three of them either way: with the §1.3 language list it reads 日本語 and drops 'Off'; with its defaults (English only) it reads 'off' and drops 日本語 entirely. This is exactly the kind of finding the archive exists for, and it is recorded rather than papered over; the expectation follows the settings the app actually uses so a settings change shows up here as a red test."
+      "notes": "Two things the archive recorded rather than smoothed over. (1) The subtitle list is what the app's own MenuOCR.Settings read, not what the page prints: the page prints English / Francais / Japanese / Off, and Vision reads three of the four whichever way it is configured — with the 1.3 language list it reads the Japanese and drops 'Off', with its defaults it reads 'off' and drops the Japanese. (2) Chapter 6 is recorded as 'No man's land.i'. The trailing '.i' is the decorative glyph after the caption; the first capture's still rendered it such that OCR read '*', which clean() strips, and this capture's still rendered it as 'i', which it does not. That is a wrong name at the right timestamp — the cheap failure of 3.3 — and adding a cleaning rule on one disc's worth of evidence would be the expensive kind. It is also direct evidence that which frame the still comes from matters, which is 1.2's open question. The same re-render read the title card correctly as 'Bloodsport' where the first read 'Bloodiport'."
     }
   }
 }

@@ -342,6 +342,8 @@ struct DiscCorpusTests {
 
         // ---- tier 1, only where a structure was captured
         if let structure {
+            Self.assertTheCaptureActuallyReadButtons(structure, slug: slug)
+            try Self.assertTitleTableAgreesWithLsdvd(structure, slug: slug)
             try Self.assertStructureIsWellFormed(structure, slug: slug)
             try Self.assertTargetsExistInTheScan(structure, scan: scan, expect: expect, slug: slug)
             try Self.assertPlayButton(structure, manifest: manifest, expect: expect, slug: slug)
@@ -362,6 +364,113 @@ struct DiscCorpusTests {
         try Self.assertChapterNames(ocr, structure: structure, expect: expect, slug: slug)
         Self.assertLanguageLists(ocr, expect: expect, slug: slug)
         Self.assertTitleTextAvoidsTheFilmographyTrap(ocr, expect: expect, slug: slug)
+    }
+
+    /// The slice of `lsdvd -x -Oj` this corpus reads: its own title table,
+    /// which it builds with `libdvdread`.
+    ///
+    /// It is here to be a **second witness**. `Tools/menudump` parses the
+    /// VMG title table (`TT_SRPT`) out of `VIDEO_TS.IFO` with its own code
+    /// and no library, and everything tier 1 claims rests on that table
+    /// meaning what it is believed to mean. Checking it against a different
+    /// program's reading of the same bytes is the only way to find out
+    /// without a disc — and on Bloodsport the two agree on all six titles,
+    /// their title sets, their in-set numbers and their chapter counts.
+    struct LsdvdDocument: Codable {
+        struct Track: Codable {
+            var ix: Int
+            var vts: Int
+            var ttn: Int
+            var chapter: [Chapter]?
+            struct Chapter: Codable { var ix: Int? }
+        }
+        /// The disc identity `DVDMonitor` debounces on. Spelled
+        /// `dvddiscid`, not `discid` — the capture script guessed the
+        /// shorter name and recorded `null` on every disc until this
+        /// fixture showed the real key.
+        var dvddiscid: String?
+        var track: [Track]
+    }
+
+    private static func loadLsdvd(_ slug: String) throws -> LsdvdDocument? {
+        let url = discDirectory(slug).appendingPathComponent("lsdvd.json")
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try JSONDecoder().decode(LsdvdDocument.self, from: data)
+    }
+
+    /// The manifest's `discId` is the one in the disc's own `lsdvd.json`.
+    /// A capture that silently recorded `null` while the answer was sitting
+    /// in the file next to it is the failure this pins.
+    @Test func recordedDiscIdsMatchTheCapturedLsdvdOutput() throws {
+        var checked = 0
+        for slug in Self.discSlugs() {
+            guard let lsdvd = try Self.loadLsdvd(slug), let id = lsdvd.dvddiscid else { continue }
+            let manifest = try Self.loadManifest(slug)
+            #expect(manifest.discId == id, "\(slug): disc.json records discId \(manifest.discId ?? "null") but lsdvd.json says \(id)")
+            checked += 1
+        }
+        #expect(checked >= 1, "no disc in the corpus has a committed lsdvd.json — this check is asserting nothing")
+    }
+
+    /// `TT_SRPT`, read two ways. The helper's table and `lsdvd`'s must agree
+    /// on every title: same count, same title set, same in-set number, same
+    /// chapter count. A slip in the helper's IFO arithmetic shows up here
+    /// against a program that was not written from the same notes.
+    private static func assertTitleTableAgreesWithLsdvd(
+        _ structure: MenuStructure,
+        slug: String
+    ) throws {
+        guard let lsdvd = try loadLsdvd(slug), let titles = structure.titles else { return }
+        #expect(titles.count == lsdvd.track.count, "\(slug): TT_SRPT has \(titles.count) titles, lsdvd sees \(lsdvd.track.count)")
+        for track in lsdvd.track {
+            guard let title = titles.first(where: { $0.title == track.ix }) else {
+                Issue.record("\(slug): lsdvd lists title \(track.ix) and the helper's TT_SRPT does not")
+                continue
+            }
+            #expect(title.vts == track.vts, "\(slug): title \(track.ix) title set")
+            #expect(title.vtsTTN == track.ttn, "\(slug): title \(track.ix) in-set number")
+            if let chapters = track.chapter {
+                #expect(title.ptts == chapters.count, "\(slug): title \(track.ix) chapter count")
+            }
+        }
+    }
+
+    /// **The invariant this sweep was missing.**
+    ///
+    /// The first helper read 29 menu PGCs off Bloodsport and zero buttons —
+    /// a four-byte slip in the PCI structure put every highlight field
+    /// inside the next one — and the corpus sweep passed, because every
+    /// assertion it had was conditional on an `expect.menu` field that a
+    /// capture with no buttons never fills in. A reader that returns nothing
+    /// satisfies every check that only looks at what it returned.
+    ///
+    /// So: a menu PGC with cells has video, and video means a NAV pack. If
+    /// *no* menu on the whole disc yields a button, the capture is broken,
+    /// not the disc — no DVD ships menus you cannot press. This is asserted
+    /// for the disc as a whole rather than per menu, because individual
+    /// PGCs legitimately have none (Bloodsport's own orphaned PGCs do).
+    private static func assertTheCaptureActuallyReadButtons(_ structure: MenuStructure, slug: String) {
+        let withCells = structure.menus.filter(\.hasCells)
+        guard !withCells.isEmpty else { return }
+        let withButtons = withCells.filter { !$0.buttons.isEmpty }
+        #expect(
+            !withButtons.isEmpty,
+            "\(slug): \(withCells.count) menu PGCs have cells and not one of them yielded a button. That is a broken reader, not a disc without menus — check menus/structure.json's nav.error and nav.lbnMatches."
+        )
+
+        // The reader's own self-checks, published in the capture. lbnMatches
+        // compares the sector address the *disc* wrote into the pack with
+        // the sector the IFO sent us to, so it fails independently of any
+        // assumption the parser makes about where fields sit.
+        for menu in withCells {
+            guard let nav = menu.nav else { continue }
+            if !menu.buttons.isEmpty {
+                #expect(nav.lbnMatches == true, "\(slug)/\(menu.id): the NAV pack's own sector address does not match the sector the IFO named — the PCI data offset is wrong")
+                #expect(nav.rectsInsideFrame == true, "\(slug)/\(menu.id): button rectangles fall outside the frame")
+                #expect(nav.groupsAgree == true, "\(slug)/\(menu.id): the button groups carry different commands, so taking group 1 is losing information")
+                #expect(nav.error == nil, "\(slug)/\(menu.id): \(nav.error ?? "")")
+            }
+        }
     }
 
     private static func assertStructureIsWellFormed(_ structure: MenuStructure, slug: String) throws {

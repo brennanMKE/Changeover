@@ -71,6 +71,8 @@
 				"Fixtures/discs/bloodsport/scan.stderr.txt",
 				"Fixtures/discs/bloodsport/menus/ocr.json",
 				"Fixtures/discs/bloodsport/menus/derived.json",
+				"Fixtures/discs/bloodsport/menus/structure.json",
+				"Fixtures/discs/bloodsport/lsdvd.json",
 				"Fixtures/menus/synthetic-movie/structure.json",
 				"Fixtures/menus/synthetic-movie/README.md",
 			);

@@ -20,7 +20,6 @@
     "upscale" : 1
   },
   "format" : "changeover-menu-ocr/1",
-  "note" : "Pre-helper capture (2026-09-18, joe): the 16 stills came from ffmpeg over libdvdread-decrypted menu VOBs, so the still ids are ffmpeg's frame order (menu_01...menu_16), NOT menu PGC ids. A re-capture with Tools/menudump will rename them vmgm-lu1-pgcN / vtsm-01-lu1-pgcN and add menus/structure.json. Stills are not committed: they are copyrighted menu artwork and docs/menu-intelligence.md 8.7 leaves that decision open; every invariant here reads only this file.",
   "stills" : [
     {
       "frame" : {
@@ -28,897 +27,57 @@
         "standard" : "NTSC",
         "width" : 720
       },
-      "id" : "menu_01",
+      "id" : "vtsm-01-lu1-pgc1",
       "observations" : [
         {
           "confidence" : 1,
           "rect" : [
-            313,
-            30,
-            564,
-            111
-          ],
-          "text" : "Cast &Cren"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            316,
-            112,
-            578,
-            142
-          ],
-          "text" : "Jean Claude Van Damme... Frank Dux"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            316,
-            144,
-            418,
-            162
-          ],
-          "text" : "Donald Gibb..."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            490,
-            144,
-            578,
-            162
-          ],
-          "text" : "...... Jackson"
-        },
-        {
-          "confidence" : 0.3,
-          "rect" : [
-            315,
-            167,
-            419,
-            189
-          ],
-          "text" : "Leah Ayres.."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            480,
-            166,
-            576,
-            185
-          ],
-          "text" : "...Janice Kent"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            320,
-            188,
-            432,
-            204
-          ],
-          "text" : "Norman Burton."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            505,
-            184,
-            577,
-            208
-          ],
-          "text" : "... Helmer"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            328,
-            210,
-            444,
-            228
-          ],
-          "text" : "Forest Whitaken."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            492,
-            210,
-            566,
-            226
-          ],
-          "text" : "... Rawlins"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            334,
-            232,
-            428,
-            252
-          ],
-          "text" : "Bolo Yeung...."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            488,
-            232,
-            560,
-            252
-          ],
-          "text" : "• Chong Li"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            360,
-            262,
-            542,
-            287
-          ],
-          "text" : "Story by Sheldon Lettich,"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            340,
-            286,
-            554,
-            308
-          ],
-          "text" : "Screenplay by Sheldon Lettich"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            366,
-            308,
-            528,
-            328
-          ],
-          "text" : "and Christopher Cosby"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            388,
             330,
-            506,
-            348
+            63,
+            595,
+            151
           ],
-          "text" : "& Mel Friedman"
+          "text" : "Bloodsport"
         },
         {
           "confidence" : 1,
           "rect" : [
-            352,
-            352,
-            542,
-            372
-          ],
-          "text" : "Produced by Mark DiSalle®"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            358,
-            374,
-            536,
-            394
-          ],
-          "text" : "Directed by Newt Arnold"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            406,
             417,
-            488,
-            437
-          ],
-          "text" : "Features"
-        }
-      ]
-    },
-    {
-      "frame" : {
-        "height" : 480,
-        "standard" : "NTSC",
-        "width" : 720
-      },
-      "id" : "menu_02",
-      "observations" : [
-        {
-          "confidence" : 1,
-          "rect" : [
-            358,
-            40,
-            566,
-            98
-          ],
-          "text" : "Lanquages"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            432,
-            102,
-            530,
-            124
-          ],
-          "text" : "SPOKEN•"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            414,
-            122,
-            542,
-            144
-          ],
-          "text" : "LANGUAGES"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            446,
-            154,
-            514,
-            182
-          ],
-          "text" : "English"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            440,
-            188,
+            153,
             516,
-            212
+            183
           ],
-          "text" : "Français"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            406,
-            226,
-            542,
-            248
-          ],
-          "text" : "SUBTITLES"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            446,
-            262,
-            514,
-            290
-          ],
-          "text" : "English"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            442,
-            299,
-            516,
-            322
-          ],
-          "text" : "Français"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            452,
-            328,
-            508,
-            358
-          ],
-          "text" : "日本語"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            358,
-            410,
-            578,
-            441
-          ],
-          "text" : "Main Menu, Continue"
-        }
-      ]
-    },
-    {
-      "frame" : {
-        "height" : 480,
-        "standard" : "NTSC",
-        "width" : 720
-      },
-      "id" : "menu_03",
-      "observations" : [
-        {
-          "confidence" : 1,
-          "rect" : [
-            362,
-            40,
-            564,
-            96
-          ],
-          "text" : "Lanquages"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            390,
-            108,
-            564,
-            126
-          ],
-          "text" : "www.warnervideo.com •"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            358,
-            130,
-            578,
-            154
-          ],
-          "text" : "Photography 0 1988 Cannon Films"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            386,
-            158,
-            556,
-            176
-          ],
-          "text" : "and Cannon International."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            416,
-            212,
-            520,
-            236
-          ],
-          "text" : "Menu Design &"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            386,
-            235,
-            558,
-            263
-          ],
-          "text" : "Supplementary Material •"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            378,
-            264,
-            556,
-            284
-          ],
-          "text" : "O 2002 Warner Home Video."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            408,
-            290,
-            534,
-            312
-          ],
-          "text" : "All rights reserved."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            376,
-            415,
-            426,
-            436
-          ],
-          "text" : "Back"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            482,
-            413,
-            580,
-            439
-          ],
-          "text" : "Main Menu"
-        }
-      ]
-    },
-    {
-      "frame" : {
-        "height" : 480,
-        "standard" : "NTSC",
-        "width" : 720
-      },
-      "id" : "menu_04",
-      "observations" : [
-        {
-          "confidence" : 1,
-          "rect" : [
-            144,
-            38,
-            296,
-            98
-          ],
-          "text" : "Special®"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            160,
-            90,
-            328,
-            146
-          ],
-          "text" : "Features"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            169,
-            183,
-            283,
-            216
-          ],
-          "text" : "Cast & Crew"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            152,
-            252,
-            302,
-            281
-          ],
-          "text" : "Theatrical Trailer"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            178,
-            412,
-            276,
-            432
-          ],
-          "text" : "Main Menu"
-        }
-      ]
-    },
-    {
-      "frame" : {
-        "height" : 480,
-        "standard" : "NTSC",
-        "width" : 720
-      },
-      "id" : "menu_05",
-      "observations" : [
-        {
-          "confidence" : 1,
-          "rect" : [
-            204,
-            42,
-            514,
-            92
-          ],
-          "text" : "Scene Selections"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            142,
-            192,
-            530,
-            208
-          ],
-          "text" : "1World's warriors, 2 Dux ducks out. 3 A mentor:"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            454,
-            210,
-            520,
-            226
-          ],
-          "text" : "Tanaka."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            137,
-            329,
-            224,
-            353
-          ],
-          "text" : "4 Training."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            290,
-            328,
-            582,
-            348
-          ],
-          "text" : "5 Ray Jackson. 6 No man's land. *"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            156,
-            408,
-            276,
-            428
-          ],
-          "text" : "Start Movie"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            224,
-            382,
-            482,
-            396
-          ],
-          "text" : "1-6 7-12 13-18 19-23"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            292,
-            408,
-            416,
-            428
-          ],
-          "text" : "Main Menu"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            446,
-            408,
-            570,
-            426
-          ],
-          "text" : "End Credits"
-        }
-      ]
-    },
-    {
-      "frame" : {
-        "height" : 480,
-        "standard" : "NTSC",
-        "width" : 720
-      },
-      "id" : "menu_06",
-      "observations" : [
-        {
-          "confidence" : 1,
-          "rect" : [
-            204,
-            44,
-            514,
-            92
-          ],
-          "text" : "Scene Selections"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            140,
-            190,
-            252,
-            210
-          ],
-          "text" : "7Death touch."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            290,
-            192,
-            552,
-            210
-          ],
-          "text" : "8 Bet on a woman. 9 The mightiest"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            450,
-            210,
-            508,
-            226
-          ],
-          "text" : "prevail."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            140,
-            327,
-            248,
-            355
-          ],
-          "text" : "10 First bouts."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            288,
-            328,
-            546,
-            350
-          ],
-          "text" : "11 Fight to Survive 12 Hong Kong"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            308,
-            350,
-            380,
-            364
-          ],
-          "text" : "montage."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            460,
-            348,
-            512,
-            363
-          ],
-          "text" : "chase."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            284,
-            382,
-            330,
-            396
-          ],
-          "text" : "7-12"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            330,
-            380,
-            482,
-            398
-          ],
-          "text" : "13-18 19-23"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            308,
-            408,
-            416,
-            428
-          ],
-          "text" : "Main Menu"
-        }
-      ]
-    },
-    {
-      "frame" : {
-        "height" : 480,
-        "standard" : "NTSC",
-        "width" : 720
-      },
-      "id" : "menu_07",
-      "observations" : [
-        {
-          "confidence" : 1,
-          "rect" : [
-            202,
-            44,
-            514,
-            92
-          ],
-          "text" : "Scene Selections"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            140,
-            189,
-            518,
-            210
-          ],
-          "text" : "13 Under covers, 14 Second rounds. 15 Ray vs."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            164,
-            208,
-            254,
-            224
-          ],
-          "text" : "undercover."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            460,
-            209,
-            536,
-            231
-          ],
-          "text" : "Chong Li."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            142,
-            326,
-            580,
-            355
-          ],
-          "text" : "16 Being the best. 17 Nearly zapped, 18 Dux vs. Paco. *"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            284,
-            380,
-            482,
-            396
-          ],
-          "text" : "7-12 13-18 19-23"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            308,
-            407,
-            416,
-            429
-          ],
-          "text" : "Main Menu"
-        }
-      ]
-    },
-    {
-      "frame" : {
-        "height" : 480,
-        "standard" : "NTSC",
-        "width" : 720
-      },
-      "id" : "menu_08",
-      "observations" : [
-        {
-          "confidence" : 1,
-          "rect" : [
-            201,
-            40,
-            512,
-            92
-          ],
-          "text" : "Scene Selections"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            140,
-            189,
-            540,
-            215
-          ],
-          "text" : "19 Short work for 20 Championship 21Victory out"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            164,
-            208,
-            240,
-            230
-          ],
-          "text" : "Chong Li."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            452,
-            210,
-            510,
-            228
-          ],
-          "text" : "of dust."
-        },
-        {
-          "confidence" : 0.3,
-          "rect" : [
-            444,
-            248,
-            476,
-            252
-          ],
-          "text" : "ONAOC"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            214,
-            328,
-            314,
-            348
-          ],
-          "text" : "22 Goodbye."
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            370,
-            328,
-            506,
-            346
-          ],
-          "text" : "23 Coda and End"
+          "text" : "Play Movie"
         },
         {
           "confidence" : 1,
           "rect" : [
             392,
-            347,
-            456,
-            365
+            213,
+            540,
+            239
           ],
-          "text" : "Credits.."
+          "text" : "Scene Selections®"
         },
         {
           "confidence" : 1,
           "rect" : [
-            284,
-            382,
-            402,
-            396
+            394,
+            272,
+            538,
+            298
           ],
-          "text" : "7-12 13-18"
+          "text" : "Special Features"
         },
         {
           "confidence" : 1,
           "rect" : [
-            308,
-            408,
-            416,
-            428
+            413,
+            334,
+            510,
+            360
           ],
-          "text" : "Main Menu"
-        },
-        {
-          "confidence" : 1,
-          "rect" : [
-            418,
-            382,
-            482,
-            398
-          ],
-          "text" : "19-23"
+          "text" : "Languages"
         }
       ]
     },
@@ -928,7 +87,7 @@
         "standard" : "NTSC",
         "width" : 720
       },
-      "id" : "menu_09",
+      "id" : "vtsm-01-lu1-pgc10",
       "observations" : [
         {
           "confidence" : 1,
@@ -963,10 +122,10 @@
         {
           "confidence" : 1,
           "rect" : [
-            140,
+            142,
             144,
             274,
-            160
+            158
           ],
           "text" : "Panic Room (2002)"
         },
@@ -976,7 +135,7 @@
             140,
             164,
             304,
-            182
+            184
           ],
           "text" : "Battlefield Earth (2000)"
         },
@@ -985,7 +144,7 @@
           "rect" : [
             140,
             186,
-            362,
+            360,
             206
           ],
           "text" : "Four Dogs Playing Poker (1999)"
@@ -1005,7 +164,7 @@
           "rect" : [
             150,
             228,
-            258,
+            260,
             244
           ],
           "text" : "Samurai (1999)"
@@ -1016,7 +175,7 @@
             142,
             248,
             278,
-            269
+            268
           ],
           "text" : "Phenomenon (1996)"
         },
@@ -1036,7 +195,7 @@
             140,
             292,
             238,
-            311
+            310
           ],
           "text" : "Smoke (1995)"
         },
@@ -1098,7 +257,7 @@
         "standard" : "NTSC",
         "width" : 720
       },
-      "id" : "menu_10",
+      "id" : "vtsm-01-lu1-pgc11",
       "observations" : [
         {
           "confidence" : 1,
@@ -1154,9 +313,9 @@
           "confidence" : 1,
           "rect" : [
             148,
-            184,
+            183,
             232,
-            204
+            205
           ],
           "text" : "(also prod.)"
         },
@@ -1253,7 +412,7 @@
         {
           "confidence" : 1,
           "rect" : [
-            142,
+            144,
             420,
             196,
             438
@@ -1268,7 +427,7 @@
         "standard" : "NTSC",
         "width" : 720
       },
-      "id" : "menu_11",
+      "id" : "vtsm-01-lu1-pgc12",
       "observations" : [
         {
           "confidence" : 1,
@@ -1284,19 +443,19 @@
           "confidence" : 1,
           "rect" : [
             226,
-            66,
+            65,
             358,
-            91
+            92
           ],
-          "text" : "Dan Damme"
+          "text" : "Oan Damme"
         },
         {
           "confidence" : 1,
           "rect" : [
-            143,
-            83,
-            373,
-            124
+            144,
+            92,
+            372,
+            122
           ],
           "text" : "Selected Film Highlights"
         },
@@ -1363,10 +522,10 @@
         {
           "confidence" : 1,
           "rect" : [
-            146,
+            144,
             246,
             272,
-            258
+            260
           ],
           "text" : "Legionnaire (1999)"
         },
@@ -1404,9 +563,9 @@
           "confidence" : 1,
           "rect" : [
             140,
-            324,
+            322,
             294,
-            344
+            345
           ],
           "text" : "Maximum Risk (1996)"
         },
@@ -1453,12 +612,12 @@
         {
           "confidence" : 1,
           "rect" : [
-            262,
-            420,
-            306,
+            254,
+            418,
+            310,
             434
           ],
-          "text" : "ontin"
+          "text" : "Contini"
         }
       ]
     },
@@ -1468,25 +627,25 @@
         "standard" : "NTSC",
         "width" : 720
       },
-      "id" : "menu_12",
+      "id" : "vtsm-01-lu1-pgc13",
       "observations" : [
         {
           "confidence" : 1,
           "rect" : [
-            135,
+            137,
             36,
             282,
             78
           ],
-          "text" : "Dean Clande"
+          "text" : "Dean Claude"
         },
         {
           "confidence" : 1,
           "rect" : [
-            226,
-            65,
+            225,
+            64,
             359,
-            92
+            93
           ],
           "text" : "Dan Damme"
         },
@@ -1533,7 +692,7 @@
         {
           "confidence" : 1,
           "rect" : [
-            142,
+            140,
             186,
             304,
             204
@@ -1639,6 +798,16 @@
             438
           ],
           "text" : "Back"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            280,
+            420,
+            310,
+            436
+          ],
+          "text" : "Cas"
         }
       ]
     },
@@ -1648,14 +817,14 @@
         "standard" : "NTSC",
         "width" : 720
       },
-      "id" : "menu_13",
+      "id" : "vtsm-01-lu1-pgc14",
       "observations" : [
         {
           "confidence" : 1,
           "rect" : [
             192,
             43,
-            302,
+            300,
             73
           ],
           "text" : "Leah Ayres"
@@ -1674,9 +843,9 @@
           "confidence" : 1,
           "rect" : [
             142,
-            122,
+            120,
             268,
-            140
+            141
           ],
           "text" : "The Player (1992)"
         },
@@ -1724,9 +893,9 @@
           "confidence" : 1,
           "rect" : [
             142,
-            222,
+            221,
             264,
-            242
+            244
           ],
           "text" : "Bloodsport (1987)"
         },
@@ -1763,7 +932,7 @@
         {
           "confidence" : 1,
           "rect" : [
-            142,
+            140,
             306,
             264,
             324
@@ -1818,17 +987,17 @@
         "standard" : "NTSC",
         "width" : 720
       },
-      "id" : "menu_14",
+      "id" : "vtsm-01-lu1-pgc15",
       "observations" : [
         {
           "confidence" : 1,
           "rect" : [
             178,
-            47,
-            312,
+            48,
+            308,
             75
           ],
-          "text" : "Newt Ainold"
+          "text" : "Newt Arnold"
         },
         {
           "confidence" : 1,
@@ -1846,7 +1015,7 @@
             142,
             118,
             300,
-            138
+            136
           ],
           "text" : "Bloodsport (1987) (dir.)"
         },
@@ -1904,9 +1073,9 @@
           "confidence" : 1,
           "rect" : [
             142,
-            257,
-            330,
-            280
+            258,
+            328,
+            278
           ],
           "text" : "Skullduggery (1970) (actor)"
         },
@@ -1923,10 +1092,10 @@
         {
           "confidence" : 1,
           "rect" : [
-            148,
+            150,
             300,
             264,
-            320
+            318
           ],
           "text" : "(scr., prod., dir.)"
         },
@@ -1948,17 +1117,17 @@
         "standard" : "NTSC",
         "width" : 720
       },
-      "id" : "menu_15",
+      "id" : "vtsm-01-lu1-pgc16",
       "observations" : [
         {
           "confidence" : 1,
           "rect" : [
             164,
-            34,
+            33,
             335,
             77
           ],
-          "text" : "Sheldon Lettich:"
+          "text" : "Sheldon Lettich,"
         },
         {
           "confidence" : 1,
@@ -2024,7 +1193,7 @@
           "confidence" : 1,
           "rect" : [
             156,
-            217,
+            216,
             252,
             236
           ],
@@ -2073,8 +1242,8 @@
         {
           "confidence" : 1,
           "rect" : [
-            142,
-            314,
+            140,
+            316,
             354,
             340
           ],
@@ -2083,10 +1252,10 @@
         {
           "confidence" : 1,
           "rect" : [
-            156,
+            154,
             334,
             318,
-            354
+            352
           ],
           "text" : "with Christopher Cosby"
         },
@@ -2103,12 +1272,12 @@
         {
           "confidence" : 1,
           "rect" : [
-            144,
-            371,
-            254,
-            389
+            142,
+            372,
+            252,
+            390
           ],
-          "text" : "Russkies (1987) •"
+          "text" : "Russkies (1987)"
         },
         {
           "confidence" : 1,
@@ -2138,57 +1307,897 @@
         "standard" : "NTSC",
         "width" : 720
       },
-      "id" : "menu_16",
+      "id" : "vtsm-01-lu1-pgc2",
       "observations" : [
         {
           "confidence" : 1,
           "rect" : [
-            331,
-            65,
-            595,
-            150
+            314,
+            32,
+            563,
+            107
           ],
-          "text" : "Bloodiport"
+          "text" : "Cast &Crew"
         },
         {
           "confidence" : 1,
           "rect" : [
-            417,
-            153,
-            516,
-            183
+            316,
+            114,
+            578,
+            142
           ],
-          "text" : "Play Movie"
+          "text" : "Fean Claude Van Damme...Frank Dux"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            316,
+            144,
+            420,
+            162
+          ],
+          "text" : "Donald Gibb...."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            490,
+            144,
+            578,
+            162
+          ],
+          "text" : "..... Jackson"
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            315,
+            167,
+            419,
+            189
+          ],
+          "text" : "Leah Ayres.."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            480,
+            166,
+            576,
+            185
+          ],
+          "text" : "...Janice Kent"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            320,
+            188,
+            434,
+            204
+          ],
+          "text" : "Norman Burton."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            506,
+            187,
+            576,
+            205
+          ],
+          "text" : "... Helmer"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            328,
+            210,
+            444,
+            228
+          ],
+          "text" : "ForestWhitaken."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            490,
+            210,
+            566,
+            228
+          ],
+          "text" : "... Rawlins"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            334,
+            232,
+            428,
+            252
+          ],
+          "text" : "Bolo Yeung...."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            488,
+            232,
+            560,
+            252
+          ],
+          "text" : "• Chong Li"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            360,
+            262,
+            542,
+            287
+          ],
+          "text" : "Story by Sheldon Lettich,"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            340,
+            286,
+            554,
+            308
+          ],
+          "text" : "Screenplay by Sheldon Lettich"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            366,
+            308,
+            528,
+            328
+          ],
+          "text" : "and Christopher Cosby"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            388,
+            330,
+            506,
+            348
+          ],
+          "text" : "& Mel Friedman"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            352,
+            352,
+            542,
+            372
+          ],
+          "text" : "Produced by Mark DiSalle®"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            358,
+            374,
+            536,
+            394
+          ],
+          "text" : "Directed by Newt Arnold"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            406,
+            417,
+            488,
+            437
+          ],
+          "text" : "Features"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-01-lu1-pgc3",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            360,
+            42,
+            564,
+            96
+          ],
+          "text" : "Languages"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            432,
+            102,
+            530,
+            124
+          ],
+          "text" : "SPOKEN•"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            414,
+            122,
+            542,
+            144
+          ],
+          "text" : "LANGUAGES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            446,
+            154,
+            514,
+            182
+          ],
+          "text" : "English"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            440,
+            188,
+            516,
+            212
+          ],
+          "text" : "Français"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            406,
+            224,
+            542,
+            248
+          ],
+          "text" : "SUBTITLES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            446,
+            262,
+            514,
+            290
+          ],
+          "text" : "English"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            442,
+            299,
+            516,
+            322
+          ],
+          "text" : "Français"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            452,
+            330,
+            508,
+            358
+          ],
+          "text" : "日本語"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            358,
+            410,
+            578,
+            441
+          ],
+          "text" : "Main Menu, Continue"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-01-lu1-pgc4",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            362,
+            42,
+            564,
+            94
+          ],
+          "text" : "Lanquages"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            390,
+            108,
+            564,
+            126
+          ],
+          "text" : "www.warnervideo.com •"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            358,
+            130,
+            578,
+            154
+          ],
+          "text" : "Photography 0 1988 Cannon Films"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            386,
+            158,
+            556,
+            176
+          ],
+          "text" : "and Cannon International."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            416,
+            212,
+            520,
+            236
+          ],
+          "text" : "Menu Design &"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            386,
+            235,
+            558,
+            263
+          ],
+          "text" : "Supplementary Material •"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            378,
+            264,
+            556,
+            284
+          ],
+          "text" : "O 2002 Warner Home Video."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            408,
+            290,
+            534,
+            312
+          ],
+          "text" : "All rights reserved."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            376,
+            415,
+            426,
+            436
+          ],
+          "text" : "Back"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            481,
+            412,
+            581,
+            440
+          ],
+          "text" : "Main Menu"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-01-lu1-pgc5",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            38,
+            296,
+            98
+          ],
+          "text" : "Special®"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            160,
+            90,
+            328,
+            146
+          ],
+          "text" : "Features"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            168,
+            178,
+            284,
+            221
+          ],
+          "text" : "Cast & Crew"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            254,
+            302,
+            280
+          ],
+          "text" : "Theatrical Trailer"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            178,
+            412,
+            276,
+            432
+          ],
+          "text" : "Main Menu"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-01-lu1-pgc6",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            204,
+            42,
+            514,
+            92
+          ],
+          "text" : "Scene Selections"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            192,
+            530,
+            208
+          ],
+          "text" : "1World's warriors. 2 Dux ducks out. 3 A mentor:"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            454,
+            210,
+            520,
+            226
+          ],
+          "text" : "Tanaka."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            139,
+            329,
+            224,
+            353
+          ],
+          "text" : "4 Training."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            288,
+            328,
+            582,
+            348
+          ],
+          "text" : "5 Ray Jackson.. 6 No man's land.i"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            224,
+            382,
+            482,
+            396
+          ],
+          "text" : "1-6 7-12 13-18 19-23"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            408,
+            416,
+            428
+          ],
+          "text" : "Start Movie Main Menu"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            444,
+            408,
+            570,
+            426
+          ],
+          "text" : "End Credits"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-01-lu1-pgc7",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            204,
+            44,
+            514,
+            92
+          ],
+          "text" : "Scene Selections"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            190,
+            252,
+            210
+          ],
+          "text" : "7Death touch."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            290,
+            192,
+            552,
+            210
+          ],
+          "text" : "8 Bet on a woman. 9 The mightiest"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            450,
+            210,
+            508,
+            226
+          ],
+          "text" : "prevail."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            327,
+            248,
+            355
+          ],
+          "text" : "10 First bouts."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            288,
+            328,
+            546,
+            350
+          ],
+          "text" : "11 Fight to Survive 12 Hong Kong"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            308,
+            349,
+            380,
+            365
+          ],
+          "text" : "montage."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            458,
+            348,
+            512,
+            363
+          ],
+          "text" : "chase."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            284,
+            382,
+            328,
+            396
+          ],
+          "text" : "7-12"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            330,
+            380,
+            482,
+            398
+          ],
+          "text" : "13-18 19-23"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            308,
+            408,
+            416,
+            428
+          ],
+          "text" : "Main Menu"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-01-lu1-pgc8",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            202,
+            44,
+            514,
+            90
+          ],
+          "text" : "Scene Selections"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            141,
+            192,
+            516,
+            213
+          ],
+          "text" : "13 Under covers, 14 Second rounds. 15 Ray vs."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            164,
+            208,
+            254,
+            224
+          ],
+          "text" : "undercover."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            458,
+            210,
+            534,
+            230
+          ],
+          "text" : "Chong Li."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            326,
+            582,
+            357
+          ],
+          "text" : "16 Being the best.. 17 Nearly zapped, 18 Dux vs. Paco, *"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            284,
+            380,
+            482,
+            396
+          ],
+          "text" : "7-12 13-18 19-23"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            308,
+            408,
+            416,
+            428
+          ],
+          "text" : "Main Menu"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-01-lu1-pgc9",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            202,
+            42,
+            514,
+            90
+          ],
+          "text" : "Scene Selections"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            189,
+            540,
+            215
+          ],
+          "text" : "19 Short work for 20 Championship 21Victory out"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            164,
+            209,
+            240,
+            230
+          ],
+          "text" : "Chong Li."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            452,
+            210,
+            510,
+            228
+          ],
+          "text" : "of dust."
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            444,
+            248,
+            476,
+            252
+          ],
+          "text" : "ONAD C"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            444,
+            270,
+            488,
+            278
+          ],
+          "text" : "AOREST VHITACER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            214,
+            328,
+            314,
+            348
+          ],
+          "text" : "22 Goodbye."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            370,
+            328,
+            506,
+            346
+          ],
+          "text" : "23 Coda and End"
         },
         {
           "confidence" : 1,
           "rect" : [
             392,
-            213,
-            540,
-            239
+            347,
+            456,
+            365
           ],
-          "text" : "Scene Selections®"
+          "text" : "Credits.."
         },
         {
           "confidence" : 1,
           "rect" : [
-            394,
-            272,
-            538,
-            298
+            284,
+            382,
+            404,
+            396
           ],
-          "text" : "Special Features"
+          "text" : "7-12 13-18"
         },
         {
           "confidence" : 1,
           "rect" : [
-            413,
-            334,
-            510,
-            360
+            308,
+            408,
+            416,
+            428
           ],
-          "text" : "Languages"
+          "text" : "Main Menu"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            416,
+            382,
+            482,
+            398
+          ],
+          "text" : "19-23"
         }
       ]
     }

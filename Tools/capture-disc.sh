@@ -131,14 +131,16 @@ scp -q -o BatchMode=yes "$HOST:$REMOTE_DIR/diskutil-info.txt" "$ENRICH/" 2>/dev/
 # discId is optional enrichment (CLAUDE.md), but a bare null with no
 # explanation is indistinguishable from "nobody looked" — when lsdvd can't
 # supply one, say why in DISC_ID_NOTE instead of leaving it silent.
-# lsdvd's `-Oj` output is JSON produced by a Perl printer, and the spacing
-# around its separators is not something to bet a grep on: it writes
-# `"discid" : "…"` with a space either side, and on other builds/fields
-# without. The old one-line `grep -o '"discid" *: *"…"'` matched only some of
-# those shapes and silently recorded `null` on Bloodsport, whose lsdvd output
-# does contain `"discid" : "1e0979a4cd2d0409401a628e644e8b63"`. Parse it as
-# JSON, and fall back to a whitespace-tolerant regex only when the document
-# will not parse at all (lsdvd does emit trailing-comma JSON on some discs).
+# The field is called **`dvddiscid`**, not `discid`. That is the whole bug:
+# the old `grep -o '"discid" *: *"…"'` does match — as a substring of
+# `"dvddiscid"` — but the `sed` that follows takes the last quoted string on
+# the line, and depending on the spacing lsdvd emits, the result was empty.
+# Bloodsport's output carries `"dvddiscid" : "1e0979a4cd2d0409401a628e644e8b63"`
+# and the capture recorded `null`. (CLAUDE.md already names `dvddiscid` as
+# the disc identity DVDMonitor debounces on; the capture script was the only
+# place still guessing.) Parse it as JSON, try both spellings, and fall back
+# to a whitespace-tolerant regex only when the document will not parse at all
+# — lsdvd does emit trailing-comma JSON on some discs.
 DISC_ID=""
 DISC_ID_NOTE=""
 if [[ -s "$ENRICH/lsdvd.json" ]]; then
@@ -147,9 +149,10 @@ import json, re, sys
 text = open(sys.argv[1], encoding="utf-8", errors="replace").read()
 value = None
 try:
-    value = json.loads(text).get("discid")
+    document = json.loads(text)
+    value = document.get("dvddiscid") or document.get("discid")
 except Exception:
-    match = re.search(r'"discid"\s*:\s*"([^"]+)"', text)
+    match = re.search(r'"(?:dvddiscid|discid)"\s*:\s*"([^"]+)"', text)
     if match:
         value = match.group(1)
 print(value or "")
