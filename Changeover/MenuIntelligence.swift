@@ -242,7 +242,26 @@ nonisolated enum MenuStatusLine {
     /// Every line to show for `state`, in order. Empty when there is nothing
     /// to say — which is the common case on a disc whose menus gave nothing,
     /// and which must never read as a problem.
-    static func lines(_ state: MenuState, scanFeatureTitle: Int?) -> [String] {
+    ///
+    /// - Parameter markerPlan: the chapter decision for the title the user
+    ///   currently has selected, which can differ from the one the names were
+    ///   read against. When given it wins, so the caption always describes
+    ///   what Start would actually do.
+    static func lines(
+        _ state: MenuState,
+        scanFeatureTitle: Int?,
+        markerPlan: ChapterMarkerPlan.Decision? = nil
+    ) -> [String] {
+        switch state {
+        case .ready(var menu):
+            if let markerPlan { menu.markerPlan = markerPlan }
+            return readyLines(menu, scanFeatureTitle: scanFeatureTitle)
+        default:
+            return baseLines(state, scanFeatureTitle: scanFeatureTitle)
+        }
+    }
+
+    private static func baseLines(_ state: MenuState, scanFeatureTitle: Int?) -> [String] {
         switch state {
         case .idle:
             return []
@@ -251,18 +270,22 @@ nonisolated enum MenuStatusLine {
         case .unavailable(let reason):
             return [reason.caption]
         case .ready(let menu):
-            var lines: [String] = []
-            if let line = PlayButtonResolver.confirmationLine(menu.playButton, scanFeatureTitle: scanFeatureTitle) {
-                lines.append(line)
-            }
-            if let caption = menu.judgeCaption {
-                lines.append(caption)
-            }
-            if let chapters = chapterLine(menu) {
-                lines.append(chapters)
-            }
-            return lines
+            return readyLines(menu, scanFeatureTitle: scanFeatureTitle)
         }
+    }
+
+    private static func readyLines(_ menu: MenuIntelligence, scanFeatureTitle: Int?) -> [String] {
+        var lines: [String] = []
+        if let line = PlayButtonResolver.confirmationLine(menu.playButton, scanFeatureTitle: scanFeatureTitle) {
+            lines.append(line)
+        }
+        if let caption = menu.judgeCaption {
+            lines.append(caption)
+        }
+        if let chapters = chapterLine(menu) {
+            lines.append(chapters)
+        }
+        return lines
     }
 
     /// What will happen to the chapter names at Start — including, in plain

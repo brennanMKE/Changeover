@@ -30,6 +30,13 @@ struct TrackSelectionView: View {
     private var isUntagged: Bool { AudioTrackOptions.isUntagged(title) }
     private var subtitleGroups: [SubtitleGroup] { SubtitleGrouping.groups(for: title) }
 
+    /// The advisory line from the disc's Languages menu, or `nil` — which is
+    /// the usual answer, because most discs tag their tracks and most menu
+    /// reads never happen.
+    private var menuLanguageHint: String? {
+        jobs.menuState.intelligence?.languages.flatMap(LanguageHints.caption)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             audioSection
@@ -68,6 +75,18 @@ struct TrackSelectionView: View {
                 Text(notice)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            // Menu intelligence (§5.3): what the disc's own Languages menu
+            // prints, beside the picker and nothing more. It never changes
+            // the preselection, never sets a language on an untagged stream
+            // and never merges tracks — an ordered list of names is not a
+            // mapping, and on the one disc measured no single OCR
+            // configuration even read the whole list.
+            if let hint = menuLanguageHint {
+                Text(hint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(audioOptions) { option in

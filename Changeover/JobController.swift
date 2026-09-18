@@ -114,6 +114,13 @@ final class JobController {
         _ log: @escaping @MainActor (String) -> Void
     ) async -> MenuState
 
+    /// Tier 3 — the on-device model, asked at most once per disc and only
+    /// when two or more title-jumping buttons survived the lexicon.
+    /// Injectable so no test ever depends on Apple Intelligence being
+    /// enabled; the default is `MenuJudge.answer(for:)`, which reports
+    /// `.unavailable` rather than failing when it is not.
+    typealias JudgeRunner = @MainActor (MenuJudge.Question) async -> MenuJudge.Answer
+
     /// The unit of work a disc scan performs, injectable for the same reason
     /// `Runner` is: tests drive it with a canned `DiscScanner.Outcome`
     /// instead of a real `HandBrakeCLI --scan` and a physical disc.
@@ -345,6 +352,7 @@ final class JobController {
     private let runner: Runner
     private let scanRunner: ScanRunner
     private let menuRunner: MenuRunner
+    private let judgeRunner: JudgeRunner
     /// The in-flight menu read, cancelled by a disc swap, a removal or a
     /// rescan the same way `scanTask` is. A menu read outliving its disc is
     /// the one way a caption could cross discs, so it is stopped, not merely
@@ -387,6 +395,7 @@ final class JobController {
         runner: Runner? = nil,
         scanRunner: ScanRunner? = nil,
         menuRunner: MenuRunner? = nil,
+        judgeRunner: JudgeRunner? = nil,
         sleepAssertion: SleepAssertion = ProcessInfoSleepAssertion(),
         ejector: Ejector? = nil
     ) {
@@ -396,6 +405,7 @@ final class JobController {
         self.runner = runner ?? JobController.pipelineRunner
         self.scanRunner = scanRunner ?? JobController.defaultScanRunner
         self.menuRunner = menuRunner ?? JobController.defaultMenuRunner
+        self.judgeRunner = judgeRunner ?? JobController.defaultJudgeRunner
         self.sleepAssertion = sleepAssertion
         self.ejector = ejector ?? JobController.defaultEjector
     }
@@ -474,6 +484,13 @@ final class JobController {
             scanTitles: scanTitles,
             log: log
         )
+    }
+
+    /// The production judge: one constrained Foundation Models call, or
+    /// `.unavailable` on any Mac where the model is off, not downloaded or
+    /// not supported. Never retried.
+    static let defaultJudgeRunner: JudgeRunner = { question in
+        await MenuJudge.answer(for: question)
     }
 
     /// The production ejector: the real `DiskArbitration` unmount + eject.
@@ -1187,6 +1204,31 @@ final class JobController {
         guard generation == scanGeneration, insertedDisc == disc else { return }
         menuTask = nil
         menuState = state
+        askTheModel(forDisc: disc, generation: generation)
+    }
+
+    /// Tier 3, when — and only when — tiers 1 and 2 left a real question: two
+    /// or more of the disc's own title-jumping buttons carrying labels the
+    /// lexicon has never met.
+    ///
+    /// The answer becomes a **caption**. It cannot change the title, the
+    /// tracks, the markers or the Start button, and a chosen label whose
+    /// button does not resolve to a title the scan found produces no caption
+    /// at all. Unavailable, refused, guarded, "none of these": all silence.
+    private func askTheModel(forDisc disc: DiscInsertion, generation: Int) {
+        guard case .ready(let menu) = menuState, let question = menu.judgeQuestion else { return }
+        guard case .scanned(let scan) = scanState else { return }
+        let scanTitles = Set(scan.disc.titles.map(\.index))
+        let ask = judgeRunner
+
+        menuTask = Task { [weak self] in
+            let answer = await ask(question)
+            guard let self, generation == self.scanGeneration, self.insertedDisc == disc else { return }
+            guard case .ready(var current) = self.menuState else { return }
+            self.menuTask = nil
+            current.judgeCaption = MenuJudge.caption(answer, question: question, scanTitles: scanTitles)
+            self.menuState = .ready(current)
+        }
     }
 
     /// Whether the disc's chapter names may be written into the encode of

@@ -196,6 +196,103 @@ struct JobControllerMenuTests {
         #expect(controller.chapterMarkerRows == nil)
     }
 
+    // MARK: - Tier 3 is asked, and only ever produces a caption
+
+    private static func twoButtonMenu() -> MenuIntelligence {
+        var menu = MenuIntelligence()
+        menu.judgeQuestion = MenuJudge.Question(
+            labels: ["Sehen Sie den Film", "Zusatzmaterial"],
+            titles: [1, 4]
+        )
+        return menu
+    }
+
+    @Test func aRealAmbiguityIsPutToTheModelAndComesBackACaption() async throws {
+        var asked: MenuJudge.Question?
+        let controller = JobController(
+            scanRunner: { _, _, _, _, _ in .success(Self.scan()) },
+            menuRunner: { _, _, _, _, _ in .ready(Self.twoButtonMenu()) },
+            judgeRunner: { question in
+                asked = question
+                return .chose(labelIndex: 0)
+            },
+            ejector: PipelineTestSupport.fakeEject
+        )
+        controller.insertDisc(Self.disc, settings: Self.settings())
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(asked?.labels == ["Sehen Sie den Film", "Zusatzmaterial"])
+        let caption = try #require(controller.menuState.intelligence?.judgeCaption)
+        #expect(caption.contains("Sehen Sie den Film"))
+        // And nothing it touched decides anything: the scan's own title
+        // stands and the marker gate is unmoved.
+        #expect(controller.selectedTitleIndex == 1)
+        #expect(controller.chapterMarkerRows == nil)
+    }
+
+    /// A disc the structure or the lexicon already answered is never put to
+    /// the model at all.
+    @Test func noQuestionMeansNoModelCall() async throws {
+        var asked = false
+        let controller = JobController(
+            scanRunner: { _, _, _, _, _ in .success(Self.scan()) },
+            menuRunner: { _, _, _, _, _ in .ready(Self.intelligence(chapterNames: 23)) },
+            judgeRunner: { _ in
+                asked = true
+                return .none
+            },
+            ejector: PipelineTestSupport.fakeEject
+        )
+        controller.insertDisc(Self.disc, settings: Self.settings())
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(!asked)
+        #expect(controller.menuState.intelligence?.judgeCaption == nil)
+    }
+
+    /// Apple Intelligence off, a refusal, a guardrail, "none of these": all
+    /// the same outcome, and none of them is an error.
+    @Test(arguments: [MenuJudge.Answer.unavailable("off"), .none])
+    func anUnhelpfulAnswerSaysNothing(answer: MenuJudge.Answer) async throws {
+        let controller = JobController(
+            scanRunner: { _, _, _, _, _ in .success(Self.scan()) },
+            menuRunner: { _, _, _, _, _ in .ready(Self.twoButtonMenu()) },
+            judgeRunner: { _ in answer },
+            ejector: PipelineTestSupport.fakeEject
+        )
+        controller.insertDisc(Self.disc, settings: Self.settings())
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(controller.menuState.intelligence?.judgeCaption == nil)
+        #expect(controller.menuState.intelligence?.judgeQuestion != nil)
+    }
+
+    // MARK: - The Confirm captions
+
+    /// The caption describes what Start would do *now*: the chapter decision
+    /// is recomputed against the title the user currently has selected, not
+    /// the one the names were read against.
+    @Test func theChapterCaptionFollowsTheSelectedTitle() {
+        let controller = JobController(ejector: PipelineTestSupport.fakeEject)
+        controller.insertedDisc = Self.disc
+        controller.scanState = .scanned(Self.scan(chapterCount: 23))
+        controller.selectTitle(1, settings: Self.settings())
+        controller.menuState = .ready(Self.intelligence(chapterNames: 23))
+
+        let lines = MenuStatusLine.lines(
+            controller.menuState,
+            scanFeatureTitle: controller.selectedTitleIndex,
+            markerPlan: controller.chapterMarkerPlan(forTitleIndex: controller.selectedTitleIndex)
+        )
+        #expect(lines.contains("23 chapter names from the disc menu will be written into the file."))
+
+        controller.scanState = .scanned(Self.scan(chapterCount: 18))
+        let refused = MenuStatusLine.lines(
+            controller.menuState,
+            scanFeatureTitle: controller.selectedTitleIndex,
+            markerPlan: controller.chapterMarkerPlan(forTitleIndex: controller.selectedTitleIndex)
+        )
+        #expect(refused.contains { $0.hasPrefix("Chapter names from the disc menu are not being used") })
+    }
+
     @Test func noSettledTitleMeansNoRows() {
         let controller = JobController(ejector: PipelineTestSupport.fakeEject)
         controller.insertedDisc = Self.disc

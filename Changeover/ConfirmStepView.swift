@@ -27,6 +27,7 @@ struct ConfirmStepView: View {
                     duplicateNotice
                     Divider()
                     DiscTitleListView(jobs: jobs, settings: settings, runtimeLookup: flow.search.runtimeLookup)
+                    menuNotice
                     trackSelectionSection
                 }
             }
@@ -64,6 +65,38 @@ struct ConfirmStepView: View {
             )
             .padding(.horizontal)
             .padding(.bottom, 10)
+        }
+    }
+
+    // MARK: - What the disc's own menus say (docs/menu-intelligence.md)
+
+    /// Captions, and only captions. Every line here is something the user did
+    /// not have before — which button the disc's menu starts, whether its
+    /// chapter names will be written — and not one of them changes what Start
+    /// does. The wording is `MenuStatusLine`, which is pure and pinned by
+    /// tests; this lays the lines out under the title verdict they belong
+    /// beside.
+    @ViewBuilder
+    private var menuNotice: some View {
+        let lines = MenuStatusLine.lines(
+            jobs.menuState,
+            scanFeatureTitle: jobs.selectedTitleIndex,
+            // The chapter decision for the title actually selected now, which
+            // can differ from the one the names were read against.
+            markerPlan: jobs.chapterMarkerPlan(forTitleIndex: jobs.selectedTitleIndex)
+        )
+        if !lines.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(lines, id: \.self) { line in
+                    Text(line)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal)
+            .padding(.bottom, 6)
         }
     }
 
