@@ -18,6 +18,27 @@
 #                     and silently corrupt it. Never merge these two files.
 #   disc.json         metadata plus the expectations DiscCorpusTests asserts.
 #                     `reviewed: false` until a human confirms it; see below.
+#   lsdvd.json        lsdvd -x -Oj output — kept now, not discarded (§8.2)
+#   ifo/*.IFO         byte-exact copies of the disc's IFO tables. Never
+#                     scrambled, tiny, and what menu intelligence reads.
+#   menus/structure.json  Tools/menudump's output: menu PGCs, button
+#                     rectangles and their raw 8-byte VM commands (§8.3)
+#   menus/stills/*.jpg    one still per menu PGC
+#   menus/ocr.json    Vision's observations on every still, with boxes
+#   menus/derived.json    tiers 1-2 resolved: play button, chapter names,
+#                     language lists, tv signal, title text
+#
+# VERSION 2 (docs/menu-intelligence.md §8.5). `disc.json` now carries
+# `formatVersion: 2`; a manifest with no `formatVersion` is a version-1
+# capture and DiscCorpusTests decodes it exactly as before. A format change
+# is a re-capture, never a migration script — the discs are permanent, so an
+# old capture is refreshed the next time that disc is in the drive.
+#
+# Everything under `menus/` is optional as a set. The menu half of this
+# script is enrichment: if the helper will not build, if the disc has no
+# menus, if `ffmpeg` or `libdvdread` is not on the host, the capture still
+# writes scan.json and disc.json and says in the summary what it could not
+# get. Nothing here can fail a capture, and nothing here is on the rip path.
 #
 # What this script fills in automatically: title count, HandBrake's own
 # MainFeature index, and the feature title's raw duration/chapter count. What
@@ -32,8 +53,17 @@ set -euo pipefail
 
 HOST="${CHANGEOVER_HOST:-joe}"
 HANDBRAKE_PATH="${CHANGEOVER_HANDBRAKE_PATH:-/opt/homebrew/bin/HandBrakeCLI}"
+# Absolute, for the same reason HANDBRAKE_PATH is: a non-interactive ssh shell
+# does not have Homebrew on its PATH, and a bare `lsdvd` silently recorded a
+# null disc id on every capture (found on bloodsport, 2026-09-18).
+LSDVD_PATH="${CHANGEOVER_LSDVD_PATH:-/opt/homebrew/bin/lsdvd}"
+FFMPEG_PATH="${CHANGEOVER_FFMPEG_PATH:-/opt/homebrew/bin/ffmpeg}"
 REPO_ROOT="${0:A:h}/.."
 FIXTURES="$REPO_ROOT/ChangeoverTests/Fixtures/discs"
+BUILD_DIR="$REPO_ROOT/build/capture"
+# Menu capture is opt-out rather than opt-in: a disc that passes through the
+# drive without its menus is a disc that has to come back off the shelf.
+CAPTURE_MENUS="${CHANGEOVER_CAPTURE_MENUS:-1}"
 
 ssh_host() { ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST" "$@"; }
 
@@ -85,7 +115,7 @@ ssh_host "cd ~/$REMOTE_DIR && '$HANDBRAKE_PATH' -i \"/Volumes/$VOLUME\" --scan -
 # `HandBrakeCLI --version`'s first line on some builds is a hardening-flags
 # banner, not the version, and the JSON block is what
 # `HandBrakeScanParser.parseVersionBlock` already trusts.
-ssh_host "lsdvd -x -Oj \"/Volumes/$VOLUME\" >~/$REMOTE_DIR/lsdvd.json 2>~/$REMOTE_DIR/lsdvd.stderr.txt" || true
+ssh_host "$LSDVD_PATH -x -Oj \"/Volumes/$VOLUME\" >~/$REMOTE_DIR/lsdvd.json 2>~/$REMOTE_DIR/lsdvd.stderr.txt" || true
 ssh_host "diskutil info \"/Volumes/$VOLUME\" >~/$REMOTE_DIR/diskutil-info.txt 2>/dev/null" || true
 
 scp -q -o BatchMode=yes "$HOST:$REMOTE_DIR/scan.json"       "$DEST/scan.json"
@@ -101,11 +131,35 @@ scp -q -o BatchMode=yes "$HOST:$REMOTE_DIR/diskutil-info.txt" "$ENRICH/" 2>/dev/
 # discId is optional enrichment (CLAUDE.md), but a bare null with no
 # explanation is indistinguishable from "nobody looked" — when lsdvd can't
 # supply one, say why in DISC_ID_NOTE instead of leaving it silent.
+# lsdvd's `-Oj` output is JSON produced by a Perl printer, and the spacing
+# around its separators is not something to bet a grep on: it writes
+# `"discid" : "…"` with a space either side, and on other builds/fields
+# without. The old one-line `grep -o '"discid" *: *"…"'` matched only some of
+# those shapes and silently recorded `null` on Bloodsport, whose lsdvd output
+# does contain `"discid" : "1e0979a4cd2d0409401a628e644e8b63"`. Parse it as
+# JSON, and fall back to a whitespace-tolerant regex only when the document
+# will not parse at all (lsdvd does emit trailing-comma JSON on some discs).
 DISC_ID=""
 DISC_ID_NOTE=""
 if [[ -s "$ENRICH/lsdvd.json" ]]; then
-  DISC_ID="$(grep -o '"discid" *: *"[^"]*"' "$ENRICH/lsdvd.json" 2>/dev/null | sed -E 's/.*"([^"]*)"$/\1/' || true)"
+  DISC_ID="$(python3 - "$ENRICH/lsdvd.json" <<'PY' || true
+import json, re, sys
+text = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+value = None
+try:
+    value = json.loads(text).get("discid")
+except Exception:
+    match = re.search(r'"discid"\s*:\s*"([^"]+)"', text)
+    if match:
+        value = match.group(1)
+print(value or "")
+PY
+)"
 fi
+# lsdvd.json is part of the corpus now (§8.2) — it carries the disc id, the
+# cell table and the stream languages, and throwing it away meant every
+# question about it needed the disc back.
+[[ -s "$ENRICH/lsdvd.json" ]] && cp "$ENRICH/lsdvd.json" "$DEST/lsdvd.json"
 if [[ -z "$DISC_ID" ]]; then
   if [[ -s "$ENRICH/lsdvd.stderr.txt" ]]; then
     DISC_ID_NOTE=" lsdvd could not read a disc id for this disc ($(head -1 "$ENRICH/lsdvd.stderr.txt"))."
@@ -195,6 +249,94 @@ print(len(titles), main_feature if main_feature is not None else "null", dur, ch
 PY
 )"
 
+# --- menus (§8.5 steps 3-7) --------------------------------------------------
+# Every step below is best-effort and each records why it produced nothing.
+# The helper runs AFTER the scan, never beside it: HandBrake's scan is ~60 s
+# of seeking on a USB 2.0 drive and two readers would slow both.
+MENUS_CAPTURED=false
+MENUS_CSS="unknown"
+MENU_COUNT=0
+STILL_COUNT=0
+IFO_COUNT=0
+OCR_RUN=false
+MENU_NOTE=""
+MENUDUMP_MISSING=""
+
+if (( CAPTURE_MENUS )); then
+  mkdir -p "$DEST/ifo" "$DEST/menus/stills" "$BUILD_DIR"
+
+  # 3. The IFO tables — plain file copies, nothing decrypts.
+  ssh_host "mkdir -p ~/$REMOTE_DIR/ifo && cp /Volumes/\"$VOLUME\"/VIDEO_TS/*.IFO ~/$REMOTE_DIR/ifo/ 2>/dev/null" || true
+  scp -q -o BatchMode=yes "$HOST:$REMOTE_DIR/ifo/*.IFO" "$DEST/ifo/" 2>/dev/null || true
+  IFO_COUNT="$(ls -1 "$DEST/ifo/" 2>/dev/null | grep -c '\.IFO$' || true)"
+
+  # 4. The helper. It links nothing, so building it on the host is one `cc`
+  #    with no flags and no headers — which is the point: a host missing
+  #    libdvdread still produces a complete structure.json, just no cells.
+  scp -q -o BatchMode=yes "$REPO_ROOT/Tools/menudump/menudump.c" "$HOST:$REMOTE_DIR/menudump.c" 2>/dev/null || true
+  MENUDUMP_STATUS=0
+  ssh_host "cd ~/$REMOTE_DIR && cc -std=c11 -O2 -o changeover-menudump menudump.c 2>menudump.build.txt" || MENUDUMP_STATUS=$?
+  if (( MENUDUMP_STATUS == 0 )); then
+    ssh_host "cd ~/$REMOTE_DIR && ./changeover-menudump --disc /Volumes/\"$VOLUME\" --out menus --max-bytes 67108864 2>menudump.stderr.txt" \
+      || MENUDUMP_STATUS=$?
+    scp -q -o BatchMode=yes "$HOST:$REMOTE_DIR/menus/structure.json" "$DEST/menus/structure.json" 2>/dev/null || true
+    scp -q -o BatchMode=yes "$HOST:$REMOTE_DIR/menudump.stderr.txt" "$ENRICH/menudump.stderr.txt" 2>/dev/null || true
+  fi
+
+  if [[ -s "$DEST/menus/structure.json" ]]; then
+    MENUS_CAPTURED=true
+    read -r MENU_COUNT MENUS_CSS MENUDUMP_MISSING <<<"$(python3 - "$DEST/menus/structure.json" <<'PY'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    print(0, "unknown", ""); raise SystemExit
+helper = d.get("helper") or {}
+print(len(d.get("menus") or []), helper.get("css") or "unknown", ",".join(helper.get("missing") or []) or "-")
+PY
+)"
+
+    # 5. One still per menu PGC, rendered on the host where ffmpeg lives.
+    #    The cells are already decrypted by the helper, so this is a plain
+    #    MPEG-2 decode with no key involved.
+    ssh_host "mkdir -p ~/$REMOTE_DIR/menus/stills && for v in ~/$REMOTE_DIR/menus/cells/*.vob; do [ -f \"\$v\" ] || continue; b=\$(basename \"\$v\" .vob); '$FFMPEG_PATH' -y -loglevel error -i \"\$v\" -vf 'select=eq(pict_type\\,I)' -fps_mode vfr -frames:v 1 ~/$REMOTE_DIR/menus/stills/\$b.png </dev/null; done" || true
+    scp -q -o BatchMode=yes "$HOST:$REMOTE_DIR/menus/stills/*.png" "$ENRICH/" 2>/dev/null || true
+    # (N) is zsh's null glob: no stills is a normal outcome here, not an error.
+    for png in "$ENRICH"/*.png(N); do
+      [[ -f "$png" ]] || continue
+      sips -s format jpeg -s formatOptions 80 "$png" --out "$DEST/menus/stills/$(basename "${png%.png}").jpg" >/dev/null 2>&1 || true
+    done
+    STILL_COUNT="$(ls -1 "$DEST/menus/stills/" 2>/dev/null | grep -c '\.jpg$' || true)"
+  else
+    MENU_NOTE=" changeover-menudump produced no structure.json (exit $MENUDUMP_STATUS)."
+  fi
+
+  # 6-7. OCR and resolution, locally: Vision is on this Mac and this keeps
+  #      the host idle. Both tools link the app's own sources, so what the
+  #      archive records is what the app computes.
+  if (( STILL_COUNT > 0 )); then
+    swiftc -O -o "$BUILD_DIR/menu-ocr" \
+      "$REPO_ROOT/Changeover/MenuStructure.swift" "$REPO_ROOT/Changeover/VMCommand.swift" \
+      "$REPO_ROOT/Changeover/MenuLexicon.swift" "$REPO_ROOT/Changeover/MenuOCR.swift" \
+      "$REPO_ROOT/Tools/menu-ocr/main.swift" 2>/dev/null \
+      && "$BUILD_DIR/menu-ocr" "$DEST/menus/ocr.json" "$DEST/menus/stills"/*.jpg >/dev/null 2>&1 \
+      && OCR_RUN=true || true
+  fi
+
+  if [[ -s "$DEST/menus/structure.json" || -s "$DEST/menus/ocr.json" ]]; then
+    swiftc -O -o "$BUILD_DIR/menu-derive" \
+      "$REPO_ROOT/Changeover/MenuStructure.swift" "$REPO_ROOT/Changeover/VMCommand.swift" \
+      "$REPO_ROOT/Changeover/MenuLexicon.swift" "$REPO_ROOT/Changeover/MenuOCR.swift" \
+      "$REPO_ROOT/Changeover/ChapterNames.swift" "$REPO_ROOT/Changeover/LanguageHints.swift" \
+      "$REPO_ROOT/Changeover/MenuTitleGuess.swift" "$REPO_ROOT/Changeover/PlayButtonResolver.swift" \
+      "$REPO_ROOT/Changeover/MenuDerived.swift" "$REPO_ROOT/Changeover/DiscNameSearchTerm.swift" \
+      "$REPO_ROOT/Tools/menu-derive/main.swift" 2>/dev/null \
+      && "$BUILD_DIR/menu-derive" --out "$DEST/menus/derived.json" \
+           --structure "$DEST/menus/structure.json" --ocr "$DEST/menus/ocr.json" \
+           --chapter-count "${FEATURE_CHAPTERS/null/0}" --volume-name "$VOLUME" > "$ENRICH/derive.txt" 2>&1 || true
+  fi
+fi
+
 # --- write disc.json (only when one doesn't already exist) -------------------
 if (( ! MANIFEST_EXISTS )); then
   # HandBrake's own "no main feature" signal (absent, zero, or negative —
@@ -211,8 +353,51 @@ if (( ! MANIFEST_EXISTS )); then
   DRIVE_MODEL_JSON="null";   [[ -n "$DRIVE_MODEL" ]]       && DRIVE_MODEL_JSON="\"$DRIVE_MODEL\""
   HANDBRAKE_VERSION_JSON="null"; [[ "$HANDBRAKE_VERSION" != "null" ]] && HANDBRAKE_VERSION_JSON="\"HandBrake $HANDBRAKE_VERSION\""
 
+  IFO_COUNT="${IFO_COUNT:-0}"; STILL_COUNT="${STILL_COUNT:-0}"; MENU_COUNT="${MENU_COUNT:-0}"
+  MENUS_MISSING_JSON="[]"
+  if [[ -n "$MENUDUMP_MISSING" && "$MENUDUMP_MISSING" != "-" ]]; then
+    MENUS_MISSING_JSON="[$(echo "$MENUDUMP_MISSING" | sed -E 's/([^,]+)/"\1"/g')]"
+  fi
+
+  # `expect.menu` is proposed from derived.json and then reviewed by a human
+  # against the stills, exactly like the rest of `expect`. A disc with no
+  # menus/ gets `null` and DiscCorpusTests skips the menu assertions by name
+  # rather than passing vacuously.
+  MENU_EXPECT_JSON="null"
+  if [[ -s "$DEST/menus/derived.json" ]]; then
+    MENU_EXPECT_JSON="$(python3 - "$DEST/menus/derived.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+play = d.get("playButton") or {}
+chapters = d.get("chapterMenu") or {}
+languages = d.get("languages") or {}
+title_text = d.get("titleText") or {}
+unresolved = sorted({b["target"].split(":", 1)[1]
+                     for b in d.get("buttons", [])
+                     if b.get("target", "").startswith("unresolved:")})
+out = {
+    "playButtonTitle": play.get("title"),
+    "playButtonLabel": play.get("label"),
+    "playButtonResolvedBy": play.get("resolvedBy"),
+    "chapterMenuButtons": chapters.get("buttons"),
+    "chapterNamesEmitted": chapters.get("csvRows"),
+    "chapterPages": chapters.get("pages") or [],
+    "chapterNames": [c["name"] for c in sorted(chapters.get("names", []), key=lambda c: c["chapter"])],
+    "spokenLanguages": languages.get("spoken") or [],
+    "subtitleLanguages": languages.get("subtitles") or [],
+    "languageShape": languages.get("shape"),
+    "tvSignal": (d.get("tvSignal") or {}).get("value"),
+    "titleTextCandidate": title_text.get("text"),
+    "unresolvedMnemonics": unresolved,
+}
+print(json.dumps(out, ensure_ascii=False, indent=2))
+PY
+)"
+  fi
+
   cat > "$DEST/disc.json" <<JSON
 {
+  "formatVersion": 2,
   "slug": "$SLUG",
   "volumeName": "$VOLUME",
   "driveName": "$HOST",
@@ -221,7 +406,22 @@ if (( ! MANIFEST_EXISTS )); then
   "handbrakeVersion": $HANDBRAKE_VERSION_JSON,
   "capturedDate": "$CAPTURED_DATE",
   "reviewed": false,
-  "notes": "Auto-captured by Tools/capture-disc.sh.${DISC_ID_NOTE} REVIEW REQUIRED before DiscCorpusTests will accept this disc: confirm outcome (single/playAll/none/noTitles — this script only ever guesses single or none), outcomeEpisodes for a playAll disc, audioTrackCount (AudioTrackOptions.options(for:).count on the feature title) and subtitleGroupCount (SubtitleGrouping.groups(for:).count) — then set reviewed to true.",
+  "capture": {
+    "tool": "Tools/capture-disc.sh",
+    "toolVersion": 2,
+    "ifoFiles": $IFO_COUNT,
+    "rawArchive": "$HOST:~/$REMOTE_DIR"
+  },
+  "menus": {
+    "captured": $MENUS_CAPTURED,
+    "css": "$MENUS_CSS",
+    "menuCount": $MENU_COUNT,
+    "stillCount": $STILL_COUNT,
+    "ocrRun": $OCR_RUN,
+    "judgeRun": false,
+    "missing": $MENUS_MISSING_JSON
+  },
+  "notes": "Auto-captured by Tools/capture-disc.sh (v2).${DISC_ID_NOTE}${MENU_NOTE} REVIEW REQUIRED before DiscCorpusTests will accept this disc: confirm outcome (single/playAll/none/noTitles — this script only ever guesses single or none), outcomeEpisodes for a playAll disc, audioTrackCount (AudioTrackOptions.options(for:).count on the feature title) and subtitleGroupCount (SubtitleGrouping.groups(for:).count) — then set reviewed to true.",
   "expect": {
     "titleCount": $TITLE_COUNT,
     "mainFeatureIndex": $MAIN_FEATURE,
@@ -231,7 +431,8 @@ if (( ! MANIFEST_EXISTS )); then
     "featureDurationSeconds": $FEATURE_DURATION,
     "featureChapterCount": $FEATURE_CHAPTERS,
     "audioTrackCount": null,
-    "subtitleGroupCount": null
+    "subtitleGroupCount": null,
+    "menu": $MENU_EXPECT_JSON
   }
 }
 JSON
@@ -252,6 +453,15 @@ else
 fi
 echo "HandBrake version: ${HANDBRAKE_VERSION:-unknown}"
 echo "disc id (lsdvd):   ${DISC_ID:-none}${DISC_ID_NOTE}"
+echo "IFO files:         ${IFO_COUNT:-0}"
+echo "menu PGCs:         ${MENU_COUNT:-0}  stills: ${STILL_COUNT:-0}  css: ${MENUS_CSS:-unknown}"
+if [[ -n "${MENUDUMP_MISSING:-}" && "${MENUDUMP_MISSING:-}" != "-" ]]; then
+  echo "menu deps missing: $MENUDUMP_MISSING  (brew install ${MENUDUMP_MISSING//,/ })"
+fi
+# The derive summary is the first thing the human review should read: the
+# play button line, the chapter-name count against the chapter count, the
+# language lists and every command mnemonic the decoder could not name.
+[[ -s "$ENRICH/derive.txt" ]] && cat "$ENRICH/derive.txt" || true
 echo
 echo "fixtures: $DEST/{scan.json,scan.stderr.txt,disc.json}"
 echo "Next:"
