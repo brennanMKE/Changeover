@@ -17,6 +17,30 @@
     "featureDurationSeconds": 10811,
     "featureChapterCount": 21,
     "audioTrackCount": 3,
-    "subtitleGroupCount": 6
+    "subtitleGroupCount": 6,
+    "agreement": {
+      "slug": "oppenheimer",
+      "scannerTitle": 7,
+      "scannerRaw": 7,
+      "heuristicRoute": "scanner",
+      "heuristicTitle": 7,
+      "menuRoute": "notCaptured",
+      "verdict": "notCaptured",
+      "signals": {
+        "menuCount": 0,
+        "menusWithButtons": 0,
+        "buttonCount": 0,
+        "largestMenuButtons": 0,
+        "titleJumpingButtons": 0,
+        "titlesJumpedTo": [],
+        "chapterButtons": 0,
+        "chapterPages": 0,
+        "chapterNamesRead": 0,
+        "chapterNamesEmitted": 0,
+        "spokenLanguages": [],
+        "subtitleLanguages": [],
+        "labels": []
+      }
+    }
   }
 }

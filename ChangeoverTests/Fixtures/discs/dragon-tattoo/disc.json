@@ -17,6 +17,30 @@
     "featureDurationSeconds": 9478,
     "featureChapterCount": 16,
     "audioTrackCount": 3,
-    "subtitleGroupCount": 5
+    "subtitleGroupCount": 5,
+    "agreement": {
+      "slug": "dragon-tattoo",
+      "scannerTitle": 1,
+      "scannerRaw": 1,
+      "heuristicRoute": "scanner",
+      "heuristicTitle": 1,
+      "menuRoute": "notCaptured",
+      "verdict": "notCaptured",
+      "signals": {
+        "menuCount": 0,
+        "menusWithButtons": 0,
+        "buttonCount": 0,
+        "largestMenuButtons": 0,
+        "titleJumpingButtons": 0,
+        "titlesJumpedTo": [],
+        "chapterButtons": 0,
+        "chapterPages": 0,
+        "chapterNamesRead": 0,
+        "chapterNamesEmitted": 0,
+        "spokenLanguages": [],
+        "subtitleLanguages": [],
+        "labels": []
+      }
+    }
   }
 }

@@ -17,6 +17,16 @@ nonisolated struct MenuIntelligence: Equatable, Sendable {
     /// structure says so unambiguously. `nil` is a normal answer.
     var playButton: PlayButtonResolver.Resolution?
 
+    /// Every caption OCR attached to a **real button**, keyed by button.
+    ///
+    /// The resolver has always computed this and thrown it away once it had
+    /// picked a play button. It is kept because it is the archive's
+    /// vocabulary column (`MenuAgreement.Signals.labels`): the words real
+    /// discs actually print, which is how `MenuLexicon` learns a language
+    /// without anyone guessing at it. Text attached to no button is never in
+    /// here — that is decoration, and admitting it is the filmography trap.
+    var buttonLabels: [MenuButtonRef: String] = [:]
+
     /// The stills the chapter names were read from, in page order.
     var chapterPages: [String] = []
     var chapterNames: [ChapterNames.Candidate] = []
@@ -61,6 +71,44 @@ nonisolated enum MenuState: Equatable, Sendable {
     var intelligence: MenuIntelligence? {
         if case .ready(let value) = self { return value }
         return nil
+    }
+}
+
+// Lives here, beside `MenuState`, rather than in `MenuHelper`: the state and
+// its reasons are one value, and keeping them together is what lets the pure
+// menu sources compile on their own for `Tools/menu-agreement` and
+// `Tools/menu-derive` without dragging `ProcessRunner` in behind them.
+/// Why there is no menu intelligence for the disc in the drive.
+///
+/// Every case is a caption, never a failure: the rip is byte-identical to
+/// what it is today in all of them (`docs/menu-intelligence.md` §9).
+nonisolated enum MenuUnavailable: Error, Equatable, Sendable {
+    /// No `changeover-menudump` on this Mac.
+    case helperMissing(path: String)
+    /// The helper ran but could not decrypt the menu video, so there are no
+    /// stills: buttons and targets are still known, names and hints are not.
+    case librariesMissing([String])
+    /// The disc has menus the helper could read and there is nothing in them
+    /// — or no menus at all.
+    case noMenus
+    /// Anything else: a crash, a timeout, an unreadable VIDEO_TS.
+    case failed(String)
+
+    /// The one line the Confirm step shows. Always says what is missing *and*
+    /// that the rip is unaffected, because that is the only thing the user
+    /// has to decide about it: nothing.
+    var caption: String {
+        switch self {
+        case .helperMissing:
+            return "Disc menus: not read — changeover-menudump isn't installed (Settings ▸ Dependencies). The rip is unaffected."
+        case .librariesMissing(let formulae):
+            let list = formulae.joined(separator: ", ")
+            return "Disc menus: buttons only — \(list) isn't installed, so the menu text can't be read (Settings ▸ Dependencies). The rip is unaffected."
+        case .noMenus:
+            return "Disc menus: nothing readable on this disc. The rip is unaffected."
+        case .failed(let reason):
+            return "Disc menus: not read — \(reason). The rip is unaffected."
+        }
     }
 }
 
@@ -185,6 +233,7 @@ extension MenuIntelligence {
             guard !onThisStill.isEmpty else { continue }
             labels.merge(PlayButtonResolver.labels(buttons: onThisStill, observations: observations)) { current, _ in current }
         }
+        result.buttonLabels = labels
 
         if let structure {
             if let resolution = PlayButtonResolver.resolve(structure, labels: labels),

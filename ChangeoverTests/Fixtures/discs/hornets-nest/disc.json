@@ -17,6 +17,29 @@
     "featureDurationSeconds": 8813,
     "featureChapterCount": 16,
     "audioTrackCount": 2,
-    "subtitleGroupCount": 1
+    "subtitleGroupCount": 1,
+    "agreement": {
+      "slug": "hornets-nest",
+      "scannerRaw": -1,
+      "heuristicRoute": "length",
+      "heuristicTitle": 11,
+      "menuRoute": "notCaptured",
+      "verdict": "notCaptured",
+      "signals": {
+        "menuCount": 0,
+        "menusWithButtons": 0,
+        "buttonCount": 0,
+        "largestMenuButtons": 0,
+        "titleJumpingButtons": 0,
+        "titlesJumpedTo": [],
+        "chapterButtons": 0,
+        "chapterPages": 0,
+        "chapterNamesRead": 0,
+        "chapterNamesEmitted": 0,
+        "spokenLanguages": [],
+        "subtitleLanguages": [],
+        "labels": []
+      }
+    }
   }
 }

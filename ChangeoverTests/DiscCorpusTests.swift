@@ -54,6 +54,16 @@ struct DiscCorpusTests {
             /// `nil` on a disc captured without its menus — the menu
             /// assertions are then skipped **by name**, never vacuously.
             var menu: MenuExpectation?
+            /// What the scanner, the heuristic and the disc's own menu each
+            /// said, and whether they agree — **recorded**, not inferred by
+            /// a reader comparing two numbers in different parts of the
+            /// file. `Tools/menu-agreement --manifest <slug>` writes it.
+            ///
+            /// It decodes straight into the app's own `MenuAgreement`, so a
+            /// field added to the value has to be recorded here before the
+            /// sweep will pass — the manifest cannot quietly fall behind the
+            /// thing it is describing.
+            var agreement: MenuAgreement?
         }
 
         /// What the disc's own menus should yield. Every field is optional
@@ -571,6 +581,102 @@ struct DiscCorpusTests {
                 "\(slug): the disc's play button starts title \(resolved.title) but the scan's outcome index is \(outcomeIndex). If this is real, the caption in §4.1 is the disagree form; if it is a numbering bug, JumpTT and HandBrake's title index do not agree and every menu caption has to be disabled."
             )
         }
+    }
+
+    // MARK: - Agreement: the menu against the heuristic
+
+    /// Build one disc's agreement row exactly the way `Tools/menu-agreement`
+    /// and the app do — from the committed capture and nothing else.
+    private static func agreement(for slug: String) throws -> MenuAgreement {
+        let manifest = try loadManifest(slug)
+        let scan = HandBrakeScanParser.parse(
+            try loadScanText(slug),
+            volumeName: manifest.volumeName,
+            driveName: manifest.driveName
+        )
+        return MenuAgreement.evaluate(
+            slug: slug,
+            disc: scan.disc,
+            mainFeatureIndex: scan.mainFeatureIndex,
+            structure: try loadStructure(slug),
+            ocr: try loadOCR(slug),
+            menusCaptured: manifest.menus?.captured ?? false
+        )
+    }
+
+    /// Every disc records what its three sources said and whether they agree,
+    /// and the record is checked against a fresh reading of the same files.
+    ///
+    /// This is the assertion the corpus was missing. §8.6's play-button
+    /// invariant fires only on a disc that has menus *and* an `expect.menu`
+    /// claim; every other disc passed it by saying nothing, so "the menu
+    /// disagrees" and "nobody has read this disc's menus" were the same
+    /// silence. Here they are different recorded values, and a change in
+    /// either the heuristic or the resolver moves a verdict and fails by
+    /// name.
+    @Test(arguments: DiscCorpusTests.discSlugs())
+    func discRecordsWhatEachSourceSaidAndWhetherTheyAgree(slug: String) throws {
+        let manifest = try Self.loadManifest(slug)
+        let recorded = try #require(
+            manifest.expect.agreement,
+            "\(slug): disc.json has no expect.agreement. Every disc records one, including the ones with no menus — that is how \"not captured\" stays distinguishable from \"disagrees\". Write it with Tools/menu-agreement --manifest \(slug)."
+        )
+        #expect(recorded.slug == slug, "\(slug): expect.agreement.slug names a different disc — a copied block")
+        let computed = try Self.agreement(for: slug)
+        #expect(
+            computed == recorded,
+            "\(slug): the recorded agreement no longer matches what the capture yields.\n  recorded: \(Self.line(recorded))\n  computed: \(Self.line(computed))\nIf the change is intended, re-run Tools/menu-agreement --manifest \(slug) and review the diff."
+        )
+    }
+
+    private static func line(_ row: MenuAgreement) -> String {
+        "\(MenuAgreementReport.scannerText(row)) | \(MenuAgreementReport.heuristicText(row)) | \(MenuAgreementReport.menuText(row)) | \(row.verdict.rawValue)"
+    }
+
+    /// A disc whose menus were never captured is `notCaptured` and nothing
+    /// else — the distinction the whole report rests on. Stated on its own so
+    /// that a future change to `verdict(heuristicTitle:menuRoute:menuTitle:)`
+    /// which quietly turned an un-read disc into a disagreement would fail
+    /// here rather than silently make the corpus look untrustworthy.
+    @Test func unreadDiscsAreNotCapturedRatherThanDisagreeing() throws {
+        var unread = 0
+        for slug in Self.discSlugs() {
+            let manifest = try Self.loadManifest(slug)
+            guard manifest.menus?.captured != true else { continue }
+            unread += 1
+            let computed = try Self.agreement(for: slug)
+            #expect(computed.menuRoute == .notCaptured, "\(slug): has no menus/ but its menu route is \(computed.menuRoute.rawValue)")
+            #expect(computed.verdict == .notCaptured, "\(slug): has no menus/ but its verdict is \(computed.verdict.rawValue)")
+        }
+        #expect(unread >= 1, "every disc now carries menus — retire this check rather than letting it assert nothing")
+    }
+
+    /// The corpus-wide report, compared with the committed copy.
+    ///
+    /// The file is the artifact the user reads after ripping a run of discs;
+    /// this test is what makes it worth reading. A disc captured without
+    /// regenerating the report, or a resolver change that moves a verdict,
+    /// fails here with the two versions named.
+    @Test func corpusAgreementReportIsUpToDate() throws {
+        let rows = try Self.discSlugs().map { try Self.agreement(for: $0) }
+        let report = MenuAgreementReport.make(rows)
+
+        #expect(report.rows.count == Self.discSlugs().count, "the report dropped a disc")
+        #expect(
+            report.rows.count == report.count(.agree) + report.count(.disagree) + report.count(.menuAbstained)
+                + report.count(.heuristicAbstained) + report.count(.bothAbstained) + report.count(.notCaptured),
+            "the verdict counts do not add up to the disc count"
+        )
+
+        let url = Self.fixturesRoot.appendingPathComponent("agreement-report.txt")
+        let committed = try #require(
+            try? String(contentsOf: url, encoding: .utf8),
+            "ChangeoverTests/Fixtures/discs/agreement-report.txt is missing — regenerate it with Tools/menu-agreement --out"
+        )
+        #expect(
+            report.text == committed,
+            "agreement-report.txt is stale. Regenerate it:\n  swiftc -O -o build/menu-agreement <sources, see Tools/menu-agreement/main.swift> && build/menu-agreement --out ChangeoverTests/Fixtures/discs/agreement-report.txt\nCurrent summary: \(report.summaryLine)"
+        )
     }
 
     private static func assertChapterNames(

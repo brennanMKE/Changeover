@@ -105,6 +105,137 @@
         "LinkTailPGC"
       ],
       "notes": "Read with the fixed NAV reader against the disc's own menu VOB. Four things this disc taught, all of which the design had guessed wrong. (1) The play button is not a JumpTT: it is a LinkTailPGC, which runs the root PGC's post-commands, and those end with JumpVTS_TT 1 -- hence resolvedBy 'pgcCommands'. Without following that one indirection the disc's own answer to 'which title is the feature' is unreadable. (2) Only the root menu is an entry PGC; the four scene pages and the languages page are plain PGCs reached by LinkPGCN, so rules keyed on entry type 0x86/0x84 find nothing and the pages are identified by what their buttons do and what their text says. (3) The scene buttons enclose their captions rather than sitting above them. (4) 'Scene Selections' and 'Special Features' are set-then-link commands whose trailing LinkPGCN is the navigation. LinkTailPGC stays in unresolvedMnemonics because its raw target is genuinely not a title -- the title comes from the PGC it runs. Two OCR findings kept rather than smoothed over: the subtitle list is what the app's own MenuOCR.Settings read, not what the page prints -- the page prints English / Francais / Japanese / Off and the disc's own buttons prove it (three SetSTN buttons selecting sub-picture streams plus one turning display off), while Vision reads three of the four whichever way it is configured. And chapter 6 is 'No man's land.i': the trailing '.i' is the decorative glyph, which the first capture's still rendered such that OCR read '*' (which clean() strips) and this one did not. A wrong name at the right timestamp is 3.3's cheap failure; a cleaning rule invented on one disc would be the expensive kind."
+    },
+    "agreement": {
+      "slug": "bloodsport",
+      "scannerTitle": 1,
+      "scannerRaw": 1,
+      "heuristicRoute": "scanner",
+      "heuristicTitle": 1,
+      "menuRoute": "pgcCommands",
+      "menuTitle": 1,
+      "menuLabel": "Play Movie",
+      "verdict": "agree",
+      "signals": {
+        "menuCount": 29,
+        "menusWithButtons": 16,
+        "buttonCount": 84,
+        "largestMenuButtons": 13,
+        "titleJumpingButtons": 8,
+        "titlesJumpedTo": [
+          1
+        ],
+        "chapterButtons": 25,
+        "chapterPages": 4,
+        "chapterNamesRead": 23,
+        "chapterNamesEmitted": 23,
+        "tvSignal": false,
+        "tvSignalReason": "no menu with ≥3 title-jumping buttons",
+        "spokenLanguages": [
+          "English",
+          "Français"
+        ],
+        "subtitleLanguages": [
+          "English",
+          "Français",
+          "日本語"
+        ],
+        "labels": [
+          {
+            "target": "unresolved:LinkTopPG",
+            "text": "(also co-story, dir.)"
+          },
+          {
+            "role": "nonFeature",
+            "target": "menu:1.pgc3",
+            "text": "Back"
+          },
+          {
+            "target": "menu:1.pgc2",
+            "text": "Cas"
+          },
+          {
+            "target": "menu:1.pgc2",
+            "text": "Cast"
+          },
+          {
+            "role": "nonFeature",
+            "target": "menu:1.pgc2",
+            "text": "Cast & Crew"
+          },
+          {
+            "target": "menu:1.pgc13",
+            "text": "Contini"
+          },
+          {
+            "role": "nonFeature",
+            "target": "menu:1.pgc11",
+            "text": "Continue"
+          },
+          {
+            "target": "menu:1.pgc2",
+            "text": "Crew"
+          },
+          {
+            "target": "menu:1.pgc15",
+            "text": "Directed by Newt Arnold"
+          },
+          {
+            "target": "menu:1.pgc5",
+            "text": "Features"
+          },
+          {
+            "target": "menu:1.pgc10",
+            "text": "ForestWhitaken."
+          },
+          {
+            "role": "nonFeature",
+            "target": "menu:1.pgc3",
+            "text": "Languages"
+          },
+          {
+            "target": "menu:1.pgc14",
+            "text": "Leah Ayres.."
+          },
+          {
+            "role": "nonFeature",
+            "target": "menu:1.pgc1",
+            "text": "Main Menu"
+          },
+          {
+            "target": "menu:1.pgc1",
+            "text": "Main Menu, Continue"
+          },
+          {
+            "role": "play",
+            "target": "unresolved:LinkTailPGC",
+            "text": "Play Movie"
+          },
+          {
+            "role": "nonFeature",
+            "target": "menu:1.pgc6",
+            "text": "Scene Selections®"
+          },
+          {
+            "role": "nonFeature",
+            "target": "menu:1.pgc5",
+            "text": "Special Features"
+          },
+          {
+            "target": "menu:1.pgc1",
+            "text": "Start Movie Main Menu"
+          },
+          {
+            "target": "menu:1.pgc16",
+            "text": "Story by Sheldon Lettich,"
+          },
+          {
+            "role": "nonFeature",
+            "target": "unresolved:Set",
+            "text": "Theatrical Trailer"
+          }
+        ]
+      }
     }
   }
 }

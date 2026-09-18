@@ -13,10 +13,43 @@
     "mainFeatureIndex": 14,
     "outcome": "playAll",
     "outcomeIndex": 14,
-    "outcomeEpisodes": [15, 16, 17, 18, 19, 20, 21, 22],
+    "outcomeEpisodes": [
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22
+    ],
     "featureDurationSeconds": 10413,
     "featureChapterCount": 33,
     "audioTrackCount": 1,
-    "subtitleGroupCount": 1
+    "subtitleGroupCount": 1,
+    "agreement": {
+      "slug": "tv-season-playall",
+      "scannerTitle": 14,
+      "scannerRaw": 14,
+      "heuristicRoute": "playAllGuard",
+      "heuristicTitle": 14,
+      "menuRoute": "notCaptured",
+      "verdict": "notCaptured",
+      "signals": {
+        "menuCount": 0,
+        "menusWithButtons": 0,
+        "buttonCount": 0,
+        "largestMenuButtons": 0,
+        "titleJumpingButtons": 0,
+        "titlesJumpedTo": [],
+        "chapterButtons": 0,
+        "chapterPages": 0,
+        "chapterNamesRead": 0,
+        "chapterNamesEmitted": 0,
+        "spokenLanguages": [],
+        "subtitleLanguages": [],
+        "labels": []
+      }
+    }
   }
 }
