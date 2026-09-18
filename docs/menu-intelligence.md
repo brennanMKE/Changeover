@@ -31,15 +31,28 @@ being right, it is in the wrong tier and should be cut, not defended. Tier 3
 exists so that the tier-1 confirmation can be *named* on a French, Spanish or
 Japanese disc; it never touches the selection.
 
-Two decisions from the user (2026-09-18) that shape the rest:
+Four things from the user (2026-09-18) that shape the rest:
 
+- **The discs are permanent.** "This is my DVD collection. I will always have
+  these disks." Nothing here is a one-shot capture: a disc can be re-read
+  whenever the tooling improves, so the archive is built up incrementally
+  (§8.1), a format change is a re-capture rather than a migration (§8.4),
+  and an enrichment that is not ready today can be applied to the file
+  later without losing the chance (§7). The document does not hedge against
+  never seeing a disc again, and where an earlier draft did, it now says
+  "re-read the disc".
+- **Films already in the library can be upgraded from their disc** (§7).
+  "For reading a DVD which has already been imported it could show what has
+  been included with Plex and if it can enhance chapter and audio titles it
+  should offer that upgrade." Offered, never automatic; a remux, never a
+  re-encode.
 - **`libdvdread` ships inside the app** (§2). The install image carries it.
 - **Vision and Foundation Models are assumed present.** They are OS frameworks
   on macOS 26; the app links them and has no "framework missing" branch. The
   model can still be unavailable *at runtime* (`SystemLanguageModel.default
   .availability` reports Apple Intelligence off, model not downloaded, device
   unsupported) and that is handled as **no answer**, never as an error.
-- **The archive comes first** (§7). The user will rip several discs, then
+- **The archive comes first** (§8). The user will rip several discs, then
   review what was captured. The rules in §3–§6 are hypotheses with one disc
   behind them; the archive is what turns them into pinned behaviour.
 
@@ -70,24 +83,34 @@ What it read, and what each line teaches:
 
 ## Facts checked on this Mac (2026-09-18)
 
-- The installed Xcode is **27.0** with the **macOS 27.0 SDK**
-  (`/Applications/Xcode.app`). In that SDK `FoundationModels` has
-  `DynamicGenerationSchema(name:description:anyOf: [String])`,
+- This Mac carries both the **MacOSX26.5** and the **MacOSX27** SDKs
+  (`/Applications/Xcode.app`, Xcode 27.0). In the 27 SDK `FoundationModels`
+  has `DynamicGenerationSchema(name:description:anyOf: [String])`,
   `GenerationSchema(root:dependencies:)`,
   `LanguageModelSession.respond(to:schema:includeSchemaInPrompt:options:)`,
   `GenerationOptions(sampling: .greedy)`, `GenerationGuide.anyOf(_:)`,
   `SystemLanguageModel.default.availability` →
   `.available | .unavailable(.deviceNotEligible | .appleIntelligenceNotEnabled | .modelNotReady)`,
   and `LanguageModelError.refusal / .guardrailViolation /
-  .unsupportedLanguageOrLocale`.
-- The same interface declares `Attachment<Content>`, `ImageReference`,
-  `Transcript.Segment.image` and `LanguageModelCapabilities.Capability.vision`
-  — all `@available(macOS 27.0)`. So the "text-only" fact verified against the
-  26.5 SDK holds for the runtime this app targets (`MACOSX_DEPLOYMENT_TARGET =
-  26.2`; joe runs 26): **the model reads OCR text, never pixels.** If joe moves
-  to macOS 27 an image path becomes possible; nothing here depends on it and
-  nothing should — a text answer over a closed set is checkable, a picture
-  answer is not.
+  .unsupportedLanguageOrLocale`. Everything the design uses is in the 26.5
+  SDK too.
+- **Vision input is not absent from the framework; it is absent at the
+  deployment target.** The 27 SDK declares `Attachment<Content>`,
+  `ImageReference`, `Transcript.Segment.image` and
+  `LanguageModelCapabilities.Capability.vision` (beside `guidedGeneration`
+  and `reasoning`), all `@available(macOS 27.0)`; the 26.5 SDK has none of
+  them. The app's `MACOSX_DEPLOYMENT_TARGET` is 26.2, so at the target the
+  model reads text only. joe itself runs macOS 27.0. **The design stays
+  text-only by choice**, not by limitation: OCR is deterministic and its
+  output is a list of strings with boxes that a test can pin and a human can
+  read; a picture answer is neither, and it works at the deployment target.
+  If the target ever moves to 27, what would change is that a
+  vision-capable model could read a menu still directly — which would let it
+  *name* a button on a picture-only menu (§9's "picture menus" row), but
+  would not remove the need for button geometry: the answer still has to be
+  attached to a real button rectangle and its decoded command before it is
+  worth showing. The closed-set-of-labels contract (§4.3) would apply to
+  the picture path unchanged.
 - `Vision` has both `VNRecognizeTextRequest` (the run used it) and the Swift
   `RecognizeTextRequest` with `recognitionLevel`, `usesLanguageCorrection`,
   `recognitionLanguages`, `automaticallyDetectsLanguage`, `customWords`,
@@ -132,7 +155,7 @@ What it read, and what each line teaches:
                                         ┌────────────┼──────────────┐
                                         ▼            ▼              ▼
                                   Confirm step    --markers=csv   corpus archive
-                                  captions/hints  --aname         (§7)
+                                  captions/hints  --aname         (§8)
 ```
 
 ### 1.1 Which files to read
@@ -190,7 +213,8 @@ Per menu PGC:
 Cap the disc reading: at most 64 MB of menu video per disc (about 12 s on
 the ~5.6 MB/s USB 2.0 drive, `memory/dvd-read-vs-encode-throughput.md`).
 Motion-menu discs past the cap get their entry PGCs first and stop; the
-archive records `truncated: true`.
+archive records `truncated: true` — and since the disc stays on the shelf, a
+later helper with a higher cap simply re-reads it.
 
 ### 1.3 OCR settings
 
@@ -201,7 +225,7 @@ cooperative pool, results hopped to MainActor like every other worker:
 - `usesLanguageCorrection = false` for the first archive round. Correction
   did not rescue `Lanquages`, and it is the mechanism most likely to "fix" a
   proper noun in a chapter name. Re-evaluate on the archive: the capture
-  tool records the setting it used (§7), so both settings can be run over
+  tool records the setting it used (§8), so both settings can be run over
   the same stills later.
 - `recognitionLanguages = [en, fr, es, de, it, pt, nl, ja]` and
   `automaticallyDetectsLanguage = true`.
@@ -349,7 +373,7 @@ VideoToolbox with a ~150-line PS→ES demux in the helper (MPEG-2 video is a
 supported `CMVideoCodecType`); and, last, a vendored `libmpeg2` (GPL, tiny)
 inside the helper, which would keep every decode concern in the GPL process.
 The capture path needs none of this — `ffmpeg` on joe renders stills today —
-so slice 1 (§9) is unblocked either way. One experiment on
+so slice 1 (§10) is unblocked either way. One experiment on
 `/tmp/menus/vts_01.vob` settles it before slice 2.
 
 ---
@@ -512,7 +536,7 @@ recorded so the archive can show how common they are.
 `n`-th entry of `TT_SRPT`; libhb's `hb_dvdread_title_scan` indexes
 `tt_srpt->title[t-1]` for its title `t`, so the two agree by construction.
 This is asserted, not trusted: the corpus invariant "the play button's
-target equals `expect.outcomeIndex` on every movie disc" (§7.6) is the first
+target equals `expect.outcomeIndex` on every movie disc" (§8.6) is the first
 thing the archive proves or disproves. Chapters likewise: HandBrake builds
 its chapter list from the title's PTTs, so PTT `k` is chapter `k`.
 
@@ -543,7 +567,7 @@ that opens through a trailers-plus-feature title, or a second cut — and it
 sits beside the runtime verdict as a second independent source, exactly the
 role #0025 assigned the TMDB runtime. Whether the structural target may
 *preselect* the picker when the heuristic returns `.none` or `.ambiguous`
-is a decision for the user (§10); the default is no.
+is a decision for the user (§11); the default is no.
 
 ### 4.2 Tier 2 — the lexicon, before any model
 
@@ -669,7 +693,7 @@ Every archive entry records `playButton.resolvedBy` (`structure`, `lexicon`,
 *was* — so a label the model was never asked about ("Play Movie") still
 enters the table with structural proof behind it. A label resolved by the
 model enters the table only after a human review of that disc's manifest
-(§7.5) confirms it, the same `reviewed` gate the corpus already uses. The
+(§8.5) confirms it, the same `reviewed` gate the corpus already uses. The
 model is how the table learns words; the table is what makes the next disc
 in that language deterministic.
 
@@ -699,7 +723,7 @@ Two shapes exist, and only one gives a usable mapping:
    DVD stream `k` → HandBrake `TrackNumber` = 1 + (present streams below
    `k`). The helper emits the feature PGC's audio-control bits, the mapping
    is pure, and the corpus invariant "mapped track count == HandBrake's
-   audio stream count on the feature" (§7.6) says whether the reading of
+   audio stream count on the feature" (§8.6) says whether the reading of
    libhb is right. Until that invariant holds on several discs, this is a
    *hint*.
 2. **Buttons that set a GPRM**, with the title's pre-commands choosing the
@@ -725,7 +749,7 @@ user confirms, never an automatic assignment:
   track"), changing `languageCode` (an untagged stream stays `nil`; #0027's
   silent-MP4 lesson), or merging untagged tracks because the menu says they
   differ.
-- **On request, and off by default (a §10 decision):** a popup on each
+- **On request, and off by default (a §11 decision):** a popup on each
   untagged row, prefilled from the badge when there is one, that lets the
   user *name* the track. A confirmed name goes to HandBrake as
   `--aname "Français"` (track title metadata; HandBrake cannot override the
@@ -767,7 +791,194 @@ deleted rather than tuned.
 
 ---
 
-## 7. The data-collection archive — the priority deliverable
+## 7. Upgrading an import that already exists — remux, not re-encode
+
+> "For reading a DVD which has already been imported it could show what has
+> been included with Plex and if it can enhance chapter and audio titles it
+> should offer that upgrade."
+
+### 7.1 The evidence, from the real library
+
+Two files the user already has in `Movies/`, both produced by this app or its
+predecessors, both correct in the ways that cost forty minutes and wrong in
+the ways that cost two:
+
+| File | What is wrong | What the disc menu has |
+|---|---|---|
+| `Oppenheimer (2023).mp4` | 20 chapters, every one named `Chapter 1` … `Chapter 20`; the **timings** are right, only the names are missing | a scene-selection menu with the names |
+| `The Girl Who Kicked the Hornet's Nest (2009).mp4` | the audio track is tagged `und` — no language at all (the disc tags every stream `und`, `Fixtures/discs/hornets-nest`) | a languages menu that prints the spoken languages |
+
+Neither needs a re-encode. Both are **metadata**, and MP4 metadata can be
+rewritten with the video and audio bytes copied untouched — `ffmpeg -c copy`
+with new chapter titles and new stream tags — in a minute or two per film,
+disk-bound. Because the user keeps every disc, this is not a missed chance
+at rip time; it is a pass that can be made over the library disc by disc,
+whenever the menu tooling is ready, and repeated if the tooling improves.
+
+### 7.2 What the app knows, and what it has to find out
+
+The duplicate check already recognises the situation: on the Choose step the
+selected film's `{tmdb-ID}` is looked up in `Movies/` by `LibraryProbe`
+(`docs/log-ui-and-duplicate-check.md`), `LibraryLookup.present([LibraryEntry])`
+names the folder and its files, `DuplicatePresentation` renders the notice,
+and `StartGate` blocks until a `ReplaceAcknowledgement` — the file is *there*.
+What the app does not know is what is *in* it. That is one more optional
+probe, pure at its seam:
+
+```swift
+/// LibraryFileInventory.swift — pure over ffprobe's JSON.
+nonisolated struct LibraryFileInventory: Equatable, Sendable, Codable {
+    var durationSeconds: Int
+    var video: StreamSummary                 // codec, width, height
+    var audio: [AudioSummary]                // index, codec, channels, language ("und"/nil), title
+    var subtitleCount: Int
+    var chapters: [ChapterSummary]           // start, end (ms), title
+    static func parse(ffprobeJSON: Data) -> LibraryFileInventory?
+    /// True when every chapter title is empty or matches `^Chapter \d+$` — i.e. nobody named them.
+    var chaptersAreUnnamed: Bool
+}
+```
+
+Filled by `ffprobe -v error -print_format json -show_format -show_streams
+-show_chapters <file>` through `ProcessRunner`, with a 10 s watchdog, on the
+`@concurrent` pool like `LibraryProbe.lookup`. `ffprobe` and `ffmpeg` are
+one Homebrew package (`brew install ffmpeg`), optional, located through a
+new `AppSettings.ffmpegPath` beside the HandBrakeCLI path; absent → no
+upgrade is offered and one caption says why. They are not bundled — LGPL/GPL
+and large — and nothing in the rip path depends on them (§11).
+
+### 7.3 The comparison — what Plex has now versus what the disc offers
+
+Once `menuState` is `.ready` and the inventory is in, a pure
+`UpgradeProposal.compare(inventory:menu:disc:)` yields rows. The Confirm
+step shows them as a card under the duplicate notice:
+
+```
+│ ⚠︎ Already in Plex: Movies/Oppenheimer (2023) {tmdb-872585}/Oppenheimer (2023).mp4  (1.82 GB, Sep 16)
+│
+│ This disc can improve that file without re-encoding it:
+│   Chapters   now: 20, unnamed ("Chapter 1"…"Chapter 20")    disc: 20 names from the scene menu   ✓ upgrade
+│   Audio 1    now: AAC stereo, language not set              disc menu: English                   ✓ upgrade
+│   Subtitles  now: none                                       —                                    needs a re-rip
+│
+│ [Reveal]   [Replace (re-rip, ~40 min)]   [Upgrade metadata (remux, ~2 min)]
+```
+
+Row rules, each a pure function with the archive behind it:
+
+- **Chapters** are upgradable only when `inventory.chapters.count ==
+  names.count` **and** `inventory.chaptersAreUnnamed`. Names attach to the
+  file's *existing* chapter timings by chapter number — the timings are
+  never moved, added or removed. On a count mismatch the row says "20
+  chapters in the file, 21 names on the disc — not upgraded" and offers
+  nothing; **never guess** which name to drop. This case is already in the
+  library: the scan of the Oppenheimer disc reports **21** chapters on
+  title 7 (`Fixtures/discs/oppenheimer/disc.json`,
+  `featureChapterCount: 21`) and the file has **20** — the first thing the
+  archive should explain, by comparing `ffprobe`'s chapter timings with the
+  scan's chapter durations (a trailing sub-second stub that HandBrake's
+  marker writer dropped is the likely shape). Until it is explained, that
+  file's chapter row is refused, correctly. A file whose chapters already
+  carry real names is never renamed unless the user ticks "replace existing
+  names" on the card.
+- **Audio language and title** are upgradable per track when the disc's
+  languages menu gives a *mapping* (§5.2's shape 1) for that track, or when
+  the user assigns one on the card's popup (prefilled from the menu's
+  ordered list — the same control as §5.3's, in a second place). `language`
+  gets the ISO 639-2 code (`eng`, `fra`); `title` gets the menu's own word
+  (`Français`). A track that already carries a language is left alone.
+- **Everything else is a re-rip**: a missing subtitle (the file has none;
+  #0036 is where subtitles enter the output), a second language that was
+  never encoded (#0059's one-track default), the wrong feature, a different
+  cut, video quality. The card names these as "needs a re-rip" and the
+  existing **Replace** path is how — the upgrade card never pretends a
+  remux can add data that is not in the file.
+
+### 7.4 Offered, never automatic
+
+The upgrade is a **job** the user starts, shaped like every other job so
+nothing new touches the state machine:
+
+- `RipRequest.upgrade: UpgradePlan? = nil` — additive and wire-safe, the
+  `tv` pattern. `UpgradePlan` carries the target file, the chapter rows
+  (`[MarkerRow]`, already validated against the file's count), and the
+  audio tags (`[trackIndex: (language, title)]`). `featureTitleIndex` is
+  still set to the disc's feature so `EncodeSelection.make` validates as
+  today; `extraTitleIndices` must be empty.
+- `StartGate` gains `.upgradeNothingSelected` (the card's rows are all
+  refused or unticked) and otherwise treats an upgrade like a Replace: the
+  `ReplaceAcknowledgement` is required, keyed on the same
+  `(tmdbID, folder)`, because the job **does** overwrite the library file.
+- The Ripping step shows `JobProgress.Unit.remux` — indeterminate bar,
+  "Rewriting metadata in Oppenheimer (2023).mp4", Cancel allowed until the
+  swap begins (`CancelPolicy` treats the swap as `organizing`).
+- Done says what changed: "Upgraded: 20 chapter names, 1 audio language.
+  Video and audio untouched." plus Reveal; or "Not upgraded — <check that
+  failed>; the original is unchanged."
+
+Nothing runs on insertion, on selection, or on the menu read finishing. The
+card appears; the user decides.
+
+### 7.5 The mechanism — staged, verified, then swapped (the #0012 pattern)
+
+```
+1. ffmetadata file in the job directory:
+     ;FFMETADATA1
+     [CHAPTER]  TIMEBASE=1/1000  START=<file's own start>  END=<file's own end>  title=World's warriors
+     …                                   ← timings copied from the inventory, never from the disc
+2. ffmpeg -i <library file> -i chapters.ffmeta
+          -map 0 -map_metadata 0 -map_chapters 1 -c copy
+          -metadata:s:a:0 language=eng -metadata:s:a:0 title=English
+          -movflags +faststart  <staged file in the job directory>
+3. ffprobe the staged file and refuse unless ALL hold:
+     duration equal to the original within 1 s
+     same number of streams, same codec per stream, same channel count per audio stream
+     same chapter count, every chapter start/end equal to the original within 1 ms
+     size within 2 % of the original (a copy that changed size by more re-encoded something)
+4. PlexOrganizer.move: stage onto the destination volume, then replace — the
+   original is the last thing touched, and a failure anywhere above leaves it exactly as it was.
+5. WorkingFiles.sweep removes the staged copy and the ffmetadata file.
+```
+
+Step 3 is what makes "remux, never re-encode" a property the app checks
+rather than a promise the command line makes. The verification runs on the
+staged copy before the swap, so a `ffmpeg` that silently transcoded (a
+missing `-c copy`, a future default change) is caught by the codec and size
+checks, and a metadata write that shifted a chapter is caught by the timing
+check. A refusal is a Done card with the failed check named; the library
+file is untouched.
+
+### 7.6 Where it sits in the step flow
+
+Insert disc → Choose movie (the disc's search term prefills; the duplicate
+check runs on selection as today) → **Confirm**, where the duplicate notice
+now carries the comparison card once the menu read and the file probe are
+both in ("Reading the disc's menus…" until then; the Replace and Reveal
+buttons are live throughout) → Ripping (remux) → Done (Upgraded) → Next
+Disc. The disc has to be in the drive because the names come from it; the
+menu read is the same one the rip path uses, so a disc whose film is already
+filed costs the same ~10 s of menu reading and no encode.
+
+Because the collection is permanent, this is also a *loop*: put in a disc,
+see what its file is missing, upgrade in two minutes, eject, next disc. The
+unattended version of that loop is a Phase 3 decision, not this document's;
+the per-disc version needs nothing beyond this section.
+
+### 7.7 What it cannot do, said plainly
+
+- It cannot add a subtitle, a language, or a track that was not encoded —
+  those are a Replace.
+- It cannot fix a chapter *count* — a mismatch is refused, and the fix is a
+  Replace with the disc's chapter names written at encode time (§3).
+- It cannot name chapters the disc does not name (a scene index with
+  thumbnails and no captions), and it will not invent "Scene 4".
+- It does not touch `.mkv` files or anything outside `Movies/<folder>/`; a
+  TV file's upgrade path is the same mechanism per episode and is deferred
+  with the TV plan.
+
+---
+
+## 8. The data-collection archive — the priority deliverable
 
 The user will rip several discs and review what was captured. This section
 is a specification that can be implemented from, without re-deriving
@@ -775,7 +986,7 @@ anything. It extends #0055's corpus in place rather than creating a second
 archive: **one directory per disc, everything text unless it cannot be**,
 reviewed by a human once, swept by one parameterised test.
 
-### 7.1 Two tiers of storage
+### 8.1 Two tiers of storage
 
 | Tier | Where | Holds | Lifetime |
 |---|---|---|---|
@@ -783,14 +994,20 @@ reviewed by a human once, swept by one parameterised test.
 | **reviewed corpus** | repo, `ChangeoverTests/Fixtures/discs/<slug>/` | the text products, the IFOs, JPEG stills, and the manifest | committed; the regression net |
 
 The raw tier exists so that a better frame chooser or a better OCR setting
-can be re-run over old discs without the disc. The corpus tier is what
-tests and reviews read.
+can be re-run over old discs without drive time — a convenience, not a
+safeguard, because every disc can be put back in. If the raw tier is ever
+in the way, delete it and re-capture. The corpus tier is what tests and
+reviews read, and it is built **incrementally**: a disc is captured when it
+next passes through joe for its own rip or its own upgrade (§7), never on a
+special trip, and a capture that turns out thin (no `menus/`, a truncated
+motion menu, an OCR setting since improved) is redone the next time that
+disc is in the drive.
 
-### 7.2 Folder structure (corpus tier)
+### 8.2 Folder structure (corpus tier)
 
 ```
 ChangeoverTests/Fixtures/discs/<slug>/
-├── disc.json                    manifest — formatVersion 2 (§7.4)
+├── disc.json                    manifest — formatVersion 2 (§8.4)
 ├── scan.json                    HandBrakeCLI --scan stdout            (existing)
 ├── scan.stderr.txt              its stderr, separate file (#0039)     (existing)
 ├── lsdvd.json                   lsdvd -x -Oj output, when lsdvd ran   (new: it was captured and discarded)
@@ -799,9 +1016,9 @@ ChangeoverTests/Fixtures/discs/<slug>/
 │   ├── VTS_01_0.IFO             every VTS's IFO; .BUP files are not kept
 │   └── …
 └── menus/
-    ├── structure.json           helper output: domains, PGCs, cells, buttons, raw commands (§7.3)
+    ├── structure.json           helper output: domains, PGCs, cells, buttons, raw commands (§8.3)
     ├── stills/
-    │   ├── vmgm-lu1-pgc1.jpg    one per still, named by menu PGC id (§7.3), 720×480/576, JPEG q≈0.8
+    │   ├── vmgm-lu1-pgc1.jpg    one per still, named by menu PGC id (§8.3), 720×480/576, JPEG q≈0.8
     │   └── vtsm-01-lu1-pgc3.jpg
     ├── ocr.json                 every observation on every still, with the settings used
     └── derived.json             tiers 1–3 resolved: play button, chapter names, languages, title text, judge record
@@ -818,9 +1035,9 @@ half of `derived.json`.
 
 Text versus binary: `*.json` and `*.txt` are text and reviewable in a diff.
 `ifo/*.IFO` and `stills/*.jpg` are binary; they are committed as-is (no
-LFS yet — see §7.7) and never edited.
+LFS yet — see §8.7) and never edited.
 
-### 7.3 File formats
+### 8.3 File formats
 
 **`menus/structure.json`** — written by the helper, never by hand.
 
@@ -915,7 +1132,7 @@ verbatim — `{ "labels": [...], "answer": "Lecture", "answerIndex": 0,
 record that lets a review ask "would the model have got this one right"
 across the archive without a disc.
 
-### 7.4 The manifest — `disc.json`, format version 2
+### 8.4 The manifest — `disc.json`, format version 2
 
 Existing fields are unchanged; `DiscCorpusTests.DiscManifest` decodes
 version-1 manifests exactly as before because every addition is optional.
@@ -963,11 +1180,16 @@ Additions:
 
 `formatVersion` is the tell between old and new captures: absent means 1
 (the four existing discs), and the sweep treats a missing `menus` block on a
-version-2 manifest as a capture bug, not as "no menus". `expect.menu` is
+version-2 manifest as a capture bug, not as "no menus". **A format change is
+a re-capture, never a migration script.** Because the discs are permanent,
+a version-3 format is introduced by bumping the number, letting the sweep
+accept both, and re-capturing each old disc as it next goes through the
+drive; no code ever rewrites a version-1 or version-2 capture in place. The
+four existing discs are the first re-captures (§10, slice 1). `expect.menu` is
 `null` on a disc that has no `menus/`; the sweep skips those assertions and
 says so by name.
 
-### 7.5 What `Tools/capture-disc.sh` does, step by step (version 2)
+### 8.5 What `Tools/capture-disc.sh` does, step by step (version 2)
 
 Every remote step stays its own trivial `ssh`, stdout and stderr on
 separate files, parsing local — the discipline #0055 established.
@@ -1002,7 +1224,7 @@ that the play button line names the right button; that the chapter names
 read correctly (spot-check five); that the language lists are what the
 menu shows; and that nothing from a bio page leaked into `titleText`.
 
-### 7.6 New invariants for `DiscCorpusTests`
+### 8.6 New invariants for `DiscCorpusTests`
 
 The existing sweep keeps every assertion. For every disc with
 `expect.menu != null`, in the same parameterised test:
@@ -1038,7 +1260,7 @@ The existing sweep keeps every assertion. For every disc with
   answer — a *drift* check that is skipped, not failed, on a host without
   the model (gordon may well be one).
 
-### 7.7 Space per disc, and when to revisit
+### 8.7 Space per disc, and when to revisit
 
 | Item | Size | Basis |
 |---|---|---|
@@ -1054,7 +1276,7 @@ At 50 discs the corpus is ~100–175 MB, which is the point to decide between
 git LFS for `stills/` and moving stills to the raw tier only. Not before.
 The IFOs and JSON stay in git regardless — they are what the tests read.
 
-One question the user should settle before the first push (§10): menu
+One question the user should settle before the first push (§11): menu
 stills are copyrighted artwork. In a private repository that is a
 non-issue; if the repository is or becomes public, the stills should move
 to the raw tier and the corpus keeps only the JSON — which is still enough
@@ -1062,7 +1284,7 @@ for every invariant above.
 
 ---
 
-## 8. Risks and failure modes
+## 9. Risks and failure modes
 
 Every row here ends the same way: the rip proceeds unchanged. That is the
 principle, restated as a table.
@@ -1084,9 +1306,12 @@ principle, restated as a table.
 | **A wrong chapter count** | cannot happen from this code: rows are bounded by HandBrake's own chapter count and deduplicated; fewer than half → no CSV | §3.3 |
 | **A wrong language hint** | a caption the user reads beside a picker they still control; no preselection changes | §5.3 |
 | **A wrong search term** | seeds an empty search box; the user types over it | §6 |
-| **`JumpTT` numbering ≠ HandBrake's** (if the libhb reading is wrong) | the headline corpus invariant fails on the first disc; the caption is disabled until the mapping is fixed | §7.6 |
+| **`JumpTT` numbering ≠ HandBrake's** (if the libhb reading is wrong) | the headline corpus invariant fails on the first disc; the caption is disabled until the mapping is fixed | §8.6 |
 | **The helper and the scan contend for the drive** | the helper starts only after `scanState` is `.scanned` or `.failed` | §1.4 |
-| **The user starts the rip before menu intelligence finishes** | the encode starts with bare `--markers`; the CSV is only passed when `menuState` is `.ready` at `start`; a late result is discarded (logged) | §1.4, `JobController.start` |
+| **The user starts the rip before menu intelligence finishes** | the encode starts with bare `--markers`; the CSV is only passed when `menuState` is `.ready` at `start`; a late result is discarded (logged) — and the names can still be applied later as an upgrade (§7) | §1.4, `JobController.start` |
+| **An upgrade remux silently re-encodes or shifts a chapter** | the staged file is `ffprobe`d and refused on any codec, stream-count, duration, chapter-timing or size difference; the original is untouched | §7.5 |
+| **An upgrade names the wrong chapters** (disc count ≠ file count) | refused outright; Oppenheimer's 21-vs-20 is the known example | §7.3 |
+| **`ffmpeg`/`ffprobe` missing** | no upgrade card; one caption; the rip path is unaffected | §7.2 |
 
 Nothing above changes `StartGate`, `DiscTitleHeuristic`, `AudioTrackOptions
 .preselection`, `EncodeSelection.make` or `PlexOrganizer`. If an
@@ -1095,7 +1320,7 @@ is the signal it has crossed into the decision path.
 
 ---
 
-## 9. Implementation order
+## 10. Implementation order
 
 ### Slice 1 — the archive (ship on its own; nothing in the app changes)
 
@@ -1104,7 +1329,7 @@ no distribution decision, and every later slice is measured against it.
 
 1. `Tools/menudump/`: today's C tool promoted to a repository file with a
    `Makefile` against Homebrew `libdvdread` (the vendored build is slice
-   2's), emitting `structure.json` and `cells/*.vob` per §7.3. Its own
+   2's), emitting `structure.json` and `cells/*.vob` per §8.3. Its own
    `COPYING`.
 2. `Changeover/VMCommand.swift`, `MenuStructure.swift` (pure decode of
    `structure.json`), `Changeover/MenuOCR.swift` (the Vision request, one
@@ -1112,8 +1337,8 @@ no distribution decision, and every later slice is measured against it.
    `MenuTitleGuess.swift`, `PlayButtonResolver.swift` (tiers 1–2). All
    `nonisolated`, no UI imports, so `swiftc` builds them into
    `Tools/menu-ocr` and `Tools/menu-derive`.
-3. `Tools/capture-disc.sh` version 2 (§7.5); `disc.json` format version 2;
-   `DiscCorpusTests` invariants (§7.6), with `MenuJudgeTests` skipped where
+3. `Tools/capture-disc.sh` version 2 (§8.5); `disc.json` format version 2;
+   `DiscCorpusTests` invariants (§8.6), with `MenuJudgeTests` skipped where
    the model is absent.
 4. Capture Bloodsport (it is in the drive) and re-capture the four existing
    discs as they next pass through joe. Review. This is where §3–§6's rules
@@ -1142,6 +1367,18 @@ no distribution decision, and every later slice is measured against it.
 3. `MenuTitleGuess` into `SearchPrefill` (§6).
 4. `tvSignal` into `RipModeProposal` when the TV plan lands.
 
+### Slice 4 — upgrading existing imports (§7)
+
+1. `AppSettings.ffmpegPath`; `LibraryFileInventory.parse` over captured
+   `ffprobe` JSON (fixtures from the two library files named in §7.1).
+2. `UpgradeProposal.compare` with the refusal rules, pinned on the
+   Oppenheimer 21-vs-20 shape and on Hornet's Nest's `und` tracks.
+3. `RipRequest.upgrade`, the remux runner with the staged-then-verified
+   swap, `JobProgress.Unit.remux`, the Confirm card and the Done card.
+4. Run it over the library, disc by disc, as the discs come back through
+   the drive. This slice is independent of slice 3 except for the audio
+   mapping (§5.2), and can land before it with chapters only.
+
 ### Not in any slice
 
 - Playing menus, rendering subpicture highlights, or following GPRM-driven
@@ -1153,13 +1390,13 @@ no distribution decision, and every later slice is measured against it.
 
 ---
 
-## 10. Decisions the user should make
+## 11. Decisions the user should make
 
 1. **`libdvdcss` stays outside the bundle and is found at runtime** (§2.1).
    The user said `libdvdread` ships; this document recommends that the
    decryption library does not, for the reasons HandBrake has, and that
    its path is a Settings field. Confirm or overrule.
-2. **Menu stills in git, or raw-tier only** (§7.7). In git is more useful for
+2. **Menu stills in git, or raw-tier only** (§8.7). In git is more useful for
    review; raw-tier only is the right call if the repository is public.
 3. **Track names into the file** (§5.3): whether a user-confirmed name on an
    untagged track is written with `--aname`. Recommended yes, off by
@@ -1169,3 +1406,13 @@ no distribution decision, and every later slice is measured against it.
    heuristic returns `.none` or `.ambiguous`** (§4.1)? Recommended no for
    now — the picker is shown either way, and the archive should first show
    how often the target and the heuristic disagree.
+5. **`ffmpeg`/`ffprobe` as an optional Homebrew tool for the upgrade path**
+   (§7.2), located through a Settings path like HandBrakeCLI and never
+   bundled. The alternative — writing the remux with AVFoundation so no
+   tool is needed — is possible for stream tags but awkward for chapter
+   titles, and would put the one operation that overwrites a library file
+   on code with no `-c copy` guarantee to check against. Recommended:
+   ffmpeg, optional, verified by `ffprobe` before every swap.
+6. **Whether an upgrade may rename chapters that already carry real
+   names** (§7.3). Recommended: only with an explicit tick on the card;
+   `Chapter N` placeholders are renamed without asking.
