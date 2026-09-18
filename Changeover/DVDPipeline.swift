@@ -140,6 +140,28 @@ struct DVDPipeline {
     /// tagging everything it parses as `unit`. Reads `reportProgress` into a
     /// local first so the returned closure captures the closure value rather
     /// than `self` (a struct that also carries `AppSettings`).
+    /// Writes `selection.chapterMarkers` as HandBrake's chapter CSV into this
+    /// job's directory and returns the `--markers=<file>` selection, or
+    /// `.unnamed` when there is nothing to write or the write failed.
+    ///
+    /// The names came off the disc's own scene menu and were already gated
+    /// twice — by `ChapterMarkerPlan` when they were read, and by
+    /// `EncodeSelection.make` against the title being encoded. This is only
+    /// the file.
+    private func writeChapterMarkers(in jobDirectory: String) -> EncodeController.MarkerSelection {
+        let rows = selection.chapterMarkers
+        guard !rows.isEmpty else { return .unnamed }
+        let path = (jobDirectory as NSString).appendingPathComponent(ChapterMarkerPlan.csvFileName)
+        do {
+            try ChapterNames.csv(rows).write(toFile: path, atomically: true, encoding: .utf8)
+            log("▶ Chapter names: \(rows.count) from the disc's menu → \(ChapterMarkerPlan.csvFileName)")
+            return .named(path: path)
+        } catch {
+            log("⚠︎ Could not write the chapter-name file; the encode keeps unnamed markers: \(error.localizedDescription)")
+            return .unnamed
+        }
+    }
+
     private func progressReporter(_ unit: JobProgress.Unit) -> @MainActor (HandBrakeProgress) -> Void {
         let report = reportProgress
         return { encode in
@@ -490,6 +512,13 @@ struct DVDPipeline {
         await advanceMarker(.encoding)
         reportPhase(.encoding)
 
+        // Menu intelligence: the disc's own chapter names, written beside the
+        // encode's own output so `WorkingFiles` sweeps them with everything
+        // else. Wholly optional and never a failure — a CSV that cannot be
+        // written leaves the encode with the bare `--markers` it has always
+        // had, which is exactly what an unreadable menu produces too.
+        let markerSelection = writeChapterMarkers(in: jobDirectory)
+
         // Step 1: Encode, straight from the disc's VIDEO_TS — no rip stage
         // on the happy path.
         var primaryResult = await EncodeController.encode(
@@ -499,6 +528,7 @@ struct DVDPipeline {
             handbrakePath: handbrakePath,
             filter:        deinterlaceFilter,
             audio:         selection.audio,
+            markers:       markerSelection,
             progress:      progressReporter(.feature),
             log:           log
         )

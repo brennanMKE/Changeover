@@ -67,6 +67,18 @@ nonisolated enum ChapterMarkerPlan {
         return .write(rows)
     }
 
+    /// The same equality rule applied to rows that have already been decided
+    /// once — `EncodeSelection.make`'s point-of-harm check. Returns the rows
+    /// when they are exactly `1…chapterCount` with no gaps, no duplicates and
+    /// no empty names, and `[]` otherwise. Never repairs, never reorders.
+    static func validate(rows: [MarkerRow], chapterCount: Int) -> [MarkerRow] {
+        guard !rows.isEmpty, chapterCount > 0 else { return [] }
+        guard rows.count == chapterCount else { return [] }
+        guard rows.map(\.number) == Array(1...chapterCount) else { return [] }
+        guard rows.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }) else { return [] }
+        return rows
+    }
+
     /// The CSV file name inside the job directory. Lives beside the encode's
     /// own output so `WorkingFiles.sweep` removes it with everything else.
     static let csvFileName = "chapters.csv"

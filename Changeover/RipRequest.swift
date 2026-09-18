@@ -36,4 +36,13 @@ nonisolated struct RipRequest: Codable, Hashable, Sendable {
     /// one place that turns this (together with `featureTitleIndex`) into
     /// what `EncodeController` actually runs.
     var audioTrackNumbers: [Int]
+    /// Menu intelligence — the disc's own chapter names, as HandBrake marker
+    /// rows. Additive and wire-safe, the same shape `extraTitleIndices` took:
+    /// `nil` is the default and means today's bare `--markers`.
+    ///
+    /// Already gated by `ChapterMarkerPlan` before it gets here, and gated
+    /// again by `EncodeSelection.make` against the scan actually held — the
+    /// point-of-harm check every index in this type already gets, for the
+    /// same reason (#0028's "never mix indices across scans").
+    var chapterMarkers: [MarkerRow]? = nil
 }

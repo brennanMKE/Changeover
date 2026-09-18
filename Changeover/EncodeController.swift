@@ -54,6 +54,30 @@ enum EncodeController {
         case languages([String])
     }
 
+    /// Whether HandBrake's chapter markers carry the disc's own names.
+    ///
+    /// `.unnamed` emits the bare `--markers` this app has always passed — the
+    /// byte-identical vector every existing test asserts, and what a disc
+    /// with no readable menus still gets. `.named(path:)` emits
+    /// `--markers=<file>`, a CSV of `<number>,<name>` rows written into the
+    /// job directory (`docs/menu-intelligence.md` §3.1).
+    ///
+    /// The names never move, add or remove a marker: HandBrake places the
+    /// markers from its own scan and applies the CSV to them by number. That
+    /// asymmetry is why `ChapterMarkerPlan` refuses a set whose count does
+    /// not match the title's chapter count rather than writing a partial one.
+    nonisolated enum MarkerSelection: Equatable, Sendable {
+        case unnamed
+        case named(path: String)
+
+        var arguments: [String] {
+            switch self {
+            case .unnamed:            return ["--markers"]
+            case .named(let path):    return ["--markers=\(path)"]
+            }
+        }
+    }
+
     /// Builds the `--audio`/`--audio-lang-list`/`--all-audio`/`--aencoder`/
     /// `--mixdown`/`--ab` argument group for `selection`. Pure and
     /// `nonisolated` for the same reason as `arguments(...)`.
@@ -176,12 +200,20 @@ enum EncodeController {
     /// `DeinterlaceDecision.decide(frameRate:interlaceDetected:)` and passes
     /// the result in, the same way it already resolves `title` before
     /// calling in.
+    ///
+    /// `markers` (menu intelligence) is `.unnamed` by default for the same
+    /// reason `filter` is `.none`: every existing call site and every
+    /// pre-existing test asserting an exact vector is unaffected, and
+    /// `Preflight.requiredHelpTokens()` — which derives from this function —
+    /// keeps demanding exactly `--markers` of a host's `--help`, never the
+    /// `=file` form.
     nonisolated static func arguments(
         source: String,
         title:  TitleSelection,
         output: String,
         filter: DeinterlaceFilter = .none,
-        audio:  AudioSelection = .sourceDefault
+        audio:  AudioSelection = .sourceDefault,
+        markers: MarkerSelection = .unnamed
     ) -> [String] {
         var args = ["--input", source]
 
@@ -204,7 +236,7 @@ enum EncodeController {
             "--quality",        Config.videoQuality,
         ]
         args += audioArguments(audio)
-        args += ["--markers"]
+        args += markers.arguments
         return args
     }
 
@@ -246,6 +278,11 @@ enum EncodeController {
         handbrakePath:    String,
         filter:           DeinterlaceFilter = .none,
         audio:            AudioSelection = .sourceDefault,
+        /// Menu intelligence — the disc's own chapter names, already written
+        /// to a CSV by the caller. Defaulted to `.unnamed`, which is what
+        /// every disc got before this and what every disc still gets when
+        /// the names were refused.
+        markers:          MarkerSelection = .unnamed,
         hangTimeout:      TimeInterval = 30 * 60,
         readerDelay:      @escaping () -> Void = {},
         hardCeilingGrace: TimeInterval = 10,
@@ -287,7 +324,7 @@ enum EncodeController {
 
         let result = await ProcessRunner.run(
             executablePath:   handbrakePath,
-            arguments:        arguments(source: source, title: title, output: output, filter: filter, audio: audio),
+            arguments:        arguments(source: source, title: title, output: output, filter: filter, audio: audio, markers: markers),
             watchdog:         .inactivity(hangTimeout),
             readerDelay:      readerDelay,
             hardCeilingGrace: hardCeilingGrace

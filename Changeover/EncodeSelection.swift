@@ -36,6 +36,11 @@ nonisolated struct EncodeSelection: Equatable, Sendable {
     /// fallback then keeps its pre-#0035 "pick the longest" behaviour, the
     /// same as when no explicit title was ever chosen.
     var featureDurationSeconds: Int? = nil
+    /// Menu intelligence — the disc's own chapter names for this title, or
+    /// empty for the bare `--markers` every disc got before. Resolved here,
+    /// against the held scan, so a row set that no longer matches the title
+    /// being encoded is dropped at the same point every stale index is.
+    var chapterMarkers: [MarkerRow] = []
 
     /// The pre-#0027 behaviour, byte for byte: HandBrake's own
     /// `--main-feature` scan picks the title, HandBrake's own default picks
@@ -89,12 +94,22 @@ nonisolated struct EncodeSelection: Equatable, Sendable {
             interlaceDetected: title.interlaceDetected
         )
 
+        // Menu intelligence, checked once more at the point of harm: the rows
+        // have to be exactly this title's chapters, 1…n with no gaps. A set
+        // that does not line up is dropped — the encode then gets today's
+        // bare `--markers`, which is never worse than what it had.
+        let markers = ChapterMarkerPlan.validate(
+            rows: request.chapterMarkers ?? [],
+            chapterCount: title.chapterCount
+        )
+
         return EncodeSelection(
             title:                  .index(request.featureTitleIndex),
             audio:                  audio,
             fallbackAudio:          fallbackAudio,
             filter:                 filter,
-            featureDurationSeconds: title.durationSeconds
+            featureDurationSeconds: title.durationSeconds,
+            chapterMarkers:         markers
         )
     }
 }

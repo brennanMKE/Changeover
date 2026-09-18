@@ -7,7 +7,7 @@ import Foundation
 /// here. A row never moves, adds or removes a marker — the timings come from
 /// HandBrake's own scan, which is why a wrong *name* is cheap and a wrong
 /// *count* is not (`docs/menu-intelligence.md` §3.3).
-nonisolated struct MarkerRow: Codable, Equatable, Sendable {
+nonisolated struct MarkerRow: Codable, Equatable, Hashable, Sendable {
     var number: Int
     var name: String
 

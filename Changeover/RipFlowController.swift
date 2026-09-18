@@ -333,7 +333,13 @@ final class RipFlowController {
             metadata: MovieMetadata(from: movie, selectionDisc: selectionDisc),
             featureTitleIndex: featureTitleIndex,
             extraTitleIndices: jobs.selectedExtraTitleIndices.sorted(),
-            audioTrackNumbers: jobs.selectedAudioTrackNumbers
+            audioTrackNumbers: jobs.selectedAudioTrackNumbers,
+            // Menu intelligence: the disc's own chapter names, only when the
+            // read finished before Start and only when their count matches
+            // this title's. `nil` — the usual case — is today's bare
+            // `--markers`, and a read still in flight is simply not waited
+            // for.
+            chapterMarkers: jobs.chapterMarkerRows
         )
     }
 
