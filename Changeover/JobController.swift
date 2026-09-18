@@ -99,6 +99,21 @@ final class JobController {
     /// controller without `makemkvcon`, `HandBrakeCLI`, or a physical disc.
     typealias Runner = @MainActor (JobContext, AppSettings) async -> JobOutcome
 
+    /// The disc's menus, read after the scan. Injectable for the same reason
+    /// `ScanRunner` is: a test drives it with a canned `MenuState` instead of
+    /// the helper, `ffmpeg`, Vision and a physical disc.
+    ///
+    /// Everything it produces is enrichment. A runner that never returns, a
+    /// helper that is not installed, a disc with no menus: all leave the rip
+    /// exactly as it is today, and nothing waits on this.
+    typealias MenuRunner = @MainActor (
+        _ discPath: String,
+        _ tools: MenuReader.Tools,
+        _ featureChapterCount: Int?,
+        _ scanTitles: Set<Int>,
+        _ log: @escaping @MainActor (String) -> Void
+    ) async -> MenuState
+
     /// The unit of work a disc scan performs, injectable for the same reason
     /// `Runner` is: tests drive it with a canned `DiscScanner.Outcome`
     /// instead of a real `HandBrakeCLI --scan` and a physical disc.
@@ -254,6 +269,18 @@ final class JobController {
     /// without going through the real scanner.
     var scanState: ScanState = .idle
 
+    /// Where the disc's own menu read stands — a sibling of `scanState`,
+    /// cleared by `removeDisc()` and by every fresh `startScan`, so a caption
+    /// read off one disc can never appear under another.
+    ///
+    /// Started only once `scanState` has settled: HandBrake's scan is about a
+    /// minute of seeking and there is one reader on the drive. Nothing ever
+    /// waits on this — `StartGate` does not look at it, `start` does not
+    /// require it, and a result that lands after Start is simply not used.
+    /// Plain `var` for the same reason `scanState` is: a test puts the
+    /// controller in a known menu state without a helper or a disc.
+    var menuState: MenuState = .idle
+
     /// The settled feature title index — the heuristic's `.single`
     /// preselection, or an explicit user pick from the table (#0026). `nil`
     /// until one of those has happened. `start(request:settings:)` refuses
@@ -317,6 +344,12 @@ final class JobController {
     private let historyLimit: Int
     private let runner: Runner
     private let scanRunner: ScanRunner
+    private let menuRunner: MenuRunner
+    /// The in-flight menu read, cancelled by a disc swap, a removal or a
+    /// rescan the same way `scanTask` is. A menu read outliving its disc is
+    /// the one way a caption could cross discs, so it is stopped, not merely
+    /// ignored.
+    private var menuTask: Task<Void, Never>?
     /// #0047 — held for the duration of a job so the Mac doesn't idle-sleep
     /// mid-rip/encode. Taken in `start` right before the job `Task` launches,
     /// released in `finish`, the only exit from that `Task` — see
@@ -353,6 +386,7 @@ final class JobController {
         historyLimit: Int = JobController.defaultHistoryLimit,
         runner: Runner? = nil,
         scanRunner: ScanRunner? = nil,
+        menuRunner: MenuRunner? = nil,
         sleepAssertion: SleepAssertion = ProcessInfoSleepAssertion(),
         ejector: Ejector? = nil
     ) {
@@ -361,6 +395,7 @@ final class JobController {
         self.controllerLog = JobLog(capacity: logCapacity)
         self.runner = runner ?? JobController.pipelineRunner
         self.scanRunner = scanRunner ?? JobController.defaultScanRunner
+        self.menuRunner = menuRunner ?? JobController.defaultMenuRunner
         self.sleepAssertion = sleepAssertion
         self.ejector = ejector ?? JobController.defaultEjector
     }
@@ -425,6 +460,18 @@ final class JobController {
             handbrakePath: handbrakePath,
             volumeName: volumeName,
             driveName: driveName,
+            log: log
+        )
+    }
+
+    /// The production menu runner: the helper, `ffmpeg`/AVFoundation and
+    /// Vision, off the main actor.
+    static let defaultMenuRunner: MenuRunner = { discPath, tools, featureChapterCount, scanTitles, log in
+        await MenuReader.read(
+            discPath: discPath,
+            tools: tools,
+            featureChapterCount: featureChapterCount,
+            scanTitles: scanTitles,
             log: log
         )
     }
@@ -914,6 +961,9 @@ final class JobController {
     func removeDisc() {
         scanTask?.cancel()
         scanTask = nil
+        menuTask?.cancel()
+        menuTask = nil
+        menuState = .idle
         // #0052 review: a removal after the job's own automatic eject began
         // is that eject landing (DiskArbitration's callback can arrive
         // before the job's `Task` finishes), not a pull — leave the job be.
@@ -969,6 +1019,11 @@ final class JobController {
         guard let disc = insertedDisc, !isEjecting, !discUnavailable else { return false }
 
         scanTask?.cancel()
+        // A rescan re-reads the menus too: the caption on screen belongs to
+        // the scan it was derived beside, never to the one before it.
+        menuTask?.cancel()
+        menuTask = nil
+        menuState = .idle
 
         scanGeneration += 1
         let generation = scanGeneration
@@ -1074,9 +1129,92 @@ final class JobController {
                 selectedTitleIndex = index
                 selectedAudioTrackNumbers = Self.preselectedAudioTracks(titleIndex: index, scanState: scanState, settings: settings)
             }
+            // #0014's one-reader rule: the menu helper starts only now, with
+            // `HandBrakeCLI --scan` finished and the drive free. It runs
+            // concurrently with the user's TMDB search and nothing waits on
+            // it.
+            startMenuRead(settings: settings, disc: disc, generation: generation, scan: result)
         case .failure(let failure):
             scanState = .failed(failure)
         }
+    }
+
+    // MARK: - The disc's menus (docs/menu-intelligence.md)
+
+    /// Reads the disc's menus, after the scan and never beside it.
+    ///
+    /// Wholly optional: with no helper installed this records
+    /// `.unavailable(.helperMissing)` and returns, and every other outcome —
+    /// a crash, a timeout, a disc with no menus, a missing `libdvdcss` — is a
+    /// caption too. The generation guard is the scan's own, so a disc swap
+    /// mid-read discards the result exactly as it discards a superseded scan.
+    private func startMenuRead(settings: AppSettings, disc: DiscInsertion, generation: Int, scan: DiscScanner.Result) {
+        menuTask?.cancel()
+
+        let helperPath = settings.resolvedMenudumpPath
+        guard !helperPath.isEmpty else {
+            menuState = .unavailable(.helperMissing(path: settings.menudumpPath))
+            return
+        }
+
+        let tools = MenuReader.Tools(
+            menudumpPath: helperPath,
+            ffmpegPath: settings.ffmpegPath,
+            workDirectory: MenuReader.workDirectory(
+                root: settings.workingEncodePath,
+                discIdentity: disc.discID ?? disc.mountURL.lastPathComponent
+            )
+        )
+        let discPath = disc.mountURL.path
+        let chapterCount = selectedTitleIndex.flatMap { index in
+            scan.disc.titles.first { $0.index == index }?.chapterCount
+        }
+        let scanTitles = Set(scan.disc.titles.map(\.index))
+        let read = menuRunner
+
+        menuState = .reading
+        menuTask = Task { [weak self] in
+            let state = await read(discPath, tools, chapterCount, scanTitles, { line in
+                self?.append(line)
+            })
+            self?.applyMenuState(state, forDisc: disc, generation: generation)
+        }
+    }
+
+    /// Applies a finished menu read — but only for the disc and the scan
+    /// generation it was started for, so a caption can never cross discs.
+    private func applyMenuState(_ state: MenuState, forDisc disc: DiscInsertion, generation: Int) {
+        guard generation == scanGeneration, insertedDisc == disc else { return }
+        menuTask = nil
+        menuState = state
+    }
+
+    /// Whether the disc's chapter names may be written into the encode of
+    /// `titleIndex`, decided against **that** title's chapter count.
+    ///
+    /// Recomputed per title rather than stored: the names are read once, for
+    /// whichever title was preselected, and the user may pick a different one
+    /// afterwards. The count equality is the whole safeguard, so it is
+    /// checked against the title actually being encoded and refuses on any
+    /// disagreement (`ChapterMarkerPlan`).
+    func chapterMarkerPlan(forTitleIndex titleIndex: Int?) -> ChapterMarkerPlan.Decision {
+        guard let menu = menuState.intelligence else {
+            return .refused(reason: "the disc's menus have not been read")
+        }
+        guard let titleIndex,
+              case .scanned(let scan) = scanState,
+              let title = scan.disc.titles.first(where: { $0.index == titleIndex }) else {
+            return .refused(reason: "no feature title is settled")
+        }
+        return ChapterMarkerPlan.decide(candidates: menu.chapterNames, chapterCount: title.chapterCount)
+    }
+
+    /// The rows the Start button attaches to its `RipRequest`, or `nil` when
+    /// they were refused — in which case the encode gets today's bare
+    /// `--markers`, exactly as before.
+    var chapterMarkerRows: [MarkerRow]? {
+        let plan = chapterMarkerPlan(forTitleIndex: selectedTitleIndex)
+        return plan.isWrite ? plan.rows : nil
     }
 
     /// #0027: the audio-track preselection for `titleIndex` on whatever scan
