@@ -13,10 +13,63 @@ struct SettingsView: View {
     @State private var detectNote: [ToolLocator.Tool: String] = [:]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 0) {
             Text("Changeover Settings")
                 .font(.headline)
+                .padding(.horizontal)
+                .padding(.top)
+                .padding(.bottom, 12)
 
+            // #0140's rule applied to this window: the panel below grew the
+            // content past a short screen, and the Save button must never be
+            // the thing that goes off the bottom. One scroll region, a
+            // height cap, and Save outside it.
+            ScrollView {
+                settingsGroups
+                    .padding(.horizontal)
+                    .padding(.bottom, 16)
+            }
+            .frame(maxHeight: 620)
+
+            Divider()
+
+            HStack {
+                Spacer()
+                Button("Save") {
+                    settings.persist()
+                    closeWindow()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
+        }
+        .frame(width: 460)
+        // #0008 §6.2: a 400ms debounce so typing a path doesn't spawn a
+        // `--help` process per keystroke; re-runs on appear and on every
+        // path change, including one written by Detect. A cancelled task may
+        // leave one `--help` process running for up to `Preflight.helpTimeout`
+        // seconds — harmless.
+        .task(id: settings.handbrakePath) {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            handbrakeState = await Preflight.handbrakeState(path: settings.handbrakePath)
+        }
+        .task(id: settings.makemkvconPath) {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            makemkvconState = Preflight.optionalToolState(path: settings.makemkvconPath)
+        }
+        .task {
+            lsdvdInstalled = LSDVDIdentity.defaultCandidatePaths.contains { path in
+                if case .file(executable: true) = PreflightProbes.live.fileKind(path) { return true }
+                return false
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var settingsGroups: some View {
+        VStack(alignment: .leading, spacing: 16) {
             // Plex Media Root
             GroupBox("Plex Media Root") {
                 VStack(alignment: .leading, spacing: 8) {
@@ -58,6 +111,18 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(6)
+            }
+
+            // Dependencies — everything the app can use, and the brew line
+            // for whatever is missing. Nothing is bundled, so this is the one
+            // place that says what this Mac is currently able to do.
+            GroupBox("Dependencies") {
+                DependencyPanelView(
+                    settings: settings,
+                    handbrakeState: handbrakeState,
+                    makemkvconState: makemkvconState,
+                    lsdvdInstalled: lsdvdInstalled
+                )
             }
 
             // Languages (#0027)
@@ -104,38 +169,6 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(6)
-            }
-
-            HStack {
-                Spacer()
-                Button("Save") {
-                    settings.persist()
-                    closeWindow()
-                }
-                .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding()
-        .frame(width: 460)
-        // #0008 §6.2: a 400ms debounce so typing a path doesn't spawn a
-        // `--help` process per keystroke; re-runs on appear and on every
-        // path change, including one written by Detect. A cancelled task may
-        // leave one `--help` process running for up to `Preflight.helpTimeout`
-        // seconds — harmless.
-        .task(id: settings.handbrakePath) {
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            guard !Task.isCancelled else { return }
-            handbrakeState = await Preflight.handbrakeState(path: settings.handbrakePath)
-        }
-        .task(id: settings.makemkvconPath) {
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            guard !Task.isCancelled else { return }
-            makemkvconState = Preflight.optionalToolState(path: settings.makemkvconPath)
-        }
-        .task {
-            lsdvdInstalled = LSDVDIdentity.defaultCandidatePaths.contains { path in
-                if case .file(executable: true) = PreflightProbes.live.fileKind(path) { return true }
-                return false
             }
         }
     }

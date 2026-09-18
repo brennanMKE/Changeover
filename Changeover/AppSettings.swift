@@ -29,6 +29,17 @@ final class AppSettings {
     /// track also carries the original AC3 mix — the layout #0017 verified
     /// direct-plays on Apple TV — at the cost of the extra bitrate.
     var keepOriginalAudioTrack: Bool = false
+    /// Menu intelligence — `Tools/menudump`'s helper, which reads a disc's
+    /// menu tables and button geometry. Empty means "find it": the app looks
+    /// in its own bundle, then Homebrew's and `/usr/local`'s bins, then a
+    /// developer's checkout (`MenuHelper.candidatePaths`). Wholly optional:
+    /// without it the rip is exactly what it is today.
+    var menudumpPath: String = ""
+    /// Menu intelligence — renders one still per menu so Vision can read it,
+    /// and (later) the remux for §7's library upgrade. A Homebrew formula,
+    /// never bundled; absent means no chapter names and no language hints,
+    /// and no change to the rip.
+    var ffmpegPath: String = "/opt/homebrew/bin/ffmpeg"
 
     // MARK: - Derived Plex paths (standard Plex folder structure under root)
 
@@ -59,6 +70,16 @@ final class AppSettings {
     /// True once the user has chosen a Plex media root folder and a TMDB API key.
     var isConfigured: Bool { !plexMediaRoot.isEmpty && !tmdbAPIKey.isEmpty }
 
+    /// The menu helper actually used: the configured path when it names an
+    /// executable, otherwise whatever `MenuHelper` finds on this Mac. Empty
+    /// when there is none — which is a caption, never a failure.
+    var resolvedMenudumpPath: String {
+        if !menudumpPath.isEmpty, FileManager.default.isExecutableFile(atPath: menudumpPath) {
+            return menudumpPath
+        }
+        return MenuHelper.locateDefault() ?? menudumpPath
+    }
+
     // MARK: - Init (loads from UserDefaults)
 
     /// `defaults` defaults to `.standard` for every production call site;
@@ -81,6 +102,11 @@ final class AppSettings {
             preferredAudioLanguages = v.compactMap(LanguageCode.normalize)
         }
         keepOriginalAudioTrack = d.bool(forKey: Keys.keepOriginalAudioTrack)
+        // Both may legitimately be empty ("find it" / "not installed"), so a
+        // stored empty string is honoured rather than falling back to the
+        // default the way the required paths above do.
+        if let v = d.string(forKey: Keys.menudumpPath) { menudumpPath = v }
+        if let v = d.string(forKey: Keys.ffmpegPath), !v.isEmpty { ffmpegPath = v }
     }
 
     // MARK: - Persistence
@@ -94,6 +120,8 @@ final class AppSettings {
         d.set(tmdbAPIKey,     forKey: Keys.tmdbAPIKey)
         d.set(preferredAudioLanguages.compactMap(LanguageCode.normalize), forKey: Keys.preferredAudioLanguages)
         d.set(keepOriginalAudioTrack, forKey: Keys.keepOriginalAudioTrack)
+        d.set(menudumpPath, forKey: Keys.menudumpPath)
+        d.set(ffmpegPath,   forKey: Keys.ffmpegPath)
     }
 
     // MARK: - UserDefaults keys
@@ -105,5 +133,7 @@ final class AppSettings {
         static let tmdbAPIKey     = "tmdbAPIKey"
         static let preferredAudioLanguages = "preferredAudioLanguages"
         static let keepOriginalAudioTrack = "keepOriginalAudioTrack"
+        static let menudumpPath = "menudumpPath"
+        static let ffmpegPath   = "ffmpegPath"
     }
 }
