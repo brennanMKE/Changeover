@@ -1,0 +1,368 @@
+{
+    "format": "changeover-menu-structure/1",
+    "helper": {
+        "name": "changeover-menudump",
+        "version": "0.1.0",
+        "css": "unavailable",
+        "libdvdread": "missing",
+        "missing": [
+            "libdvdread",
+            "libdvdcss"
+        ],
+        "install": [
+            "brew install libdvdread",
+            "brew install libdvdcss"
+        ]
+    },
+    "frame": {
+        "width": 720,
+        "height": 480,
+        "standard": "NTSC"
+    },
+    "titles": [
+        {
+            "title": 1,
+            "vts": 1,
+            "vtsTTN": 1,
+            "ptts": 23,
+            "angles": 1
+        }
+    ],
+    "menus": [
+        {
+            "id": "vmgm-lu1-pgc1",
+            "domain": "VMGM",
+            "vts": null,
+            "languageUnit": 1,
+            "languageCode": "en",
+            "pgc": 1,
+            "entryType": "title",
+            "cells": [
+                {
+                    "firstSector": 0,
+                    "lastSector": 9,
+                    "durationMS": null
+                }
+            ],
+            "reachableFrom": [
+                "entry"
+            ],
+            "buttonGroups": 1,
+            "highlight": {
+                "start": null,
+                "buttons": 1,
+                "forcedSelect": 1
+            },
+            "buttons": [
+                {
+                    "number": 1,
+                    "rect": [
+                        100,
+                        100,
+                        300,
+                        130
+                    ],
+                    "autoAction": false,
+                    "command": "3002000000010000",
+                    "up": 1,
+                    "down": 1,
+                    "left": 1,
+                    "right": 1
+                }
+            ],
+            "stills": [],
+            "truncated": false
+        },
+        {
+            "id": "vtsm-01-lu1-pgc1",
+            "domain": "VTSM",
+            "vts": 1,
+            "languageUnit": 1,
+            "languageCode": "en",
+            "pgc": 1,
+            "entryType": "root",
+            "cells": [
+                {
+                    "firstSector": 0,
+                    "lastSector": 9,
+                    "durationMS": null
+                }
+            ],
+            "reachableFrom": [
+                "entry"
+            ],
+            "buttonGroups": 1,
+            "highlight": {
+                "start": null,
+                "buttons": 4,
+                "forcedSelect": 1
+            },
+            "buttons": [
+                {
+                    "number": 1,
+                    "rect": [
+                        388,
+                        148,
+                        550,
+                        178
+                    ],
+                    "autoAction": false,
+                    "command": "3002000000010000",
+                    "up": 4,
+                    "down": 2,
+                    "left": 1,
+                    "right": 1
+                },
+                {
+                    "number": 2,
+                    "rect": [
+                        388,
+                        188,
+                        550,
+                        218
+                    ],
+                    "autoAction": false,
+                    "command": "2004000000000002",
+                    "up": 1,
+                    "down": 3,
+                    "left": 2,
+                    "right": 2
+                },
+                {
+                    "number": 3,
+                    "rect": [
+                        388,
+                        228,
+                        550,
+                        258
+                    ],
+                    "autoAction": false,
+                    "command": "2004000000000004",
+                    "up": 2,
+                    "down": 4,
+                    "left": 3,
+                    "right": 3
+                },
+                {
+                    "number": 4,
+                    "rect": [
+                        388,
+                        268,
+                        550,
+                        298
+                    ],
+                    "autoAction": false,
+                    "command": "2004000000000003",
+                    "up": 3,
+                    "down": 1,
+                    "left": 4,
+                    "right": 4
+                }
+            ],
+            "stills": [],
+            "truncated": false
+        },
+        {
+            "id": "vtsm-01-lu1-pgc2",
+            "domain": "VTSM",
+            "vts": 1,
+            "languageUnit": 1,
+            "languageCode": "en",
+            "pgc": 2,
+            "entryType": "chapter",
+            "cells": [
+                {
+                    "firstSector": 10,
+                    "lastSector": 19,
+                    "durationMS": null
+                }
+            ],
+            "reachableFrom": [
+                "entry"
+            ],
+            "buttonGroups": 1,
+            "highlight": {
+                "start": null,
+                "buttons": 6,
+                "forcedSelect": 1
+            },
+            "buttons": [
+                {
+                    "number": 1,
+                    "rect": [
+                        137,
+                        180,
+                        260,
+                        210
+                    ],
+                    "autoAction": false,
+                    "command": "3005000100010000",
+                    "up": 1,
+                    "down": 4,
+                    "left": 3,
+                    "right": 2
+                },
+                {
+                    "number": 2,
+                    "rect": [
+                        290,
+                        180,
+                        420,
+                        210
+                    ],
+                    "autoAction": false,
+                    "command": "3005000200010000",
+                    "up": 2,
+                    "down": 5,
+                    "left": 1,
+                    "right": 3
+                },
+                {
+                    "number": 3,
+                    "rect": [
+                        440,
+                        180,
+                        570,
+                        210
+                    ],
+                    "autoAction": false,
+                    "command": "3005000300010000",
+                    "up": 3,
+                    "down": 6,
+                    "left": 2,
+                    "right": 1
+                },
+                {
+                    "number": 4,
+                    "rect": [
+                        137,
+                        316,
+                        260,
+                        346
+                    ],
+                    "autoAction": false,
+                    "command": "3005000400010000",
+                    "up": 1,
+                    "down": 1,
+                    "left": 6,
+                    "right": 5
+                },
+                {
+                    "number": 5,
+                    "rect": [
+                        290,
+                        316,
+                        420,
+                        346
+                    ],
+                    "autoAction": false,
+                    "command": "3005000500010000",
+                    "up": 2,
+                    "down": 2,
+                    "left": 4,
+                    "right": 6
+                },
+                {
+                    "number": 6,
+                    "rect": [
+                        440,
+                        316,
+                        570,
+                        346
+                    ],
+                    "autoAction": false,
+                    "command": "3005000600010000",
+                    "up": 3,
+                    "down": 3,
+                    "left": 5,
+                    "right": 4
+                }
+            ],
+            "stills": [],
+            "truncated": false
+        },
+        {
+            "id": "vtsm-01-lu1-pgc3",
+            "domain": "VTSM",
+            "vts": 1,
+            "languageUnit": 1,
+            "languageCode": "en",
+            "pgc": 3,
+            "entryType": "audio",
+            "cells": [
+                {
+                    "firstSector": 20,
+                    "lastSector": 29,
+                    "durationMS": null
+                }
+            ],
+            "reachableFrom": [
+                "entry"
+            ],
+            "buttonGroups": 1,
+            "highlight": {
+                "start": null,
+                "buttons": 2,
+                "forcedSelect": 1
+            },
+            "buttons": [
+                {
+                    "number": 1,
+                    "rect": [
+                        200,
+                        260,
+                        340,
+                        290
+                    ],
+                    "autoAction": false,
+                    "command": "4100008000000000",
+                    "up": 1,
+                    "down": 2,
+                    "left": 1,
+                    "right": 1
+                },
+                {
+                    "number": 2,
+                    "rect": [
+                        200,
+                        300,
+                        340,
+                        330
+                    ],
+                    "autoAction": false,
+                    "command": "4100008100000000",
+                    "up": 1,
+                    "down": 2,
+                    "left": 2,
+                    "right": 2
+                }
+            ],
+            "stills": [],
+            "truncated": false
+        },
+        {
+            "id": "vtsm-01-lu1-pgc4",
+            "domain": "VTSM",
+            "vts": 1,
+            "languageUnit": 1,
+            "languageCode": "en",
+            "pgc": 4,
+            "entryType": "none",
+            "cells": [
+                {
+                    "firstSector": 30,
+                    "lastSector": 39,
+                    "durationMS": null
+                }
+            ],
+            "reachableFrom": [
+                "link"
+            ],
+            "buttonGroups": 1,
+            "highlight": null,
+            "buttons": [],
+            "stills": [],
+            "truncated": false
+        }
+    ]
+}

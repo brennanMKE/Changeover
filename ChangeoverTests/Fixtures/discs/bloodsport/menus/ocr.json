@@ -1,0 +1,2196 @@
+{
+  "engine" : {
+    "api" : "VNRecognizeTextRequest",
+    "customWords" : 63,
+    "framework" : "Vision",
+    "languageCorrection" : false,
+    "languages" : [
+      "en",
+      "fr",
+      "es",
+      "de",
+      "it",
+      "pt",
+      "nl",
+      "ja"
+    ],
+    "level" : "accurate",
+    "minimumTextHeightFraction" : 0.02,
+    "os" : "Version 27.0 (Build 26A428)",
+    "upscale" : 1
+  },
+  "format" : "changeover-menu-ocr/1",
+  "note" : "Pre-helper capture (2026-09-18, joe): the 16 stills came from ffmpeg over libdvdread-decrypted menu VOBs, so the still ids are ffmpeg's frame order (menu_01...menu_16), NOT menu PGC ids. A re-capture with Tools/menudump will rename them vmgm-lu1-pgcN / vtsm-01-lu1-pgcN and add menus/structure.json. Stills are not committed: they are copyrighted menu artwork and docs/menu-intelligence.md 8.7 leaves that decision open; every invariant here reads only this file.",
+  "stills" : [
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_01",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            313,
+            30,
+            564,
+            111
+          ],
+          "text" : "Cast &Cren"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            316,
+            112,
+            578,
+            142
+          ],
+          "text" : "Jean Claude Van Damme... Frank Dux"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            316,
+            144,
+            418,
+            162
+          ],
+          "text" : "Donald Gibb..."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            490,
+            144,
+            578,
+            162
+          ],
+          "text" : "...... Jackson"
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            315,
+            167,
+            419,
+            189
+          ],
+          "text" : "Leah Ayres.."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            480,
+            166,
+            576,
+            185
+          ],
+          "text" : "...Janice Kent"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            320,
+            188,
+            432,
+            204
+          ],
+          "text" : "Norman Burton."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            505,
+            184,
+            577,
+            208
+          ],
+          "text" : "... Helmer"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            328,
+            210,
+            444,
+            228
+          ],
+          "text" : "Forest Whitaken."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            492,
+            210,
+            566,
+            226
+          ],
+          "text" : "... Rawlins"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            334,
+            232,
+            428,
+            252
+          ],
+          "text" : "Bolo Yeung...."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            488,
+            232,
+            560,
+            252
+          ],
+          "text" : "• Chong Li"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            360,
+            262,
+            542,
+            287
+          ],
+          "text" : "Story by Sheldon Lettich,"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            340,
+            286,
+            554,
+            308
+          ],
+          "text" : "Screenplay by Sheldon Lettich"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            366,
+            308,
+            528,
+            328
+          ],
+          "text" : "and Christopher Cosby"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            388,
+            330,
+            506,
+            348
+          ],
+          "text" : "& Mel Friedman"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            352,
+            352,
+            542,
+            372
+          ],
+          "text" : "Produced by Mark DiSalle®"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            358,
+            374,
+            536,
+            394
+          ],
+          "text" : "Directed by Newt Arnold"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            406,
+            417,
+            488,
+            437
+          ],
+          "text" : "Features"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_02",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            358,
+            40,
+            566,
+            98
+          ],
+          "text" : "Lanquages"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            432,
+            102,
+            530,
+            124
+          ],
+          "text" : "SPOKEN•"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            414,
+            122,
+            542,
+            144
+          ],
+          "text" : "LANGUAGES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            446,
+            154,
+            514,
+            182
+          ],
+          "text" : "English"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            440,
+            188,
+            516,
+            212
+          ],
+          "text" : "Français"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            406,
+            226,
+            542,
+            248
+          ],
+          "text" : "SUBTITLES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            446,
+            262,
+            514,
+            290
+          ],
+          "text" : "English"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            442,
+            299,
+            516,
+            322
+          ],
+          "text" : "Français"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            452,
+            328,
+            508,
+            358
+          ],
+          "text" : "日本語"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            358,
+            410,
+            578,
+            441
+          ],
+          "text" : "Main Menu, Continue"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_03",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            362,
+            40,
+            564,
+            96
+          ],
+          "text" : "Lanquages"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            390,
+            108,
+            564,
+            126
+          ],
+          "text" : "www.warnervideo.com •"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            358,
+            130,
+            578,
+            154
+          ],
+          "text" : "Photography 0 1988 Cannon Films"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            386,
+            158,
+            556,
+            176
+          ],
+          "text" : "and Cannon International."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            416,
+            212,
+            520,
+            236
+          ],
+          "text" : "Menu Design &"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            386,
+            235,
+            558,
+            263
+          ],
+          "text" : "Supplementary Material •"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            378,
+            264,
+            556,
+            284
+          ],
+          "text" : "O 2002 Warner Home Video."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            408,
+            290,
+            534,
+            312
+          ],
+          "text" : "All rights reserved."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            376,
+            415,
+            426,
+            436
+          ],
+          "text" : "Back"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            482,
+            413,
+            580,
+            439
+          ],
+          "text" : "Main Menu"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_04",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            38,
+            296,
+            98
+          ],
+          "text" : "Special®"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            160,
+            90,
+            328,
+            146
+          ],
+          "text" : "Features"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            169,
+            183,
+            283,
+            216
+          ],
+          "text" : "Cast & Crew"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            252,
+            302,
+            281
+          ],
+          "text" : "Theatrical Trailer"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            178,
+            412,
+            276,
+            432
+          ],
+          "text" : "Main Menu"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_05",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            204,
+            42,
+            514,
+            92
+          ],
+          "text" : "Scene Selections"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            192,
+            530,
+            208
+          ],
+          "text" : "1World's warriors, 2 Dux ducks out. 3 A mentor:"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            454,
+            210,
+            520,
+            226
+          ],
+          "text" : "Tanaka."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            137,
+            329,
+            224,
+            353
+          ],
+          "text" : "4 Training."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            290,
+            328,
+            582,
+            348
+          ],
+          "text" : "5 Ray Jackson. 6 No man's land. *"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            408,
+            276,
+            428
+          ],
+          "text" : "Start Movie"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            224,
+            382,
+            482,
+            396
+          ],
+          "text" : "1-6 7-12 13-18 19-23"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            292,
+            408,
+            416,
+            428
+          ],
+          "text" : "Main Menu"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            446,
+            408,
+            570,
+            426
+          ],
+          "text" : "End Credits"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_06",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            204,
+            44,
+            514,
+            92
+          ],
+          "text" : "Scene Selections"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            190,
+            252,
+            210
+          ],
+          "text" : "7Death touch."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            290,
+            192,
+            552,
+            210
+          ],
+          "text" : "8 Bet on a woman. 9 The mightiest"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            450,
+            210,
+            508,
+            226
+          ],
+          "text" : "prevail."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            327,
+            248,
+            355
+          ],
+          "text" : "10 First bouts."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            288,
+            328,
+            546,
+            350
+          ],
+          "text" : "11 Fight to Survive 12 Hong Kong"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            308,
+            350,
+            380,
+            364
+          ],
+          "text" : "montage."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            460,
+            348,
+            512,
+            363
+          ],
+          "text" : "chase."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            284,
+            382,
+            330,
+            396
+          ],
+          "text" : "7-12"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            330,
+            380,
+            482,
+            398
+          ],
+          "text" : "13-18 19-23"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            308,
+            408,
+            416,
+            428
+          ],
+          "text" : "Main Menu"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_07",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            202,
+            44,
+            514,
+            92
+          ],
+          "text" : "Scene Selections"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            189,
+            518,
+            210
+          ],
+          "text" : "13 Under covers, 14 Second rounds. 15 Ray vs."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            164,
+            208,
+            254,
+            224
+          ],
+          "text" : "undercover."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            460,
+            209,
+            536,
+            231
+          ],
+          "text" : "Chong Li."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            326,
+            580,
+            355
+          ],
+          "text" : "16 Being the best. 17 Nearly zapped, 18 Dux vs. Paco. *"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            284,
+            380,
+            482,
+            396
+          ],
+          "text" : "7-12 13-18 19-23"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            308,
+            407,
+            416,
+            429
+          ],
+          "text" : "Main Menu"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_08",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            201,
+            40,
+            512,
+            92
+          ],
+          "text" : "Scene Selections"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            189,
+            540,
+            215
+          ],
+          "text" : "19 Short work for 20 Championship 21Victory out"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            164,
+            208,
+            240,
+            230
+          ],
+          "text" : "Chong Li."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            452,
+            210,
+            510,
+            228
+          ],
+          "text" : "of dust."
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            444,
+            248,
+            476,
+            252
+          ],
+          "text" : "ONAOC"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            214,
+            328,
+            314,
+            348
+          ],
+          "text" : "22 Goodbye."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            370,
+            328,
+            506,
+            346
+          ],
+          "text" : "23 Coda and End"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            392,
+            347,
+            456,
+            365
+          ],
+          "text" : "Credits.."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            284,
+            382,
+            402,
+            396
+          ],
+          "text" : "7-12 13-18"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            308,
+            408,
+            416,
+            428
+          ],
+          "text" : "Main Menu"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            418,
+            382,
+            482,
+            398
+          ],
+          "text" : "19-23"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_09",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            172,
+            41,
+            340,
+            74
+          ],
+          "text" : "Forest Whitaker"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            143,
+            85,
+            373,
+            124
+          ],
+          "text" : "Selected Film Highlights"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            122,
+            280,
+            138
+          ],
+          "text" : "Phone Booth (2002)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            144,
+            274,
+            160
+          ],
+          "text" : "Panic Room (2002)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            164,
+            304,
+            182
+          ],
+          "text" : "Battlefield Earth (2000)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            186,
+            362,
+            206
+          ],
+          "text" : "Four Dogs Playing Poker (1999)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            208,
+            326,
+            228
+          ],
+          "text" : "Ghost Dog: The Way of the"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            150,
+            228,
+            258,
+            244
+          ],
+          "text" : "Samurai (1999)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            248,
+            278,
+            269
+          ],
+          "text" : "Phenomenon (1996)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            272,
+            244,
+            290
+          ],
+          "text" : "Species (1995)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            292,
+            238,
+            311
+          ],
+          "text" : "Smoke (1995)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            314,
+            292,
+            334
+          ],
+          "text" : "Ready to Wear (1994)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            336,
+            280,
+            356
+          ],
+          "text" : "Jason's Lyric (1994)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            358,
+            276,
+            378
+          ],
+          "text" : "Blown Away (1994)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            418,
+            190,
+            436
+          ],
+          "text" : "Cast"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            248,
+            418,
+            330,
+            436
+          ],
+          "text" : "Continue"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_10",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            172,
+            42,
+            340,
+            73
+          ],
+          "text" : "Forest Whitaker"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            143,
+            85,
+            373,
+            124
+          ],
+          "text" : "Selected Film Highlights"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            120,
+            312,
+            142
+          ],
+          "text" : "The Crying Game (1992)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            142,
+            316,
+            162
+          ],
+          "text" : "Diary of a Hit Man (1991)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            163,
+            312,
+            185
+          ],
+          "text" : "A Rage in Harlem (1991)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            148,
+            184,
+            232,
+            204
+          ],
+          "text" : "(also prod.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            206,
+            220,
+            224
+          ],
+          "text" : "Bird (1988)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            148,
+            224,
+            384,
+            242
+          ],
+          "text" : "Best Actor - Cannes Film Festival"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            246,
+            356,
+            266
+          ],
+          "text" : "Good Morning, Vietnam (1987)."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            268,
+            264,
+            288
+          ],
+          "text" : "Bloodsport (1987)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            289,
+            250,
+            309
+          ],
+          "text" : "Stakeout (1987)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            312,
+            244,
+            330
+          ],
+          "text" : "Platoon (1986)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            334,
+            328,
+            354
+          ],
+          "text" : "The Color of Money (1986)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            354,
+            348,
+            374
+          ],
+          "text" : "Fast Times at Ridgemont High"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            148,
+            378,
+            196,
+            396
+          ],
+          "text" : "(1982)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            420,
+            196,
+            438
+          ],
+          "text" : "Back"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_11",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            137,
+            36,
+            282,
+            78
+          ],
+          "text" : "Dean Claude"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            226,
+            66,
+            358,
+            91
+          ],
+          "text" : "Dan Damme"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            143,
+            83,
+            373,
+            124
+          ],
+          "text" : "Selected Film Highlights"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            122,
+            250,
+            138
+          ],
+          "text" : "Derailed (2001)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            142,
+            264,
+            160
+          ],
+          "text" : "The Order (2001)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            154,
+            160,
+            248,
+            174
+          ],
+          "text" : "(also co-scr.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            180,
+            256,
+            200
+          ],
+          "text" : "Replicant (2001)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            204,
+            386,
+            220
+          ],
+          "text" : "Universal Soldier: The Return (1999)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            220,
+            236,
+            240
+          ],
+          "text" : "(also prod.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            146,
+            246,
+            272,
+            258
+          ],
+          "text" : "Legionnaire (1999)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            154,
+            260,
+            300,
+            277
+          ],
+          "text" : "(also co-story, prod.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            282,
+            260,
+            300
+          ],
+          "text" : "Knock Off (1998)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            304,
+            278,
+            322
+          ],
+          "text" : "Double Team (1997)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            324,
+            294,
+            344
+          ],
+          "text" : "Maximum Risk (1996)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            346,
+            264,
+            364
+          ],
+          "text" : "The Quest (1996)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            363,
+            300,
+            387
+          ],
+          "text" : "(also co-story, dir.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            388,
+            288,
+            406
+          ],
+          "text" : "Sudden Death (1995)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            418,
+            190,
+            436
+          ],
+          "text" : "Cast"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            262,
+            420,
+            306,
+            434
+          ],
+          "text" : "ontin"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_12",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            135,
+            36,
+            282,
+            78
+          ],
+          "text" : "Dean Clande"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            226,
+            65,
+            359,
+            92
+          ],
+          "text" : "Dan Damme"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            92,
+            372,
+            122
+          ],
+          "text" : "Selected Film Highlights"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            120,
+            284,
+            142
+          ],
+          "text" : "Street Fighter (1994)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            144,
+            248,
+            162
+          ],
+          "text" : "Limecop (1994)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            163,
+            274,
+            186
+          ],
+          "text" : "Hard Target (1993)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            186,
+            304,
+            204
+          ],
+          "text" : "Nowhere to Run (1993)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            208,
+            310,
+            226
+          ],
+          "text" : "Universal Soldier (1992)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            230,
+            292,
+            250
+          ],
+          "text" : "Double Impact (1991)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            154,
+            248,
+            358,
+            266
+          ],
+          "text" : "(also co-story, co-scr., prod.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            270,
+            254,
+            288
+          ],
+          "text" : "Lionheart (1991)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            154,
+            286,
+            292,
+            307
+          ],
+          "text" : "(also story, co-scr.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            310,
+            292,
+            328
+          ],
+          "text" : "Death Warrant (1990)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            330,
+            260,
+            348
+          ],
+          "text" : "Kickboxer (1989)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            154,
+            348,
+            256,
+            366
+          ],
+          "text" : "(also co-story)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            370,
+            264,
+            393
+          ],
+          "text" : "Bloodsport (1987)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            420,
+            196,
+            438
+          ],
+          "text" : "Back"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_13",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            192,
+            43,
+            302,
+            73
+          ],
+          "text" : "Leah Ayres"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            143,
+            85,
+            373,
+            124
+          ],
+          "text" : "Selected Film Highlights"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            122,
+            268,
+            140
+          ],
+          "text" : "The Player (1992)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            141,
+            276,
+            165
+          ],
+          "text" : "Dead Ringer (1991)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            165,
+            234,
+            180
+          ],
+          "text" : "Police Story:"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            184,
+            320,
+            198
+          ],
+          "text" : "The Watch Commander"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            154,
+            202,
+            232,
+            220
+          ],
+          "text" : "(TV) (1988)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            222,
+            264,
+            242
+          ],
+          "text" : "Bloodsport (1987)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            242,
+            326,
+            265
+          ],
+          "text" : "Hot Child in the City (1987)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            266,
+            324,
+            284
+          ],
+          "text" : "St. Elsewhere (TV Series)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            154,
+            284,
+            220,
+            302
+          ],
+          "text" : "(1985-86)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            306,
+            264,
+            324
+          ],
+          "text" : "Velvet (TV) (1984)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            326,
+            328,
+            346
+          ],
+          "text" : "Eddie Macon's Run (1983)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            350,
+            274,
+            370
+          ],
+          "text" : "The Burning (1981)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            372,
+            284,
+            390
+          ],
+          "text" : "All That Jazz (1979)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            418,
+            190,
+            436
+          ],
+          "text" : "Cast"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_14",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            178,
+            47,
+            312,
+            75
+          ],
+          "text" : "Newt Ainold"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            143,
+            85,
+            373,
+            124
+          ],
+          "text" : "Selected Film Highlights"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            118,
+            300,
+            138
+          ],
+          "text" : "Bloodsport (1987) (dir.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            142,
+            324,
+            160
+          ],
+          "text" : "The Goonies (1985) (actor)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            166,
+            302,
+            184
+          ],
+          "text" : "D.C. Cab (1983) (actor)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            192,
+            360,
+            210
+          ],
+          "text" : "JWanna Hold Your Hand (1978)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            150,
+            209,
+            202,
+            225
+          ],
+          "text" : "(actor)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            234,
+            352,
+            252
+          ],
+          "text" : "Blood Thirst (1971) (prod., dir.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            257,
+            330,
+            280
+          ],
+          "text" : "Skullduggery (1970) (actor)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            281,
+            330,
+            305
+          ],
+          "text" : "Hands of a Stranger (1962)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            148,
+            300,
+            264,
+            320
+          ],
+          "text" : "(scr., prod., dir.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            418,
+            196,
+            436
+          ],
+          "text" : "Crew"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_15",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            164,
+            34,
+            335,
+            77
+          ],
+          "text" : "Sheldon Lettich:"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            143,
+            85,
+            373,
+            124
+          ],
+          "text" : "Selected Film Highlights"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            118,
+            300,
+            138
+          ],
+          "text" : "The Order (2001) (dir.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            140,
+            334,
+            158
+          ],
+          "text" : "The Last Patrol (2000) (dir.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            162,
+            272,
+            180
+          ],
+          "text" : "Legionnaire (1998)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            158,
+            178,
+            330,
+            198
+          ],
+          "text" : "(co-story, co-scr., prod.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            198,
+            300,
+            218
+          ],
+          "text" : "Only the Strong (1993)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            217,
+            252,
+            236
+          ],
+          "text" : "(co-scr., dir.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            235,
+            292,
+            258
+          ],
+          "text" : "Double Impact (1991)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            252,
+            362,
+            274
+          ],
+          "text" : "(co-story, co-scr., prod., dir.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            276,
+            348,
+            294
+          ],
+          "text" : "Lionheart (1991) (co-scr., dir.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            296,
+            332,
+            314
+          ],
+          "text" : "Rambo 111 (1988) (co-scr.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            142,
+            314,
+            354,
+            340
+          ],
+          "text" : "Bloodsport (1987) (story, co-scr."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            334,
+            318,
+            354
+          ],
+          "text" : "with Christopher Cosby"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            158,
+            350,
+            274,
+            368
+          ],
+          "text" : "& Mel Friedman)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            371,
+            254,
+            389
+          ],
+          "text" : "Russkies (1987) •"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            168,
+            390,
+            296,
+            408
+          ],
+          "text" : "(co-story, co-scr.)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            418,
+            196,
+            436
+          ],
+          "text" : "Crew"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "menu_16",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            331,
+            65,
+            595,
+            150
+          ],
+          "text" : "Bloodiport"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            417,
+            153,
+            516,
+            183
+          ],
+          "text" : "Play Movie"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            392,
+            213,
+            540,
+            239
+          ],
+          "text" : "Scene Selections®"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            394,
+            272,
+            538,
+            298
+          ],
+          "text" : "Special Features"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            413,
+            334,
+            510,
+            360
+          ],
+          "text" : "Languages"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,204 @@
+{
+  "buttons" : [
+
+  ],
+  "chapterMenu" : {
+    "buttons" : 0,
+    "csvRows" : 23,
+    "names" : [
+      {
+        "chapter" : 1,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "World's warriors",
+        "printedNumber" : 1
+      },
+      {
+        "chapter" : 2,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Dux ducks out",
+        "printedNumber" : 2
+      },
+      {
+        "chapter" : 3,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "A mentor: Tanaka",
+        "printedNumber" : 3
+      },
+      {
+        "chapter" : 4,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Training",
+        "printedNumber" : 4
+      },
+      {
+        "chapter" : 5,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Ray Jackson",
+        "printedNumber" : 5
+      },
+      {
+        "chapter" : 6,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "No man's land",
+        "printedNumber" : 6
+      },
+      {
+        "chapter" : 7,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Death touch",
+        "printedNumber" : 7
+      },
+      {
+        "chapter" : 8,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Bet on a woman",
+        "printedNumber" : 8
+      },
+      {
+        "chapter" : 9,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "The mightiest prevail",
+        "printedNumber" : 9
+      },
+      {
+        "chapter" : 10,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "First bouts",
+        "printedNumber" : 10
+      },
+      {
+        "chapter" : 11,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Fight to Survive montage",
+        "printedNumber" : 11
+      },
+      {
+        "chapter" : 12,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Hong Kong chase",
+        "printedNumber" : 12
+      },
+      {
+        "chapter" : 13,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Under covers, undercover",
+        "printedNumber" : 13
+      },
+      {
+        "chapter" : 14,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Second rounds",
+        "printedNumber" : 14
+      },
+      {
+        "chapter" : 15,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Ray vs. Chong Li",
+        "printedNumber" : 15
+      },
+      {
+        "chapter" : 16,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Being the best",
+        "printedNumber" : 16
+      },
+      {
+        "chapter" : 17,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Nearly zapped",
+        "printedNumber" : 17
+      },
+      {
+        "chapter" : 18,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Dux vs. Paco",
+        "printedNumber" : 18
+      },
+      {
+        "chapter" : 19,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Short work for Chong Li",
+        "printedNumber" : 19
+      },
+      {
+        "chapter" : 20,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Championship",
+        "printedNumber" : 20
+      },
+      {
+        "chapter" : 21,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Victory out of dust",
+        "printedNumber" : 21
+      },
+      {
+        "chapter" : 22,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Goodbye",
+        "printedNumber" : 22
+      },
+      {
+        "chapter" : 23,
+        "confidence" : 1,
+        "disputed" : false,
+        "name" : "Coda and End Credits",
+        "printedNumber" : 23
+      }
+    ],
+    "pages" : [
+      "menu_05",
+      "menu_06",
+      "menu_07",
+      "menu_08"
+    ]
+  },
+  "format" : "changeover-menu-derived/1",
+  "languages" : {
+    "shape" : "listing",
+    "spoken" : [
+      "English",
+      "Français"
+    ],
+    "subtitles" : [
+      "English",
+      "Français",
+      "日本語"
+    ]
+  },
+  "resolver" : {
+    "app" : "slice1",
+    "lexicon" : 8
+  },
+  "titleText" : {
+    "confidence" : 1,
+    "still" : "menu_16",
+    "text" : "Bloodiport"
+  },
+  "tvSignal" : {
+    "reason" : "no structure.json captured",
+    "value" : false
+  }
+}

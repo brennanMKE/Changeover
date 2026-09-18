@@ -66,6 +66,13 @@
 				"Fixtures/discs/hornets-nest/scan.json",
 				"Fixtures/discs/hornets-nest/disc.json",
 				"Fixtures/discs/hornets-nest/scan.stderr.txt",
+				"Fixtures/discs/bloodsport/scan.json",
+				"Fixtures/discs/bloodsport/disc.json",
+				"Fixtures/discs/bloodsport/scan.stderr.txt",
+				"Fixtures/discs/bloodsport/menus/ocr.json",
+				"Fixtures/discs/bloodsport/menus/derived.json",
+				"Fixtures/menus/synthetic-movie/structure.json",
+				"Fixtures/menus/synthetic-movie/README.md",
 			);
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
