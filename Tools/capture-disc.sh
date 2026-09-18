@@ -444,6 +444,56 @@ else
   echo "kept:   $DEST/disc.json (not overwritten)"
 fi
 
+# --- expect.agreement, and the corpus-wide report ---------------------------
+# What the scanner said, what the heuristic decided and by which route, what
+# the disc's own menu says, and whether they agree — recorded rather than left
+# for a reader to infer. Every disc gets one, including a disc with no menus:
+# that is how "not captured" stays distinguishable from "disagrees".
+#
+# It runs after disc.json exists because it reads the manifest's volume name,
+# drive name and menus.captured flag, and it rewrites only the `agreement`
+# key, so a manifest a human has already reviewed keeps everything else.
+if swiftc -O -o "$BUILD_DIR/menu-agreement" \
+  "$REPO_ROOT/Changeover/DiscInfo.swift" "$REPO_ROOT/Changeover/HandBrakeScanParser.swift" \
+  "$REPO_ROOT/Changeover/DiscTitleHeuristic.swift" "$REPO_ROOT/Changeover/LanguageCode.swift" \
+  "$REPO_ROOT/Changeover/MenuStructure.swift" "$REPO_ROOT/Changeover/VMCommand.swift" \
+  "$REPO_ROOT/Changeover/MenuLexicon.swift" "$REPO_ROOT/Changeover/MenuOCR.swift" \
+  "$REPO_ROOT/Changeover/ChapterNames.swift" "$REPO_ROOT/Changeover/ChapterMarkerPlan.swift" \
+  "$REPO_ROOT/Changeover/LanguageHints.swift" "$REPO_ROOT/Changeover/MenuTitleGuess.swift" \
+  "$REPO_ROOT/Changeover/PlayButtonResolver.swift" "$REPO_ROOT/Changeover/MenuJudge.swift" \
+  "$REPO_ROOT/Changeover/MenuIntelligence.swift" "$REPO_ROOT/Changeover/MenuDerived.swift" \
+  "$REPO_ROOT/Changeover/MenuAgreement.swift" "$REPO_ROOT/Changeover/MenuAgreementReport.swift" \
+  "$REPO_ROOT/Changeover/DiscNameSearchTerm.swift" \
+  "$REPO_ROOT/Tools/menu-agreement/main.swift" 2>/dev/null
+then
+  "$BUILD_DIR/menu-agreement" --corpus "$FIXTURES" --manifest "$SLUG" > "$BUILD_DIR/agreement.json" 2>/dev/null || true
+  if [[ -s "$BUILD_DIR/agreement.json" ]]; then
+    python3 - "$DEST/disc.json" "$BUILD_DIR/agreement.json" <<'PY' || true
+import json, sys
+path = sys.argv[1]
+agreement = json.load(open(sys.argv[2], encoding="utf-8"))
+order = ["slug", "scannerTitle", "scannerRaw", "heuristicRoute", "heuristicTitle",
+         "menuRoute", "menuTitle", "menuLabel", "verdict", "signals"]
+agreement = {k: agreement[k] for k in order if k in agreement}
+signal_order = ["menuCount", "menusWithButtons", "buttonCount", "largestMenuButtons",
+                "titleJumpingButtons", "titlesJumpedTo", "chapterButtons", "chapterPages",
+                "chapterNamesRead", "chapterNamesEmitted", "tvSignal", "tvSignalReason",
+                "spokenLanguages", "subtitleLanguages", "labels"]
+if isinstance(agreement.get("signals"), dict):
+    s = agreement["signals"]
+    agreement["signals"] = {k: s[k] for k in signal_order if k in s}
+manifest = json.load(open(path, encoding="utf-8"))
+manifest["expect"]["agreement"] = agreement
+open(path, "w", encoding="utf-8").write(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+PY
+    echo "wrote:  $DEST/disc.json expect.agreement"
+  fi
+  # The one place that says where the menu and the heuristic agree across the
+  # whole corpus. Regenerated on every capture; the diff is the review.
+  "$BUILD_DIR/menu-agreement" --corpus "$FIXTURES" --out "$FIXTURES/agreement-report.txt" 2>/dev/null \
+    && echo "wrote:  $FIXTURES/agreement-report.txt" || true
+fi
+
 echo
 echo "=== summary ==="
 echo "titles:            $TITLE_COUNT"
@@ -465,6 +515,14 @@ fi
 # play button line, the chapter-name count against the chapter count, the
 # language lists and every command mnemonic the decoder could not name.
 [[ -s "$ENRICH/derive.txt" ]] && cat "$ENRICH/derive.txt" || true
+# Whether this disc's own menu and the heuristic reached the same title. The
+# second thing the review should read, and the reason `agreement-report.txt`
+# exists: one disc agreeing proves nothing, and the report is where "nothing"
+# turns into evidence.
+if [[ -x "$BUILD_DIR/menu-agreement" ]]; then
+  echo
+  "$BUILD_DIR/menu-agreement" --corpus "$FIXTURES" 2>/dev/null | sed -n '/^Verdicts$/,/^$/p' || true
+fi
 echo
 echo "fixtures: $DEST/{scan.json,scan.stderr.txt,disc.json}"
 echo "Next:"
