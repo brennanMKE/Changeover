@@ -93,16 +93,16 @@ nonisolated enum MenuOCR {
         init() {}
     }
 
-    /// The button lexicon plus the words the Bloodsport run misread. The
+    /// The button lexicon, whole, plus the words a real run misread. The
     /// custom-word list takes precedence over Vision's dictionary, which is
     /// what a menu wants — these are labels, not prose.
-    static let defaultCustomWords: [String] = (
-        MenuLexicon.allPlayLabels + [
-            "Languages", "Language", "Continue", "Crew", "Cast", "Chapters",
-            "Scene Selections", "Scene Selection", "Special Features",
-            "Main Menu", "End Credits", "Subtitles", "Trailer",
-        ]
-    ).sorted()
+    ///
+    /// **Derived, never re-listed.** This used to spell out a second copy of
+    /// the button vocabulary beside `MenuLexicon`'s, and the two had already
+    /// drifted: Vision was being primed for "Continue" and "Main Menu" that
+    /// the matcher did not know, so a button carrying one read cleanly and
+    /// then meant nothing. One table, both uses.
+    static let defaultCustomWords: [String] = MenuLexicon.customWords
 
 #if canImport(Vision)
     /// Read one still. Off the main actor; the caller hops results back.

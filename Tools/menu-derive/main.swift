@@ -138,7 +138,7 @@ let offered = !volumeName.isEmpty && DiscNameSearchTerm.derive(volumeName: volum
 
 let derived = MenuDerived(
     format: "changeover-menu-derived/1",
-    resolver: MenuDerived.Resolver(app: "slice1", lexicon: MenuLexicon.playLabels.count),
+    resolver: MenuDerived.Resolver(app: "slice1", lexicon: MenuLexicon.entries.count),
     buttons: resolved.map { button in
         MenuDerived.ButtonRecord(
             menu: button.ref.menu,
