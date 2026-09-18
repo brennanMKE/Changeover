@@ -44,6 +44,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// Internal rather than private so a test can assert the window is *reused*
     /// across a close/reopen instead of being rebuilt (#0002).
     private(set) var metadataWindow: NSWindow?
+    /// Sizes `metadataWindow` to the step (`docs/window-sizing.md`). Owned
+    /// here, alongside the window it drives; it is also that window's
+    /// `NSWindowDelegate`, so a drag by the user is recorded. Internal so a
+    /// test can assert the size the window opens at.
+    private(set) var windowSizer: RipWindowSizer?
     /// Internal rather than private so a test can assert the window is *reused*
     /// across a close/reopen instead of being rebuilt (#0011).
     private(set) var settingsWindow: NSWindow?
@@ -136,6 +141,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // and rebuilding it would hand the user a brand-new view (and a brand-new
         // MovieSearchViewModel) while the previous job is still running.
         if let w = metadataWindow {
+            // Size it *before* it is shown: a window closed on Confirm and
+            // reopened on Ripping must open at Ripping's size rather than
+            // visibly collapsing after it appears. The observation loop only
+            // fires on a *change*, and this is not one — the same reason
+            // `RipFlowView` prefills on `.onAppear` as well as `.onChange`
+            // (`b294256`).
+            windowSizer?.apply()
             w.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -153,23 +165,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // audio/21 subtitle tracks pushed Start off-screen with no way to
         // reach it).
         //
-        // #0061: 760 points tall was sized for the old one-screen stack,
-        // which also carried the search results and a 130-point log. A step
-        // shows one of those at a time, so 680 is the new default; the
-        // minimum is unchanged.
+        // The one fixed height (760 before #0061, then 680) is gone: the
+        // window now opens at the height of the step it is opening on and
+        // changes with the step — 340 for Insert a disc/Ripping/Done, 640
+        // for Choose the movie/Confirm (`docs/window-sizing.md`). The floor
+        // drops to 560×340 with it, because the compact steps *are* 340.
+        // Width is never touched.
+        let step = flow.step(jobs: jobs)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 680),
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: 620,
+                height: WindowSizing.height(for: WindowSizing.heightClass(for: step), state: .init())
+            ),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "Changeover"
-        window.minSize = NSSize(width: 560, height: 560)
+        window.minSize = NSSize(width: WindowSizing.minimum.width, height: WindowSizing.minimum.height)
         window.center()
         window.contentView = NSHostingView(
             rootView: RipFlowView().environment(settings).environment(jobs).environment(flow)
         )
         window.isReleasedWhenClosed = false
+        let sizer = RipWindowSizer(window: window, jobs: jobs, flow: flow)
+        windowSizer = sizer
+        // Records the height the window was built at, before it is on screen,
+        // so the first real step change is the first visible resize.
+        sizer.apply(step: step)
+        sizer.observeStep()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         metadataWindow = window

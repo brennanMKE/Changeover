@@ -26,6 +26,13 @@ import SwiftUI
 /// the window past the screen with Start out of reach. Each step view
 /// therefore puts its content in a `List`/`ScrollView` (or bounded content)
 /// with its bar outside it.
+///
+/// The rule that follows for this file: **the only `minHeight` in the window
+/// is the constant on the root below, and no step body may add one.** A
+/// content-derived minimum would raise `contentMinSize` above the height
+/// `RipWindowSizer` asks for, so the window would open taller than
+/// `WindowSizing`'s table says — which is what
+/// `MetadataWindowReuseTests.theWindowOpensAtTheStepsHeight` asserts.
 struct RipFlowView: View {
     @Environment(AppSettings.self) private var settings
     /// Job state lives on the app-level controller, not here — closing this
@@ -43,7 +50,15 @@ struct RipFlowView: View {
             Divider()
             content(step)
         }
-        .frame(minWidth: 560, idealWidth: 620)
+        // The *only* `minHeight` in the window, and it is a constant
+        // (`WindowSizing.minimum`) — never derived from content. The hosting
+        // view publishes this as the window's `contentMinSize`, so a
+        // content-derived one here (or on any step body) would be #0140
+        // again, and would also let the window grow past the height the
+        // sizer asked for (`docs/window-sizing.md` §2).
+        .frame(minWidth: WindowSizing.minimum.width,
+               idealWidth: 620,
+               minHeight: WindowSizing.minimum.height)
         // #0034: the selection is reconciled against the disc actually in
         // the drive on every insertion and whenever a job stops. The
         // observation trigger stays in SwiftUI; the decision is

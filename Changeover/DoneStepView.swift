@@ -20,24 +20,35 @@ struct DoneStepView: View {
         VStack(spacing: 0) {
             if let job = jobs.job(id: jobID) {
                 let card = outcomeCard(for: job)
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Circle()
-                            .fill(card.tone.color)
-                            .frame(width: 8, height: 8)
-                        Text(card.headline)
-                            .font(.title3)
+                // The card scrolls, the bar does not (`docs/window-sizing.md`
+                // §6.3). At the old 680-point window a long failure card
+                // (`FailurePresenter.details` plus #0052's disc-removed
+                // sentence) fitted; at the compact 340 this step now opens
+                // at, it is the one bounded-by-hope body that could exceed
+                // the window — and a body that outgrows the window raises the
+                // published minimum, which is a small #0140. A `ScrollView`
+                // has no minimum height in its scroll axis, so it cannot.
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Circle()
+                                .fill(card.tone.color)
+                                .frame(width: 8, height: 8)
+                            Text(card.headline)
+                                .font(.title3)
+                        }
+                        ForEach(card.lines, id: \.self) { line in
+                            Text(line)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
-                    ForEach(card.lines, id: \.self) { line in
-                        Text(line)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
-                .padding()
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 Divider()
                 StepActionBar {

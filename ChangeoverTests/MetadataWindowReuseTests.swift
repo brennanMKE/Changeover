@@ -68,6 +68,71 @@ struct MetadataWindowReuseTests {
         #expect(controller.isRunning == false)
     }
 
+    // MARK: - Per-step sizing (`docs/window-sizing.md`)
+
+    /// The window opens at the height of the step it opens on, and its floor
+    /// is `WindowSizing.minimum`.
+    ///
+    /// **This is the test that catches a future body `minHeight`.**
+    /// `NSHostingView` publishes the root view's minimum as the window's
+    /// `contentMinSize`, so a step body that grew a content-derived minimum —
+    /// #0140's mechanism — would make the window open taller than
+    /// `WindowSizing`'s table says, and this assertion would fail. It creates
+    /// a real window in the app-hosted bundle, like every other test in this
+    /// file; it is not a UI test (`docs/ui-test-crash-prevention.md`).
+    @Test func theWindowOpensAtTheStepsHeight() throws {
+        let delegate = AppDelegate()
+        defer { delegate.metadataWindow?.close() }
+
+        delegate.showMetadataEntry()
+        let window = try #require(delegate.metadataWindow, "no window was created")
+        delegate.windowSizer?.animates = false
+        // Force the hosting view's layout: a content-derived minimum only
+        // pushes the window out on a layout pass.
+        window.layoutIfNeeded()
+
+        let step = delegate.flow.step(jobs: delegate.jobs)
+        let expected = WindowSizing.height(for: WindowSizing.heightClass(for: step), state: .init())
+        #expect(window.contentRect(forFrameRect: window.frame).height == expected, "step \(step)")
+        #expect(window.minSize == NSSize(width: WindowSizing.minimum.width,
+                                         height: WindowSizing.minimum.height))
+    }
+
+    /// The window actually moves between the two heights, and — the part
+    /// that cannot be checked in the pure seam — **stays** where `setFrame`
+    /// put it after the next layout pass. If `NSHostingView`'s intrinsic
+    /// content size were being honoured above `windowSizeStayPut`, the shrink
+    /// back to compact would snap open again here.
+    @Test func theSizerMovesTheWindowBetweenTheTwoHeightsAndItStaysThere() throws {
+        let delegate = AppDelegate()
+        defer { delegate.metadataWindow?.close() }
+
+        delegate.showMetadataEntry()
+        let window = try #require(delegate.metadataWindow)
+        let sizer = try #require(delegate.windowSizer)
+        sizer.animates = false
+
+        func contentHeight() -> CGFloat {
+            window.layoutIfNeeded()
+            return window.contentRect(forFrameRect: window.frame).height
+        }
+        // The screen the test host is on has to be able to hold the full
+        // height, or the clamp (`targetFrame`) is the thing under test
+        // instead.
+        let chrome = window.frame.height - contentHeight()
+        let visible = (window.screen ?? NSScreen.main)?.visibleFrame ?? .zero
+        let full = WindowSizing.height(for: .full, state: .init())
+        let compact = WindowSizing.height(for: .compact, state: .init())
+        try #require(visible.isEmpty == false && visible.height >= full + chrome,
+                     "the test host's screen is too short for this assertion")
+
+        sizer.apply(step: .confirm)
+        #expect(contentHeight() == full)
+
+        sizer.apply(step: .insertDisc(.noDisc))
+        #expect(contentHeight() == compact)
+    }
+
     /// The Settings half of #0011: `showSettings()` had the same
     /// `w.isVisible` bug `showMetadataEntry()` was fixed for in #0002, so a
     /// closed Settings window fell through to a brand-new `NSWindow` +
