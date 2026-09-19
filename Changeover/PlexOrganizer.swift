@@ -232,6 +232,49 @@ enum PlexOrganizer {
         return destURL
     }
 
+    /// §7.5 step 4 — swaps a staged, already-verified file over a library file
+    /// that is already there, and nothing else.
+    ///
+    /// The other half of `move` for the upgrade path: the staged copy was
+    /// written by `ffmpeg` **into an `itemReplacementDirectory` on the
+    /// destination's own volume** (`UpgradeController.stage`), so this is
+    /// always a same-volume `replaceItemAt` — the #0012 lesson, met again by
+    /// hand on 2026-09-18 where `os.replace` across devices simply cannot
+    /// work. `replaceItemAt` performs the destructive swap only once staging
+    /// has fully succeeded, so a failure here leaves the library file exactly
+    /// as it was, which is the whole safety argument for the upgrade.
+    ///
+    /// Deliberately **not** a variant of `move`: `move` resolves a
+    /// destination from `MovieMetadata` and creates folders. An upgrade
+    /// rewrites a file that already exists at a path the library probe
+    /// already found, and must never create anything.
+    @concurrent
+    nonisolated static func replaceInPlace(
+        stagedFile: String,
+        destination: String,
+        log: @MainActor (String) -> Void
+    ) async -> Result<Void, JobFailure> {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: stagedFile) else {
+            await log("✗ ERROR: the rewritten file is not where it was staged (\(stagedFile))")
+            return .failure(JobFailure(stage: .organize, reason: .unknown("the rewritten file was not staged")))
+        }
+        guard fm.fileExists(atPath: destination) else {
+            // An upgrade never creates a library file — if the original has
+            // gone since the probe, the honest answer is to do nothing.
+            await log("✗ ERROR: \(destination) is no longer there, so nothing was replaced")
+            return .failure(JobFailure(stage: .organize, reason: .destinationUnwritable(path: destination)))
+        }
+        do {
+            _ = try fm.replaceItemAt(URL(fileURLWithPath: destination), withItemAt: URL(fileURLWithPath: stagedFile))
+        } catch {
+            await log("✗ ERROR replacing \(destination): \(error.localizedDescription)")
+            return .failure(JobFailure(stage: .organize, reason: reason(for: error, destination: destination)))
+        }
+        await log("✓ Replaced: \(destination)")
+        return .success(())
+    }
+
     /// #0062 — the warning logged when the move is about to replace a file
     /// that is already in the library. Pure, so the wording and the "only
     /// when something is actually there" rule are unit-tested without a
