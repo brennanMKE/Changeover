@@ -102,6 +102,10 @@ struct DiscCorpusTests {
             /// stays honest; a decoder regression shows up as an entry-menu
             /// button that resolves to nothing and is not listed.
             var unresolvedMnemonics: [String]?
+            /// Titles whose `TT_SRPT` PTT count exceeds the chapter count
+            /// lsdvd reads out of the PGC — a disc padding its title table.
+            /// `nil` means none, so both shapes are pinned.
+            var ttSrptOverDeclaredTitles: [Int]?
             var notes: String?
         }
 
@@ -353,7 +357,7 @@ struct DiscCorpusTests {
         // ---- tier 1, only where a structure was captured
         if let structure {
             Self.assertTheCaptureActuallyReadButtons(structure, slug: slug)
-            try Self.assertTitleTableAgreesWithLsdvd(structure, slug: slug)
+            try Self.assertTitleTableAgreesWithLsdvd(structure, manifest: manifest, expect: expect, slug: slug)
             try Self.assertStructureIsWellFormed(structure, slug: slug)
             try Self.assertTargetsExistInTheScan(structure, scan: scan, expect: expect, slug: slug)
             try Self.assertPlayButton(structure, manifest: manifest, expect: expect, slug: slug)
@@ -371,7 +375,7 @@ struct DiscCorpusTests {
 
         // ---- tier 2, only where OCR ran
         guard let ocr else { return }
-        try Self.assertChapterNames(ocr, structure: structure, expect: expect, slug: slug)
+        try Self.assertChapterNames(ocr, structure: structure, manifest: manifest, expect: expect, slug: slug)
         Self.assertLanguageLists(ocr, structure: structure, expect: expect, slug: slug)
         Self.assertTitleTextAvoidsTheFilmographyTrap(ocr, expect: expect, slug: slug)
     }
@@ -428,21 +432,61 @@ struct DiscCorpusTests {
     /// against a program that was not written from the same notes.
     private static func assertTitleTableAgreesWithLsdvd(
         _ structure: MenuStructure,
+        manifest: DiscManifest,
+        expect: DiscManifest.MenuExpectation,
         slug: String
     ) throws {
         guard let lsdvd = try loadLsdvd(slug), let titles = structure.titles else { return }
         #expect(titles.count == lsdvd.track.count, "\(slug): TT_SRPT has \(titles.count) titles, lsdvd sees \(lsdvd.track.count)")
+
+        var overDeclared: [Int] = []
         for track in lsdvd.track {
             guard let title = titles.first(where: { $0.title == track.ix }) else {
                 Issue.record("\(slug): lsdvd lists title \(track.ix) and the helper's TT_SRPT does not")
                 continue
             }
+            // These two validate the parsing, and they are exact on every
+            // disc so far: same title set, same in-set number.
             #expect(title.vts == track.vts, "\(slug): title \(track.ix) title set")
             #expect(title.vtsTTN == track.ttn, "\(slug): title \(track.ix) in-set number")
-            if let chapters = track.chapter {
-                #expect(title.ptts == chapters.count, "\(slug): title \(track.ix) chapter count")
-            }
+
+            guard let chapters = track.chapter else { continue }
+            // Comparing these two for equality was a category error of mine.
+            // `TT_SRPT.nr_of_ptts` is what the disc **declares**; lsdvd's
+            // chapter list is what the PGC actually **contains**. On a clean
+            // title they agree — and on the feature title of both captured
+            // discs they do, exactly. On Oppenheimer's filler titles they do
+            // not: title 8 declares 25 PTTs for 0.5 seconds of video, title
+            // 9 declares 11, title 34 declares 8. That is the disc padding
+            // its title table, not a parse error, and HandBrake never sees
+            // those titles at all because --min-duration 1 drops them.
+            //
+            // So: the table may over-declare, never under-declare. An
+            // under-declaring title would mean the parse is wrong.
+            #expect(
+                title.ptts >= chapters.count,
+                "\(slug): title \(track.ix) declares \(title.ptts) PTTs but lsdvd finds \(chapters.count) chapters — a table cannot hold fewer chapters than the PGC contains, so this is a parse error"
+            )
+            if title.ptts != chapters.count { overDeclared.append(track.ix) }
         }
+
+        // The feature is the one title whose chapter numbering anything
+        // downstream uses, so there the two readings must agree exactly.
+        if let feature = manifest.expect.outcomeIndex,
+           let title = titles.first(where: { $0.title == feature }),
+           let chapters = lsdvd.track.first(where: { $0.ix == feature })?.chapter {
+            #expect(
+                title.ptts == chapters.count,
+                "\(slug): the feature title declares \(title.ptts) PTTs and lsdvd finds \(chapters.count) chapters. Chapter names are applied by number, so they cannot be trusted on this disc until that is explained."
+            )
+        }
+
+        // Pinned, so a disc that starts padding its table shows up as a
+        // change rather than passing quietly. `nil` means "none".
+        #expect(
+            overDeclared.sorted() == (expect.ttSrptOverDeclaredTitles ?? []),
+            "\(slug): titles whose declared PTT count exceeds their real chapter count are \(overDeclared.sorted()), manifest says \(expect.ttSrptOverDeclaredTitles ?? [])"
+        )
     }
 
     /// **The invariant this sweep was missing.**
@@ -682,6 +726,7 @@ struct DiscCorpusTests {
     private static func assertChapterNames(
         _ ocr: MenuOCRDocument,
         structure: MenuStructure?,
+        manifest: DiscManifest,
         expect: DiscManifest.MenuExpectation,
         slug: String
     ) throws {
@@ -689,9 +734,37 @@ struct DiscCorpusTests {
         let pages = expect.chapterPages
             ?? structure?.chapterMenus().flatMap(\.stillIDs)
             ?? []
-        #expect(!pages.isEmpty, "\(slug): expect.menu.chapterNamesEmitted is set but no chapter pages are named")
-
         let candidates = ChapterNames.candidates(stills: pages.map { ocr.still($0)?.observations ?? [] })
+
+        // **A disc that names no chapters is a shape, not a fault.**
+        //
+        // The design's §3.3 already has a row for it — "a scene index with
+        // highlights only → no CSV; bare `--markers` as today" — and the
+        // second captured disc is exactly that. Oppenheimer's chapter menu
+        // does not use `JumpVTS_PTT` at all: its buttons set a register and
+        // link to a common PGC, so there are no chapter targets to attach
+        // captions to, and its captured scene page prints only the page
+        // ranges "1-4", "5-8", "9-12", "13-16", "17-20" with no names.
+        //
+        // That must not be asserted the same way as "the reader failed".
+        // So zero is a claim in its own right and it is checked in the
+        // opposite direction: the reader must produce nothing, rather than
+        // the test skipping because there was nothing to look at.
+        if expectedRows == 0 {
+            let featureChapters = manifest.expect.featureChapterCount ?? 0
+            let rows = ChapterNames.markers(candidates, chapterCount: featureChapters)
+            #expect(
+                rows == nil,
+                "\(slug): the manifest says this disc names no chapters, but the reader produced \(rows?.count ?? 0) rows — one of the two is wrong"
+            )
+            #expect(
+                candidates.count * 2 < max(featureChapters, 1),
+                "\(slug): the manifest says this disc names no chapters, yet \(candidates.count) captions resolved against \(featureChapters) chapters"
+            )
+            return
+        }
+
+        #expect(!pages.isEmpty, "\(slug): expect.menu.chapterNamesEmitted is \(expectedRows) but no chapter pages are named")
         if let expectedNames = expect.chapterNames {
             #expect(
                 candidates.sorted { $0.chapter < $1.chapter }.map(\.name) == expectedNames,
