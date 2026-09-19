@@ -1,0 +1,299 @@
+{
+ "streams": [
+  {
+   "index": 0,
+   "codec_name": "hevc",
+   "codec_type": "video",
+   "width": 720,
+   "height": 480,
+   "disposition": {
+    "default": 1,
+    "attached_pic": 0
+   },
+   "tags": {
+    "handler_name": "VideoHandler"
+   }
+  },
+  {
+   "index": 1,
+   "codec_name": "aac",
+   "codec_type": "audio",
+   "channels": 2,
+   "tags": {
+    "handler_name": "SoundHandler"
+   }
+  },
+  {
+   "index": 2,
+   "codec_name": "bin_data",
+   "codec_type": "data",
+   "tags": {
+    "language": "und",
+    "handler_name": "SubtitleHandler"
+   }
+  }
+ ],
+ "chapters": [
+  {
+   "id": 0,
+   "time_base": "1/1000",
+   "start": 0,
+   "start_time": "0.000000",
+   "end": 255652,
+   "end_time": "255.652000",
+   "tags": {
+    "title": "Chapter 1"
+   }
+  },
+  {
+   "id": 1,
+   "time_base": "1/1000",
+   "start": 255652,
+   "start_time": "255.652000",
+   "end": 511304,
+   "end_time": "511.304000",
+   "tags": {
+    "title": "Chapter 2"
+   }
+  },
+  {
+   "id": 2,
+   "time_base": "1/1000",
+   "start": 511304,
+   "start_time": "511.304000",
+   "end": 766956,
+   "end_time": "766.956000",
+   "tags": {
+    "title": "Chapter 3"
+   }
+  },
+  {
+   "id": 3,
+   "time_base": "1/1000",
+   "start": 766956,
+   "start_time": "766.956000",
+   "end": 1022608,
+   "end_time": "1022.608000",
+   "tags": {
+    "title": "Chapter 4"
+   }
+  },
+  {
+   "id": 4,
+   "time_base": "1/1000",
+   "start": 1022608,
+   "start_time": "1022.608000",
+   "end": 1278260,
+   "end_time": "1278.260000",
+   "tags": {
+    "title": "Chapter 5"
+   }
+  },
+  {
+   "id": 5,
+   "time_base": "1/1000",
+   "start": 1278260,
+   "start_time": "1278.260000",
+   "end": 1533912,
+   "end_time": "1533.912000",
+   "tags": {
+    "title": "Chapter 6"
+   }
+  },
+  {
+   "id": 6,
+   "time_base": "1/1000",
+   "start": 1533912,
+   "start_time": "1533.912000",
+   "end": 1789564,
+   "end_time": "1789.564000",
+   "tags": {
+    "title": "Chapter 7"
+   }
+  },
+  {
+   "id": 7,
+   "time_base": "1/1000",
+   "start": 1789564,
+   "start_time": "1789.564000",
+   "end": 2045216,
+   "end_time": "2045.216000",
+   "tags": {
+    "title": "Chapter 8"
+   }
+  },
+  {
+   "id": 8,
+   "time_base": "1/1000",
+   "start": 2045216,
+   "start_time": "2045.216000",
+   "end": 2300868,
+   "end_time": "2300.868000",
+   "tags": {
+    "title": "Chapter 9"
+   }
+  },
+  {
+   "id": 9,
+   "time_base": "1/1000",
+   "start": 2300868,
+   "start_time": "2300.868000",
+   "end": 2556520,
+   "end_time": "2556.520000",
+   "tags": {
+    "title": "Chapter 10"
+   }
+  },
+  {
+   "id": 10,
+   "time_base": "1/1000",
+   "start": 2556520,
+   "start_time": "2556.520000",
+   "end": 2812172,
+   "end_time": "2812.172000",
+   "tags": {
+    "title": "Chapter 11"
+   }
+  },
+  {
+   "id": 11,
+   "time_base": "1/1000",
+   "start": 2812172,
+   "start_time": "2812.172000",
+   "end": 3067824,
+   "end_time": "3067.824000",
+   "tags": {
+    "title": "Chapter 12"
+   }
+  },
+  {
+   "id": 12,
+   "time_base": "1/1000",
+   "start": 3067824,
+   "start_time": "3067.824000",
+   "end": 3323476,
+   "end_time": "3323.476000",
+   "tags": {
+    "title": "Chapter 13"
+   }
+  },
+  {
+   "id": 13,
+   "time_base": "1/1000",
+   "start": 3323476,
+   "start_time": "3323.476000",
+   "end": 3579128,
+   "end_time": "3579.128000",
+   "tags": {
+    "title": "Chapter 14"
+   }
+  },
+  {
+   "id": 14,
+   "time_base": "1/1000",
+   "start": 3579128,
+   "start_time": "3579.128000",
+   "end": 3834780,
+   "end_time": "3834.780000",
+   "tags": {
+    "title": "Chapter 15"
+   }
+  },
+  {
+   "id": 15,
+   "time_base": "1/1000",
+   "start": 3834780,
+   "start_time": "3834.780000",
+   "end": 4090432,
+   "end_time": "4090.432000",
+   "tags": {
+    "title": "Chapter 16"
+   }
+  },
+  {
+   "id": 16,
+   "time_base": "1/1000",
+   "start": 4090432,
+   "start_time": "4090.432000",
+   "end": 4346084,
+   "end_time": "4346.084000",
+   "tags": {
+    "title": "Chapter 17"
+   }
+  },
+  {
+   "id": 17,
+   "time_base": "1/1000",
+   "start": 4346084,
+   "start_time": "4346.084000",
+   "end": 4601736,
+   "end_time": "4601.736000",
+   "tags": {
+    "title": "Chapter 18"
+   }
+  },
+  {
+   "id": 18,
+   "time_base": "1/1000",
+   "start": 4601736,
+   "start_time": "4601.736000",
+   "end": 4857388,
+   "end_time": "4857.388000",
+   "tags": {
+    "title": "Chapter 19"
+   }
+  },
+  {
+   "id": 19,
+   "time_base": "1/1000",
+   "start": 4857388,
+   "start_time": "4857.388000",
+   "end": 5113040,
+   "end_time": "5113.040000",
+   "tags": {
+    "title": "Chapter 20"
+   }
+  },
+  {
+   "id": 20,
+   "time_base": "1/1000",
+   "start": 5113040,
+   "start_time": "5113.040000",
+   "end": 5368692,
+   "end_time": "5368.692000",
+   "tags": {
+    "title": "Chapter 21"
+   }
+  },
+  {
+   "id": 21,
+   "time_base": "1/1000",
+   "start": 5368692,
+   "start_time": "5368.692000",
+   "end": 5624344,
+   "end_time": "5624.344000",
+   "tags": {
+    "title": "Chapter 22"
+   }
+  },
+  {
+   "id": 22,
+   "time_base": "1/1000",
+   "start": 5624344,
+   "start_time": "5624.344000",
+   "end": 5880000,
+   "end_time": "5880.000000",
+   "tags": {
+    "title": "Chapter 23"
+   }
+  }
+ ],
+ "format": {
+  "filename": "/Volumes/MediaSSD/Plex Media/Movies/Bloodsport (1988) {tmdb-10336}/Bloodsport (1988).mp4",
+  "nb_streams": 3,
+  "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+  "duration": "5880.437000",
+  "size": "1210453921",
+  "bit_rate": "1646678"
+ }
+}

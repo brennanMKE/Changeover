@@ -1,0 +1,267 @@
+{
+ "streams": [
+  {
+   "index": 0,
+   "codec_name": "hevc",
+   "codec_type": "video",
+   "width": 720,
+   "height": 480,
+   "disposition": {
+    "default": 1,
+    "attached_pic": 0
+   },
+   "tags": {
+    "handler_name": "VideoHandler"
+   }
+  },
+  {
+   "index": 1,
+   "codec_name": "aac",
+   "codec_type": "audio",
+   "channels": 2,
+   "tags": {
+    "handler_name": "SoundHandler",
+    "language": "eng"
+   }
+  },
+  {
+   "index": 2,
+   "codec_name": "bin_data",
+   "codec_type": "data",
+   "tags": {
+    "language": "und",
+    "handler_name": "SubtitleHandler"
+   }
+  }
+ ],
+ "chapters": [
+  {
+   "id": 0,
+   "time_base": "1/1000",
+   "start": 0,
+   "start_time": "0.000000",
+   "end": 540550,
+   "end_time": "540.550000",
+   "tags": {
+    "title": "Chapter 1"
+   }
+  },
+  {
+   "id": 1,
+   "time_base": "1/1000",
+   "start": 540550,
+   "start_time": "540.550000",
+   "end": 1081100,
+   "end_time": "1081.100000",
+   "tags": {
+    "title": "Chapter 2"
+   }
+  },
+  {
+   "id": 2,
+   "time_base": "1/1000",
+   "start": 1081100,
+   "start_time": "1081.100000",
+   "end": 1621650,
+   "end_time": "1621.650000",
+   "tags": {
+    "title": "Chapter 3"
+   }
+  },
+  {
+   "id": 3,
+   "time_base": "1/1000",
+   "start": 1621650,
+   "start_time": "1621.650000",
+   "end": 2162200,
+   "end_time": "2162.200000",
+   "tags": {
+    "title": "Chapter 4"
+   }
+  },
+  {
+   "id": 4,
+   "time_base": "1/1000",
+   "start": 2162200,
+   "start_time": "2162.200000",
+   "end": 2702750,
+   "end_time": "2702.750000",
+   "tags": {
+    "title": "Chapter 5"
+   }
+  },
+  {
+   "id": 5,
+   "time_base": "1/1000",
+   "start": 2702750,
+   "start_time": "2702.750000",
+   "end": 3243300,
+   "end_time": "3243.300000",
+   "tags": {
+    "title": "Chapter 6"
+   }
+  },
+  {
+   "id": 6,
+   "time_base": "1/1000",
+   "start": 3243300,
+   "start_time": "3243.300000",
+   "end": 3783850,
+   "end_time": "3783.850000",
+   "tags": {
+    "title": "Chapter 7"
+   }
+  },
+  {
+   "id": 7,
+   "time_base": "1/1000",
+   "start": 3783850,
+   "start_time": "3783.850000",
+   "end": 4324400,
+   "end_time": "4324.400000",
+   "tags": {
+    "title": "Chapter 8"
+   }
+  },
+  {
+   "id": 8,
+   "time_base": "1/1000",
+   "start": 4324400,
+   "start_time": "4324.400000",
+   "end": 4864950,
+   "end_time": "4864.950000",
+   "tags": {
+    "title": "Chapter 9"
+   }
+  },
+  {
+   "id": 9,
+   "time_base": "1/1000",
+   "start": 4864950,
+   "start_time": "4864.950000",
+   "end": 5405500,
+   "end_time": "5405.500000",
+   "tags": {
+    "title": "Chapter 10"
+   }
+  },
+  {
+   "id": 10,
+   "time_base": "1/1000",
+   "start": 5405500,
+   "start_time": "5405.500000",
+   "end": 5946050,
+   "end_time": "5946.050000",
+   "tags": {
+    "title": "Chapter 11"
+   }
+  },
+  {
+   "id": 11,
+   "time_base": "1/1000",
+   "start": 5946050,
+   "start_time": "5946.050000",
+   "end": 6486600,
+   "end_time": "6486.600000",
+   "tags": {
+    "title": "Chapter 12"
+   }
+  },
+  {
+   "id": 12,
+   "time_base": "1/1000",
+   "start": 6486600,
+   "start_time": "6486.600000",
+   "end": 7027150,
+   "end_time": "7027.150000",
+   "tags": {
+    "title": "Chapter 13"
+   }
+  },
+  {
+   "id": 13,
+   "time_base": "1/1000",
+   "start": 7027150,
+   "start_time": "7027.150000",
+   "end": 7567700,
+   "end_time": "7567.700000",
+   "tags": {
+    "title": "Chapter 14"
+   }
+  },
+  {
+   "id": 14,
+   "time_base": "1/1000",
+   "start": 7567700,
+   "start_time": "7567.700000",
+   "end": 8108250,
+   "end_time": "8108.250000",
+   "tags": {
+    "title": "Chapter 15"
+   }
+  },
+  {
+   "id": 15,
+   "time_base": "1/1000",
+   "start": 8108250,
+   "start_time": "8108.250000",
+   "end": 8648800,
+   "end_time": "8648.800000",
+   "tags": {
+    "title": "Chapter 16"
+   }
+  },
+  {
+   "id": 16,
+   "time_base": "1/1000",
+   "start": 8648800,
+   "start_time": "8648.800000",
+   "end": 9189350,
+   "end_time": "9189.350000",
+   "tags": {
+    "title": "Chapter 17"
+   }
+  },
+  {
+   "id": 17,
+   "time_base": "1/1000",
+   "start": 9189350,
+   "start_time": "9189.350000",
+   "end": 9729900,
+   "end_time": "9729.900000",
+   "tags": {
+    "title": "Chapter 18"
+   }
+  },
+  {
+   "id": 18,
+   "time_base": "1/1000",
+   "start": 9729900,
+   "start_time": "9729.900000",
+   "end": 10270450,
+   "end_time": "10270.450000",
+   "tags": {
+    "title": "Chapter 19"
+   }
+  },
+  {
+   "id": 19,
+   "time_base": "1/1000",
+   "start": 10270450,
+   "start_time": "10270.450000",
+   "end": 10811000,
+   "end_time": "10811.000000",
+   "tags": {
+    "title": "Chapter 20"
+   }
+  }
+ ],
+ "format": {
+  "filename": "/Volumes/MediaSSD/Plex Media/Movies/Oppenheimer (2023) {tmdb-872585}/Oppenheimer (2023).mp4",
+  "nb_streams": 3,
+  "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+  "duration": "10811.221000",
+  "size": "1955203219",
+  "bit_rate": "1446678"
+ }
+}

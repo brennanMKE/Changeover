@@ -1,0 +1,292 @@
+{
+ "streams": [
+  {
+   "index": 0,
+   "codec_name": "hevc",
+   "codec_type": "video",
+   "width": 720,
+   "height": 480,
+   "disposition": {
+    "default": 1,
+    "attached_pic": 0
+   },
+   "tags": {
+    "handler_name": "VideoHandler"
+   }
+  },
+  {
+   "index": 1,
+   "codec_name": "aac",
+   "codec_type": "audio",
+   "channels": 2,
+   "tags": {
+    "handler_name": "SoundHandler",
+    "language": "eng",
+    "name": "English"
+   }
+  }
+ ],
+ "chapters": [
+  {
+   "id": 0,
+   "time_base": "1/90000",
+   "start": 0,
+   "start_time": "0.000000",
+   "end": 23008680,
+   "end_time": "255.652000",
+   "tags": {
+    "title": "World's warriors"
+   }
+  },
+  {
+   "id": 1,
+   "time_base": "1/90000",
+   "start": 23008680,
+   "start_time": "255.652000",
+   "end": 46017360,
+   "end_time": "511.304000",
+   "tags": {
+    "title": "Dux ducks out"
+   }
+  },
+  {
+   "id": 2,
+   "time_base": "1/90000",
+   "start": 46017360,
+   "start_time": "511.304000",
+   "end": 69026040,
+   "end_time": "766.956000",
+   "tags": {
+    "title": "A mentor: Tanaka"
+   }
+  },
+  {
+   "id": 3,
+   "time_base": "1/90000",
+   "start": 69026040,
+   "start_time": "766.956000",
+   "end": 92034720,
+   "end_time": "1022.608000",
+   "tags": {
+    "title": "Training"
+   }
+  },
+  {
+   "id": 4,
+   "time_base": "1/90000",
+   "start": 92034720,
+   "start_time": "1022.608000",
+   "end": 115043400,
+   "end_time": "1278.260000",
+   "tags": {
+    "title": "Ray Jackson"
+   }
+  },
+  {
+   "id": 5,
+   "time_base": "1/90000",
+   "start": 115043400,
+   "start_time": "1278.260000",
+   "end": 138052080,
+   "end_time": "1533.912000",
+   "tags": {
+    "title": "No man's land.i"
+   }
+  },
+  {
+   "id": 6,
+   "time_base": "1/90000",
+   "start": 138052080,
+   "start_time": "1533.912000",
+   "end": 161060760,
+   "end_time": "1789.564000",
+   "tags": {
+    "title": "Death touch"
+   }
+  },
+  {
+   "id": 7,
+   "time_base": "1/90000",
+   "start": 161060760,
+   "start_time": "1789.564000",
+   "end": 184069440,
+   "end_time": "2045.216000",
+   "tags": {
+    "title": "Bet on a woman"
+   }
+  },
+  {
+   "id": 8,
+   "time_base": "1/90000",
+   "start": 184069440,
+   "start_time": "2045.216000",
+   "end": 207078120,
+   "end_time": "2300.868000",
+   "tags": {
+    "title": "The mightiest prevail"
+   }
+  },
+  {
+   "id": 9,
+   "time_base": "1/90000",
+   "start": 207078120,
+   "start_time": "2300.868000",
+   "end": 230086800,
+   "end_time": "2556.520000",
+   "tags": {
+    "title": "First bouts"
+   }
+  },
+  {
+   "id": 10,
+   "time_base": "1/90000",
+   "start": 230086800,
+   "start_time": "2556.520000",
+   "end": 253095480,
+   "end_time": "2812.172000",
+   "tags": {
+    "title": "Fight to Survive montage"
+   }
+  },
+  {
+   "id": 11,
+   "time_base": "1/90000",
+   "start": 253095480,
+   "start_time": "2812.172000",
+   "end": 276104160,
+   "end_time": "3067.824000",
+   "tags": {
+    "title": "Hong Kong chase"
+   }
+  },
+  {
+   "id": 12,
+   "time_base": "1/90000",
+   "start": 276104160,
+   "start_time": "3067.824000",
+   "end": 299112840,
+   "end_time": "3323.476000",
+   "tags": {
+    "title": "Under covers, undercover"
+   }
+  },
+  {
+   "id": 13,
+   "time_base": "1/90000",
+   "start": 299112840,
+   "start_time": "3323.476000",
+   "end": 322121520,
+   "end_time": "3579.128000",
+   "tags": {
+    "title": "Second rounds"
+   }
+  },
+  {
+   "id": 14,
+   "time_base": "1/90000",
+   "start": 322121520,
+   "start_time": "3579.128000",
+   "end": 345130200,
+   "end_time": "3834.780000",
+   "tags": {
+    "title": "Ray vs. Chong Li"
+   }
+  },
+  {
+   "id": 15,
+   "time_base": "1/90000",
+   "start": 345130200,
+   "start_time": "3834.780000",
+   "end": 368138880,
+   "end_time": "4090.432000",
+   "tags": {
+    "title": "Being the best"
+   }
+  },
+  {
+   "id": 16,
+   "time_base": "1/90000",
+   "start": 368138880,
+   "start_time": "4090.432000",
+   "end": 391147560,
+   "end_time": "4346.084000",
+   "tags": {
+    "title": "Nearly zapped"
+   }
+  },
+  {
+   "id": 17,
+   "time_base": "1/90000",
+   "start": 391147560,
+   "start_time": "4346.084000",
+   "end": 414156240,
+   "end_time": "4601.736000",
+   "tags": {
+    "title": "Dux vs. Paco"
+   }
+  },
+  {
+   "id": 18,
+   "time_base": "1/90000",
+   "start": 414156240,
+   "start_time": "4601.736000",
+   "end": 437164920,
+   "end_time": "4857.388000",
+   "tags": {
+    "title": "Short work for Chong Li"
+   }
+  },
+  {
+   "id": 19,
+   "time_base": "1/90000",
+   "start": 437164920,
+   "start_time": "4857.388000",
+   "end": 460173600,
+   "end_time": "5113.040000",
+   "tags": {
+    "title": "Championship"
+   }
+  },
+  {
+   "id": 20,
+   "time_base": "1/90000",
+   "start": 460173600,
+   "start_time": "5113.040000",
+   "end": 483182280,
+   "end_time": "5368.692000",
+   "tags": {
+    "title": "Victory out of dust"
+   }
+  },
+  {
+   "id": 21,
+   "time_base": "1/90000",
+   "start": 483182280,
+   "start_time": "5368.692000",
+   "end": 506190960,
+   "end_time": "5624.344000",
+   "tags": {
+    "title": "Goodbye"
+   }
+  },
+  {
+   "id": 22,
+   "time_base": "1/90000",
+   "start": 506190960,
+   "start_time": "5624.344000",
+   "end": 529200000,
+   "end_time": "5880.000000",
+   "tags": {
+    "title": "Coda and End Credits"
+   }
+  }
+ ],
+ "format": {
+  "filename": "/private/var/folders/xx/(A Document Being Saved)/Bloodsport (1988).upgrade.mp4",
+  "nb_streams": 2,
+  "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+  "duration": "5880.437000",
+  "size": "1210461044",
+  "bit_rate": "1646688"
+ }
+}
