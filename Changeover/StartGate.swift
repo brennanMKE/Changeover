@@ -50,6 +50,15 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
     /// staged `replaceItemAt`), so without this a re-rip silently overwrites
     /// a good library copy *after* a 40-minute encode.
     case duplicateUnacknowledged
+    /// §7.4 — every row on the upgrade card is refused or unticked, so there
+    /// is nothing for a remux to write. Never offered as a no-op.
+    case upgradeNothingSelected
+    /// §7.2 — `ffmpeg` is not installed, so the upgrade path has no tool.
+    /// **Only ever returned by `decideUpgrade`**: a missing `ffmpeg` must
+    /// never affect ripping, which does not use it.
+    case ffmpegMissing
+    /// §7.2 — the existing file's own contents have not been read back yet.
+    case fileCheckInProgress
 
     /// A short sentence naming the next action — what `ConfirmStepView`
     /// shows as the Start button's `.help(...)` tooltip and as a caption
@@ -109,6 +118,12 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
             // Name the control, the way `.runtimeMismatchUnconfirmed` does:
             // the notice above the action bar offers exactly this button.
             return "This movie is already in Plex — choose Replace the Existing File to rip it again."
+        case .upgradeNothingSelected:
+            return "There is nothing this disc can add to the file already in Plex."
+        case .ffmpegMissing:
+            return "Upgrading needs ffmpeg — run brew install ffmpeg, then reopen this window."
+        case .fileCheckInProgress:
+            return "Reading what the existing file already has."
         }
     }
 }
@@ -244,6 +259,58 @@ nonisolated enum StartGate {
         case .done(_, .absent), .done(_, .unreachable):
             return .ready
         }
+    }
+
+    /// §7.4 — the decision behind the **Upgrade metadata** button, which is
+    /// offered beside Replace and Reveal on the duplicate notice.
+    ///
+    /// Deliberately its own function rather than a branch inside `decide`:
+    /// the upgrade asks a different set of questions (is there a tool? is
+    /// there anything to write?) and must never make Start stricter. A Mac
+    /// with no `ffmpeg` rips exactly as it does today.
+    ///
+    /// It *does* reuse the two questions it shares with a re-rip, and for the
+    /// same reasons: nothing runs on top of a running job, and the
+    /// `ReplaceAcknowledgement` is required because an upgrade **does**
+    /// overwrite the library file — by remux rather than by re-encode, but
+    /// overwrite it is.
+    static func decideUpgrade(
+        isRunning: Bool,
+        hasMovieSelected: Bool,
+        ffmpegAvailable: Bool,
+        libraryCheck: LibraryCheck,
+        fileCheck: FileInventoryCheck,
+        proposal: UpgradeProposal.Result?,
+        replaceAcknowledgement: ReplaceAcknowledgement?
+    ) -> StartDecision {
+        guard !isRunning else { return .jobRunning }
+        guard hasMovieSelected else { return .noMovieSelected }
+        guard ffmpegAvailable else { return .ffmpegMissing }
+
+        switch libraryCheck {
+        case .idle, .done(_, .absent), .done(_, .unreachable):
+            // Nothing to upgrade: there is no file there to rewrite.
+            return .upgradeNothingSelected
+        case .checking:
+            return .libraryCheckInProgress
+        case .done:
+            break
+        }
+
+        switch fileCheck {
+        case .idle, .checking:
+            return .fileCheckInProgress
+        case .unavailable:
+            return .upgradeNothingSelected
+        case .done:
+            break
+        }
+
+        guard let proposal, proposal.offersUpgrade else { return .upgradeNothingSelected }
+
+        // The same acknowledgement Replace needs, keyed the same way: the
+        // library file is being overwritten either way.
+        return libraryDecision(libraryCheck, replaceAcknowledgement: replaceAcknowledgement)
     }
 
     /// #0053: `canStart` is now derived from `decide`, so the button's

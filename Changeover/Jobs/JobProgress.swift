@@ -22,6 +22,31 @@ nonisolated struct JobProgress: Codable, Sendable, Equatable {
         /// #0031's extras loop. `index` is 1-based, for display as
         /// "extra 2 of 3".
         case extra(index: Int, count: Int, titleIndex: Int)
+        /// §7.4 — the metadata upgrade's `ffmpeg -c copy` pass over a file
+        /// already in the library. It has no percentage of its own: ffmpeg's
+        /// `-progress` output is not parsed, and a two-minute disk-bound copy
+        /// does not need one. **Always indeterminate** — see
+        /// `JobPresentation.progressMode`, which refuses to derive a fraction
+        /// for this unit even if one is ever attached.
+        case remux
+    }
+
+    /// The one report an upgrade makes: "something is happening, and it has no
+    /// percentage". The `encode` payload is a placeholder the bar never reads.
+    static func remux(at date: Date = Date()) -> JobProgress {
+        JobProgress(
+            unit: .remux,
+            encode: HandBrakeProgress(
+                stage: .muxing,
+                fraction: 0,
+                task: 1,
+                taskCount: 1,
+                fps: nil,
+                averageFPS: nil,
+                etaSeconds: nil
+            ),
+            receivedAt: date
+        )
     }
 
     var unit: Unit

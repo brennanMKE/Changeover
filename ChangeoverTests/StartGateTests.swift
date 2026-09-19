@@ -213,7 +213,8 @@ struct StartGateTests {
         for decision in StartDecision.allCases where decision != .ready {
             #expect(decision.reason?.isEmpty == false, "\(decision) has no reason")
         }
-        #expect(StartDecision.allCases.count == 14)
+        // 14 through #0062, plus §7.4's three upgrade cases.
+        #expect(StartDecision.allCases.count == 17)
     }
 
     // MARK: - #0062: the "already in Plex" check

@@ -25,6 +25,7 @@ struct ConfirmStepView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     movieCard
                     duplicateNotice
+                    upgradeCard
                     Divider()
                     DiscTitleListView(jobs: jobs, settings: settings, runtimeLookup: flow.search.runtimeLookup)
                     menuNotice
@@ -44,6 +45,40 @@ struct ConfirmStepView: View {
         .task(id: flow.libraryCheckKey(settings: settings)) {
             guard flow.libraryCheckKey(settings: settings) != nil else { return }
             await flow.checkLibrary(settings: settings)
+        }
+        // §7.2 — and, once a duplicate is found, what is actually *in* it.
+        // Keyed on the matched file, so it runs exactly once per file and
+        // never on an unrelated redraw. A Mac with no ffmpeg never starts it
+        // at all (`fileInventoryKey` returns `nil`) and rips as it does today.
+        .task(id: flow.fileInventoryKey(settings: settings)) {
+            guard flow.fileInventoryKey(settings: settings) != nil else { return }
+            await flow.checkFile(settings: settings)
+        }
+    }
+
+    // MARK: - Upgrading an existing import (docs/menu-intelligence.md §7)
+
+    /// The comparison card, and the third action beside Replace and Reveal.
+    /// Shown only when the film really is already in Plex; the common case
+    /// costs no pixels.
+    @ViewBuilder
+    private var upgradeCard: some View {
+        @Bindable var flow = flow
+        if let card = UpgradePresentation.card(
+            libraryCheck: flow.libraryCheck,
+            fileCheck: flow.fileCheck,
+            proposal: flow.upgradeProposal(jobs: jobs),
+            menuState: jobs.menuState,
+            ffmpegAvailable: settings.isFFmpegAvailable,
+            decision: flow.upgradeDecision(jobs: jobs, settings: settings)
+        ) {
+            UpgradeCardView(
+                card: card,
+                overwriteExistingNames: $flow.overwriteExistingChapterNames,
+                onUpgrade: { flow.startUpgrade(jobs: jobs, settings: settings) }
+            )
+            .padding(.horizontal)
+            .padding(.bottom, 10)
         }
     }
 

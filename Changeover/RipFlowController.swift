@@ -56,10 +56,25 @@ final class RipFlowController {
     /// another.
     private(set) var replaceAcknowledgement: ReplaceAcknowledgement?
 
+    /// §7.2 — where the `ffprobe` read of the matched library file stands.
+    /// Only ever started once `libraryCheck` has found one, and cleared by
+    /// everything that clears `libraryCheck`.
+    private(set) var fileCheck: FileInventoryCheck = .idle
+
+    /// §7.3 — the card's explicit "replace existing chapter names" tick. Off
+    /// by default and reset with every other per-selection piece of state: a
+    /// permission given for one file must never carry to another.
+    var overwriteExistingChapterNames = false
+
     /// Bumped by every `checkLibrary`, so a result for a movie that is no
     /// longer selected is discarded — the same generation guard `startScan`
     /// uses for a superseded disc scan.
     private var libraryCheckGeneration = 0
+
+    /// The same guard for the file probe, bumped independently: the library
+    /// listing and the `ffprobe` read finish at different times and one must
+    /// not discard the other's answer.
+    private var fileCheckGeneration = 0
 
     /// The disc a search-term prefill has already been attempted for
     /// (`SearchPrefill.decide`'s `alreadyAttemptedFor`), whether or not it
@@ -252,6 +267,115 @@ final class RipFlowController {
         libraryCheckGeneration += 1
         libraryCheck = .idle
         replaceAcknowledgement = nil
+        // §7: the file probe, its answer and the overwrite permission are all
+        // about the file the library check found. When that goes, so do they.
+        fileCheckGeneration += 1
+        fileCheck = .idle
+        overwriteExistingChapterNames = false
+    }
+
+    // MARK: - Upgrading an existing import (docs/menu-intelligence.md §7)
+
+    /// The library file an upgrade would rewrite: the first video file in the
+    /// first matched folder. `nil` when the check found nothing — which is
+    /// the common case and costs nothing.
+    var upgradeTargetPath: String? {
+        guard case .done(_, .present(let entries)) = libraryCheck,
+              let entry = entries.first,
+              let file = entry.files.first else { return nil }
+        return (entry.folderPath as NSString).appendingPathComponent(file.name)
+    }
+
+    /// What `ConfirmStepView.task(id:)` keys the file probe on. `nil` when
+    /// there is no matched file or no `ffprobe` — in both cases there is
+    /// nothing to read.
+    func fileInventoryKey(settings: AppSettings) -> FileInventoryKey? {
+        guard let path = upgradeTargetPath, settings.isFFmpegAvailable else { return nil }
+        return FileInventoryKey(path: path, ffprobePath: settings.ffprobePath)
+    }
+
+    /// Reads what the matched library file already has. Runs off the main
+    /// actor (`UpgradeController.probe` is `@concurrent`), and its answer is
+    /// dropped if the selection moved on while it was in flight.
+    ///
+    /// Never blocks Start and never affects a rip: a probe that fails leaves
+    /// `.unavailable` and the upgrade simply is not offered.
+    func checkFile(
+        settings: AppSettings,
+        probe: @Sendable (String, String) async -> Result<LibraryFileInventory, JobFailure> = { path, ffprobePath in
+            await UpgradeController.probe(path: path, ffprobePath: ffprobePath)
+        }
+    ) async {
+        guard let path = upgradeTargetPath else { return }
+        let ffprobePath = settings.ffprobePath
+
+        fileCheckGeneration += 1
+        let generation = fileCheckGeneration
+        fileCheck = .checking(path: path)
+
+        let result = await probe(path, ffprobePath)
+
+        guard generation == fileCheckGeneration, upgradeTargetPath == path else { return }
+        switch result {
+        case .success(let inventory):
+            fileCheck = .done(path: path, inventory)
+        case .failure(let failure):
+            fileCheck = .unavailable(path: path, reason: FailurePresenter.message(for: failure).headline)
+        }
+    }
+
+    /// The comparison for the file the library check found and the disc in
+    /// the drive. `nil` until both halves are in.
+    ///
+    /// The two halves are deliberately separate values: `LibraryFileGaps`
+    /// answers "what does this file lack?" from the file alone — which is
+    /// what a library-wide sweep would list, with no disc anywhere — and
+    /// `DiscUpgradeOffer` answers "what can this disc supply?". This is the
+    /// one place today that joins them.
+    func upgradeProposal(jobs: JobController) -> UpgradeProposal.Result? {
+        guard case .done(let path, let inventory) = fileCheck else { return nil }
+        let offer = jobs.menuState.intelligence.map(DiscUpgradeOffer.make(menu:)) ?? DiscUpgradeOffer()
+        return UpgradeProposal.compare(
+            filePath: path,
+            inventory: inventory,
+            offer: offer,
+            overwriteExistingNames: overwriteExistingChapterNames
+        )
+    }
+
+    /// Whether the Upgrade button is live, and if not, why.
+    ///
+    /// - Parameter ffmpegAvailable: defaults to the real filesystem check.
+    ///   Passed explicitly by tests so the decision never depends on whether
+    ///   the host they run on happens to have `brew install ffmpeg`.
+    func upgradeDecision(jobs: JobController, settings: AppSettings, ffmpegAvailable: Bool? = nil) -> StartDecision {
+        StartGate.decideUpgrade(
+            isRunning: jobs.isRunning,
+            hasMovieSelected: search.selectedMovie != nil,
+            ffmpegAvailable: ffmpegAvailable ?? settings.isFFmpegAvailable,
+            libraryCheck: libraryCheck,
+            fileCheck: fileCheck,
+            proposal: upgradeProposal(jobs: jobs),
+            replaceAcknowledgement: replaceAcknowledgement
+        )
+    }
+
+    /// The request the Upgrade button hands to `JobController.start`: the
+    /// same shape a rip uses, with the plan attached and no extras.
+    func upgradeRequest(jobs: JobController) -> RipRequest? {
+        guard let plan = upgradeProposal(jobs: jobs)?.plan, var request = ripRequest(jobs: jobs) else { return nil }
+        request.extraTitleIndices = []
+        request.chapterMarkers = nil
+        request.upgrade = plan
+        return request
+    }
+
+    /// Starts the upgrade, if there is one to start.
+    @discardableResult
+    func startUpgrade(jobs: JobController, settings: AppSettings, ffmpegAvailable: Bool? = nil) -> Bool {
+        guard upgradeDecision(jobs: jobs, settings: settings, ffmpegAvailable: ffmpegAvailable) == .ready,
+              let request = upgradeRequest(jobs: jobs) else { return false }
+        return jobs.start(request: request, settings: settings)
     }
 
     // MARK: - Disc swap (#0034)

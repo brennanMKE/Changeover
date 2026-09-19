@@ -36,10 +36,23 @@ final class AppSettings {
     /// without it the rip is exactly what it is today.
     var menudumpPath: String = ""
     /// Menu intelligence — renders one still per menu so Vision can read it,
-    /// and (later) the remux for §7's library upgrade. A Homebrew formula,
-    /// never bundled; absent means no chapter names and no language hints,
-    /// and no change to the rip.
+    /// and, with `ffprobe` beside it, performs and verifies §7's metadata
+    /// upgrade of a file already in the library. A Homebrew formula, never
+    /// bundled; absent means no chapter names, no language hints and no
+    /// upgrade — and **no change to the rip**, which does not use it.
     var ffmpegPath: String = "/opt/homebrew/bin/ffmpeg"
+
+    /// `ffprobe`, derived from `ffmpegPath` — one Homebrew formula ships
+    /// both, so a second Settings field would only be a second thing to get
+    /// wrong.
+    var ffprobePath: String { UpgradeController.ffprobePath(forFFmpegPath: ffmpegPath) }
+
+    /// Whether the §7 upgrade path has its tool. A plain filesystem check, so
+    /// installing `ffmpeg` and reopening the window is all it takes.
+    var isFFmpegAvailable: Bool {
+        let fm = FileManager.default
+        return fm.isExecutableFile(atPath: ffmpegPath) && fm.isExecutableFile(atPath: ffprobePath)
+    }
 
     // MARK: - Derived Plex paths (standard Plex folder structure under root)
 

@@ -56,7 +56,9 @@ nonisolated struct JobPresentation: Equatable, Sendable {
             return JobPresentation(label: "Checking setup", tone: .neutral, progress: .none, detail: [])
         case .encoding:
             return JobPresentation(
-                label: "Encoding \(snapshot.metadata.baseName)",
+                label: snapshot.progress?.unit == .remux
+                    ? "Rewriting metadata in \(snapshot.metadata.fileName)"
+                    : "Encoding \(snapshot.metadata.baseName)",
                 tone: .active,
                 progress: progressMode(for: snapshot),
                 detail: []
@@ -98,6 +100,9 @@ nonisolated struct JobPresentation: Equatable, Sendable {
         // lines carry their own percentage. Showing it would run the bar
         // 0→100 and then start again, so the pre-encode read is
         // indeterminate — `progressSummary` labels it "Reading the disc".
+        // §7.4: a remux has no percentage at all, and a placeholder payload
+        // must never be mistaken for one.
+        if snapshot.progress?.unit == .remux { return .indeterminate }
         let live = snapshot.progress.flatMap { $0.encode.stage == .scanning ? nil : $0.encode.fraction }
         guard let fraction = live ?? snapshot.state.progress else {
             return .indeterminate

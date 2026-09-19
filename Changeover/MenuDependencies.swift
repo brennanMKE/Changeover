@@ -202,7 +202,7 @@ nonisolated enum DependencyPanel {
             name: "ffmpeg",
             role: .optional,
             status: status(ffmpeg),
-            purpose: "Renders one still per menu so the text can be read.",
+            purpose: "Renders one still per menu so the text can be read, and upgrades an existing import's metadata.",
             install: ffmpegInstall
         ))
 

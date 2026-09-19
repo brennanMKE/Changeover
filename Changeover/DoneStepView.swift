@@ -88,7 +88,10 @@ struct DoneStepView: View {
             discRemovedDuringJob: job.discRemovedDuringJob,
             retryDecision: jobs.retryDecision(id: jobID),
             discEjected: jobs.insertedDisc == nil,
-            discUnavailable: jobs.discUnavailable
+            discUnavailable: jobs.discUnavailable,
+            // §7.4 — when this job was a metadata upgrade, the card says what
+            // changed and what did not, rather than "Filed as…".
+            upgrade: job.request?.upgrade
         )
     }
 

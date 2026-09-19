@@ -62,6 +62,11 @@ extension JobPresentation {
         if isCancelling, !snapshot.state.phase.isTerminal { return "Cancelling…" }
         switch snapshot.state.phase {
         case .encoding:
+            // §7.4 — an upgrade's one pass is not an encode, and saying so is
+            // the whole reassurance: nothing is being re-encoded.
+            if snapshot.progress?.unit == .remux {
+                return "Rewriting metadata in \(snapshot.metadata.fileName)"
+            }
             // HandBrake scans the disc itself before it encodes; saying
             // "Encoding" through that read would be a lie the bar can't back
             // up (it has no percentage to show either).
@@ -118,12 +123,17 @@ extension JobPresentation {
     ///     end-of-job eject actually took the disc out.
     ///   - discUnavailable: #0049 — the disc unmounted but stayed in the
     ///     drive, so Eject is offered again.
+    /// - Parameter upgrade: §7.4 — the plan this job applied, when it was a
+    ///   metadata upgrade rather than a rip (`Job.request?.upgrade`). It
+    ///   changes what the card *says* and nothing else: the same phases, the
+    ///   same actions, the same tones.
     nonisolated static func outcomeCard(
         for snapshot: JobSnapshot,
         discRemovedDuringJob: Bool = false,
         retryDecision: RetryDecision,
         discEjected: Bool,
-        discUnavailable: Bool = false
+        discUnavailable: Bool = false,
+        upgrade: UpgradePlan? = nil
     ) -> OutcomeCard {
         let name = snapshot.metadata.baseName
         let elapsed = elapsedLine(snapshot, discEjected: discEjected, discUnavailable: discUnavailable)
@@ -131,7 +141,13 @@ extension JobPresentation {
         switch snapshot.state.phase {
         case .succeeded:
             var lines: [String] = []
-            if let destination = snapshot.outcome?.destination {
+            if let upgrade {
+                // Says exactly what changed, and — the sentence that matters
+                // most on a file that took forty minutes to make — what did
+                // not.
+                lines.append("Upgraded: \(upgrade.changeSummary). Video and audio untouched.")
+                lines.append(upgrade.filePath)
+            } else if let destination = snapshot.outcome?.destination {
                 lines.append("Filed as \(destination.path)")
             }
             lines.append(elapsed)
@@ -144,13 +160,21 @@ extension JobPresentation {
             }
             if discUnavailable { actions.append(.eject) }
             actions.append(.nextDisc)
-            return OutcomeCard(headline: name, tone: .success, lines: lines, actions: actions)
+            return OutcomeCard(
+                headline: upgrade == nil ? name : "\(name) — Upgraded",
+                tone: .success,
+                lines: lines,
+                actions: actions
+            )
 
         case .failed:
             var lines = make(for: snapshot).detail
             lines.append(elapsed)
             return OutcomeCard(
-                headline: "\(name) — Failed",
+                // An upgrade that refused did not "fail" in the sense a rip
+                // does: nothing was produced and nothing was lost. Saying
+                // "Not upgraded" is the difference between a scare and a fact.
+                headline: upgrade == nil ? "\(name) — Failed" : "\(name) — Not upgraded",
                 tone: .failure,
                 lines: lines,
                 actions: retryActions(retryDecision: retryDecision, discUnavailable: discUnavailable)

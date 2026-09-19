@@ -69,6 +69,11 @@ final class JobController {
         /// #0031 Step B — resolved the same way; an empty plan is the
         /// default and a valid job.
         let extras: ExtrasPlan
+        /// §7.4 — set when this job upgrades an existing library file by
+        /// remux instead of ripping the disc. `nil` is an ordinary rip.
+        /// Defaulted so every hand-built context in a test compiles
+        /// unchanged.
+        var upgrade: UpgradePlan? = nil
         let log: @MainActor (String) -> Void
         /// Called as `DVDPipeline` crosses `.encoding`/`.fallback`/
         /// `.organizing`/`.extras` — validated by `Job.advance(to:)` before
@@ -448,7 +453,26 @@ final class JobController {
     /// straight through to `DVDPipeline`, exactly as each used to be passed
     /// positionally.
     static let pipelineRunner: Runner = { context, settings in
-        await DVDPipeline(
+        // §7.4 — an upgrade is a job of the same shape and runs through the
+        // same `Runner` seam, so nothing in the state machine, the log, the
+        // history or the notification learns a new case. It simply never
+        // touches HandBrake.
+        if let plan = context.upgrade {
+            return await UpgradePipeline(
+                metadata: context.metadata,
+                plan: plan,
+                jobID: context.id,
+                log: context.log,
+                steps: UpgradeController.live(
+                    ffmpegPath: settings.ffmpegPath,
+                    ffprobePath: settings.ffprobePath,
+                    log: context.log
+                ),
+                reportPhase: context.phase,
+                reportProgress: context.progress
+            ).run()
+        }
+        return await DVDPipeline(
             metadata:    context.metadata,
             settings:    settings,
             disc:        context.disc,
@@ -600,7 +624,19 @@ final class JobController {
         // no longer resolves (a stale pick from a superseded scan) is simply
         // dropped, not treated as a reason to fail the whole job the feature
         // is about.
-        let extrasPlan = ExtrasPlan.make(featureIndex: request.featureTitleIndex, requested: request.extraTitleIndices, disc: scan.disc)
+        // §7.4: an upgrade encodes nothing at all, so it can carry no extras,
+        // whatever the request asked for.
+        let extrasPlan = request.isUpgrade
+            ? ExtrasPlan()
+            : ExtrasPlan.make(featureIndex: request.featureTitleIndex, requested: request.extraTitleIndices, disc: scan.disc)
+        // §7.4: an upgrade with nothing in its plan is a no-op that would
+        // still overwrite a library file. `StartGate.decideUpgrade` disables
+        // the button; this is the failsafe at the point of harm, the same
+        // pattern #0034's disc-identity guard established.
+        if let plan = request.upgrade, plan.isEmpty {
+            append("⚠︎ \(StartDecision.upgradeNothingSelected.reason!)")
+            return false
+        }
         // #0027 review: `make` accepts an empty track list, which HandBrake
         // would turn into "first track only" while the picker shows nothing
         // checked. Refuse it on a title that has audio.
@@ -647,6 +683,10 @@ final class JobController {
             disc: disc,
             selection: selection,
             extras: extrasPlan,
+            // §7.4: an upgrade encodes nothing, so it never carries extras —
+            // whatever the request asked for. Checked here at the point of
+            // harm rather than trusted from the caller.
+            upgrade: request.upgrade,
             log: { [job] line in job.log.append(line) },
             phase: { [job] phase in job.advance(to: phase) },
             // #0061: bound to this job the same way, so a progress line that

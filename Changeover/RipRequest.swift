@@ -45,4 +45,20 @@ nonisolated struct RipRequest: Codable, Hashable, Sendable {
     /// point-of-harm check every index in this type already gets, for the
     /// same reason (#0028's "never mix indices across scans").
     var chapterMarkers: [MarkerRow]? = nil
+    /// §7.4 — when set, this job **upgrades an existing library file by
+    /// remux** instead of ripping the disc: no HandBrake, no encode, no new
+    /// file. Additive and wire-safe, the same shape `extraTitleIndices` and
+    /// `chapterMarkers` took; `nil` — the usual case — is an ordinary rip.
+    ///
+    /// The rest of the request is still filled in exactly as a rip's is
+    /// (`featureTitleIndex`, `audioTrackNumbers`), so `JobController.start`'s
+    /// disc-binding and scan-resolution guards apply unchanged and an upgrade
+    /// cannot be started for a disc that is not in the drive. `UpgradePlan`
+    /// itself refers to no disc at all, so a future library sweep can build
+    /// one with nothing inserted.
+    ///
+    /// `extraTitleIndices` must be empty: an upgrade encodes nothing.
+    var upgrade: UpgradePlan? = nil
+
+    var isUpgrade: Bool { upgrade != nil }
 }
