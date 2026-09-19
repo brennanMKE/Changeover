@@ -509,6 +509,66 @@ typedef struct {
     int check_only;
 } options_t;
 
+/* One cell's button table.
+ *
+ * Split out of the PGC loop because a menu's pages are its cells: a
+ * multi-page scene index is one PGC, and reading only cell 0 sees page 1 and
+ * calls it the whole menu. Every caller gets the same bounded walk — the
+ * first VOBU of a cell starts with a NAV pack and a still menu repeats its
+ * button table in every one, but a motion menu whose highlight starts later
+ * has an empty table until it does, so keep looking a bounded way in rather
+ * than reporting "no buttons", which is the one answer a reader must never
+ * give when it simply has not looked yet. */
+static void scan_cell_nav(FILE *vob, uint32_t first_sector, uint32_t last_sector,
+                          int frame_w, int frame_h, nav_t *out_nav,
+                          uint32_t *out_sector, int *out_lbn_matches,
+                          const char **out_error) {
+    memset(out_nav, 0, sizeof *out_nav);
+    out_nav->button_groups = 1;      /* the defaults a menu with no */
+    out_nav->groups_agree = 1;       /* readable NAV pack reports,  */
+    out_nav->rects_inside_frame = 1; /* so "unknown" never reads as a failed check */
+    *out_sector = 0;
+    *out_lbn_matches = 0;
+    *out_error = "no NAV pack with buttons in the cell";
+
+    uint32_t limit = last_sector >= first_sector ? last_sector : first_sector;
+    if (limit > first_sector + 64) limit = first_sector + 64;
+    for (uint32_t s = first_sector; s <= limit; s++) {
+        uint8_t sector[DVD_BLOCK];
+        if (fseek(vob, (long)s * DVD_BLOCK, SEEK_SET) != 0) {
+            *out_error = "seek past the end of the menu VOB";
+            break;
+        }
+        if (fread(sector, 1, DVD_BLOCK, vob) != DVD_BLOCK) {
+            *out_error = "short read from the menu VOB";
+            break;
+        }
+        nav_t candidate;
+        parse_nav_pack(sector, frame_w, frame_h, &candidate);
+        if (!candidate.found) continue;
+        *out_nav = candidate;
+        *out_sector = s;
+        *out_lbn_matches = (candidate.lbn == s);
+        if (candidate.count > 0) { *out_error = candidate.error; break; }
+    }
+}
+
+/* The button array, as JSON. Shared by a menu's legacy top-level "buttons"
+ * (cell 0, so nothing that already reads this file has to change) and by each
+ * entry of "pages". */
+static void emit_buttons(const nav_t *nav) {
+    for (int b = 0; b < nav->count; b++) {
+        jprintf("%s\n        { \"number\": %d, \"rect\": [%d, %d, %d, %d], \"autoAction\": %s, \"command\": \"",
+                b ? "," : "", nav->buttons[b].number,
+                nav->buttons[b].x_start, nav->buttons[b].y_start,
+                nav->buttons[b].x_end, nav->buttons[b].y_end,
+                nav->buttons[b].auto_action ? "true" : "false");
+        for (int k = 0; k < 8; k++) jprintf("%02x", nav->buttons[b].command[k]);
+        jprintf("\", \"up\": %d, \"down\": %d, \"left\": %d, \"right\": %d }",
+                nav->buttons[b].up, nav->buttons[b].down, nav->buttons[b].left, nav->buttons[b].right);
+    }
+}
+
 static void usage(void) {
     fprintf(stderr,
             "changeover-menudump " MENUDUMP_VERSION "\n"
@@ -713,9 +773,9 @@ int main(int argc, char **argv) {
 
                 nav_t nav;
                 memset(&nav, 0, sizeof nav);
-                nav.button_groups = 1;      /* the defaults a menu with no */
-                nav.groups_agree = 1;       /* readable NAV pack reports,  */
-                nav.rects_inside_frame = 1; /* so "unknown" never reads as a failed check */
+                nav.button_groups = 1;
+                nav.groups_agree = 1;
+                nav.rects_inside_frame = 1;
                 const char *nav_error = "no cell to read";
                 uint32_t nav_sector = 0;
                 int nav_lbn_matches = 0;
@@ -724,63 +784,57 @@ int main(int argc, char **argv) {
                 if (cells && cell_count > 0) {
                     first_sector = be32(cells + 0x08);
                     last_sector = be32(cells + 0x14);
-                    nav_error = have_vob ? "no NAV pack with buttons in the first cell"
-                                         : "could not open the menu VOB";
-                    if (have_vob) {
-                        /* The first VOBU of the cell starts with a NAV pack and
-                         * a still menu repeats its button table in every one, so
-                         * the first is normally enough. A motion menu whose
-                         * highlight starts later (§1.2) has an empty table until
-                         * it does, so keep walking a bounded way into the cell
-                         * rather than reporting "no buttons" — which is exactly
-                         * the answer a reader must never give when it simply has
-                         * not looked yet. */
-                        uint32_t limit = last_sector >= first_sector ? last_sector : first_sector;
-                        if (limit > first_sector + 64) limit = first_sector + 64;
-                        for (uint32_t s = first_sector; s <= limit; s++) {
-                            uint8_t sector[DVD_BLOCK];
-                            if (fseek(vob, (long)s * DVD_BLOCK, SEEK_SET) != 0) {
-                                nav_error = "seek past the end of the menu VOB";
-                                break;
-                            }
-                            if (fread(sector, 1, DVD_BLOCK, vob) != DVD_BLOCK) {
-                                nav_error = "short read from the menu VOB";
-                                break;
-                            }
-                            nav_t candidate;
-                            parse_nav_pack(sector, frame_w, frame_h, &candidate);
-                            if (!candidate.found) continue;
-                            nav = candidate;
-                            nav_sector = s;
-                            nav_lbn_matches = (candidate.lbn == s);
-                            if (candidate.count > 0) { nav_error = candidate.error; break; }
-                        }
+                    if (!have_vob) {
+                        nav_error = "could not open the menu VOB";
+                    } else {
+                        scan_cell_nav(vob, first_sector, last_sector, frame_w, frame_h,
+                                      &nav, &nav_sector, &nav_lbn_matches, &nav_error);
                     }
                 }
 
+                /* Every cell, not just the first. A multi-page scene menu is
+                 * one PGC whose pages are its successive cells — Oppenheimer's
+                 * CHAPTERS menu is pgc19 with five cells, one per page of four
+                 * scenes, and the "5-8"…"17-20" buttons are PGCs with no cells
+                 * of their own that set a register and link back into it. So a
+                 * reader that stops at cell 0 sees page 1 and concludes the
+                 * disc offers four scenes. Dumping every cell is what lets the
+                 * later stages see all twenty.
+                 *
+                 * Cell 0 keeps the plain `<id>.vob` name so nothing that
+                 * already reads these files has to learn a new one; the rest
+                 * are `<id>-cell2.vob` upward, numbered as a viewer would
+                 * count pages. */
+                unsigned char dumped[256];
+                memset(dumped, 0, sizeof dumped);
                 int dumped_cell = 0;
-                if (dvd_file && cells && cell_count > 0 && last_sector >= first_sector) {
-                    long want = ((long)last_sector - (long)first_sector + 1) * DVD_BLOCK;
-                    if (bytes_used + want <= options.max_bytes) {
-                        char cell_path[2200];
-                        snprintf(cell_path, sizeof cell_path, "%s/%s.vob", cells_dir, id);
-                        FILE *cf = fopen(cell_path, "wb");
-                        if (cf) {
-                            unsigned char *buf = malloc(DVD_BLOCK * 256);
-                            long done = 0, total = (long)last_sector - (long)first_sector + 1;
-                            while (buf && done < total) {
-                                int chunk = (total - done) > 256 ? 256 : (int)(total - done);
-                                ssize_t got = lib.read_blocks(dvd_file, (int)(first_sector + done), (size_t)chunk, buf);
-                                if (got <= 0) break;
-                                fwrite(buf, DVD_BLOCK, (size_t)got, cf);
-                                done += got;
-                            }
-                            free(buf);
-                            fclose(cf);
-                            if (done > 0) { dumped_cell = 1; bytes_used += done * DVD_BLOCK; }
-                            else unlink(cell_path);
-                        }
+                for (int c = 0; c < cell_count && c < 256 && dvd_file && cells; c++) {
+                    const uint8_t *cell = cells + (size_t)c * 24;
+                    uint32_t cell_first = be32(cell + 0x08), cell_last = be32(cell + 0x14);
+                    if (cell_last < cell_first) continue;
+
+                    long want = ((long)cell_last - (long)cell_first + 1) * DVD_BLOCK;
+                    if (bytes_used + want > options.max_bytes) break;
+
+                    char cell_path[2200];
+                    if (c == 0) snprintf(cell_path, sizeof cell_path, "%s/%s.vob", cells_dir, id);
+                    else snprintf(cell_path, sizeof cell_path, "%s/%s-cell%d.vob", cells_dir, id, c + 1);
+                    FILE *cf = fopen(cell_path, "wb");
+                    if (!cf) continue;
+
+                    unsigned char *buf = malloc(DVD_BLOCK * 256);
+                    long done = 0, total = (long)cell_last - (long)cell_first + 1;
+                    while (buf && done < total) {
+                        int chunk = (total - done) > 256 ? 256 : (int)(total - done);
+                        ssize_t got = lib.read_blocks(dvd_file, (int)(cell_first + done), (size_t)chunk, buf);
+                        if (got <= 0) break;
+                        fwrite(buf, DVD_BLOCK, (size_t)got, cf);
+                        done += got;
                     }
+                    free(buf);
+                    fclose(cf);
+                    if (done > 0) { dumped[c] = 1; dumped_cell = 1; bytes_used += done * DVD_BLOCK; }
+                    else unlink(cell_path);
                 }
 
                 jprintf("%s\n    {\n", menu_index ? "," : "");
@@ -864,19 +918,74 @@ int main(int argc, char **argv) {
                 else
                     jprintf("      \"highlight\": null,\n");
                 jprintf("      \"buttons\": [");
-                for (int b = 0; b < nav.count; b++) {
-                    jprintf("%s\n        { \"number\": %d, \"rect\": [%d, %d, %d, %d], \"autoAction\": %s, \"command\": \"",
-                            b ? "," : "", nav.buttons[b].number,
-                            nav.buttons[b].x_start, nav.buttons[b].y_start, nav.buttons[b].x_end, nav.buttons[b].y_end,
-                            nav.buttons[b].auto_action ? "true" : "false");
-                    for (int k = 0; k < 8; k++) jprintf("%02x", nav.buttons[b].command[k]);
-                    jprintf("\", \"up\": %d, \"down\": %d, \"left\": %d, \"right\": %d }",
-                            nav.buttons[b].up, nav.buttons[b].down, nav.buttons[b].left, nav.buttons[b].right);
-                }
+                emit_buttons(&nav);
                 jprintf("%s],\n", nav.count > 0 ? "\n      " : "");
                 jprintf("      \"stills\": [");
-                if (dumped_cell) { jstring(id); }
+                if (dumped_cell) {
+                    int emitted = 0;
+                    for (int c = 0; c < cell_count && c < 256; c++) {
+                        if (!dumped[c]) continue;
+                        char still_id[2200];
+                        if (c == 0) snprintf(still_id, sizeof still_id, "%s", id);
+                        else snprintf(still_id, sizeof still_id, "%s-cell%d", id, c + 1);
+                        if (emitted++) jprintf(", ");
+                        jstring(still_id);
+                    }
+                }
                 jprintf("],\n");
+
+                /* One entry per cell, each naming the still it was rendered
+                 * to and carrying that cell's own buttons.
+                 *
+                 * A scene index spreads its chapters over pages, and the
+                 * pages are cells of a single PGC — Oppenheimer's CHAPTERS
+                 * menu is pgc19 with five of them. The top-level "buttons"
+                 * above is cell 0, which is page 1 and nothing else, so a
+                 * consumer that reads only that sees four scenes on a disc
+                 * offering twenty, then throws the set away for naming fewer
+                 * than half the chapters. "pages" is what lets a name be
+                 * paired with its own page's geometry.
+                 *
+                 * The scan is redone here rather than cached: it is a bounded
+                 * walk over at most 64 sectors of an already-open file, and
+                 * holding a nav_t per cell would put 200 KB on the stack for
+                 * a menu that has no pages worth speaking of. */
+                jprintf("      \"pages\": [");
+                int page_index = 0;
+                for (int c = 0; c < cell_count && c < 256 && cells && have_vob; c++) {
+                    const uint8_t *cell = cells + (size_t)c * 24;
+                    uint32_t cell_first = be32(cell + 0x08), cell_last = be32(cell + 0x14);
+                    if (cell_last < cell_first) continue;
+
+                    nav_t page_nav;
+                    uint32_t page_sector = 0;
+                    int page_lbn_matches = 0;
+                    const char *page_error = NULL;
+                    scan_cell_nav(vob, cell_first, cell_last, frame_w, frame_h,
+                                  &page_nav, &page_sector, &page_lbn_matches, &page_error);
+                    if (page_nav.count == 0) continue;
+
+                    char still_id[2200];
+                    if (c == 0) snprintf(still_id, sizeof still_id, "%s", id);
+                    else snprintf(still_id, sizeof still_id, "%s-cell%d", id, c + 1);
+
+                    jprintf("%s\n      { \"cell\": %d, \"still\": ", page_index ? "," : "", c + 1);
+                    jstring(still_id);
+                    jprintf(", \"rendered\": %s", (c < 256 && dumped[c]) ? "true" : "false");
+                    jprintf(", \"nav\": { \"sector\": %u, \"lbnMatches\": %s, \"buttonsPerGroup\": %d,"
+                            " \"groupsAgree\": %s, \"rectsInsideFrame\": %s, \"error\": ",
+                            page_sector, page_lbn_matches ? "true" : "false",
+                            page_nav.buttons_per_group,
+                            page_nav.groups_agree ? "true" : "false",
+                            page_nav.rects_inside_frame ? "true" : "false");
+                    if (page_nav.count > 0 && !page_nav.error) jprintf("null");
+                    else jstring(page_nav.error ? page_nav.error : page_error);
+                    jprintf(" }, \"buttons\": [");
+                    emit_buttons(&page_nav);
+                    jprintf("%s] }", page_nav.count > 0 ? "\n      " : "");
+                    page_index++;
+                }
+                jprintf("%s],\n", page_index ? "\n      " : "");
                 jprintf("      \"truncated\": %s\n", (bytes_used >= options.max_bytes) ? "true" : "false");
                 jprintf("    }");
                 menu_index++;

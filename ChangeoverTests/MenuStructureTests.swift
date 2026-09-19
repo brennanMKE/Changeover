@@ -353,4 +353,108 @@ struct MenuStructureTests {
         #expect(labels[MenuButtonRef(menu: "vtsm-01-lu1-pgc1", number: 2)] == "Scene Selections")
         #expect(!labels.values.contains("© 2002 Warner Home Video"), "text inside no button is decoration, never a label")
     }
+
+    // MARK: - A scene index spread over several pages
+
+    /// The shape `Tools/menudump` writes for a multi-page menu, copied from
+    /// what it produced reading a real disc (Oppenheimer's `pgc19`, five
+    /// cells of four scenes). Pinning the literal JSON is the point: this is
+    /// the contract between the C helper and this decoder, and a test built
+    /// from a Swift value would agree with itself while the two drifted.
+    static func pagedMenuJSON(pageCount: Int, buttonsPerPage: Int) -> String {
+        func button(_ number: Int, chapter: Int) -> String {
+            let top = 60 + (number - 1) * 100
+            return """
+            { "number": \(number), "rect": [512, \(top), 658, \(top + 90)], "autoAction": false, \
+            "command": "3005\(String(format: "%04x", chapter))00010000", "up": 1, "down": 2, "left": 3, "right": 4 }
+            """
+        }
+        let pages = (1...pageCount).map { page -> String in
+            let still = page == 1 ? "vtsm-03-lu1-pgc19" : "vtsm-03-lu1-pgc19-cell\(page)"
+            let buttons = (1...buttonsPerPage).map { index in
+                button(index, chapter: (page - 1) * buttonsPerPage + index)
+            }
+            return """
+            { "cell": \(page), "still": "\(still)", "rendered": true, \
+            "nav": { "sector": \(page * 40), "lbnMatches": true, "buttonsPerGroup": \(buttonsPerPage), \
+            "groupsAgree": true, "rectsInsideFrame": true, "error": null }, \
+            "buttons": [\(buttons.joined(separator: ", "))] }
+            """
+        }
+        let firstPageButtons = (1...buttonsPerPage).map { button($0, chapter: $0) }
+        return """
+        { "format": "changeover-menu-structure/1",
+          "titles": [{ "title": 7, "vts": 3, "vtsTTN": 1, "ptts": 20, "angles": 1 }],
+          "menus": [
+            { "id": "vtsm-03-lu1-pgc19", "domain": "VTSM", "vts": 3, "languageUnit": 1, "pgc": 19,
+              "entryType": "none",
+              "buttons": [\(firstPageButtons.joined(separator: ", "))],
+              "pages": [\(pages.joined(separator: ", "))],
+              "stills": ["vtsm-03-lu1-pgc19", "vtsm-03-lu1-pgc19-cell2"] }
+          ] }
+        """
+    }
+
+    /// The defect this exists to prevent: reading cell 0 and calling it the
+    /// menu. A five-page index addresses twenty chapters, and a reader that
+    /// sees four of them hands `ChapterNames.markers` a set naming fewer than
+    /// half the film's chapters — which it correctly throws away, so the disc
+    /// silently yields no names at all.
+    @Test func everyPageOfASceneIndexIsRead() throws {
+        let structure = try MenuStructure.decode(
+            Data(Self.pagedMenuJSON(pageCount: 5, buttonsPerPage: 4).utf8)
+        )
+        let menu = try #require(structure.menus.first)
+        #expect(menu.pages?.count == 5)
+        #expect(menu.buttons.count == 4, "the legacy field stays cell 0, so an old reader sees what it always saw")
+
+        let buttons = structure.resolvedButtons()
+        #expect(buttons.count == 20)
+
+        let chapters = buttons.compactMap { button -> Int? in
+            if case .chapter(_, let ptt) = button.target { return ptt }
+            return nil
+        }
+        #expect(chapters.sorted() == Array(1...20))
+    }
+
+    /// A caption has to be paired against its own page's geometry: every page
+    /// puts its buttons at the same coordinates, so pooling them first would
+    /// let page 3's text claim page 1's button.
+    @Test func aButtonIsAddressedByThePageItIsPrintedOn() throws {
+        let structure = try MenuStructure.decode(
+            Data(Self.pagedMenuJSON(pageCount: 5, buttonsPerPage: 4).utf8)
+        )
+        let byPage = Dictionary(grouping: structure.resolvedButtons(), by: { $0.ref.menu })
+        #expect(byPage.count == 5)
+        #expect(byPage["vtsm-03-lu1-pgc19"]?.count == 4, "cell 0's page keeps the menu's own id")
+        #expect(byPage["vtsm-03-lu1-pgc19-cell5"]?.count == 4)
+
+        // Page 5 addresses chapters 17-20 and nothing else.
+        let lastPage = try #require(byPage["vtsm-03-lu1-pgc19-cell5"])
+        let chapters = lastPage.compactMap { button -> Int? in
+            if case .chapter(_, let ptt) = button.target { return ptt }
+            return nil
+        }
+        #expect(chapters.sorted() == [17, 18, 19, 20])
+
+        #expect(structure.chapterPageIDs().count == 5, "each page is a scene page in its own right")
+    }
+
+    /// A capture made before the helper read past the first cell has no
+    /// `pages` at all. It must keep reading exactly as it did — a missing
+    /// array is an older document, not a menu without buttons.
+    @Test func aCaptureWithNoPagesStillReadsItsButtons() throws {
+        let structure = try Self.load("synthetic-movie")
+        #expect(structure.menus.allSatisfy { $0.pages == nil })
+
+        let chapterMenu = try #require(structure.menus.first { $0.id == "vtsm-01-lu1-pgc2" })
+        #expect(chapterMenu.buttonPages.count == 1)
+        #expect(chapterMenu.buttonPages.first?.still == chapterMenu.id,
+                "one page, named after the menu — which is what cell 0's page is called either way")
+
+        let refs = Set(structure.resolvedButtons().map(\.ref.menu))
+        #expect(refs.contains("vtsm-01-lu1-pgc2"))
+        #expect(structure.chapterPageIDs().contains("vtsm-01-lu1-pgc2"))
+    }
 }

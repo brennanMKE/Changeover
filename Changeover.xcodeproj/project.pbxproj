@@ -203,6 +203,7 @@
 				265E2B902F51801C00FF97DF /* Sources */,
 				265E2B912F51801C00FF97DF /* Frameworks */,
 				265E2B922F51801C00FF97DF /* Resources */,
+				265E2BD02F51801C00FF97DF /* Embed menudump helper */,
 			);
 			buildRules = (
 			);
@@ -331,6 +332,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		265E2BD02F51801C00FF97DF /* Embed menudump helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 0;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Tools/menudump/menudump.c",
+				"$(SRCROOT)/Tools/menudump/embed-helper.sh",
+			);
+			name = "Embed menudump helper";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/changeover-menudump",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"$SRCROOT/Tools/menudump/embed-helper.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		265E2B902F51801C00FF97DF /* Sources */ = {

@@ -213,6 +213,33 @@ nonisolated struct MenuStructure: Codable, Equatable, Sendable {
         var right: Int?
     }
 
+    /// One cell of a menu PGC, with the buttons that cell's own NAV pack
+    /// carries.
+    ///
+    /// A multi-page scene index is not several menus — it is one PGC whose
+    /// pages are its successive cells, and the "5-8"…"17-20" buttons are
+    /// cell-less PGCs that set a register and link back into it. Oppenheimer's
+    /// CHAPTERS menu is `pgc19` with five cells addressing chapters 1-4, 5-8,
+    /// 9-12, 13-16 and 17-20. `Menu.buttons` is cell 0 alone, so a reader that
+    /// stops there sees four chapters on a disc offering twenty, and
+    /// `ChapterNames.markers` then discards the whole set for naming fewer
+    /// than half of them.
+    ///
+    /// `still` is the id of the frame this page was rendered to, which is
+    /// what an OCR document keys its observations by — so a name found on
+    /// page 3 is paired with page 3's button rectangles and no other's.
+    nonisolated struct Page: Codable, Equatable, Sendable {
+        /// 1-based, as a viewer would count pages.
+        var cell: Int
+        var still: String
+        /// Whether a frame was actually written for this cell. False when
+        /// the byte budget ran out or `libdvdcss` was missing — the buttons
+        /// are still here, there is just no picture to OCR.
+        var rendered: Bool?
+        var nav: Nav?
+        var buttons: [Button]
+    }
+
     nonisolated struct Menu: Codable, Equatable, Sendable {
         var id: String
         /// `"VMGM"` or `"VTSM"`.
@@ -235,6 +262,11 @@ nonisolated struct MenuStructure: Codable, Equatable, Sendable {
         var nav: Nav?
         var highlight: Highlight?
         var buttons: [Button]
+        /// Every cell's buttons, cell 0 included. Absent in a capture made
+        /// before the helper read past the first cell, which is why
+        /// `buttonPages` falls back to `buttons` rather than treating a
+        /// missing array as a menu with no buttons.
+        var pages: [Page]?
         var stills: [String]?
         var truncated: Bool?
 
@@ -260,6 +292,20 @@ nonisolated struct MenuStructure: Codable, Equatable, Sendable {
         /// a menu with no cells has nothing to read and is not evidence of
         /// anything.
         var hasCells: Bool { !(cells ?? []).isEmpty }
+
+        /// The menu's pages, as `(stillID, buttons)` — one per cell that
+        /// carries a button table.
+        ///
+        /// An older capture has no `pages`, so its single button table is
+        /// reported as one page keyed by the menu's own id. That is exactly
+        /// what cell 0's page is called, so every consumer reads one shape
+        /// and a re-capture changes only how many pages come back.
+        var buttonPages: [(still: String, buttons: [Button])] {
+            guard let pages, !pages.isEmpty else {
+                return buttons.isEmpty ? [] : [(id, buttons)]
+            }
+            return pages.map { ($0.still, $0.buttons) }
+        }
     }
 
     var format: String
@@ -307,20 +353,29 @@ extension MenuStructure {
     /// `.unresolved(mnemonic:)` with its mnemonic, never dropped — §8.6's
     /// sweep counts them so a decoder regression is visible and a disc with
     /// genuinely opaque authoring stays honest.
+    /// Every button of every **page** of every menu.
+    ///
+    /// `ref.menu` is the page's still id, not the menu's — they are the same
+    /// string for cell 0, so nothing that resolved a play button before sees
+    /// a different answer, while page 2 upward becomes addressable at all.
+    /// Pairing a name with a button is a per-frame job, and the still id is
+    /// what an OCR document keys its observations by.
     func resolvedButtons() -> [ResolvedButton] {
         menus.flatMap { menu in
-            menu.buttons.map { button in
-                let command = VMCommand(hex: button.command) ?? VMCommand(bytes: [0, 0, 0, 0, 0, 0, 0, 0])
-                let raw = command.target(inVTS: menu.vts)
-                return ResolvedButton(
-                    ref: MenuButtonRef(menu: menu.id, number: button.number),
-                    rect: button.rect,
-                    autoAction: button.autoAction,
-                    command: command,
-                    target: lift(raw, vts: menu.vts),
-                    onEntryMenu: menu.isEntryMenu,
-                    entryType: menu.entryType
-                )
+            menu.buttonPages.flatMap { page in
+                page.buttons.map { button in
+                    let command = VMCommand(hex: button.command) ?? VMCommand(bytes: [0, 0, 0, 0, 0, 0, 0, 0])
+                    let raw = command.target(inVTS: menu.vts)
+                    return ResolvedButton(
+                        ref: MenuButtonRef(menu: page.still, number: button.number),
+                        rect: button.rect,
+                        autoAction: button.autoAction,
+                        command: command,
+                        target: lift(raw, vts: menu.vts),
+                        onEntryMenu: menu.isEntryMenu,
+                        entryType: menu.entryType
+                    )
+                }
             }
         }
     }
@@ -334,13 +389,25 @@ extension MenuStructure {
     /// and reads no chapter names. What actually identifies a scene page is
     /// what its buttons do: two or more of them jump to chapters.
     func chapterMenus() -> [Menu] {
+        let qualifying = chapterPageIDs()
+        return menus
+            .filter { menu in menu.buttonPages.contains { qualifying.contains($0.still) } }
+            .sorted { ($0.vts ?? 0, $0.pgc) < ($1.vts ?? 0, $1.pgc) }
+    }
+
+    /// The still ids of the scene pages — the granularity the names are
+    /// actually read at.
+    ///
+    /// A five-page scene index is one menu, so `chapterMenus()` can only say
+    /// "this menu is a scene index". Which *frame* a caption was printed on
+    /// is what pairing needs, and each page carries its own two or more
+    /// chapter-jumping buttons, so the test applies per page unchanged.
+    func chapterPageIDs() -> Set<String> {
         let chapterButtons = Dictionary(
             grouping: resolvedButtons().filter { if case .chapter = $0.target { return true } else { return false } },
             by: { $0.ref.menu }
         )
-        return menus
-            .filter { (chapterButtons[$0.id]?.count ?? 0) >= 2 }
-            .sorted { ($0.vts ?? 0, $0.pgc) < ($1.vts ?? 0, $1.pgc) }
+        return Set(chapterButtons.filter { $0.value.count >= 2 }.keys)
     }
 
     /// The single title this menu PGC's own commands jump to, if there is

@@ -142,9 +142,14 @@ nonisolated enum MenuPages {
         chapterCount: Int
     ) -> [MenuOCRDocument.Still] {
         if let structure {
-            let ids = Set(structure.menus.filter(\.isChapterMenu).flatMap { menu in
-                menu.stills ?? [menu.id]
-            })
+            // Two structural routes, and the buttons are the stronger one.
+            // `entryType` says what the author tagged the PGC; the buttons say
+            // what it does. A five-page scene index tagged "none" — which is
+            // what a real disc turned out to be — is found only by the second,
+            // and it names the individual pages, which is the granularity a
+            // caption has to be paired at.
+            var ids = structure.chapterPageIDs()
+            ids.formUnion(structure.menus.filter(\.isChapterMenu).flatMap(\.stillIDs))
             let matched = ocr.stills.filter { ids.contains($0.id) }
             if !matched.isEmpty { return matched.sorted { $0.id < $1.id } }
         }
