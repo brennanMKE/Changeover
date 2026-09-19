@@ -83,6 +83,21 @@
 #define MAX_BUTTONS 36
 #define DEFAULT_MAX_BYTES (64 * 1024 * 1024)
 
+/* The largest single cell worth rendering a still from.
+ *
+ * A menu page is a still frame or a few seconds of looping video; at DVD
+ * bitrates that is well under a megabyte. A cell of a hundred megabytes is
+ * not a menu page at all — it is the FBI warning, a studio ident or a trailer
+ * reel parked in the menu domain. Oppenheimer's VMGM has one of 102 MB.
+ *
+ * Without this cap those cells spend the whole byte budget before the reader
+ * reaches the title set holding the actual movie menus, and the disc yields
+ * no chapter names for want of pictures to read. The single-cell reader never
+ * hit it because one 102 MB cell exceeded the budget outright and was
+ * skipped; dumping every cell made each one individually affordable, which is
+ * how a change that reads more of a disc can end up seeing less of it. */
+#define DEFAULT_MAX_CELL_BYTES (8 * 1024 * 1024)
+
 /* ------------------------------------------------------------------ bytes */
 
 static uint16_t be16(const uint8_t *p) { return (uint16_t)((p[0] << 8) | p[1]); }
@@ -505,6 +520,7 @@ typedef struct {
     const char *disc;
     const char *out_dir;
     long max_bytes;
+    long max_cell_bytes;
     int dump_cells;
     int check_only;
 } options_t;
@@ -572,7 +588,8 @@ static void emit_buttons(const nav_t *nav) {
 static void usage(void) {
     fprintf(stderr,
             "changeover-menudump " MENUDUMP_VERSION "\n"
-            "usage: changeover-menudump --disc <path> --out <dir> [--max-bytes N] [--no-cells]\n"
+            "usage: changeover-menudump --disc <path> --out <dir> [--max-bytes N]\n"
+            "                          [--max-cell-bytes N] [--no-cells]\n"
             "       changeover-menudump --check\n"
             "       changeover-menudump --version\n");
 }
@@ -593,7 +610,7 @@ static void print_dependency_report(FILE *f, const dvdread_t *lib, const char *c
 }
 
 int main(int argc, char **argv) {
-    options_t options = { NULL, NULL, DEFAULT_MAX_BYTES, 1, 0 };
+    options_t options = { NULL, NULL, DEFAULT_MAX_BYTES, DEFAULT_MAX_CELL_BYTES, 1, 0 };
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--version")) { printf("changeover-menudump %s\n", MENUDUMP_VERSION); return 0; }
@@ -602,6 +619,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--disc") && i + 1 < argc) options.disc = argv[++i];
         else if (!strcmp(argv[i], "--out") && i + 1 < argc) options.out_dir = argv[++i];
         else if (!strcmp(argv[i], "--max-bytes") && i + 1 < argc) options.max_bytes = atol(argv[++i]);
+        else if (!strcmp(argv[i], "--max-cell-bytes") && i + 1 < argc) options.max_cell_bytes = atol(argv[++i]);
         else { usage(); return 2; }
     }
 
@@ -814,6 +832,11 @@ int main(int argc, char **argv) {
                     if (cell_last < cell_first) continue;
 
                     long want = ((long)cell_last - (long)cell_first + 1) * DVD_BLOCK;
+                    /* `continue`, not `break`: one oversized cell in a menu
+                     * says nothing about the cells after it, and a scene
+                     * index's later pages must not be lost because an
+                     * unrelated cell was long. */
+                    if (want > options.max_cell_bytes) continue;
                     if (bytes_used + want > options.max_bytes) break;
 
                     char cell_path[2200];

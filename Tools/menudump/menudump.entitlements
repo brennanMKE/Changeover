@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for the changeover-menudump helper.
+
+  Library validation, which the hardened runtime turns on, lets a process load
+  only libraries signed by the same Team ID or by Apple. The helper's whole
+  decryption path is a runtime dlopen of the user's own Homebrew libdvdread,
+  which is ad-hoc signed by Homebrew and therefore neither — so the first
+  signed build reported `"libdvdread": { "status": "missing" }` on a Mac where
+  the library was plainly installed and the unsigned build had just used it.
+  A missing library and a blocked one look identical from inside the process,
+  which is exactly the confusion this comment exists to end.
+
+  The entitlement is on the helper alone, not on the app. The helper is a
+  700-line program launched as a subprocess that reads a disc and exits; the
+  app keeps library validation intact.
+
+  dlopen is also why this cannot be solved by bundling: the point is to use
+  whichever libdvdread the user installed, and never to ship one.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>
