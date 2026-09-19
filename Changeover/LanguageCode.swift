@@ -36,8 +36,10 @@ nonisolated enum LanguageCode {
     /// offer a language for that track. The table covers the languages DVD
     /// menus in this library actually print; adding a row is how it grows.
     nonisolated static func code(forMenuName name: String) -> String? {
+        // Diacritics are folded as well as case, so a menu's own "Français"
+        // and a caption's "FRANCAIS" reach the same row.
         let cleaned = name
-            .folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         // Menus print "ENGLISH 5.1", "English (Dolby Digital)" and the like:
