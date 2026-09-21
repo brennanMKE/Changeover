@@ -1,0 +1,1596 @@
+{
+  "engine" : {
+    "api" : "VNRecognizeTextRequest",
+    "customWords" : 99,
+    "framework" : "Vision",
+    "languageCorrection" : false,
+    "languages" : [
+      "en",
+      "fr",
+      "es",
+      "de",
+      "it",
+      "pt",
+      "nl",
+      "ja"
+    ],
+    "level" : "accurate",
+    "minimumTextHeightFraction" : 0.02,
+    "os" : "Version 27.0 (Build 26A428)",
+    "upscale" : 1
+  },
+  "format" : "changeover-menu-ocr/1",
+  "note" : "re-read from cells dumped by the shipped helper; every page, not just the first",
+  "stills" : [
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc13",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            232,
+            91,
+            496,
+            143
+          ],
+          "text" : "UNIVERSAL"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            294,
+            218,
+            434,
+            230
+          ],
+          "text" : "A COMCAST COMPANY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            164,
+            256,
+            558,
+            288
+          ],
+          "text" : "The parental level of the player"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            276,
+            292,
+            446,
+            321
+          ],
+          "text" : "has been set."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            206,
+            330,
+            516,
+            370
+          ],
+          "text" : "Press \"yes\" to continue."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            252,
+            408,
+            300,
+            436
+          ],
+          "text" : "yes"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            415,
+            405,
+            485,
+            436
+          ],
+          "text" : "stop"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc13-cell2",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            232,
+            90,
+            496,
+            144
+          ],
+          "text" : "UNIVERSAL"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            296,
+            218,
+            434,
+            230
+          ],
+          "text" : "A COMCAST COMPANY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            180,
+            253,
+            540,
+            290
+          ],
+          "text" : "This movie will not play due"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            184,
+            291,
+            536,
+            324
+          ],
+          "text" : "to the current parental level"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            229,
+            322,
+            491,
+            365
+          ],
+          "text" : "setting of the player."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            230,
+            372,
+            494,
+            404
+          ],
+          "text" : "Please eject the disc."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc14",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            232,
+            91,
+            496,
+            143
+          ],
+          "text" : "UNIVERSAL"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            294,
+            218,
+            434,
+            230
+          ],
+          "text" : "A COMCAST COMPANY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            178,
+            256,
+            544,
+            284
+          ],
+          "text" : "El nivel de calificación de los"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            218,
+            286,
+            508,
+            324
+          ],
+          "text" : "padres ha establecido."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            205,
+            328,
+            517,
+            372
+          ],
+          "text" : "Elija \"sí\" para continuar."
+        },
+        {
+          "confidence" : 0.5,
+          "rect" : [
+            252,
+            404,
+            290,
+            430
+          ],
+          "text" : "SÍ"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            418,
+            404,
+            470,
+            430
+          ],
+          "text" : "alto"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc14-cell2",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            232,
+            90,
+            496,
+            144
+          ],
+          "text" : "UNIVERSAL"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            296,
+            218,
+            432,
+            230
+          ],
+          "text" : "A COMCAST COMPANY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            256,
+            580,
+            286
+          ],
+          "text" : "Esta pélicula no se exhibira debido"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            287,
+            568,
+            325
+          ],
+          "text" : "al nivel calificación de los padres"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            144,
+            326,
+            578,
+            358
+          ],
+          "text" : "que ha establecido de la máquina."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            204,
+            372,
+            508,
+            408
+          ],
+          "text" : "*Por favor, quite el disc."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc15",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            232,
+            91,
+            496,
+            143
+          ],
+          "text" : "UNIVERSAL"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            294,
+            218,
+            434,
+            230
+          ],
+          "text" : "A COMCAST COMPANY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            188,
+            252,
+            532,
+            290
+          ],
+          "text" : "Le niveau parental autorisé"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            308,
+            292,
+            412,
+            320
+          ],
+          "text" : "a etabli."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            196,
+            328,
+            526,
+            368
+          ],
+          "text" : "Pressez \"oui\" á continuer."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            252,
+            402,
+            300,
+            430
+          ],
+          "text" : "oui"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            414,
+            402,
+            484,
+            430
+          ],
+          "text" : "arrêt"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc15-cell2",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            232,
+            90,
+            496,
+            144
+          ],
+          "text" : "UNIVERSAL"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            294,
+            218,
+            432,
+            230
+          ],
+          "text" : "A COMCAST COMPANY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            256,
+            578,
+            288
+          ],
+          "text" : "Ce film ne peut pas être visionné"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            182,
+            292,
+            542,
+            324
+          ],
+          "text" : "parce que le niveau parental"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            222,
+            326,
+            500,
+            358
+          ],
+          "text" : "autorisé de l'appareil."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            118,
+            369,
+            602,
+            410
+          ],
+          "text" : "Veuillez sortir le disque, s'il vous plaît."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc17-cell2-001",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            132,
+            422,
+            178,
+            440
+          ],
+          "text" : "PLAY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            206,
+            424,
+            296,
+            438
+          ],
+          "text" : "CHAPTERS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            310,
+            423,
+            378,
+            439
+          ],
+          "text" : "SETUP"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc17-cell2-002",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            132,
+            422,
+            178,
+            440
+          ],
+          "text" : "PLAY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            206,
+            424,
+            298,
+            438
+          ],
+          "text" : "CHAPTERS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            316,
+            424,
+            378,
+            438
+          ],
+          "text" : "SETUP"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc17-cell2-003",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            134,
+            424,
+            180,
+            438
+          ],
+          "text" : "PLAY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            206,
+            424,
+            298,
+            438
+          ],
+          "text" : "CHAPTERS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            316,
+            424,
+            378,
+            438
+          ],
+          "text" : "SETUP"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc17-cell2-004",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            132,
+            422,
+            178,
+            440
+          ],
+          "text" : "PLAY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            206,
+            424,
+            298,
+            438
+          ],
+          "text" : "CHAPTERS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            312,
+            424,
+            378,
+            438
+          ],
+          "text" : "SETUP"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc17-cell2-005",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            132,
+            422,
+            180,
+            440
+          ],
+          "text" : "PLAY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            204,
+            424,
+            298,
+            438
+          ],
+          "text" : "CHAPTERS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            312,
+            424,
+            378,
+            438
+          ],
+          "text" : "SETUP"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc17-cell2-006",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            132,
+            424,
+            178,
+            440
+          ],
+          "text" : "PLAY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            206,
+            424,
+            296,
+            438
+          ],
+          "text" : "CHAPTERS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            314,
+            424,
+            378,
+            438
+          ],
+          "text" : "SETUP"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc18",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            134,
+            424,
+            300,
+            438
+          ],
+          "text" : "PLAY CHAPTERS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            304,
+            424,
+            378,
+            438
+          ],
+          "text" : "SETUP"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc19",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            500,
+            36,
+            642,
+            58
+          ],
+          "text" : "CHAPTERS"
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            488,
+            176,
+            512,
+            188
+          ],
+          "text" : "1-4"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            488,
+            204,
+            510,
+            216
+          ],
+          "text" : "5-8"
+        },
+        {
+          "confidence" : 0.5,
+          "rect" : [
+            484,
+            230,
+            510,
+            242
+          ],
+          "text" : "9-12"
+        },
+        {
+          "confidence" : 0.5,
+          "rect" : [
+            478,
+            258,
+            510,
+            270
+          ],
+          "text" : "13-16"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            474,
+            284,
+            510,
+            298
+          ],
+          "text" : "17-20"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            472,
+            312,
+            510,
+            324
+          ],
+          "text" : "MENU"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            516,
+            228,
+            532,
+            240
+          ],
+          "text" : "2."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc19-cell2",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            500,
+            36,
+            642,
+            58
+          ],
+          "text" : "CHAPTERS"
+        },
+        {
+          "confidence" : 0.5,
+          "rect" : [
+            488,
+            176,
+            510,
+            188
+          ],
+          "text" : "1-4"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            488,
+            204,
+            510,
+            216
+          ],
+          "text" : "5-8"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            484,
+            230,
+            510,
+            242
+          ],
+          "text" : "9-12"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            478,
+            258,
+            510,
+            270
+          ],
+          "text" : "13-16"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            474,
+            284,
+            510,
+            298
+          ],
+          "text" : "17-20"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            472,
+            312,
+            512,
+            324
+          ],
+          "text" : "MENU"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            518,
+            228,
+            530,
+            240
+          ],
+          "text" : "6."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc19-cell3",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            500,
+            36,
+            642,
+            58
+          ],
+          "text" : "CHAPTERS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            490,
+            176,
+            510,
+            188
+          ],
+          "text" : "1-4"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            488,
+            204,
+            510,
+            216
+          ],
+          "text" : "5-8"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            483,
+            226,
+            538,
+            244
+          ],
+          "text" : "9-12 10."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            478,
+            258,
+            510,
+            270
+          ],
+          "text" : "13-16"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            474,
+            284,
+            510,
+            298
+          ],
+          "text" : "17-20"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            470,
+            305,
+            539,
+            336
+          ],
+          "text" : "MENU 11."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc19-cell4",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            500,
+            36,
+            642,
+            58
+          ],
+          "text" : "CHAPTERS"
+        },
+        {
+          "confidence" : 0.5,
+          "rect" : [
+            518,
+            138,
+            532,
+            148
+          ],
+          "text" : "13."
+        },
+        {
+          "confidence" : 0.5,
+          "rect" : [
+            490,
+            176,
+            510,
+            188
+          ],
+          "text" : "1-4"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            488,
+            204,
+            510,
+            216
+          ],
+          "text" : "5-8"
+        },
+        {
+          "confidence" : 0.5,
+          "rect" : [
+            484,
+            230,
+            510,
+            242
+          ],
+          "text" : "9-12"
+        },
+        {
+          "confidence" : 0.5,
+          "rect" : [
+            478,
+            258,
+            510,
+            270
+          ],
+          "text" : "13-16"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            476,
+            284,
+            512,
+            296
+          ],
+          "text" : "17-20"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            472,
+            312,
+            510,
+            324
+          ],
+          "text" : "MENU"
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            514,
+            410,
+            534,
+            426
+          ],
+          "text" : "16；"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc19-cell5",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            500,
+            36,
+            642,
+            58
+          ],
+          "text" : "CHAPTERS"
+        },
+        {
+          "confidence" : 0.5,
+          "rect" : [
+            490,
+            176,
+            510,
+            188
+          ],
+          "text" : "1-4"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            488,
+            204,
+            510,
+            216
+          ],
+          "text" : "5-8"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            484,
+            230,
+            510,
+            242
+          ],
+          "text" : "9-12"
+        },
+        {
+          "confidence" : 0.5,
+          "rect" : [
+            478,
+            258,
+            510,
+            270
+          ],
+          "text" : "13-16"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            476,
+            284,
+            510,
+            296
+          ],
+          "text" : "17-20"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            472,
+            312,
+            512,
+            324
+          ],
+          "text" : "MENU"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            510,
+            320,
+            536,
+            336
+          ],
+          "text" : "19."
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            513,
+            226,
+            565,
+            247
+          ],
+          "text" : "187/8"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            516,
+            412,
+            540,
+            424
+          ],
+          "text" : "20."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc25",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            528,
+            36,
+            614,
+            58
+          ],
+          "text" : "SETUP"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            546,
+            84,
+            600,
+            100
+          ],
+          "text" : "AUDIO"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            532,
+            114,
+            616,
+            126
+          ],
+          "text" : "ENGLISH 5.1"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            528,
+            138,
+            618,
+            154
+          ],
+          "text" : "ESPAÑOL 5.1"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            554,
+            166,
+            592,
+            180
+          ],
+          "text" : "DVS*"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            486,
+            180,
+            660,
+            192
+          ],
+          "text" : "(DESCRIPTIVE VIDEO SERVICE)"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            546,
+            368,
+            600,
+            380
+          ],
+          "text" : "UPHE.COM"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            536,
+            402,
+            610,
+            416
+          ],
+          "text" : "SUBTITLES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            552,
+            430,
+            594,
+            442
+          ],
+          "text" : "MENU"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc26",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            102,
+            98,
+            412,
+            126
+          ],
+          "text" : "OPPENHEIMER"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            528,
+            36,
+            614,
+            58
+          ],
+          "text" : "SETUP"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            528,
+            84,
+            616,
+            100
+          ],
+          "text" : "SUBTITLES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            526,
+            112,
+            626,
+            126
+          ],
+          "text" : "ENGLISH SDH*"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            538,
+            137,
+            606,
+            155
+          ],
+          "text" : "ESPAÑOL"
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            558,
+            166,
+            586,
+            182
+          ],
+          "text" : "粤語"
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            546,
+            194,
+            598,
+            210
+          ],
+          "text" : "繁體中文"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            552,
+            220,
+            592,
+            236
+          ],
+          "text" : "한국어"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            560,
+            248,
+            588,
+            260
+          ],
+          "text" : "OFF"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            522,
+            340,
+            622,
+            350
+          ],
+          "text" : "*SUBTITLED FOR THE"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            508,
+            350,
+            638,
+            360
+          ],
+          "text" : "DEAF & HARD-OF-HEARING"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            546,
+            368,
+            598,
+            378
+          ],
+          "text" : "UPHE.COM"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            550,
+            402,
+            596,
+            414
+          ],
+          "text" : "AUDIO"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            552,
+            430,
+            594,
+            442
+          ],
+          "text" : "MENU"
+        }
+      ]
+    }
+  ]
+}

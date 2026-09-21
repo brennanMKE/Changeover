@@ -9,7 +9,7 @@ The heuristic decides what is encoded. Nothing below does, today or in
 this pass: it is the evidence for whether the disc's own answer could
 ever be trusted to preselect a title (menu-intelligence.md §11.4).
 
-5 discs: agree 1 · disagree 0 · menu abstained 0 · heuristic abstained 0 · both abstained 0 · not captured 4
+5 discs: agree 1 · disagree 0 · menu abstained 1 · heuristic abstained 0 · both abstained 0 · not captured 3
 
 Verdicts
 --------
@@ -17,7 +17,7 @@ disc               scanner       heuristic                 disc menu            
 bloodsport         title 1       title 1 (scanner)         title 1 (pgcCommands, "Play Movie")  agree
 dragon-tattoo      title 1       title 1 (scanner)         — (notCaptured)                     notCaptured
 hornets-nest       none (-1)     title 11 (length)         — (notCaptured)                     notCaptured
-oppenheimer        title 7       title 7 (scanner)         — (notCaptured)                     notCaptured
+oppenheimer        title 7       title 7 (scanner)         — (unresolved)                      menuAbstained
 tv-season-playall  title 14      title 14 (playAllGuard)   — (notCaptured)                     notCaptured
 
 Signals
@@ -29,45 +29,92 @@ bloodsport:
   tv signal no — no menu with ≥3 title-jumping buttons
   languages: spoken [English, Français] subtitles [English, Français, 日本語]
   button captions 21, unknown to the lexicon 12
+oppenheimer:
+  menus 77 (7 with buttons), buttons 85, busiest menu 12
+  title-jumping buttons 0 → titles 
+  chapter buttons 0 on 0 page(s); names read 0, written 0
+  tv signal no — no menu with ≥3 title-jumping buttons
+  languages: spoken [] subtitles [ESPAÑOL, 한국어, OFF]
+  button captions 21, unknown to the lexicon 19
 
 Button caption vocabulary (OCR'd off real discs)
 ------------------------------------------------
-"Back"                       nonFeature    bloodsport
-"Cast & Crew"                nonFeature    bloodsport
-"Continue"                   nonFeature    bloodsport
-"Languages"                  nonFeature    bloodsport
-"Main Menu"                  nonFeature    bloodsport
-"Scene Selections®"          nonFeature    bloodsport
-"Special Features"           nonFeature    bloodsport
-"Theatrical Trailer"         nonFeature    bloodsport
-"Play Movie"                 play          bloodsport
-"(also co-story, dir.)"      unknown       bloodsport
-"Cas"                        unknown       bloodsport
-"Cast"                       unknown       bloodsport
-"Contini"                    unknown       bloodsport
-"Crew"                       unknown       bloodsport
-"Directed by Newt Arnold"    unknown       bloodsport
-"Features"                   unknown       bloodsport
-"ForestWhitaken."            unknown       bloodsport
-"Leah Ayres.."               unknown       bloodsport
-"Main Menu, Continue"        unknown       bloodsport
-"Start Movie Main Menu"      unknown       bloodsport
-"Story by Sheldon Lettich,"  unknown       bloodsport
+"Back"                         nonFeature    bloodsport
+"Cast & Crew"                  nonFeature    bloodsport
+"Continue"                     nonFeature    bloodsport
+"Languages"                    nonFeature    bloodsport
+"Main Menu"                    nonFeature    bloodsport
+"SETUP"                        nonFeature    oppenheimer
+"SUBTITLES"                    nonFeature    oppenheimer
+"Scene Selections®"            nonFeature    bloodsport
+"Special Features"             nonFeature    bloodsport
+"Theatrical Trailer"           nonFeature    bloodsport
+"Play Movie"                   play          bloodsport
+"(DESCRIPTIVE VIDEO SERVICE)"  unknown       oppenheimer
+"(also co-story, dir.)"        unknown       bloodsport
+"AUDIO"                        unknown       oppenheimer
+"Cas"                          unknown       bloodsport
+"Cast"                         unknown       bloodsport
+"Contini"                      unknown       bloodsport
+"Crew"                         unknown       bloodsport
+"Directed by Newt Arnold"      unknown       bloodsport
+"ENGLISH 5.1"                  unknown       oppenheimer
+"ENGLISH SDH*"                 unknown       oppenheimer
+"ESPAÑOL"                      unknown       oppenheimer
+"ESPAÑOL 5.1"                  unknown       oppenheimer
+"Features"                     unknown       bloodsport
+"ForestWhitaken."              unknown       bloodsport
+"Leah Ayres.."                 unknown       bloodsport
+"MENU"                         unknown       oppenheimer
+"MENU 11."                     unknown       oppenheimer
+"Main Menu, Continue"          unknown       bloodsport
+"OFF"                          unknown       oppenheimer
+"PLAY CHAPTERS"                unknown       oppenheimer
+"Start Movie Main Menu"        unknown       bloodsport
+"Story by Sheldon Lettich,"    unknown       bloodsport
+"SÍ"                           unknown       oppenheimer
+"alto"                         unknown       oppenheimer
+"arrêt"                        unknown       oppenheimer
+"oui"                          unknown       oppenheimer
+"stop"                         unknown       oppenheimer
+"yes"                          unknown       oppenheimer
+"粤語"                           unknown       oppenheimer
+"繁體中文"                         unknown       oppenheimer
+"한국어"                          unknown       oppenheimer
 
 Unknown to MenuLexicon.entries — add a row per word, with its language,
 what it does and the disc it was read off:
+  "(DESCRIPTIVE VIDEO SERVICE)"  (oppenheimer)
   "(also co-story, dir.)"  (bloodsport)
+  "AUDIO"  (oppenheimer)
   "Cas"  (bloodsport)
   "Cast"  (bloodsport)
   "Contini"  (bloodsport)
   "Crew"  (bloodsport)
   "Directed by Newt Arnold"  (bloodsport)
+  "ENGLISH 5.1"  (oppenheimer)
+  "ENGLISH SDH*"  (oppenheimer)
+  "ESPAÑOL"  (oppenheimer)
+  "ESPAÑOL 5.1"  (oppenheimer)
   "Features"  (bloodsport)
   "ForestWhitaken."  (bloodsport)
   "Leah Ayres.."  (bloodsport)
+  "MENU"  (oppenheimer)
+  "MENU 11."  (oppenheimer)
   "Main Menu, Continue"  (bloodsport)
+  "OFF"  (oppenheimer)
+  "PLAY CHAPTERS"  (oppenheimer)
   "Start Movie Main Menu"  (bloodsport)
   "Story by Sheldon Lettich,"  (bloodsport)
+  "SÍ"  (oppenheimer)
+  "alto"  (oppenheimer)
+  "arrêt"  (oppenheimer)
+  "oui"  (oppenheimer)
+  "stop"  (oppenheimer)
+  "yes"  (oppenheimer)
+  "粤語"  (oppenheimer)
+  "繁體中文"  (oppenheimer)
+  "한국어"  (oppenheimer)
 
 How to read this
 ----------------

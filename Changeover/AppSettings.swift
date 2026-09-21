@@ -35,6 +35,17 @@ final class AppSettings {
     /// developer's checkout (`MenuHelper.candidatePaths`). Wholly optional:
     /// without it the rip is exactly what it is today.
     var menudumpPath: String = ""
+    /// Where every disc's menu findings are kept: one directory per disc,
+    /// holding `structure.json`, `ocr.json`, `derived.json` and the stills the
+    /// text was read from (`docs/menu-intelligence.md` §8.1, the raw tier).
+    ///
+    /// This is how a disc teaches the app something. Without it a disc that
+    /// yields no chapter names is indistinguishable from a disc that prints
+    /// none, because the evidence is deleted with the menu video the moment
+    /// the read finishes. Empty disables collection entirely; nothing here is
+    /// ever an input to a rip.
+    var menuArchivePath: String = (NSHomeDirectory() as NSString)
+        .appendingPathComponent("changeover-fixtures")
     /// Menu intelligence — renders one still per menu so Vision can read it,
     /// and, with `ffprobe` beside it, performs and verifies §7's metadata
     /// upgrade of a file already in the library. A Homebrew formula, never
@@ -119,6 +130,7 @@ final class AppSettings {
         // stored empty string is honoured rather than falling back to the
         // default the way the required paths above do.
         if let v = d.string(forKey: Keys.menudumpPath) { menudumpPath = v }
+        if let v = d.string(forKey: Keys.menuArchivePath) { menuArchivePath = v }
         if let v = d.string(forKey: Keys.ffmpegPath), !v.isEmpty { ffmpegPath = v }
     }
 
@@ -134,6 +146,7 @@ final class AppSettings {
         d.set(preferredAudioLanguages.compactMap(LanguageCode.normalize), forKey: Keys.preferredAudioLanguages)
         d.set(keepOriginalAudioTrack, forKey: Keys.keepOriginalAudioTrack)
         d.set(menudumpPath, forKey: Keys.menudumpPath)
+        d.set(menuArchivePath, forKey: Keys.menuArchivePath)
         d.set(ffmpegPath,   forKey: Keys.ffmpegPath)
     }
 
@@ -147,6 +160,7 @@ final class AppSettings {
         static let preferredAudioLanguages = "preferredAudioLanguages"
         static let keepOriginalAudioTrack = "keepOriginalAudioTrack"
         static let menudumpPath = "menudumpPath"
+        static let menuArchivePath = "menuArchivePath"
         static let ffmpegPath   = "ffmpegPath"
     }
 }

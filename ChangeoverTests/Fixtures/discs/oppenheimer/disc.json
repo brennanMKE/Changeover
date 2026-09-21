@@ -1,50 +1,21 @@
 {
-  "slug": "oppenheimer",
-  "volumeName": "OPPENHEIMER",
-  "driveName": "joe",
+  "capturedDate": "2026-09-16",
   "discId": "4b7e2a0a85d9eb3bbfc4be7348fedbf0",
   "driveModel": null,
-  "handbrakeVersion": "1.11.2",
-  "capturedDate": "2026-09-16",
-  "reviewed": true,
-  "notes": "Migrated from the pre-#0055 Fixtures/handbrake-scan/ layout — the disc that motivated #0039 (a merged stdout+stderr capture spliced HandBrake's stderr log text into the JSON mid-value). scan.json here is the clean, stdout-only re-derivation of that same scan. scan.merged.txt is the deliberate NEGATIVE fixture for #0039 (must fail to decode with titleSetCorrupted=true) and is intentionally NOT swept by DiscCorpusTests — see HandBrakeScanParserTests.oppenheimerMergedCaptureFailsToDecodeAndIsFlaggedCorrupted, which still asserts it directly. No separate scan.stderr.txt exists for the clean capture (it predates the two-file capture discipline this ticket introduces). Expectations derived the same way as dragon-tattoo's — see its notes.",
+  "driveName": "joe",
   "expect": {
-    "titleCount": 8,
-    "mainFeatureIndex": 7,
-    "outcome": "single",
-    "outcomeIndex": 7,
-    "outcomeEpisodes": null,
-    "featureDurationSeconds": 10811,
-    "featureChapterCount": 21,
-    "audioTrackCount": 3,
-    "subtitleGroupCount": 6,
     "agreement": {
-      "slug": "oppenheimer",
-      "scannerTitle": 7,
-      "scannerRaw": 7,
       "heuristicRoute": "scanner",
       "heuristicTitle": 7,
       "menuRoute": "unresolved",
-      "verdict": "menuAbstained",
+      "scannerRaw": 7,
+      "scannerTitle": 7,
       "signals": {
-        "menuCount": 77,
-        "menusWithButtons": 7,
-        "buttonCount": 34,
-        "largestMenuButtons": 12,
-        "titleJumpingButtons": 0,
-        "titlesJumpedTo": [],
+        "buttonCount": 85,
         "chapterButtons": 0,
-        "chapterPages": 0,
-        "chapterNamesRead": 0,
         "chapterNamesEmitted": 0,
-        "tvSignal": false,
-        "tvSignalReason": "no menu with ≥3 title-jumping buttons",
-        "spokenLanguages": [],
-        "subtitleLanguages": [
-          "ESPAÑOL",
-          "한국어",
-          "OFF"
-        ],
+        "chapterNamesRead": 0,
+        "chapterPages": 0,
         "labels": [
           {
             "target": "menu:3.pgc5",
@@ -53,11 +24,6 @@
           {
             "target": "menu:3.pgc25",
             "text": "AUDIO"
-          },
-          {
-            "role": "nonFeature",
-            "target": "menu:3.pgc19",
-            "text": "CHAPTERS"
           },
           {
             "target": "menu:3.pgc5",
@@ -76,21 +42,20 @@
             "text": "ESPAÑOL 5.1"
           },
           {
-            "target": "unresolved:LinkTailPGC",
-            "text": "Elija \"sí\" para continuar."
-          },
-          {
             "target": "menu:3.pgc18",
             "text": "MENU"
+          },
+          {
+            "target": "menu:3.pgc24",
+            "text": "MENU 11."
           },
           {
             "target": "menu:3.pgc7",
             "text": "OFF"
           },
           {
-            "role": "play",
             "target": "menu:3.pgc16",
-            "text": "PLAY"
+            "text": "PLAY CHAPTERS"
           },
           {
             "role": "nonFeature",
@@ -101,6 +66,10 @@
             "role": "nonFeature",
             "target": "menu:3.pgc26",
             "text": "SUBTITLES"
+          },
+          {
+            "target": "unresolved:LinkTailPGC",
+            "text": "SÍ"
           },
           {
             "target": "unresolved:LinkPGN",
@@ -128,23 +97,43 @@
           },
           {
             "target": "menu:3.pgc6",
-            "text": "緊體中文"
+            "text": "繁體中文"
           },
           {
             "target": "menu:3.pgc6",
             "text": "한국어"
           }
-        ]
-      }
+        ],
+        "largestMenuButtons": 12,
+        "menuCount": 77,
+        "menusWithButtons": 7,
+        "spokenLanguages": [],
+        "subtitleLanguages": [
+          "ESPAÑOL",
+          "한국어",
+          "OFF"
+        ],
+        "titleJumpingButtons": 0,
+        "titlesJumpedTo": [],
+        "tvSignal": false,
+        "tvSignalReason": "no menu with ≥3 title-jumping buttons"
+      },
+      "slug": "oppenheimer",
+      "verdict": "menuAbstained"
     },
+    "audioTrackCount": 3,
+    "featureChapterCount": 21,
+    "featureDurationSeconds": 10811,
+    "mainFeatureIndex": 7,
     "menu": {
-      "playButtonTitle": null,
-      "playButtonLabel": null,
-      "playButtonResolvedBy": null,
       "chapterMenuButtons": 0,
+      "chapterNames": [],
       "chapterNamesEmitted": 0,
       "chapterPages": [],
-      "chapterNames": [],
+      "notes": "This disc names no chapters, and that is a shape rather than a fault -- docs/menu-intelligence.md 3.3's 'scene index with highlights only' row. Its chapter menu (vtsm-03-lu1-pgc19) does not use JumpVTS_PTT at all: its buttons are register-setting Set-then-link commands (7104...) that link to a common PGC which performs the jump from a GPRM, so there are no chapter targets for captions to attach to. The captured scene page prints only the page ranges 1-4, 5-8, 9-12, 13-16, 17-20 and no names, so even the structure-free reading correctly yields nothing -- the page-range guard drops '1-4' and friends as navigation. chapterNamesEmitted 0 is therefore asserted in the opposite direction: the reader must produce nothing.\n\nThe play button is not resolved either, and that too is by design rather than by failure. PLAY (on vtsm-03-lu1-pgc18) links to vtsm-03-lu1-pgc16, which has no cells and no buttons -- only pre-commands, which are conditional cross-domain JumpSS jumps into VMGM PGCs 17 and 2. Following that would mean evaluating GPRM conditionals across domains, which is VM emulation and is excluded by 10's 'Not in any slice'. It would also be WRONG, which matters more. VMGM pgc 2 is a register dispatch table: about sixty conditional goto specials each guarding a JumpTT, with seven distinct title targets among them (9, 7, 3, 6, 6, 3, 4, 5). Which one runs depends on a register only playback knows, so a chain-follower has no unique answer to find. The other branch is worse: VMGM pgc 17 holds a single unconditional JumpTT 9, and title 9 is a half-second stub in VTS 5 -- so the naive 'follow the first unconditional jump' rule would confidently report the wrong title. The feature, title 7, does appear in pgc 2's table, but picking it because it matches the scan would be circular: the caption exists to be an independent witness, and one that can only ever agree is worth nothing. Abstaining is the correct result here, not a limitation to be lifted.\n\nThe unresolved LinkPGN and LinkTailPGC buttons are NOT what blocks the play button. Their OCR labels identify them: LinkPGN carries 'stop' / 'alto' / 'arret' and LinkTailPGC carries 'yes' / 'oui' / 'Elija si para continuar' -- stop buttons and a parental-control gate. Decoding them would gain nothing here.\n\nttSrptOverDeclaredTitles records the disc padding its own title table: titles 8, 9, 11 and 34 declare 25, 11, 4 and 8 PTTs for 0.5 seconds of video each, where lsdvd reads one chapter. HandBrake never sees them (--min-duration 1). The feature, title 7, declares 21 PTTs and lsdvd reads 21 -- the two agree exactly, so this is NOT the 21-vs-20 discrepancy against the Plex file; the disc's own tables are unanimous at 21 and the missing marker was lost somewhere after the scan.",
+      "playButtonLabel": null,
+      "playButtonResolvedBy": null,
+      "playButtonTitle": null,
       "ttSrptOverDeclaredTitles": [
         8,
         9,
@@ -152,18 +141,27 @@
         34
       ],
       "tvSignal": false,
-      "unresolvedMnemonics": [],
-      "notes": "This disc names no chapters, and that is a shape rather than a fault -- docs/menu-intelligence.md 3.3's 'scene index with highlights only' row. Its chapter menu (vtsm-03-lu1-pgc19) does not use JumpVTS_PTT at all: its buttons are register-setting Set-then-link commands (7104...) that link to a common PGC which performs the jump from a GPRM, so there are no chapter targets for captions to attach to. The captured scene page prints only the page ranges 1-4, 5-8, 9-12, 13-16, 17-20 and no names, so even the structure-free reading correctly yields nothing -- the page-range guard drops '1-4' and friends as navigation. chapterNamesEmitted 0 is therefore asserted in the opposite direction: the reader must produce nothing.\n\nThe play button is not resolved either, and that too is by design rather than by failure. PLAY (on vtsm-03-lu1-pgc18) links to vtsm-03-lu1-pgc16, which has no cells and no buttons -- only pre-commands, which are conditional cross-domain JumpSS jumps into VMGM PGCs 17 and 2. Following that would mean evaluating GPRM conditionals across domains, which is VM emulation and is excluded by 10's 'Not in any slice'. It would also be WRONG, which matters more. VMGM pgc 2 is a register dispatch table: about sixty conditional goto specials each guarding a JumpTT, with seven distinct title targets among them (9, 7, 3, 6, 6, 3, 4, 5). Which one runs depends on a register only playback knows, so a chain-follower has no unique answer to find. The other branch is worse: VMGM pgc 17 holds a single unconditional JumpTT 9, and title 9 is a half-second stub in VTS 5 -- so the naive 'follow the first unconditional jump' rule would confidently report the wrong title. The feature, title 7, does appear in pgc 2's table, but picking it because it matches the scan would be circular: the caption exists to be an independent witness, and one that can only ever agree is worth nothing. Abstaining is the correct result here, not a limitation to be lifted.\n\nThe unresolved LinkPGN and LinkTailPGC buttons are NOT what blocks the play button. Their OCR labels identify them: LinkPGN carries 'stop' / 'alto' / 'arret' and LinkTailPGC carries 'yes' / 'oui' / 'Elija si para continuar' -- stop buttons and a parental-control gate. Decoding them would gain nothing here.\n\nttSrptOverDeclaredTitles records the disc padding its own title table: titles 8, 9, 11 and 34 declare 25, 11, 4 and 8 PTTs for 0.5 seconds of video each, where lsdvd reads one chapter. HandBrake never sees them (--min-duration 1). The feature, title 7, declares 21 PTTs and lsdvd reads 21 -- the two agree exactly, so this is NOT the 21-vs-20 discrepancy against the Plex file; the disc's own tables are unanimous at 21 and the missing marker was lost somewhere after the scan."
-    }
+      "unresolvedMnemonics": []
+    },
+    "outcome": "single",
+    "outcomeEpisodes": null,
+    "outcomeIndex": 7,
+    "subtitleGroupCount": 6,
+    "titleCount": 8
   },
+  "handbrakeVersion": "1.11.2",
   "menus": {
     "captured": true,
-    "structure": true,
     "css": "available",
-    "menuCount": 77,
-    "stillCount": 24,
-    "ocrRun": true,
     "judgeRun": false,
-    "missing": []
-  }
+    "menuCount": 77,
+    "missing": [],
+    "ocrRun": true,
+    "stillCount": 24,
+    "structure": true
+  },
+  "notes": "Migrated from the pre-#0055 Fixtures/handbrake-scan/ layout — the disc that motivated #0039 (a merged stdout+stderr capture spliced HandBrake's stderr log text into the JSON mid-value). scan.json here is the clean, stdout-only re-derivation of that same scan. scan.merged.txt is the deliberate NEGATIVE fixture for #0039 (must fail to decode with titleSetCorrupted=true) and is intentionally NOT swept by DiscCorpusTests — see HandBrakeScanParserTests.oppenheimerMergedCaptureFailsToDecodeAndIsFlaggedCorrupted, which still asserts it directly. No separate scan.stderr.txt exists for the clean capture (it predates the two-file capture discipline this ticket introduces). Expectations derived the same way as dragon-tattoo's — see its notes.",
+  "reviewed": true,
+  "slug": "oppenheimer",
+  "volumeName": "OPPENHEIMER"
 }

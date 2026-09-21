@@ -50,11 +50,25 @@ nonisolated enum MenuReader {
         var menudumpPath: String
         var ffmpegPath: String
         var workDirectory: String
+        /// Where the disc's text products are kept, or `nil` to keep nothing.
+        /// Empty means the same as `nil`, so an unset Settings field disables
+        /// collection rather than writing to the filesystem root.
+        var archiveRoot: String?
+        /// The archive's directory name for this disc.
+        var archiveSlug: String
 
-        init(menudumpPath: String, ffmpegPath: String, workDirectory: String) {
+        init(
+            menudumpPath: String,
+            ffmpegPath: String,
+            workDirectory: String,
+            archiveRoot: String? = nil,
+            archiveSlug: String = "disc"
+        ) {
             self.menudumpPath = menudumpPath
             self.ffmpegPath = ffmpegPath
             self.workDirectory = workDirectory
+            self.archiveRoot = (archiveRoot?.isEmpty == true) ? nil : archiveRoot
+            self.archiveSlug = archiveSlug
         }
     }
 
@@ -108,8 +122,26 @@ nonisolated enum MenuReader {
             featureChapterCount: featureChapterCount,
             scanTitles: scanTitles
         )
-        // The cells and stills have served their purpose the moment the text
-        // is out of them; up to 64 MB of menu video is not worth keeping.
+        // Keep the text, drop the video. `structure.json` is read back off
+        // disk rather than re-encoded so the archive holds the helper's own
+        // bytes, which is what the corpus tests and `Tools/menu-derive` parse.
+        if let root = tools.archiveRoot {
+            let structurePath = (tools.workDirectory as NSString).appendingPathComponent("structure.json")
+            let written = MenuArchive.write(
+                root: root,
+                slug: tools.archiveSlug,
+                structureJSON: try? Data(contentsOf: URL(fileURLWithPath: structurePath)),
+                ocr: ocr,
+                derived: MenuDerived.make(structure: structure, intelligence: menu),
+                stillIDs: ocr?.stills.map(\.id) ?? [],
+                workDirectory: tools.workDirectory
+            )
+            if let written {
+                Task { @MainActor in log("▶ Disc menus: archived to \(written)") }
+            }
+        }
+        // Up to 64 MB of decrypted menu video, and nothing that cannot be read
+        // again off the same disc.
         try? FileManager.default.removeItem(atPath: tools.workDirectory)
 
         guard !menu.isEmpty else {
@@ -139,12 +171,20 @@ nonisolated enum MenuReader {
         let settings = MenuOCR.Settings()
         var stills: [MenuOCRDocument.Still] = []
 
-        for menu in structure.menus {
-            let cell = cellPath(for: menu.id, in: tools.workDirectory)
+        // Every page, not every menu. A scene index is one PGC whose pages are
+        // its cells, and the helper writes one cell file per page, named after
+        // the still: `<menu-id>.vob` for cell 0, `<menu-id>-cell2.vob` upward.
+        // Reading only `menu.id` here is what made the shipped build see page
+        // one of Oppenheimer's five and conclude the disc offered four
+        // chapters — which `ChapterNames.markers` then discarded for naming
+        // fewer than half the film's, so the disc looked like one that prints
+        // no names at all.
+        for still in structure.menus.flatMap(\.stillIDs) {
+            let cell = cellPath(for: still, in: tools.workDirectory)
             guard FileManager.default.fileExists(atPath: cell) else { continue }
-            guard let image = await still(
+            guard let image = await self.still(
                 cell: cell,
-                output: (tools.workDirectory as NSString).appendingPathComponent("\(menu.id).png"),
+                output: (tools.workDirectory as NSString).appendingPathComponent("\(still).jpg"),
                 ffmpegPath: tools.ffmpegPath
             ) else { continue }
             guard let observations = try? MenuOCR.observations(
@@ -154,7 +194,7 @@ nonisolated enum MenuReader {
                 settings: settings
             ) else { continue }
             stills.append(MenuOCRDocument.Still(
-                id: menu.id,
+                id: still,
                 frame: frame,
                 note: nil,
                 observations: observations
@@ -186,10 +226,13 @@ nonisolated enum MenuReader {
 #endif
     }
 
-    /// The helper's own naming: `cells/<menu-id>.vob`.
-    static func cellPath(for menuID: String, in workDirectory: String) -> String {
+    /// The helper's own naming: `cells/<still-id>.vob`, where the still id is
+    /// the menu's id for cell 0 and `<menu-id>-cell<n>` for the pages after
+    /// it. One name serves the cell, the still and the OCR record, so a
+    /// caption can never be attributed to a page it was not printed on.
+    static func cellPath(for stillID: String, in workDirectory: String) -> String {
         let cells = (workDirectory as NSString).appendingPathComponent("cells")
-        return (cells as NSString).appendingPathComponent("\(menuID).vob")
+        return (cells as NSString).appendingPathComponent("\(stillID).vob")
     }
 
     /// `ffmpeg`'s vector for "one I-frame out of this cell" — the same one
@@ -201,6 +244,12 @@ nonisolated enum MenuReader {
             "-i", cell,
             "-vf", "select=eq(pict_type\\,I)",
             "-frames:v", "1",
+            // JPEG at a high quality, because this frame is both what Vision
+            // reads now and what the archive keeps for re-reading later, and
+            // the archive is specified as JPEG (§8.2). `-q:v 2` is visually
+            // lossless on a menu's flat artwork and about a tenth the size of
+            // the PNG this used to write.
+            "-q:v", "2",
             "-y", output,
         ]
     }

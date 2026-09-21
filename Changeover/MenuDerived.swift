@@ -57,6 +57,51 @@ nonisolated struct MenuDerived: Codable, Equatable, Sendable {
     }
 }
 
+extension MenuDerived {
+
+    /// The archive record for one disc, built from the same
+    /// `MenuIntelligence` the user was shown.
+    ///
+    /// `Tools/menu-derive` computes this offline from a capture; this builds
+    /// it at rip time from the answers already in hand. Deriving it a second
+    /// time here would be the drift the archive exists to rule out — if what
+    /// is recorded and what was acted on can disagree, the archive stops
+    /// being evidence.
+    static func make(structure: MenuStructure, intelligence: MenuIntelligence) -> MenuDerived {
+        let buttons = structure.resolvedButtons()
+        let chapterButtons = buttons.filter {
+            if case .chapter = $0.target { return true } else { return false }
+        }
+        return MenuDerived(
+            format: "changeover-menu-derived/1",
+            resolver: Resolver(app: "app", lexicon: MenuLexicon.entries.count),
+            buttons: buttons.map { button in
+                ButtonRecord(
+                    menu: button.ref.menu,
+                    number: button.ref.number,
+                    target: button.target.archiveDescription,
+                    label: intelligence.buttonLabels[button.ref],
+                    labelConfidence: nil
+                )
+            },
+            playButton: intelligence.playButton,
+            chapterMenu: intelligence.chapterPages.isEmpty ? nil : ChapterMenu(
+                title: intelligence.playButton?.title,
+                buttons: chapterButtons.count,
+                pages: intelligence.chapterPages,
+                names: intelligence.chapterNames.sorted { $0.chapter < $1.chapter },
+                csvRows: intelligence.markerRows.count
+            ),
+            languages: intelligence.languages,
+            tvSignal: MenuTVSignal.evaluate(structure),
+            titleText: intelligence.titleText,
+            // The caption the model gave, or nil when it was never asked —
+            // and those two must stay distinguishable in the archive.
+            judge: intelligence.judgeCaption
+        )
+    }
+}
+
 extension ButtonTarget {
     /// The short form `derived.json` records. Lossless enough to read in a
     /// diff, and never the source of truth — `structure.json`'s raw 16 hex

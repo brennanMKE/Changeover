@@ -1219,6 +1219,11 @@ final class JobController {
             ffmpegPath: settings.ffmpegPath,
             workDirectory: MenuReader.workDirectory(
                 discIdentity: disc.discID ?? disc.mountURL.lastPathComponent
+            ),
+            archiveRoot: settings.menuArchivePath,
+            archiveSlug: MenuArchive.slug(
+                discID: disc.discID,
+                volumeName: disc.mountURL.lastPathComponent
             )
         )
         let discPath = disc.mountURL.path
