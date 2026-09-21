@@ -22,6 +22,22 @@ final class MovieSearchViewModel {
     var errorMessage: String?
     var selectedMovie: TMDBMovie?
 
+    /// `docs/plain-language-ui.md` §3.14 — what the Choose step says when a
+    /// search fails. `errorMessage` is whatever the transport or TMDB
+    /// reported, verbatim, and stays the detail; this is the one thing the
+    /// person can act on. Non-`nil` exactly when `errorMessage` is.
+    var plainErrorMessage: String? {
+        errorMessage == nil
+            ? nil
+            : "The movie search didn't work. Check your internet connection and try again."
+    }
+
+    /// The failure in both registers, or `nil` when the search is fine.
+    var errorWording: Wording? {
+        guard let errorMessage, let plainErrorMessage else { return nil }
+        return Wording(plain: plainErrorMessage, detail: errorMessage)
+    }
+
     /// #0032: the runtime lookup for `selectedMovie`. Read-only from the
     /// outside — `select(movieID:apiKey:)` is the only way to change it.
     private(set) var runtimeLookup: RuntimeLookup = .idle

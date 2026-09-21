@@ -126,6 +126,63 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
             return "Reading what the existing file already has."
         }
     }
+
+    /// `docs/plain-language-ui.md` §3.1 — the same refusal, said the way the
+    /// person ripping the disc would say it.
+    ///
+    /// This is the **caption beside Start**; `reason` above stays the
+    /// button's `.help(...)` tooltip, so #0053's rule ("the caption and the
+    /// tooltip can never disagree") still holds in the sense that matters:
+    /// both come from this one value, one per register. `nil` exactly where
+    /// `reason` is `nil`, plus the two cases that only ever appear inside the
+    /// upgrade card — which is itself detail content.
+    ///
+    /// Exhaustive on purpose, like `reason`: a new case cannot forget its
+    /// plain wording and quietly fall back to the precise one.
+    var plainReason: String? {
+        switch self {
+        case .ready:
+            return nil
+        case .jobRunning:
+            return "Another disc is still being ripped."
+        case .noDisc:
+            return "Put a DVD in the drive first."
+        case .discUnavailable:
+            return "The disc is stuck in the drive. Try Eject again, or take it out by hand."
+        case .scanInProgress:
+            return "Still reading the disc…"
+        case .scanFailed:
+            return "The disc couldn't be read. Press Scan Again."
+        case .noTitlesOnDisc:
+            return "Nothing playable was found on this disc. Press Scan Again."
+        case .noMovieSelected:
+            // Already plain, and already the shortest true sentence.
+            return "Choose a movie."
+        case .noTitleSelected:
+            return "Pick which part of the disc to rip."
+        case .noAudioTrackSelected:
+            return "Tick at least one audio track."
+        case .runtimeLookupLoading:
+            return "Checking the movie's length — one moment."
+        case .runtimeMismatchUnconfirmed:
+            return "The length doesn't match. Press Rip anyway if you're sure."
+        case .libraryCheckInProgress:
+            return "Checking whether this movie is already in Plex…"
+        case .duplicateUnacknowledged:
+            return "Already in Plex. Press Replace the Existing File to rip it again."
+        case .upgradeNothingSelected:
+            return "There is nothing this disc can add to the copy already in Plex."
+        case .ffmpegMissing, .fileCheckInProgress:
+            // Only ever returned by `decideUpgrade`, and only ever shown
+            // inside the upgrade card — which the plain register does not
+            // draw at all. Detail only.
+            return nil
+        }
+    }
+
+    /// Start's enabled tooltip. Not diagnostic — nothing has gone wrong when
+    /// the button works — so the plain register is simply the better one.
+    static let readyHelp = "Rip this movie into Plex."
 }
 
 /// #0026 — the single decision behind the Start button's enabled state,

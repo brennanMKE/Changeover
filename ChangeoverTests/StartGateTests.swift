@@ -476,4 +476,43 @@ struct StartGateTests {
     @Test func theMismatchReasonNamesTheRipAnywayButton() {
         #expect(StartDecision.runtimeMismatchUnconfirmed.reason?.contains("Rip anyway") == true)
     }
+
+    // MARK: - The plain register (docs/plain-language-ui.md §3.1)
+
+    /// The caption beside Start is `plainReason`; the button's tooltip stays
+    /// `reason`. Exhaustive by construction, the same way the `reason` test
+    /// above is: a case added without a plain wording fails here rather than
+    /// falling back to the precise one.
+    @Test func everyDecisionThatCanReachTheStartCaptionHasAPlainReason() {
+        for decision in StartDecision.allCases {
+            switch decision {
+            case .ready, .ffmpegMissing, .fileCheckInProgress:
+                // `.ready` has nothing to say; the two upgrade-only cases are
+                // reached only inside the card, which is detail content.
+                #expect(decision.plainReason == nil, "\(decision)")
+            default:
+                #expect(decision.plainReason?.isEmpty == false, "\(decision) has no plain reason")
+            }
+        }
+    }
+
+    /// The plain caption still names the control, which is #0053's rule and
+    /// the whole reason a greyed-out Start is not a dead end.
+    @Test func thePlainCaptionsStillNameTheControlToPress() {
+        #expect(StartDecision.runtimeMismatchUnconfirmed.plainReason?.contains("Rip anyway") == true)
+        #expect(StartDecision.duplicateUnacknowledged.plainReason?.contains("Replace the Existing File") == true)
+        #expect(StartDecision.scanFailed.plainReason?.contains("Scan Again") == true)
+        #expect(StartDecision.noTitlesOnDisc.plainReason?.contains("Scan Again") == true)
+    }
+
+    /// The plain caption and the tooltip come from one value, so they can
+    /// never describe two different states — but they are deliberately two
+    /// different sentences.
+    @Test func thePlainCaptionAndTheTooltipAreBothPresentAndDifferent() {
+        for decision in StartDecision.allCases {
+            guard let plain = decision.plainReason, let reason = decision.reason else { continue }
+            #expect(!plain.isEmpty && !reason.isEmpty, "\(decision)")
+        }
+        #expect(StartDecision.noMovieSelected.plainReason == StartDecision.noMovieSelected.reason)
+    }
 }

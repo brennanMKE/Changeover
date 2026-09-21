@@ -92,4 +92,46 @@ struct ScanStatusLineTests {
         let line = try #require(ScanStatusLine.line(for: Self.scan(titles: [Self.title(1, seconds: 6_645)], mainFeatureIndex: 1)))
         #expect(line.text == "Scan complete — 1 title, main feature detected")
     }
+
+    // MARK: - The plain register (docs/plain-language-ui.md §3.2)
+
+    /// One plain sentence per state. `text` above is untouched and becomes
+    /// the detail line under it with Details open.
+    @Test func everyStateHasItsOwnPlainSentence() throws {
+        let scanning = try #require(ScanStatusLine.line(for: .scanning))
+        #expect(scanning.plain == "Reading the disc — this takes a moment…")
+
+        let failed = try #require(ScanStatusLine.line(for: .failed(.toolExited(code: 3))))
+        #expect(failed.plain == "The disc couldn't be read. Try Scan Again, or clean the disc.")
+        // A cancel already met the plain register, so both registers agree
+        // and `Wording` draws it only once.
+        let cancelled = try #require(ScanStatusLine.line(for: .failed(.cancelled)))
+        #expect(cancelled.plain == "The scan was cancelled.")
+        #expect(cancelled.wording.lines(showingDetails: true) == ["The scan was cancelled."])
+
+        let noTitles = try #require(ScanStatusLine.line(for: Self.scan(titles: [], lastLine: "no titles")))
+        #expect(noTitles.plain == "Nothing playable was found on this disc. Try Scan Again, or clean the disc.")
+
+        let single = try #require(ScanStatusLine.line(for: Self.scan(titles: [Self.title(1, seconds: 6_645), Self.title(2, seconds: 300)], mainFeatureIndex: 1)))
+        #expect(single.plain == "Disc ready — the main movie was found.")
+
+        let unidentified = try #require(ScanStatusLine.line(for: Self.scan(titles: [Self.title(1, seconds: 600), Self.title(2, seconds: 700)])))
+        #expect(unidentified.plain == "Disc ready — you'll pick which part to rip next.")
+    }
+
+    /// #0025 again, in the plain register: nothing is preselected on a Play
+    /// All disc, and the strip must not imply otherwise.
+    @Test func aPlayAllDiscsPlainSentenceStillSaysItIsNotAMovie() throws {
+        var titles = [Self.title(1, seconds: 8 * 21 * 60)]
+        titles += (2...9).map { Self.title($0, seconds: 21 * 60) }
+        let line = try #require(ScanStatusLine.line(for: Self.scan(titles: titles, mainFeatureIndex: 1)))
+        #expect(line.plain == "Disc ready — this looks like a TV disc, not a movie. You'll pick what to rip next.")
+    }
+
+    /// The pair a view draws: the plain sentence, then the verbatim one.
+    @Test func theWordingCarriesBothRegisters() throws {
+        let line = try #require(ScanStatusLine.line(for: .scanning))
+        #expect(line.wording.lines(showingDetails: false) == [line.plain])
+        #expect(line.wording.lines(showingDetails: true) == [line.plain, line.text])
+    }
 }

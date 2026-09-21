@@ -29,6 +29,12 @@ struct DiscTitleListView: View {
 
     @State private var showFullTable = false
 
+    /// `docs/plain-language-ui.md` — whether the precise register is on.
+    /// Read off the same `AppSettings` the view already holds, so this view
+    /// keeps its explicit `settings:` argument rather than growing a second
+    /// source of truth.
+    private var showsDetails: Bool { settings.showsDetails }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             switch jobs.scanState {
@@ -53,9 +59,13 @@ struct DiscTitleListView: View {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
-                Text("Scanning disc — this takes tens of seconds…")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                WordingText(
+                    wording: Wording(
+                        plain: "Reading the disc — this takes a moment…",
+                        detail: "Scanning disc — this takes tens of seconds…"
+                    ),
+                    font: .subheadline
+                )
             }
             // #0051: a hung scan (a scratched disc, a malformed IFO, a slow
             // drive) used to have no way out short of `DiscScanner
@@ -75,10 +85,12 @@ struct DiscTitleListView: View {
 
     private func failedView(_ failure: DiscScanner.Failure) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(DiscTitleFormatting.scanFailureMessage(failure))
-                .font(.subheadline)
-                .foregroundStyle(.red)
-            Button("Rescan") {
+            WordingText(
+                wording: DiscTitleFormatting.scanFailureWording(failure),
+                font: .subheadline,
+                tint: .red
+            )
+            Button("Scan Again") {
                 jobs.startScan(settings: settings)
             }
             // #0045 review: `startScan` refuses a disc being ejected.
@@ -99,10 +111,12 @@ struct DiscTitleListView: View {
     /// success with an empty `DiscInfo`. No table: there is nothing in it.
     private func noTitlesView(_ result: DiscScanner.Result) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(DiscTitleFormatting.noTitlesMessage(warnings: result.warnings, lastLine: result.lastLine))
-                .font(.subheadline)
-                .foregroundStyle(.red)
-            Button("Rescan") {
+            WordingText(
+                wording: DiscTitleFormatting.noTitlesWording(warnings: result.warnings, lastLine: result.lastLine),
+                font: .subheadline,
+                tint: .red
+            )
+            Button("Scan Again") {
                 jobs.startScan(settings: settings)
             }
             .disabled(jobs.isEjecting || jobs.discUnavailable)
@@ -121,10 +135,14 @@ struct DiscTitleListView: View {
         // #0024: a successful scan can still carry a warning (e.g. 28
         // MSG:4004 read errors on Hornets' Nest) — non-blocking, but the
         // only signal the user gets before a rip that may be incomplete.
+        //
+        // `docs/plain-language-ui.md` §3.4: detail only, with no plain
+        // placeholder. The libdvdcss fallback warning fires on most real
+        // discs and usually works; the subtitle-decode warning concerns data
+        // the output does not carry at all (#0036). Neither gives a person
+        // anything to *do*, which is rule 7. Both are still in the log.
         ForEach(result.warnings, id: \.self) { warning in
-            Text("⚠︎ \(warning)")
-                .font(.caption)
-                .foregroundStyle(.orange)
+            DetailOnlyText(text: "⚠︎ \(warning)", tint: .orange)
         }
 
         switch outcome {
@@ -136,19 +154,19 @@ struct DiscTitleListView: View {
 
         case .playAll(let index, let episodes):
             VStack(alignment: .leading, spacing: 2) {
-                Text(DiscTitleFormatting.playAllMessage(index: index, episodes: episodes, disc: result.disc))
-                    .font(.subheadline)
-                    .foregroundStyle(.orange)
-                Text("Ripping is still possible by picking a title below, but nothing here is treated as a movie.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                WordingText(
+                    wording: DiscTitleFormatting.playAllWording(index: index, episodes: episodes, disc: result.disc),
+                    font: .subheadline,
+                    tint: .orange
+                )
+                // The plain sentence already says "pick the part you want",
+                // so this one only adds vocabulary.
+                DetailOnlyText(text: "Ripping is still possible by picking a title below, but nothing here is treated as a movie.")
             }
             titleTable(result.disc, badgeIndex: nil)
 
         case .none:
-            Text("This disc did not identify itself — no title looks like a feature. That can happen on a TV disc with no Play All title, or a feature under 45 minutes. Choose one below.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            WordingText(wording: DiscTitleFormatting.noFeatureWording, font: .subheadline)
             titleTable(result.disc, badgeIndex: nil)
 
         case .noTitles:
@@ -195,25 +213,35 @@ struct DiscTitleListView: View {
         let extrasPlan = jobs.selectedExtrasPlan
         return VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text("Main feature")
-                    .font(.headline)
-                if let title {
-                    Text("— \(DiscTitleFormatting.confirmationDetail(index: index, title: title))")
-                        .font(.system(.body, design: .monospaced))
+                if showsDetails {
+                    Text("Main feature")
+                        .font(.headline)
+                    if let title {
+                        Text("— \(DiscTitleFormatting.confirmationDetail(index: index, title: title))")
+                            .font(.system(.body, design: .monospaced))
+                    }
+                } else if let title {
+                    // "The movie · 1h 38m" — the index, the seconds, the
+                    // chapter count and the byte size are all one disclosure
+                    // away, and none of them is a decision.
+                    Text(DiscTitleFormatting.plainFeatureLine(title: title))
+                        .font(.headline)
+                } else {
+                    Text(DiscTitleFormatting.plainFeatureLabel)
+                        .font(.headline)
                 }
                 Spacer()
-                Button(showFullTable ? "Hide titles" : "Show all titles") {
+                Button(showFullTable ? "Hide" : "Show everything on the disc") {
                     showFullTable.toggle()
                 }
                 .buttonStyle(.link)
             }
             // #0056: the length fallback chose this title, not HandBrake's
             // own MainFeature answer — say so, rather than presenting a
-            // guess with the same confidence as a scanner answer.
-            if let caption = DiscTitleFormatting.featureSourceCaption(source) {
-                Text(caption)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+            // guess with the same confidence as a scanner answer. Orange in
+            // both registers: it is the one guess on the screen.
+            if let wording = DiscTitleFormatting.featureSourceWording(source) {
+                WordingText(wording: wording, font: .caption, tint: .orange)
             }
             // #0038: extras must be reachable without first disagreeing with
             // the detected feature — "Not this one?" said the opposite of
@@ -221,10 +249,12 @@ struct DiscTitleListView: View {
             // link are the primary way in; "Show all titles" above still
             // opens the same table for anyone who wants to see everything.
             HStack(spacing: 4) {
-                Text(DiscTitleFormatting.extrasStatusLine(extrasPlan))
+                Text(showsDetails
+                     ? DiscTitleFormatting.extrasStatusLine(extrasPlan)
+                     : DiscTitleFormatting.plainExtrasLine(extrasPlan))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Button(extrasPlan.items.isEmpty ? "Choose…" : "Change…") {
+                Button(extrasPlan.items.isEmpty ? "Add…" : "Change…") {
                     showFullTable = true
                 }
                 .buttonStyle(.link)
@@ -237,21 +267,20 @@ struct DiscTitleListView: View {
 
     @ViewBuilder
     private func runtimeVerdict(for title: DiscTitle) -> some View {
-        switch RuntimeCrossCheck.evaluate(discSeconds: title.durationSeconds, lookup: runtimeLookup) {
-        case .consistent(let delta):
-            Text("Title \(title.index) matches the TMDB runtime (Δ \(Self.signed(delta))s)")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+        let verdict = RuntimeCrossCheck.evaluate(discSeconds: title.durationSeconds, lookup: runtimeLookup)
+        switch verdict {
+        case .consistent:
+            if let wording = DiscTitleFormatting.runtimeVerdictWording(title: title, verdict: verdict) {
+                WordingText(wording: wording, font: .caption2)
+            }
 
-        case .mismatch(let delta):
+        case .mismatch:
             VStack(alignment: .leading, spacing: 2) {
-                Text("Title \(title.index) does not match the TMDB runtime (Δ \(Self.signed(delta))s) — check this is the right title.")
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                if let wording = DiscTitleFormatting.runtimeVerdictWording(title: title, verdict: verdict) {
+                    WordingText(wording: wording, font: .caption, tint: .red)
+                }
                 if StartGate.isAcknowledged(jobs.mismatchAcknowledgement, titleIndex: title.index, runtimeLookup: runtimeLookup) {
-                    Text("Confirmed — Start is enabled despite the mismatch.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    WordingText(wording: DiscTitleFormatting.acknowledgedWording, font: .caption2)
                 } else if let movieID = loadedMovieID {
                     Button("Rip anyway") {
                         jobs.acknowledgeMismatch(titleIndex: title.index, movieID: movieID)
@@ -274,10 +303,6 @@ struct DiscTitleListView: View {
     private var loadedMovieID: Int? {
         if case .loaded(let movieID, _) = runtimeLookup { return movieID }
         return nil
-    }
-
-    private static func signed(_ seconds: Int) -> String {
-        seconds >= 0 ? "+\(seconds)" : "\(seconds)"
     }
 
     /// #0038: `.single` renders its own extras line inline in
@@ -306,25 +331,35 @@ struct DiscTitleListView: View {
 
     private func titleRow(_ title: DiscTitle, badgeIndex: Int?) -> some View {
         HStack(spacing: 10) {
-            Text("\(title.index)")
-                .font(.system(.body, design: .monospaced))
-                .frame(width: 24, alignment: .trailing)
-            Text(DiscTitleFormatting.duration(title.durationSeconds))
+            // The index, the chapter count and the byte size are the
+            // vocabulary of a disc, not of a film: detail columns.
+            if showsDetails {
+                Text("\(title.index)")
+                    .font(.system(.body, design: .monospaced))
+                    .frame(width: 24, alignment: .trailing)
+            }
+            Text(showsDetails
+                 ? DiscTitleFormatting.duration(title.durationSeconds)
+                 : DiscTitleFormatting.plainDuration(title.durationSeconds))
                 .font(.system(.body, design: .monospaced))
                 .frame(width: 64, alignment: .trailing)
-            Text("\(title.chapterCount) ch")
-                .font(.system(.body, design: .monospaced))
-                .frame(width: 44, alignment: .trailing)
-            Text(DiscTitleFormatting.size(title.sizeBytes) ?? "—")
-                .font(.system(.body, design: .monospaced))
-                .frame(width: 72, alignment: .trailing)
-            Text(DiscTitleFormatting.streamSummary(for: title))
+            if showsDetails {
+                Text("\(title.chapterCount) ch")
+                    .font(.system(.body, design: .monospaced))
+                    .frame(width: 44, alignment: .trailing)
+                Text(DiscTitleFormatting.size(title.sizeBytes) ?? "—")
+                    .font(.system(.body, design: .monospaced))
+                    .frame(width: 72, alignment: .trailing)
+            }
+            Text(showsDetails
+                 ? DiscTitleFormatting.streamSummary(for: title)
+                 : DiscTitleFormatting.plainLanguages(for: title))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 0)
             if title.index == badgeIndex {
-                Text("Main feature")
+                Text(showsDetails ? "Main feature" : DiscTitleFormatting.plainFeatureLabel)
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -352,9 +387,6 @@ struct DiscTitleListView: View {
     /// `ExtrasPlan.make` `start` runs — so the count and total match what
     /// will be encoded.
     private func extrasSummary(_ plan: ExtrasPlan) -> some View {
-        let count = plan.items.count
-        return Text("\(count) extra\(count == 1 ? "" : "s") selected — \(DiscTitleFormatting.duration(plan.totalDurationSeconds)) total, filed outside the Plex library")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        WordingText(wording: DiscTitleFormatting.extrasSummaryWording(plan), font: .caption)
     }
 }

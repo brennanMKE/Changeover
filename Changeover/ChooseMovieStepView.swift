@@ -57,9 +57,14 @@ struct ChooseMovieStepView: View {
                     .disabled(search.selectedMovie == nil)
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
+                    // Tooltips stay in the detail register (§5): a disabled
+                    // control still explains itself precisely on hover.
                     .help(search.selectedMovie == nil
                           ? "Choose a movie from the results first."
                           : "Confirm the disc title and tracks for this movie.")
+                    .accessibilityHint(search.selectedMovie == nil
+                                       ? "Pick a movie from the list first."
+                                       : "Next: check the disc, then start.")
             }
         }
         // #0030: debounced as-you-type search. The selection (and the
@@ -89,10 +94,8 @@ struct ChooseMovieStepView: View {
                 .controlSize(.small)
                 .padding(8)
                 .frame(maxWidth: .infinity)
-        } else if let error = flow.search.errorMessage {
-            Text(error)
-                .foregroundStyle(.red)
-                .font(.subheadline)
+        } else if let error = flow.search.errorWording {
+            WordingText(wording: error, font: .subheadline, tint: .red)
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -115,10 +118,13 @@ struct ScanStatusStrip: View {
             if line.action == .cancelScan {
                 ProgressView().controlSize(.small)
             }
-            Text(line.text)
-                .font(.caption)
-                .foregroundStyle(line.tone == .failure ? Color.red : Color.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            // The plain sentence by default; the verbatim one (HandBrake's
+            // exit status, the title count) beneath it with Details open.
+            WordingText(
+                wording: line.wording,
+                font: .caption,
+                tint: line.tone == .failure ? Color.red : Color.secondary
+            )
             Spacer(minLength: 8)
             switch line.action {
             case .none:
@@ -130,7 +136,7 @@ struct ScanStatusStrip: View {
                     .buttonStyle(.link)
                     .font(.caption)
             case .rescan:
-                Button("Rescan") { jobs.startScan(settings: settings) }
+                Button("Scan Again") { jobs.startScan(settings: settings) }
                     .buttonStyle(.link)
                     .font(.caption)
                     // #0045/#0049: `startScan` refuses a disc being ejected
@@ -146,6 +152,8 @@ struct ScanStatusStrip: View {
 // MARK: - Movie row
 
 struct MovieRow: View {
+    @Environment(AppSettings.self) private var settings
+
     let movie:     TMDBMovie
     let posterURL: URL?
 
@@ -156,7 +164,12 @@ struct MovieRow: View {
                 Text(movie.title)
                     .font(.headline)
                     .lineLimit(2)
-                Text("\(movie.yearText)  ·  tmdb-\(String(movie.id))")
+                // The year is what tells two films of the same name apart on
+                // screen; the database id is what tells Plex. Only one of
+                // those is the person's problem, so the id is detail.
+                Text(settings.showsDetails
+                     ? "\(movie.yearText)  ·  tmdb-\(String(movie.id))"
+                     : movie.yearText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

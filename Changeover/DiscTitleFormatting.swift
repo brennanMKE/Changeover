@@ -210,4 +210,204 @@ nonisolated enum DiscTitleFormatting {
         return "This looks like a TV season disc — \(episodes.count) titles of about "
             + "\(averageMinutes) minutes that together match the length of title \(index)."
     }
+
+    // MARK: - The plain register (docs/plain-language-ui.md §3.3)
+    //
+    // Every function above keeps its name, its wording and its tests. What
+    // follows is the plain sibling of each: one short sentence a person with
+    // no vocabulary for DVDs can act on, with the precise one kept verbatim
+    // as the detail. Nothing above was reworded.
+
+    /// Whole minutes, rounded: 5872 → "1h 38m", 2890 → "48m". The plain
+    /// sibling of `duration(_:)`, which keeps `H:MM:SS` for the table's
+    /// detail column and the extras total.
+    static func plainDuration(_ totalSeconds: Int) -> String {
+        runtime((max(0, totalSeconds) + 30) / 60)
+    }
+
+    /// "The movie · 1h 38m" — the plain sibling of `confirmationDetail`.
+    /// No index, no chapter count, no byte size: none of them is something
+    /// the person has to act on, and all three are one disclosure away.
+    static func plainFeatureLine(title: DiscTitle) -> String {
+        "The movie · \(plainDuration(title.durationSeconds))"
+    }
+
+    /// The heading and table badge in the plain register. "Main feature" is
+    /// HandBrake's word; this is the user's.
+    static let plainFeatureLabel = "The movie"
+
+    static func plainScanFailureMessage(_ failure: DiscScanner.Failure) -> String {
+        switch failure {
+        case .toolMissing:
+            return "A program Changeover needs isn't installed. Open Settings to fix it."
+        case .launchFailure:
+            return "The disc reader couldn't start. Open Settings to check it."
+        case .toolExited:
+            return "The disc couldn't be read. Try Scan Again, or clean the disc."
+        case .jsonMissing:
+            return "The disc couldn't be read. Try Scan Again."
+        case .titleSetCorrupted:
+            return "The disc couldn't be read. Try Scan Again, or clean the disc."
+        case .cancelled:
+            // Already plain, and already the whole truth.
+            return "The scan was cancelled."
+        }
+    }
+
+    /// The plain sibling of `noTitlesMessage(warnings:lastLine:)`. Constant:
+    /// neither HandBrake's last line nor the Full Disk Access hint gives a
+    /// person anything to *do* that "try again, or clean the disc" doesn't,
+    /// and the hint is worded as a possibility, not a diagnosis (see its own
+    /// doc comment). Both stay verbatim in the detail.
+    static let plainNoTitlesMessage = "Nothing playable was found on this disc. Try Scan Again, or clean the disc."
+
+    /// The scan failure in both registers.
+    static func scanFailureWording(_ failure: DiscScanner.Failure) -> Wording {
+        Wording(plain: plainScanFailureMessage(failure), detail: scanFailureMessage(failure))
+    }
+
+    static func noTitlesWording(warnings: [String], lastLine: String?) -> Wording {
+        Wording(
+            plain: plainNoTitlesMessage,
+            detail: noTitlesMessage(warnings: warnings, lastLine: lastLine)
+        )
+    }
+
+    /// #0056's length fallback, in plain words. Stays orange in both
+    /// registers: it is the one guess on the screen, and the plain sentence
+    /// has to keep saying so.
+    static func plainFeatureSourceCaption(_ source: DiscTitleHeuristic.FeatureSource) -> String? {
+        switch source {
+        case .scanner:
+            return nil
+        case .length:
+            return "Changeover guessed this is the movie because it's the only long part of the disc. Check the length looks right."
+        }
+    }
+
+    static func featureSourceWording(_ source: DiscTitleHeuristic.FeatureSource) -> Wording? {
+        guard let plain = plainFeatureSourceCaption(source),
+              let detail = featureSourceCaption(source) else { return nil }
+        return Wording(plain: plain, detail: detail)
+    }
+
+    /// "Extras: none" / "Extras: 2 · 48m" — the plain sibling of
+    /// `extrasStatusLine`, which keeps `H:MM:SS`.
+    static func plainExtrasLine(_ plan: ExtrasPlan) -> String {
+        guard !plan.items.isEmpty else { return "Extras: none" }
+        return "Extras: \(plan.items.count) · \(plainDuration(plan.totalDurationSeconds))"
+    }
+
+    /// The Play All refusal, plain. The cluster arithmetic that produced it
+    /// is exactly what the detail register is for; what the person needs is
+    /// "this isn't a film — pick the part you want".
+    static let plainPlayAllMessage = "This looks like a TV disc, not a movie. Pick the part you want below."
+
+    static func playAllWording(index: Int, episodes: [Int], disc: DiscInfo) -> Wording {
+        Wording(
+            plain: plainPlayAllMessage,
+            detail: playAllMessage(index: index, episodes: episodes, disc: disc)
+        )
+    }
+
+    /// `DiscTitleHeuristic.Outcome.none` — the disc that did not identify
+    /// itself. The detail is the sentence `DiscTitleListView` used to hold as
+    /// a literal; moving it here is what gives it a test.
+    static let noFeatureWording = Wording(
+        plain: "Changeover couldn't tell which part of the disc is the movie. Pick it below — it's usually the longest one.",
+        detail: "This disc did not identify itself — no title looks like a feature. That can happen on a TV disc with no Play All title, or a feature under 45 minutes. Choose one below."
+    )
+
+    /// The `.playAll`/`.none` extras running total, likewise moved out of
+    /// `DiscTitleListView` so it is pinned rather than merely compiled.
+    static func extrasSummaryWording(_ plan: ExtrasPlan) -> Wording {
+        let count = plan.items.count
+        return Wording(
+            plain: plainExtrasLine(plan),
+            detail: "\(count) extra\(count == 1 ? "" : "s") selected — \(duration(plan.totalDurationSeconds)) total, filed outside the Plex library"
+        )
+    }
+
+    /// "English, Spanish" / "No sound" — the plain sibling of
+    /// `streamSummary(for:)`. Language *names*, never codes; the subtitle
+    /// count is a detail, because the output carries no subtitles at all
+    /// (#0036) and the count therefore changes nothing the person can do.
+    ///
+    /// A fully untagged title has no names to give, so it says how many
+    /// tracks there are instead — which is the one thing that is still true.
+    static func plainLanguages(for title: DiscTitle) -> String {
+        let audio = title.streams.filter { $0.kind == .audio }
+        guard !audio.isEmpty else { return "No sound" }
+        let names = orderedUniqueLanguages(audio).compactMap { PlainLanguage.languageName($0) }
+        guard !names.isEmpty else {
+            return "\(audio.count) audio track\(audio.count == 1 ? "" : "s")"
+        }
+        return names.joined(separator: ", ")
+    }
+
+    /// #0036's fact about the *output*, said once, in plain words. Constant
+    /// on purpose: the track count is what the detail register carries.
+    static let plainSubtitleLine = "Subtitles aren't copied to Plex yet."
+
+    static func subtitleWording(count: Int) -> Wording {
+        Wording(plain: plainSubtitleLine, detail: subtitleSummary(count: count))
+    }
+
+    /// The plain sibling of `runtimeCaption`. "Listed length", not "TMDB
+    /// runtime": the person did not choose a database, they chose a movie.
+    static func plainRuntimeCaption(_ lookup: RuntimeLookup) -> String? {
+        switch lookup {
+        case .idle:
+            return nil
+        case .loading:
+            return "Checking the movie's length…"
+        case .loaded(_, let minutes):
+            return "Listed length \(runtime(minutes))"
+        case .unavailable:
+            // Why it will not run — a missing key, a lookup error — is the
+            // detail. That it did not happen is the plain fact.
+            return "Couldn't check the movie's length."
+        }
+    }
+
+    static func runtimeWording(_ lookup: RuntimeLookup) -> Wording? {
+        guard let plain = plainRuntimeCaption(lookup), let detail = runtimeCaption(lookup) else { return nil }
+        return Wording(plain: plain, detail: detail)
+    }
+
+    /// #0032's verdict in both registers, moved out of `DiscTitleListView` so
+    /// the Δ arithmetic behind the plain sentence is tested.
+    ///
+    /// `nil` for `.notRun`: the movie card's own runtime caption already says
+    /// the check did not happen, and repeating it here was the redundant
+    /// second line the first pass flagged.
+    static func runtimeVerdictWording(title: DiscTitle, verdict: RuntimeCrossCheck.Verdict) -> Wording? {
+        switch verdict {
+        case .consistent(let delta):
+            return Wording(
+                plain: "✓ Length matches.",
+                detail: "Title \(title.index) matches the TMDB runtime (Δ \(signed(delta))s)"
+            )
+        case .mismatch(let delta):
+            let direction = delta < 0 ? "shorter" : "longer"
+            return Wording(
+                plain: "This part is \(PlainLanguage.minutes(delta)) \(direction) than the movie should be. It may not be the movie — check before ripping.",
+                detail: "Title \(title.index) does not match the TMDB runtime (Δ \(signed(delta))s) — check this is the right title."
+            )
+        case .notRun:
+            return nil
+        }
+    }
+
+    /// The caption after "Rip anyway".
+    static let acknowledgedWording = Wording(
+        plain: "OK — you've chosen to rip it anyway.",
+        detail: "Confirmed — Start is enabled despite the mismatch."
+    )
+
+    /// `RuntimeCrossCheck`'s delta, signed — the shape `DiscTitleListView`
+    /// rendered inline before the verdict moved here.
+    static func signed(_ seconds: Int) -> String {
+        seconds >= 0 ? "+\(seconds)" : "\(seconds)"
+    }
 }

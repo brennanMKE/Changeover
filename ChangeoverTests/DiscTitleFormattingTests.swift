@@ -307,4 +307,176 @@ struct DiscTitleFormattingTests {
         #expect(messages[2] == "The disc scan failed (HandBrakeCLI exited with status 3).")
         #expect(messages[5] == "The scan was cancelled.")
     }
+
+    // MARK: - The plain register (docs/plain-language-ui.md §3.3)
+    //
+    // Every assertion above is untouched: these are the plain siblings, one
+    // per function, with the precise string kept verbatim as the detail.
+
+    @Test func plainDurationRoundsToWholeMinutes() {
+        #expect(DiscTitleFormatting.plainDuration(5_872) == "1h 38m")
+        #expect(DiscTitleFormatting.plainDuration(2_890) == "48m")
+        #expect(DiscTitleFormatting.plainDuration(0) == "0m")
+        // Rounds, never truncates: 89 seconds is nearer a minute than none.
+        #expect(DiscTitleFormatting.plainDuration(89) == "1m")
+        #expect(DiscTitleFormatting.plainDuration(-10) == "0m")
+    }
+
+    @Test func plainFeatureLineNamesNeitherTheIndexNorTheChapters() {
+        let title = DiscTitle(index: 3, durationSeconds: 5_872, chapterCount: 21, sizeBytes: 6_800_000_000, outputFileName: nil)
+        #expect(DiscTitleFormatting.plainFeatureLine(title: title) == "The movie · 1h 38m")
+        // The precise line is untouched and still carries all four facts.
+        #expect(DiscTitleFormatting.confirmationDetail(index: 3, title: title).contains("21 chapters"))
+    }
+
+    @Test func everyScanFailureHasItsOwnPlainSentenceToo() {
+        let failures: [DiscScanner.Failure] = [
+            .toolMissing(path: "/opt/homebrew/bin/HandBrakeCLI"),
+            .launchFailure("permission denied"),
+            .toolExited(code: 3),
+            .jsonMissing,
+            .titleSetCorrupted,
+            .cancelled,
+        ]
+        let plain = failures.map(DiscTitleFormatting.plainScanFailureMessage)
+        #expect(plain.allSatisfy { !$0.isEmpty })
+        // No path, no exit status: the one that named a path now names
+        // Settings instead.
+        #expect(plain[0] == "A program Changeover needs isn't installed. Open Settings to fix it.")
+        #expect(plain[2] == "The disc couldn't be read. Try Scan Again, or clean the disc.")
+        // A cancel already met the plain register, so the pair collapses.
+        #expect(plain[5] == "The scan was cancelled.")
+        #expect(DiscTitleFormatting.scanFailureWording(.cancelled).lines(showingDetails: true) == ["The scan was cancelled."])
+        // …and every other one keeps the verbatim sentence beneath it.
+        #expect(DiscTitleFormatting.scanFailureWording(.toolExited(code: 3)).detail
+                == "The disc scan failed (HandBrakeCLI exited with status 3).")
+    }
+
+    /// The permissions hint and HandBrake's last line stay in the detail,
+    /// verbatim — the plain sentence is constant.
+    @Test func plainNoTitlesMessageIsConstantAndTheHintStaysInTheDetail() {
+        let wording = DiscTitleFormatting.noTitlesWording(
+            warnings: ["libdvdcss could not open the raw device"],
+            lastLine: "scan: 0 valid title(s) found"
+        )
+        #expect(wording.plain == "Nothing playable was found on this disc. Try Scan Again, or clean the disc.")
+        #expect(wording.detail?.contains("Full Disk Access") == true)
+        #expect(wording.detail?.contains("scan: 0 valid title(s) found") == true)
+    }
+
+    @Test func plainFeatureSourceCaptionOnlyExistsForTheLengthFallback() {
+        #expect(DiscTitleFormatting.plainFeatureSourceCaption(.scanner) == nil)
+        #expect(DiscTitleFormatting.featureSourceWording(.scanner) == nil)
+        let wording = try? #require(DiscTitleFormatting.featureSourceWording(.length))
+        #expect(wording?.plain == "Changeover guessed this is the movie because it's the only long part of the disc. Check the length looks right.")
+        #expect(wording?.detail == DiscTitleFormatting.featureSourceCaption(.length))
+    }
+
+    @Test func plainExtrasLineRoundsTheTotalToMinutes() {
+        #expect(DiscTitleFormatting.plainExtrasLine(ExtrasPlan(items: [])) == "Extras: none")
+        let plan = ExtrasPlan(items: [
+            ExtrasPlan.Item(titleIndex: 5, durationSeconds: 1_200, frameRate: nil, interlaceDetected: nil),
+            ExtrasPlan.Item(titleIndex: 7, durationSeconds: 1_690, frameRate: nil, interlaceDetected: nil),
+        ])
+        #expect(DiscTitleFormatting.plainExtrasLine(plan) == "Extras: 2 · 48m")
+        // The running total's precise form is untouched.
+        #expect(DiscTitleFormatting.extrasStatusLine(plan) == "Extras: 2 · 0:48:10")
+        #expect(DiscTitleFormatting.extrasSummaryWording(plan).plain == "Extras: 2 · 48m")
+        #expect(DiscTitleFormatting.extrasSummaryWording(plan).detail?.contains("filed outside the Plex library") == true)
+    }
+
+    @Test func plainPlayAllMessageDropsTheClusterArithmetic() {
+        let titles = (1...9).map { DiscTitle(index: $0, durationSeconds: 1_260, chapterCount: 5, sizeBytes: 0, outputFileName: nil) }
+        let disc = DiscInfo(volumeName: "TV_S1_D1", driveName: "disk6", titles: titles)
+        let wording = DiscTitleFormatting.playAllWording(index: 1, episodes: [2, 3, 4], disc: disc)
+        #expect(wording.plain == "This looks like a TV disc, not a movie. Pick the part you want below.")
+        #expect(wording.detail == DiscTitleFormatting.playAllMessage(index: 1, episodes: [2, 3, 4], disc: disc))
+    }
+
+    /// The `.none` sentence moved off `DiscTitleListView` so it gains a test.
+    @Test func theNoFeatureSentenceKeepsItsVerbatimFormAsTheDetail() {
+        #expect(DiscTitleFormatting.noFeatureWording.plain.contains("Pick it below"))
+        #expect(DiscTitleFormatting.noFeatureWording.detail
+                == "This disc did not identify itself — no title looks like a feature. That can happen on a TV disc with no Play All title, or a feature under 45 minutes. Choose one below.")
+    }
+
+    @Test func plainLanguagesNamesLanguagesRatherThanCountingStreams() {
+        let title = DiscTitle(index: 1, durationSeconds: 6000, chapterCount: 10, sizeBytes: 0,
+                              outputFileName: nil,
+                              streams: [
+                                stream(1, kind: .audio, languageCode: "eng"),
+                                stream(2, kind: .audio, languageCode: "spa"),
+                                stream(3, kind: .subtitle, languageCode: "eng"),
+                              ])
+        if Locale.current.language.languageCode?.identifier == "en" {
+            #expect(DiscTitleFormatting.plainLanguages(for: title) == "English, Spanish")
+        }
+        // Never a parenthetical, and never an ISO code.
+        #expect(!DiscTitleFormatting.plainLanguages(for: title).contains("("))
+        #expect(!DiscTitleFormatting.plainLanguages(for: title).contains("eng"))
+    }
+
+    /// Hornet's Nest's shape: no audio stream carries a language tag at all,
+    /// so there is no name to give — and the fallback must not render "()".
+    @Test func plainLanguagesSurvivesATitleWithNoLanguageTagsAtAll() {
+        let title = DiscTitle(index: 1, durationSeconds: 6000, chapterCount: 10, sizeBytes: 0,
+                              outputFileName: nil,
+                              streams: [stream(1, kind: .audio), stream(2, kind: .audio)])
+        #expect(DiscTitleFormatting.plainLanguages(for: title) == "2 audio tracks")
+        #expect(!DiscTitleFormatting.plainLanguages(for: title).contains("()"))
+    }
+
+    @Test func plainLanguagesOfATitleWithNoAudioSaysSo() {
+        let title = DiscTitle(index: 1, durationSeconds: 6000, chapterCount: 10, sizeBytes: 0, outputFileName: nil)
+        #expect(DiscTitleFormatting.plainLanguages(for: title) == "No sound")
+    }
+
+    /// The subtitle caption is constant on purpose: it states #0036's fact
+    /// about the *output*, which is the surprise. The count is the detail.
+    @Test func thePlainSubtitleLineIsConstantAndTheCountIsTheDetail() {
+        #expect(DiscTitleFormatting.subtitleWording(count: 6).plain == "Subtitles aren't copied to Plex yet.")
+        #expect(DiscTitleFormatting.subtitleWording(count: 6).detail == "6 subtitle tracks, none carried into the output")
+        #expect(DiscTitleFormatting.subtitleWording(count: 1).plain == DiscTitleFormatting.subtitleWording(count: 21).plain)
+    }
+
+    @Test func plainRuntimeCaptionSaysListedLengthNotTheDatabasesName() {
+        #expect(DiscTitleFormatting.plainRuntimeCaption(.idle) == nil)
+        #expect(DiscTitleFormatting.plainRuntimeCaption(.loading(movieID: 275)) == "Checking the movie's length…")
+        #expect(DiscTitleFormatting.plainRuntimeCaption(.loaded(movieID: 275, runtimeMinutes: 98)) == "Listed length 1h 38m")
+        // Never reads like a pass when the check did not run.
+        #expect(DiscTitleFormatting.plainRuntimeCaption(.unavailable(movieID: 275, reason: .missingAPIKey))
+                == "Couldn't check the movie's length.")
+        let wording = DiscTitleFormatting.runtimeWording(.unavailable(movieID: 275, reason: .lookupFailed("timed out")))
+        #expect(wording?.detail == "Runtime cross-check will not run — timed out")
+    }
+
+    // MARK: - The runtime verdict, moved off DiscTitleListView
+
+    @Test func theConsistentVerdictIsATickAndTheDeltaIsTheDetail() throws {
+        let title = DiscTitle(index: 1, durationSeconds: 5_886, chapterCount: 21, sizeBytes: 0, outputFileName: nil)
+        let wording = try #require(DiscTitleFormatting.runtimeVerdictWording(title: title, verdict: .consistent(deltaSeconds: 14)))
+        #expect(wording.plain == "✓ Length matches.")
+        #expect(wording.detail == "Title 1 matches the TMDB runtime (Δ +14s)")
+    }
+
+    /// Both signs, in minutes, with the direction said out loud — the
+    /// arithmetic the plain sentence rests on.
+    @Test func theMismatchVerdictSaysHowFarOffAndInWhichDirection() throws {
+        let title = DiscTitle(index: 1, durationSeconds: 4_000, chapterCount: 21, sizeBytes: 0, outputFileName: nil)
+
+        let shorter = try #require(DiscTitleFormatting.runtimeVerdictWording(title: title, verdict: .mismatch(deltaSeconds: -1_832)))
+        #expect(shorter.plain.hasPrefix("This part is about 31 minutes shorter than the movie should be."))
+        #expect(shorter.detail == "Title 1 does not match the TMDB runtime (Δ -1832s) — check this is the right title.")
+
+        let longer = try #require(DiscTitleFormatting.runtimeVerdictWording(title: title, verdict: .mismatch(deltaSeconds: 1_832)))
+        #expect(longer.plain.hasPrefix("This part is about 31 minutes longer than the movie should be."))
+        #expect(longer.detail == "Title 1 does not match the TMDB runtime (Δ +1832s) — check this is the right title.")
+    }
+
+    /// The movie card's own caption already says the check did not run;
+    /// repeating it here was the redundant second line the first pass flagged.
+    @Test func aCheckThatDidNotRunAddsNoVerdictLine() {
+        let title = DiscTitle(index: 1, durationSeconds: 4_000, chapterCount: 21, sizeBytes: 0, outputFileName: nil)
+        #expect(DiscTitleFormatting.runtimeVerdictWording(title: title, verdict: .notRun(.missingAPIKey)) == nil)
+    }
 }
