@@ -80,9 +80,19 @@ struct MetadataWindowReuseTests {
     /// `WindowSizing`'s table says, and this assertion would fail. It creates
     /// a real window in the app-hosted bundle, like every other test in this
     /// file; it is not a UI test (`docs/ui-test-crash-prevention.md`).
-    @Test func theWindowOpensAtTheStepsHeight() throws {
+    ///
+    /// Parameterised on `AppSettings.showsDetails` since
+    /// `docs/plain-language-ui.md`: the Details disclosure's content is laid
+    /// out **inside** each step's own scroller, never in the action bar, so
+    /// `WindowSizing.heightClass(for:)` — which keys on the step and knows
+    /// nothing about that flag — stays the whole truth. If a `DetailsDisclosure`
+    /// were ever placed outside a scroller, the open case fails here.
+    @Test(arguments: [false, true]) func theWindowOpensAtTheStepsHeight(showsDetails: Bool) throws {
         let delegate = AppDelegate()
         defer { delegate.metadataWindow?.close() }
+        // Set, never persisted: these tests run against the real defaults
+        // domain and must not change what the user sees next launch.
+        delegate.settings.showsDetails = showsDetails
 
         delegate.showMetadataEntry()
         let window = try #require(delegate.metadataWindow, "no window was created")
@@ -93,7 +103,7 @@ struct MetadataWindowReuseTests {
 
         let step = delegate.flow.step(jobs: delegate.jobs)
         let expected = WindowSizing.height(for: WindowSizing.heightClass(for: step), state: .init())
-        #expect(window.contentRect(forFrameRect: window.frame).height == expected, "step \(step)")
+        #expect(window.contentRect(forFrameRect: window.frame).height == expected, "step \(step), details \(showsDetails)")
         #expect(window.minSize == NSSize(width: WindowSizing.minimum.width,
                                          height: WindowSizing.minimum.height))
     }
@@ -103,9 +113,10 @@ struct MetadataWindowReuseTests {
     /// put it after the next layout pass. If `NSHostingView`'s intrinsic
     /// content size were being honoured above `windowSizeStayPut`, the shrink
     /// back to compact would snap open again here.
-    @Test func theSizerMovesTheWindowBetweenTheTwoHeightsAndItStaysThere() throws {
+    @Test(arguments: [false, true]) func theSizerMovesTheWindowBetweenTheTwoHeightsAndItStaysThere(showsDetails: Bool) throws {
         let delegate = AppDelegate()
         defer { delegate.metadataWindow?.close() }
+        delegate.settings.showsDetails = showsDetails
 
         delegate.showMetadataEntry()
         let window = try #require(delegate.metadataWindow)
@@ -127,10 +138,10 @@ struct MetadataWindowReuseTests {
                      "the test host's screen is too short for this assertion")
 
         sizer.apply(step: .confirm)
-        #expect(contentHeight() == full)
+        #expect(contentHeight() == full, "details \(showsDetails)")
 
         sizer.apply(step: .insertDisc(.noDisc))
-        #expect(contentHeight() == compact)
+        #expect(contentHeight() == compact, "details \(showsDetails)")
     }
 
     /// The Settings half of #0011: `showSettings()` had the same

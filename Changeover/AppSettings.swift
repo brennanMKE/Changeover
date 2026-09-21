@@ -52,6 +52,15 @@ final class AppSettings {
     /// bundled; absent means no chapter names, no language hints and no
     /// upgrade — and **no change to the rip**, which does not use it.
     var ffmpegPath: String = "/opt/homebrew/bin/ffmpeg"
+    /// `docs/plain-language-ui.md` — the Details disclosure's state, shared by
+    /// every step of the rip window and by Settings.
+    ///
+    /// The app speaks plainly by default; opening Details once opens it
+    /// everywhere and it stays open across launches, because "an option to
+    /// expand to see details" is a preference, not a per-screen chore. Written
+    /// by `persistShowsDetails()` the moment it is toggled, so it never waits
+    /// on the Settings window's Save button.
+    var showsDetails: Bool = false
 
     /// `ffprobe`, derived from `ffmpegPath` — one Homebrew formula ships
     /// both, so a second Settings field would only be a second thing to get
@@ -132,6 +141,7 @@ final class AppSettings {
         if let v = d.string(forKey: Keys.menudumpPath) { menudumpPath = v }
         if let v = d.string(forKey: Keys.menuArchivePath) { menuArchivePath = v }
         if let v = d.string(forKey: Keys.ffmpegPath), !v.isEmpty { ffmpegPath = v }
+        showsDetails = d.bool(forKey: Keys.showsDetails)
     }
 
     // MARK: - Persistence
@@ -148,6 +158,17 @@ final class AppSettings {
         d.set(menudumpPath, forKey: Keys.menudumpPath)
         d.set(menuArchivePath, forKey: Keys.menuArchivePath)
         d.set(ffmpegPath,   forKey: Keys.ffmpegPath)
+        d.set(showsDetails, forKey: Keys.showsDetails)
+    }
+
+    /// Writes **only** the Details disclosure's state.
+    ///
+    /// Deliberately not `persist()`: the disclosure appears inside the
+    /// Settings window too, and a full `persist()` there would save a
+    /// half-typed API key the user has not pressed Save on yet. `persist()`
+    /// still writes this key, so a Save is never wrong either.
+    func persistShowsDetails() {
+        defaults.set(showsDetails, forKey: Keys.showsDetails)
     }
 
     // MARK: - UserDefaults keys
@@ -162,5 +183,6 @@ final class AppSettings {
         static let menudumpPath = "menudumpPath"
         static let menuArchivePath = "menuArchivePath"
         static let ffmpegPath   = "ffmpegPath"
+        static let showsDetails = "showsDetails"
     }
 }

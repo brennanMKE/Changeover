@@ -354,7 +354,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         window.title = "Settings"
         window.center()
         window.contentView = NSHostingView(
-            rootView: SettingsView(settings: settings)
+            // `.environment(settings)` as well as the explicit `settings:`
+            // argument: `DetailsDisclosure` reads the shared
+            // `showsDetails` flag out of the environment, the same way every
+            // step of the rip window does.
+            rootView: SettingsView(settings: settings).environment(settings)
         )
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)

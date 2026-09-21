@@ -73,4 +73,36 @@ struct AppSettingsTests {
         let reloaded = AppSettings(defaults: defaults)
         #expect(reloaded.preferredAudioLanguages == ["fra", "eng"])
     }
+    // MARK: - The Details disclosure (docs/plain-language-ui.md §1.4)
+
+    /// The app speaks plainly by default.
+    @Test func showsDetailsDefaultsToFalse() {
+        #expect(AppSettings(defaults: throwawaySuite()).showsDetails == false)
+    }
+
+    /// Opening Details once opens it everywhere and it stays open across
+    /// launches — it is a preference, not a per-screen chore.
+    @Test func showsDetailsRoundTripsThroughPersist() {
+        let defaults = throwawaySuite()
+        let settings = AppSettings(defaults: defaults)
+        settings.showsDetails = true
+        settings.persist()
+        #expect(AppSettings(defaults: defaults).showsDetails)
+    }
+
+    /// The disclosure writes immediately, and writes **only** its own key —
+    /// so toggling it inside the Settings window never saves a half-typed
+    /// API key the user has not pressed Save on.
+    @Test func persistShowsDetailsWritesOnlyThatOneKey() {
+        let defaults = throwawaySuite()
+        let settings = AppSettings(defaults: defaults)
+        settings.tmdbAPIKey = "half-typed"
+        settings.showsDetails = true
+        settings.persistShowsDetails()
+
+        let reloaded = AppSettings(defaults: defaults)
+        #expect(reloaded.showsDetails)
+        #expect(reloaded.tmdbAPIKey.isEmpty)
+    }
+
 }
