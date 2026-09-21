@@ -263,4 +263,33 @@ nonisolated enum DependencyPanel {
         }
         return "Optional, not installed: \(missingOptional.map(\.name).joined(separator: ", ")). Each one adds something; none is needed to rip a disc."
     }
+
+    /// `docs/plain-language-ui.md` §3.16 — the one readiness line at the top
+    /// of Settings, in the plain register.
+    ///
+    /// `nil` in the two cases where the honest answer is silence: while a
+    /// required probe is still running (a "not installed" that turns into
+    /// "ready" a second later is worse than nothing), and when only optional
+    /// tools are missing — which is a fully supported Mac, and the person did
+    /// not ask. `summary(_:)` above keeps naming them, verbatim, in Details.
+    ///
+    /// The failing line deliberately does not name HandBrake, even though
+    /// the plan's draft did: the forbidden-terms rule (§1.2) has exactly two
+    /// exemptions and this is not one of them, and the `brew` line the
+    /// person actually needs is in Details with the tool's own name beside
+    /// it.
+    static func plainSummary(_ rows: [Row]) -> String? {
+        let required = rows.filter { $0.role == .required }
+        let stillChecking = required.contains { if case .checking = $0.status { return true } else { return false } }
+        guard !stillChecking else { return nil }
+
+        let unusable = required.contains { row in
+            if case .installed = row.status { return false }
+            return true
+        }
+        guard !unusable else {
+            return "✗ A program Changeover needs isn't installed, so nothing can be ripped yet. Open Details for the command that installs it."
+        }
+        return "✓ Ready to rip."
+    }
 }

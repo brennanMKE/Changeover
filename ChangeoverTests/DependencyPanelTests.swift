@@ -185,4 +185,48 @@ struct DependencyPanelTests {
         let rows = Self.rows(dependencies: MenuDependencies.parse(Self.bothInstalled))
         #expect(DependencyPanel.summary(rows) == "Everything Changeover can use is installed.")
     }
+    // MARK: - The plain register (docs/plain-language-ui.md §3.16)
+
+    /// One line at the top of Settings, and only when it says something.
+    /// `summary(_:)` above is untouched and stays in Details.
+    @Test func thePlainSummaryOnlyEverSpeaksAboutARequiredTool() {
+        let ready = DependencyPanel.rows(
+            handbrake: .ready, makemkvcon: .notFound(path: "/nope"), menudump: .notFound(path: "/nope"),
+            ffmpeg: .notFound(path: "/nope"), lsdvdInstalled: false, dependencies: nil
+        )
+        // Optional tools missing is a fully supported Mac, and the person
+        // did not ask.
+        #expect(DependencyPanel.plainSummary(ready) == "✓ Ready to rip.")
+        #expect(DependencyPanel.summary(ready).contains("Optional, not installed"))
+
+        let broken = DependencyPanel.rows(
+            handbrake: .notFound(path: "/nope"), makemkvcon: .ready, menudump: .ready,
+            ffmpeg: .ready, lsdvdInstalled: true, dependencies: nil
+        )
+        let line = DependencyPanel.plainSummary(broken)
+        #expect(line == "✗ A program Changeover needs isn't installed, so nothing can be ripped yet. Open Details for the command that installs it.")
+        // The plain line must not name the tool — the `brew` line in Details
+        // does, beside its own name.
+        #expect(PlainLanguage.violations(in: line ?? "").isEmpty)
+    }
+
+    /// A "not installed" that turns into "ready" a second later is worse
+    /// than nothing, so a probe still running says nothing at all.
+    @Test func aRequiredProbeStillRunningSaysNothingPlain() {
+        let checking = DependencyPanel.rows(
+            handbrake: nil, makemkvcon: nil, menudump: nil,
+            ffmpeg: nil, lsdvdInstalled: false, dependencies: nil
+        )
+        #expect(DependencyPanel.plainSummary(checking) == nil)
+    }
+
+    /// A path pointing at the GUI app is not "installed" either.
+    @Test func anUnusableRequiredToolIsNotReady() {
+        let bundle = DependencyPanel.rows(
+            handbrake: .insideAppBundle(path: "/Applications/HandBrake.app/x"), makemkvcon: .ready, menudump: .ready,
+            ffmpeg: .ready, lsdvdInstalled: true, dependencies: nil
+        )
+        #expect(DependencyPanel.plainSummary(bundle)?.hasPrefix("✗") == true)
+    }
+
 }

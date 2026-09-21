@@ -67,11 +67,18 @@ struct SettingsView: View {
         }
     }
 
+    /// `docs/plain-language-ui.md` §3.16 — the three things a person has to
+    /// set, then one line saying whether the Mac can rip, then everything
+    /// else behind the same Details disclosure the rip window uses.
+    ///
+    /// Nothing below is deleted or reworded: the derived-path preview, the
+    /// CLI tool fields, the Dependencies table, the ISO-code field and the
+    /// long audio caption are all still here, verbatim, under Details.
     @ViewBuilder
     private var settingsGroups: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Plex Media Root
-            GroupBox("Plex Media Root") {
+            // 1 — Plex folder
+            GroupBox("Plex Folder") {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text(settings.plexMediaRoot.isEmpty ? "Not set" : settings.plexMediaRoot)
@@ -82,7 +89,9 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Button("Choose…") { choosePlexRoot() }
                     }
-                    if !settings.plexMediaRoot.isEmpty {
+                    // Where each kind of file will land: derived, never
+                    // typed, so it is a reassurance rather than a setting.
+                    if !settings.plexMediaRoot.isEmpty, settings.showsDetails {
                         VStack(alignment: .leading, spacing: 2) {
                             pathPreviewRow("Movies",       settings.plexMoviesPath)
                             pathPreviewRow("TV Shows",     settings.plexTVPath)
@@ -95,6 +104,69 @@ struct SettingsView: View {
                 .padding(6)
             }
 
+            // 2 — Movie lookup key. This caption names TMDB on purpose and
+            // is one of the two documented exemptions from the
+            // forbidden-terms rule: the person has to visit that site to get
+            // a key, so the name *is* the instruction.
+            GroupBox("Movie Lookup") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Key")
+                            .frame(width: 90, alignment: .trailing)
+                        SecureField("Your TMDB API Key", text: $settings.tmdbAPIKey)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    Text("Changeover looks movies up on The Movie Database. A free key from themoviedb.org is needed.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    DetailOnlyText(text: "The Movie Database (TMDB) API is used for movie metadata and poster art. You can get a free API key by creating an account at themoviedb.org.")
+                }
+                .padding(6)
+            }
+
+            // 3 — Audio (#0059)
+            GroupBox("Audio") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Keep the original surround sound (larger files)", isOn: $settings.keepOriginalAudioTrack)
+                    DetailOnlyText(text: "Every selected track is always encoded to one AAC stereo track at 160 kbps (roughly 0.5–0.7 GB per film). Off by default; turning this on additionally keeps the original AC3 5.1 track alongside it — the same layout verified to direct-play on Apple TV — at the cost of the disc's own bitrate on top.")
+                }
+                .padding(6)
+            }
+
+            // 4 — Can this Mac rip?
+            if let readiness = DependencyPanel.plainSummary(readinessRows) {
+                Text(readiness)
+                    .font(.subheadline)
+                    .foregroundStyle(readiness.hasPrefix("✓") ? Color.secondary : Color.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // 5 — everything else, verbatim
+            DetailsDisclosure {
+                detailGroups
+            }
+        }
+    }
+
+    /// The rows the readiness line is decided from. `menudump`/`ffmpeg` are
+    /// probed by `DependencyPanelView` itself and are optional anyway, so
+    /// `plainSummary` — which only ever speaks about required tools — reads
+    /// the same answer with or without them.
+    private var readinessRows: [DependencyPanel.Row] {
+        DependencyPanel.rows(
+            handbrake: handbrakeState,
+            makemkvcon: makemkvconState,
+            menudump: nil,
+            ffmpeg: nil,
+            lsdvdInstalled: lsdvdInstalled,
+            dependencies: nil
+        )
+    }
+
+    @ViewBuilder
+    private var detailGroups: some View {
+        VStack(alignment: .leading, spacing: 16) {
             // CLI Tools
             GroupBox("CLI Tools") {
                 VStack(alignment: .leading, spacing: 10) {
@@ -142,34 +214,9 @@ struct SettingsView: View {
                 .padding(6)
             }
 
-            // Audio (#0059)
-            GroupBox("Audio") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle("Keep the original 5.1 track (larger files)", isOn: $settings.keepOriginalAudioTrack)
-                    Text("Every selected track is always encoded to one AAC stereo track at 160 kbps (roughly 0.5–0.7 GB per film). Off by default; turning this on additionally keeps the original AC3 5.1 track alongside it — the same layout verified to direct-play on Apple TV — at the cost of the disc's own bitrate on top.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(6)
-            }
-
-            // TMDB
-            GroupBox("Movie Database (TMDB)") {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("API Key")
-                            .frame(width: 90, alignment: .trailing)
-                        SecureField("Your TMDB API Key", text: $settings.tmdbAPIKey)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    Text("The Movie Database (TMDB) API is used for movie metadata and poster art. You can get a free API key by creating an account at themoviedb.org.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(6)
-            }
+            // The Audio toggle and the TMDB key moved to the plain group
+            // above — they are two of the three things a person has to set.
+            // Their long captions went with them, as `DetailOnlyText`.
         }
     }
 
@@ -277,7 +324,7 @@ struct SettingsView: View {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = "Choose Root"
-        panel.message = "Select your Plex Media root folder (e.g. Plex Media on the MediaSSD)"
+        panel.message = "Choose the folder Plex uses for your media — the one that contains Movies."
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
         settings.plexMediaRoot = url.path
