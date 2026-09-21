@@ -225,6 +225,54 @@ nonisolated enum AudioTrackOptions {
         return nil
     }
 
+    /// `docs/plain-language-ui.md` §3.5 — the plain sibling of `notice`,
+    /// case for case, with `notice`'s own wording kept verbatim as the
+    /// detail.
+    ///
+    /// `nil` for the "no preferred languages are set" case as well as for
+    /// `notice`'s own `nil`: a caption whose only content is why the default
+    /// is the default gives the person nothing to decide (rule 7), so it is
+    /// detail only. Every other case names the control — "tick" — because
+    /// the checkbox beside it is the whole point.
+    nonisolated static func plainNotice(
+        options: [AudioTrackOption],
+        preferred: [String],
+        untagged: Bool,
+        selected: [Int]
+    ) -> String? {
+        if options.isEmpty {
+            return "This part of the disc has no sound."
+        }
+        if selected.isEmpty {
+            return "Tick at least one audio track to start."
+        }
+        if untagged {
+            return "The disc doesn't say which language each track is. The first is ticked; tick others if you want them too."
+        }
+        let normalizedPreferred = preferred.compactMap(LanguageCode.normalize)
+        let matchesPreference = options.contains { option in
+            guard !option.isCommentary, let code = option.languageCode else { return false }
+            return normalizedPreferred.contains(code)
+        }
+        if !matchesPreference {
+            // No preference set at all is not news; none of the preferences
+            // being on this disc is.
+            guard !normalizedPreferred.isEmpty else { return nil }
+            return "None of your usual languages is on this disc, so the first track is ticked."
+        }
+        if let missing = unselectedPreferredLanguages(
+            options: options,
+            normalizedPreferred: normalizedPreferred,
+            selected: selected
+        ) {
+            // Names, not ISO codes: "Spanish", never "spa".
+            let names = missing.map { PlainLanguage.languageName($0) ?? $0 }
+            let verb = names.count == 1 ? "is" : "are"
+            return "\(PlainLanguage.andList(names)) \(verb) also on this disc. Tick \(names.count == 1 ? "it" : "them") if you want to keep \(names.count == 1 ? "it" : "them")."
+        }
+        return nil
+    }
+
     /// #0059 review — the tagged-disc half of "don't drop a second language
     /// silently".
     ///

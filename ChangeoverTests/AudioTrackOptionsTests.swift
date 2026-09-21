@@ -282,4 +282,66 @@ struct AudioTrackOptionsTests {
             options: options, preferred: ["spa"], untagged: false, selected: [1]
         )?.contains("None of your preferred languages (spa)") == true)
     }
+
+    // MARK: - The plain register (docs/plain-language-ui.md §3.5)
+
+    /// A plain sibling for every case `notice` has, with `notice`'s own
+    /// wording kept verbatim above as the detail.
+    @Test func thePlainNoticeMirrorsEveryNoticeCase() throws {
+        let disc = try Self.fixtureDisc()
+        let title1 = try #require(disc.titles.first { $0.index == 1 })
+        let options = AudioTrackOptions.options(for: title1)
+
+        #expect(AudioTrackOptions.plainNotice(options: [], preferred: ["eng"], untagged: false, selected: [])
+                == "This part of the disc has no sound.")
+        #expect(AudioTrackOptions.plainNotice(options: options, preferred: ["eng"], untagged: false, selected: [])
+                == "Tick at least one audio track to start.")
+        #expect(AudioTrackOptions.plainNotice(options: options, preferred: ["spa"], untagged: false, selected: [1])
+                == "None of your usual languages is on this disc, so the first track is ticked.")
+        // Nothing to decide, so nothing to say.
+        #expect(AudioTrackOptions.plainNotice(options: options, preferred: ["eng"], untagged: false, selected: [1]) == nil)
+
+        let untagged = title([
+            audioStream(1, languageCode: nil, displayName: "DD Surround 5.1"),
+            audioStream(2, languageCode: nil, displayName: "DD Surround 5.1"),
+        ])
+        let caption = try #require(AudioTrackOptions.plainNotice(
+            options: AudioTrackOptions.options(for: untagged), preferred: ["eng"], untagged: true, selected: [1]
+        ))
+        #expect(caption == "The disc doesn't say which language each track is. The first is ticked; tick others if you want them too.")
+    }
+
+    /// Rule 7: a caption whose only content is why the default is the
+    /// default has no plain form at all. The verbatim sentence survives, in
+    /// Details.
+    @Test func theNoPreferencesCaseHasNoPlainFormAtAll() throws {
+        let disc = try Self.fixtureDisc()
+        let title1 = try #require(disc.titles.first { $0.index == 1 })
+        let options = AudioTrackOptions.options(for: title1)
+
+        #expect(AudioTrackOptions.plainNotice(options: options, preferred: [], untagged: false, selected: [1]) == nil)
+        #expect(AudioTrackOptions.notice(options: options, preferred: [], untagged: false, selected: [1])?
+            .contains("No preferred audio languages") == true)
+    }
+
+    /// The dropped language is named, never coded: "French", not "fra".
+    @Test func thePlainNoticeNamesTheDroppedLanguageRatherThanItsCode() throws {
+        let disc = try Self.fixtureDisc()
+        let title1 = try #require(disc.titles.first { $0.index == 1 })
+        let options = AudioTrackOptions.options(for: title1)
+
+        let caption = try #require(AudioTrackOptions.plainNotice(
+            options: options, preferred: ["eng", "fra"], untagged: false, selected: [1]
+        ))
+        #expect(!caption.contains("fra"))
+        #expect(caption.hasSuffix("is also on this disc. Tick it if you want to keep it."))
+        if Locale.current.language.languageCode?.identifier == "en" {
+            #expect(caption.hasPrefix("French"))
+        }
+
+        // Ticking it clears the caption, exactly as `notice` does.
+        #expect(AudioTrackOptions.plainNotice(
+            options: options, preferred: ["eng", "fra"], untagged: false, selected: [1, 4]
+        ) == nil)
+    }
 }

@@ -37,6 +37,16 @@ struct TrackSelectionView: View {
         MenuAudioHint.line(jobs.menuState.intelligence?.languages)
     }
 
+    /// The verbatim audio caption — the detail register's half of the pair.
+    private var audioNotice: String? {
+        AudioTrackOptions.notice(
+            options: audioOptions,
+            preferred: settings.preferredAudioLanguages,
+            untagged: isUntagged,
+            selected: jobs.selectedAudioTrackNumbers
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             audioSection
@@ -66,15 +76,24 @@ struct TrackSelectionView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Audio")
                 .font(.headline)
-            if let notice = AudioTrackOptions.notice(
+            // `docs/plain-language-ui.md` §3.5. The plain sentence names the
+            // control; the verbatim one — which is the diagnostic record of
+            // #0059's one-track default — sits under it with Details open.
+            // The "no preferred languages are set" case has no plain form at
+            // all: it explains why the default is the default, which is
+            // nothing the person has to decide (rule 7).
+            if let plain = AudioTrackOptions.plainNotice(
                 options: audioOptions,
                 preferred: settings.preferredAudioLanguages,
                 untagged: isUntagged,
                 selected: jobs.selectedAudioTrackNumbers
             ) {
-                Text(notice)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                WordingText(
+                    wording: Wording(plain: plain, detail: audioNotice),
+                    font: .caption
+                )
+            } else if let detail = audioNotice {
+                DetailOnlyText(text: detail)
             }
             // Menu intelligence (§5.3): what the disc's own Languages menu
             // prints, beside the picker and nothing more. It never changes
@@ -82,11 +101,12 @@ struct TrackSelectionView: View {
             // and never merges tracks — an ordered list of names is not a
             // mapping, and on the one disc measured no single OCR
             // configuration even read the whole list.
+            //
+            // Detail only since `docs/plain-language-ui.md`: what the disc's
+            // menu prints is never a mapping and never changes a track, so
+            // there is nothing here for a person to act on.
             if let hint = menuLanguageHint {
-                Text(hint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                DetailOnlyText(text: hint)
             }
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(audioOptions) { option in
@@ -115,9 +135,11 @@ struct TrackSelectionView: View {
 
     private func audioLabel(for option: AudioTrackOption) -> some View {
         HStack(spacing: 6) {
+            // Proportional, not monospaced: this is a language, not a
+            // terminal column, and the monospaced style read as one.
             Text(Self.languageLabel(option.languageCode, fallback: option.displayName))
-                .font(.system(.body, design: .monospaced))
-            if !option.duplicateTrackNumbers.isEmpty {
+                .font(.body)
+            if !option.duplicateTrackNumbers.isEmpty, settings.showsDetails {
                 Text("\(option.duplicateTrackNumbers.count + 1) tracks")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -141,19 +163,32 @@ struct TrackSelectionView: View {
     /// to the window growing past the screen. The label alone, from
     /// `DiscTitleFormatting.subtitleSummary` (unit-tested), carries the
     /// "purely informational" fact that used to be a separate caption line.
+    ///
+    /// `docs/plain-language-ui.md` §3.3: with Details off this whole section
+    /// collapses to one constant caption — the #0036 fact about the *output*,
+    /// which is the surprise a person needs to hear once. The count and the
+    /// per-track rows are detail.
+    @ViewBuilder
     private var subtitleSection: some View {
-        DisclosureGroup(isExpanded: $subtitlesExpanded) {
-            VStack(alignment: .leading, spacing: 3) {
-                ForEach(subtitleGroups) { group in
-                    Text(Self.subtitleRowText(for: group))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        if settings.showsDetails {
+            DisclosureGroup(isExpanded: $subtitlesExpanded) {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(subtitleGroups) { group in
+                        Text(Self.subtitleRowText(for: group))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .padding(.top, 3)
+            } label: {
+                Text(DiscTitleFormatting.subtitleSummary(count: subtitleGroups.count))
+                    .font(.subheadline)
             }
-            .padding(.top, 3)
-        } label: {
-            Text(DiscTitleFormatting.subtitleSummary(count: subtitleGroups.count))
-                .font(.subheadline)
+        } else {
+            Text(DiscTitleFormatting.plainSubtitleLine)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -165,10 +200,10 @@ struct TrackSelectionView: View {
         return parts.joined(separator: " · ")
     }
 
+    /// `PlainLanguage.languageName` is the one lookup, shared with the disc
+    /// table's plain column so the picker and the table can never name the
+    /// same language two different ways.
     private static func languageLabel(_ code: String?, fallback: String) -> String {
-        guard let code, let name = Locale.current.localizedString(forLanguageCode: code) else {
-            return fallback
-        }
-        return name
+        PlainLanguage.languageName(code) ?? fallback
     }
 }
