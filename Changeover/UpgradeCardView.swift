@@ -60,6 +60,49 @@ struct UpgradeCardView: View {
     }
 }
 
+/// `docs/plain-language-ui.md` §3.8 — what the Confirm step shows in place of
+/// the comparison card with Details off: one sentence, and at most one
+/// button. Everything it says is `UpgradePresentation.plainOffer`, which is
+/// pure and pinned by tests.
+struct UpgradeOfferView: View {
+    let offer: UpgradePresentation.PlainOffer
+    /// The plain caption beside a disabled button, from the same
+    /// `StartDecision` the button's own tooltip uses.
+    let plainDisabledReason: String?
+    let detailDisabledReason: String?
+    let onUpgrade: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(offer.sentence)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let title = offer.actionTitle {
+                HStack(spacing: 10) {
+                    Spacer(minLength: 0)
+                    if let plainDisabledReason {
+                        Text(plainDisabledReason)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    Button(title, action: onUpgrade)
+                        .font(.caption)
+                        .disabled(detailDisabledReason != nil)
+                        .help(detailDisabledReason ?? "Rewrite this file's metadata in place. The video and audio are copied untouched.")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color(.separatorColor).opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(.separatorColor)))
+    }
+}
+
 /// One comparison line. The verdict carries its own reason, so a refusal is
 /// never a silent blank — the whole point of §7.3's count-mismatch rule is
 /// that both numbers end up on screen.

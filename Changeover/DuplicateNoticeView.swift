@@ -14,6 +14,8 @@ import SwiftUI
 /// It sits inside the Confirm step's single `ScrollView`, and the action bar
 /// is outside that scroller, so it can never push Start off-screen (#0140).
 struct DuplicateNoticeView: View {
+    @Environment(AppSettings.self) private var settings
+
     let notice: DuplicateNotice
     let onReplace: () -> Void
     let onRecheck: () -> Void
@@ -23,15 +25,27 @@ struct DuplicateNoticeView: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: symbol)
                     .foregroundStyle(notice.tone.color)
-                Text(notice.headline)
+                // The plain headline always leads, so a screen reader hears
+                // the short sentence first.
+                Text(notice.plainHeadline)
                     .font(.callout.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
             }
-            ForEach(notice.lines, id: \.self) { line in
+            ForEach(notice.plainLines, id: \.self) { line in
                 Text(line)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            // The verbatim headline, the file line (`name · size · added
+            // date`) and the folder path, under Details.
+            if settings.showsDetails {
+                ForEach([notice.headline] + notice.lines, id: \.self) { line in
+                    Text(line)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             if notice.offersReplace || notice.offersRecheck {
                 HStack(spacing: 10) {
@@ -42,7 +56,7 @@ struct DuplicateNoticeView: View {
                             .font(.caption)
                     }
                     if let path = notice.revealPath, notice.offersReplace {
-                        Button("Reveal") {
+                        Button("Show in Finder") {
                             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
                         }
                         .font(.caption)

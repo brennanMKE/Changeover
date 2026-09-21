@@ -261,4 +261,70 @@ struct MenuIntelligenceTests {
         #expect(menu.judgeQuestion == nil)
         #expect(MenuStatusLine.lines(.ready(menu), scanFeatureTitle: 1).isEmpty)
     }
+
+    // MARK: - The plain register (docs/plain-language-ui.md §3.6)
+
+    /// Every unavailable reason says the same two things — a tool is
+    /// missing, and the rip is unaffected — and the second half is why the
+    /// first half is not the person's problem. Silence, not a gap.
+    @Test func everyUnavailableReasonIsSilentInThePlainRegister() {
+        let reasons: [MenuUnavailable] = [
+            .helperMissing(path: "/x"),
+            .librariesMissing(["libdvdread"]),
+            .noMenus,
+            .failed("the helper timed out"),
+        ]
+        for reason in reasons {
+            #expect(MenuStatusLine.plainLines(.unavailable(reason), scanFeatureTitle: 1).isEmpty, "\(reason)")
+            // …and the verbatim caption is still there, unchanged.
+            #expect(MenuStatusLine.lines(.unavailable(reason), scanFeatureTitle: 1).count == 1)
+        }
+        #expect(MenuStatusLine.plainLines(.reading, scanFeatureTitle: 1).isEmpty)
+        #expect(MenuStatusLine.plainLines(.idle, scanFeatureTitle: 1).isEmpty)
+    }
+
+    /// The one menu caption that can change what the person does: the disc
+    /// disagreeing with the scan about which part is the movie. Agreement is
+    /// a confirmation of something nobody doubted, so it stays in Details.
+    @Test func onlyTheDisagreementSurvivesIntoThePlainRegister() {
+        var menu = MenuIntelligence()
+        menu.playButton = PlayButtonResolver.Resolution(
+            menu: "vtsm-01-lu1-pgc1", number: 1, label: "Play Movie",
+            title: 1, resolvedBy: .structure, candidates: 1
+        )
+        #expect(MenuStatusLine.plainLines(.ready(menu), scanFeatureTitle: 1).isEmpty)
+        #expect(MenuStatusLine.plainLines(.ready(menu), scanFeatureTitle: nil).isEmpty)
+
+        let disagreement = MenuStatusLine.plainLines(.ready(menu), scanFeatureTitle: 3)
+        #expect(disagreement.count == 1)
+        #expect(disagreement[0] == "The disc's own Play button points at a different part than the one picked here. If the length looks wrong, choose a different part.")
+        #expect(PlainLanguage.violations(in: disagreement[0]).isEmpty)
+    }
+
+    /// The promise survives; the refusal does not. A person who does not
+    /// know what a chapter marker is should not be told one was refused —
+    /// the owner, who has Details open, still sees the exact reason.
+    @Test func thePlainChapterLineIsOnlyEverThePromise() {
+        var writing = MenuIntelligence()
+        writing.markerPlan = .write((1...20).map { MarkerRow(number: $0, name: "Name \($0)") })
+        #expect(MenuStatusLine.plainLines(.ready(writing), scanFeatureTitle: nil)
+                == ["Chapter names from the disc will be included."])
+
+        var refused = MenuIntelligence()
+        refused.chapterNames = [ChapterNames.Candidate(chapter: 1, printedNumber: 1, name: "Opening", confidence: 1)]
+        refused.markerPlan = .refused(reason: "the menu names 21 chapters and the disc has 20")
+        #expect(MenuStatusLine.plainLines(.ready(refused), scanFeatureTitle: nil).isEmpty)
+        // …and the verbatim refusal is still exactly where it was.
+        #expect(MenuStatusLine.lines(.ready(refused), scanFeatureTitle: nil)
+                == ["Chapter names from the disc menu are not being used — the menu names 21 chapters and the disc has 20."])
+    }
+
+    /// The judge's caption is a sentence about how many buttons start a
+    /// title. Nothing in it is a decision, so it is detail only.
+    @Test func theJudgeCaptionNeverReachesThePlainRegister() {
+        var menu = MenuIntelligence()
+        menu.judgeCaption = "This disc has 4 buttons that start a title; \"Play Movie\" reads as the feature (title 1)."
+        #expect(MenuStatusLine.plainLines(.ready(menu), scanFeatureTitle: 1).isEmpty)
+        #expect(MenuStatusLine.lines(.ready(menu), scanFeatureTitle: 1).count == 1)
+    }
 }

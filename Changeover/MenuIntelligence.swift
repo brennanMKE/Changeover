@@ -369,6 +369,42 @@ nonisolated enum MenuStatusLine {
         return lines
     }
 
+    /// `docs/plain-language-ui.md` §3.6 — the lines the **plain** register
+    /// shows, which is almost none of them.
+    ///
+    /// Every `MenuUnavailable` caption says the same two things: a tool is
+    /// missing, and the rip is unaffected. The second half is why the first
+    /// half is not the person's problem, so with Details off there is nothing
+    /// to say at all — and an empty list is the right answer, not a gap.
+    /// `.reading` likewise: a menu read the rip never waits on is not news.
+    ///
+    /// What survives is the pair that can change what someone does: the disc
+    /// disagreeing with the scan about which part is the movie, and the
+    /// promise that the disc's chapter names will be in the file.
+    ///
+    /// The **refusal** line does not survive. `ChapterMarkerPlan`'s comment
+    /// says a refusal the user cannot see is indistinguishable from a bug;
+    /// this design's answer is that the owner, who has Details open, sees it,
+    /// and that a person who does not know what a chapter marker is should
+    /// not be told one was refused.
+    static func plainLines(
+        _ state: MenuState,
+        scanFeatureTitle: Int?,
+        markerPlan: ChapterMarkerPlan.Decision? = nil
+    ) -> [String] {
+        guard case .ready(var menu) = state else { return [] }
+        if let markerPlan { menu.markerPlan = markerPlan }
+
+        var lines: [String] = []
+        if let line = PlayButtonResolver.plainConfirmationLine(menu.playButton, scanFeatureTitle: scanFeatureTitle) {
+            lines.append(line)
+        }
+        if case .write = menu.markerPlan {
+            lines.append("Chapter names from the disc will be included.")
+        }
+        return lines
+    }
+
     /// What will happen to the chapter names at Start — including, in plain
     /// words, when they will *not* be written. A refusal the user cannot see
     /// is indistinguishable from a bug.

@@ -309,4 +309,57 @@ struct UpgradeProposalTests {
         #expect(plan.audio == [AudioTag(track: 0, language: nil, title: "Klingon")])
         #expect(plan.changeSummary == "1 audio track name")
     }
+    // MARK: - The plain register (docs/plain-language-ui.md §3.8)
+
+    /// "20 chapter names and 1 audio language" — the same list, joined the
+    /// way a sentence joins one. `changeSummary` keeps its comma form for
+    /// the Done card and the tests that pin it.
+    @Test func plainChangeSummaryJoinsWithAndWithoutTouchingChangeSummary() {
+        let two = UpgradePlan(
+            filePath: "/x.mp4",
+            chapters: (1...20).map { MarkerRow(number: $0, name: "Name \($0)") },
+            audio: [AudioTag(track: 0, language: "eng", title: nil)]
+        )
+        #expect(two.changeSummary == "20 chapter names, 1 audio language")
+        #expect(two.plainChangeSummary == "20 chapter names and 1 audio language")
+
+        let one = UpgradePlan(filePath: "/x.mp4", chapters: [MarkerRow(number: 1, name: "Opening")])
+        #expect(one.changeSummary == "1 chapter name")
+        #expect(one.plainChangeSummary == "1 chapter name")
+
+        let three = UpgradePlan(
+            filePath: "/x.mp4",
+            chapters: [MarkerRow(number: 1, name: "Opening")],
+            audio: [AudioTag(track: 0, language: "eng", title: nil), AudioTag(track: 1, language: nil, title: "Commentary")]
+        )
+        #expect(three.plainChangeSummary == "1 chapter name, 1 audio language and 1 audio track name")
+
+        #expect(UpgradePlan(filePath: "/x.mp4").plainChangeSummary == "nothing")
+    }
+
+    /// `declinedSomething` is the distinction the plain register rests on:
+    /// the disc offered something and a rule refused it, as opposed to a
+    /// file that simply already has everything. It matches the card's own
+    /// headline rule exactly, so the two can never disagree.
+    @Test func declinedSomethingMeansRefusedNotNeedsARerip() throws {
+        let refusing = UpgradeProposal.compare(
+            filePath: "/Plex/x.mp4",
+            inventory: try Self.inventory("oppenheimer-library.json"),
+            offer: DiscUpgradeOffer(chapterNames: (1...21).map { MarkerRow(number: $0, name: "Name \($0)") })
+        )
+        #expect(refusing.declinedSomething)
+        #expect(refusing.headline == "This disc cannot improve that file:")
+
+        // The real disc: no names at all, so nothing was refused — and the
+        // subtitle row's "needs a re-rip", which every file this app makes
+        // will carry (#0036), must not count as a refusal.
+        let nothingToGive = UpgradeProposal.compare(
+            filePath: "/Plex/x.mp4",
+            inventory: try Self.inventory("oppenheimer-library.json"),
+            offer: try Self.offer(slug: "oppenheimer", chapterCount: 21)
+        )
+        #expect(!nothingToGive.declinedSomething)
+        #expect(nothingToGive.headline == "That file already has everything this disc can give it.")
+    }
+
 }

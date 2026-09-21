@@ -30,6 +30,15 @@ struct ConfirmStepView: View {
                     DiscTitleListView(jobs: jobs, settings: settings, runtimeLookup: flow.search.runtimeLookup)
                     menuNotice
                     trackSelectionSection
+                    // `docs/plain-language-ui.md` §1.4: the one switch, at
+                    // the end of the body and **inside this scroller**, never
+                    // in the action bar — so opening it can never raise the
+                    // window's published minimum height (#0140). It has no
+                    // content of its own here: everything above reads
+                    // `settings.showsDetails` and grows in place.
+                    DetailsDisclosure { EmptyView() }
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
                 }
             }
 
@@ -64,22 +73,41 @@ struct ConfirmStepView: View {
     @ViewBuilder
     private var upgradeCard: some View {
         @Bindable var flow = flow
-        if let card = UpgradePresentation.card(
+        let proposal = flow.upgradeProposal(jobs: jobs)
+        let decision = flow.upgradeDecision(jobs: jobs, settings: settings)
+        let card = UpgradePresentation.card(
             libraryCheck: flow.libraryCheck,
             fileCheck: flow.fileCheck,
-            proposal: flow.upgradeProposal(jobs: jobs),
+            proposal: proposal,
             menuState: jobs.menuState,
             ffmpegAvailable: settings.isFFmpegAvailable,
-            decision: flow.upgradeDecision(jobs: jobs, settings: settings)
-        ) {
-            UpgradeCardView(
-                card: card,
-                overwriteExistingNames: $flow.overwriteExistingChapterNames,
-                onUpgrade: { flow.startUpgrade(jobs: jobs, settings: settings) }
-            )
-            .padding(.horizontal)
-            .padding(.bottom, 10)
+            decision: decision
+        )
+        VStack(alignment: .leading, spacing: 8) {
+            // `docs/plain-language-ui.md` §3.8 — the plain register shows
+            // one sentence and at most one button: the offer when this disc
+            // can add something, or the refusal when it could have and a
+            // rule said no. Silence is kept for a file that already has
+            // everything the disc offers.
+            if let offer = UpgradePresentation.plainOffer(card: card, proposal: proposal) {
+                UpgradeOfferView(
+                    offer: offer,
+                    plainDisabledReason: decision == .ready ? nil : decision.plainReason,
+                    detailDisabledReason: card?.disabledReason,
+                    onUpgrade: { flow.startUpgrade(jobs: jobs, settings: settings) }
+                )
+            }
+            // The comparison card itself is the Details rendering, verbatim.
+            if settings.showsDetails, let card {
+                UpgradeCardView(
+                    card: card,
+                    overwriteExistingNames: $flow.overwriteExistingChapterNames,
+                    onUpgrade: { flow.startUpgrade(jobs: jobs, settings: settings) }
+                )
+            }
         }
+        .padding(.horizontal)
+        .padding(.bottom, card == nil ? 0 : 10)
     }
 
     // MARK: - Already in Plex (#0062)
@@ -113,13 +141,23 @@ struct ConfirmStepView: View {
     /// beside.
     @ViewBuilder
     private var menuNotice: some View {
-        let lines = MenuStatusLine.lines(
-            jobs.menuState,
-            scanFeatureTitle: jobs.selectedTitleIndex,
-            // The chapter decision for the title actually selected now, which
-            // can differ from the one the names were read against.
-            markerPlan: jobs.chapterMarkerPlan(forTitleIndex: jobs.selectedTitleIndex)
-        )
+        let markerPlan = jobs.chapterMarkerPlan(forTitleIndex: jobs.selectedTitleIndex)
+        // With Details off only the two lines that can change what the person
+        // does survive (`docs/plain-language-ui.md` §3.6); with it on, every
+        // caption, verbatim.
+        let lines = settings.showsDetails
+            ? MenuStatusLine.lines(
+                jobs.menuState,
+                scanFeatureTitle: jobs.selectedTitleIndex,
+                // The chapter decision for the title actually selected now,
+                // which can differ from the one the names were read against.
+                markerPlan: markerPlan
+            )
+            : MenuStatusLine.plainLines(
+                jobs.menuState,
+                scanFeatureTitle: jobs.selectedTitleIndex,
+                markerPlan: markerPlan
+            )
         if !lines.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(lines, id: \.self) { line in
@@ -146,18 +184,15 @@ struct ConfirmStepView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("\(movie.title) (\(movie.yearText))")
                         .font(.headline)
-                    Text(meta.folderName)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                    Text(meta.fileName)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
+                    // Where the file will land is a fact about Plex's folder
+                    // convention, not a decision — and the `{tmdb-…}` tag in
+                    // it means nothing to the person reading it. Detail.
+                    DetailOnlyText(text: meta.folderName, font: .system(.caption, design: .monospaced))
+                    DetailOnlyText(text: meta.fileName, font: .system(.caption, design: .monospaced))
                     // #0032's only caption: never reads like a pass when the
                     // cross-check did not run.
-                    if let caption = DiscTitleFormatting.runtimeCaption(flow.search.runtimeLookup) {
-                        Text(caption)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                    if let wording = DiscTitleFormatting.runtimeWording(flow.search.runtimeLookup) {
+                        WordingText(wording: wording, font: .caption2)
                     }
                 }
                 Spacer(minLength: 8)
@@ -237,10 +272,13 @@ struct ConfirmStepView: View {
     private var actionBar: some View {
         StepActionBar {
             Spacer()
-            // #0053: the caption beside the button — the same sentence as
-            // its tooltip, so a disabled Start never leaves the user
-            // guessing why (found twice on a real disc, 2026-09-16).
-            if let reason = startDecision.reason {
+            // #0053: the caption beside the button — so a disabled Start
+            // never leaves the user guessing why (found twice on a real
+            // disc, 2026-09-16). Since `docs/plain-language-ui.md` the
+            // caption is the plain register and the tooltip below is the
+            // precise one; both come from this one `StartDecision`, so they
+            // still cannot disagree about *why*.
+            if let reason = startDecision.plainReason {
                 Text(reason)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -257,7 +295,9 @@ struct ConfirmStepView: View {
                 flow.startRipping(jobs: jobs, settings: settings)
             }
             .disabled(startDecision != .ready)
-            .help(startDecision.reason ?? "Encode the selected title into the Plex library.")
+            // The tooltip stays the detail register: a disabled control still
+            // explains itself precisely on hover with Details off.
+            .help(startDecision.reason ?? StartDecision.readyHelp)
             .keyboardShortcut(.defaultAction)
             .buttonStyle(.borderedProminent)
         }

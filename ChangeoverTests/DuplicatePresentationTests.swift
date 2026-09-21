@@ -154,4 +154,66 @@ struct DuplicatePresentationTests {
         #expect(DuplicatePresentation.formatDate(Self.added, now: Self.now) == "Aug 29")
         #expect(DuplicatePresentation.formatDate(Self.oldAdded, now: Self.now) == "Sep 13, 2020")
     }
+    // MARK: - The plain register (docs/plain-language-ui.md §3.7)
+
+    /// One short sentence per kind, with no path, no byte count and no
+    /// folder name. `headline`/`lines` above are untouched and become the
+    /// detail lines beneath.
+    @Test func everyKindHasItsOwnPlainHeadline() throws {
+        let checking = try #require(makeNotice(.checking(tmdbID: "964960")))
+        #expect(checking.plainHeadline == "Checking whether this movie is already in Plex…")
+        #expect(checking.plainLines.isEmpty)
+
+        let unreachable = try #require(makeNotice(.done(tmdbID: "964960", .unreachable(reason: "/Volumes/Media is not mounted"))))
+        #expect(unreachable.plainHeadline == "Couldn't check whether this movie is already in Plex.")
+        #expect(unreachable.plainLines == ["If it is, it will be replaced."])
+        // The reason itself is still there, verbatim.
+        #expect(unreachable.headline.contains("/Volumes/Media is not mounted"))
+
+        let present = try #require(makeNotice(.done(tmdbID: "964960", .present([Self.entry()]))))
+        #expect(present.plainHeadline == "This movie is already in Plex.")
+        #expect(present.plainLines == ["Ripping it again will replace the copy that's there (added Aug 29)."])
+
+        let renamed = try #require(makeNotice(.done(tmdbID: "964960", .present([Self.entry(folderName: "Air (2023)")]))))
+        #expect(renamed.plainHeadline == "This movie is already in Plex under a different name.")
+        #expect(renamed.plainLines == ["The new copy will be added alongside it."])
+
+        let several = try #require(makeNotice(.done(tmdbID: "964960", .present([
+            Self.entry(),
+            Self.entry(folderName: "Air (2023)", path: "/Movies/Air (2023)"),
+        ]))))
+        #expect(several.plainHeadline == "This movie is in Plex more than once.")
+        #expect(several.plainLines == ["Ripping it again will replace one of the copies."])
+    }
+
+    @Test func acknowledgingReadsAsOneShortConfirmationInThePlainRegister() throws {
+        let acknowledgement = ReplaceAcknowledgement(
+            movieID: 964960,
+            folderPath: "/Volumes/Media/Media/Movies/Air (2023) {tmdb-964960}"
+        )
+        let notice = try #require(makeNotice(.done(tmdbID: "964960", .present([Self.entry()])), acknowledgement: acknowledgement))
+        #expect(notice.plainHeadline == "OK — the existing copy will be replaced.")
+        #expect(notice.plainLines.isEmpty)
+        // The folder path is still on the card, under Details.
+        #expect(notice.lines.contains("/Volumes/Media/Media/Movies/Air (2023) {tmdb-964960}"))
+    }
+
+    /// The file line and the folder path never reach the plain register:
+    /// a byte count and a `{tmdb-…}` folder tag are identifiers, and the
+    /// date is the only part of that line that tells the person anything.
+    @Test func noPlainLineCarriesAPathOrAByteCount() throws {
+        for check: LibraryCheck in [
+            .checking(tmdbID: "964960"),
+            .done(tmdbID: "964960", .unreachable(reason: "not mounted")),
+            .done(tmdbID: "964960", .present([Self.entry()])),
+        ] {
+            guard let notice = makeNotice(check) else { continue }
+            for line in [notice.plainHeadline] + notice.plainLines {
+                #expect(!line.contains("/"), "\(line)")
+                #expect(!line.contains("GB"), "\(line)")
+                #expect(!line.contains("tmdb-"), "\(line)")
+            }
+        }
+    }
+
 }

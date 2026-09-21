@@ -124,4 +124,66 @@ nonisolated enum UpgradePresentation {
     /// The upgrade's own log/announce line for a row that cannot be done here
     /// at all, so the Replace path is named rather than implied.
     static let reRipLine = "Anything marked “needs a re-rip” is what Replace is for — a remux cannot add data the file does not have."
+
+    // MARK: - The plain register (docs/plain-language-ui.md §3.8)
+
+    /// The comparison card is the most technical surface in the app, and it
+    /// is only ever a bonus on top of a duplicate the person has already been
+    /// told about. With Details off it is replaced by this: at most one
+    /// sentence, and at most one button.
+    nonisolated struct PlainOffer: Equatable, Sendable {
+        nonisolated enum Kind: Equatable, Sendable {
+            /// The disc can add something the file lacks.
+            case offer
+            /// The disc had something to give and Changeover refused it.
+            case declined
+        }
+
+        var kind: Kind
+        var sentence: String
+        /// `nil` for `.declined` — there is nothing to press.
+        var actionTitle: String?
+    }
+
+    static let plainEstimate = "about 2 minutes"
+    static let plainActionTitle = "Improve the Existing Copy (\(estimate))"
+    /// The refusal, in one sentence. Deliberately **not** silence.
+    ///
+    /// The plan had every refused state show nothing at all. The user
+    /// overruled that: this upgrade path will be used heavily, and a card
+    /// that vanishes is indistinguishable from a feature that is broken. So a
+    /// refusal says so plainly and puts the precise reason — "20 chapters in
+    /// the file, 21 names on the disc — not upgraded" — one disclosure away.
+    /// Silence is reserved for the genuinely different case below.
+    static let plainDeclinedSentence = "This copy can't be improved from this disc."
+
+    /// What the plain register draws in place of the card, or `nil` for
+    /// nothing at all.
+    ///
+    /// `nil` covers four states, and they are not the same as a refusal:
+    ///
+    /// - **there is no card** — no duplicate, so there was never anything to
+    ///   improve;
+    /// - **the file already has everything this disc offers** — nothing was
+    ///   lost and nothing was declined, so there is nothing to report;
+    /// - **the only thing missing is the user's own "replace existing names"
+    ///   tick** — an expert decision, and the tick that answers it lives on
+    ///   the Details card;
+    /// - **the check itself could not run or has not finished** — no
+    ///   `ffmpeg`, a file that could not be read, a read still in flight.
+    ///   None of those is a statement about the disc.
+    static func plainOffer(card: Card?, proposal: UpgradeProposal.Result?) -> PlainOffer? {
+        guard let card else { return nil }
+
+        if card.offersUpgrade, let plan = proposal?.plan {
+            return PlainOffer(
+                kind: .offer,
+                sentence: "This disc can add \(plan.plainChangeSummary) to the copy already in Plex — \(plainEstimate), nothing is re-encoded.",
+                actionTitle: plainActionTitle
+            )
+        }
+
+        guard let proposal, !proposal.overwriteWouldHelp, proposal.declinedSomething else { return nil }
+        return PlainOffer(kind: .declined, sentence: plainDeclinedSentence, actionTitle: nil)
+    }
 }

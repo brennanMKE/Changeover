@@ -245,4 +245,17 @@ nonisolated enum PlayButtonResolver {
         }
         return "Disc menu: \(subject) starts title \(resolution.title); the scan chose title \(scanFeatureTitle)."
     }
+
+    /// `docs/plain-language-ui.md` §3.6 — the plain register's version, and
+    /// **only for the disagreement**.
+    ///
+    /// The other two forms ("matches", and the no-scan-feature form) are
+    /// confirmations of something the person never doubted; the disagreement
+    /// is the one that can change what they do, so it is the one that stays
+    /// in the default view. The verbatim line remains the detail in all three
+    /// cases.
+    static func plainConfirmationLine(_ resolution: Resolution?, scanFeatureTitle: Int?) -> String? {
+        guard let resolution, let scanFeatureTitle, resolution.title != scanFeatureTitle else { return nil }
+        return "The disc's own Play button points at a different part than the one picked here. If the length looks wrong, choose a different part."
+    }
 }

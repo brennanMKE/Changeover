@@ -40,6 +40,19 @@ nonisolated struct UpgradePlan: Codable, Hashable, Sendable {
     /// changed. Never a claim about video or audio *data*: a remux copies
     /// those bytes and the verification proves it.
     var changeSummary: String {
+        let parts = summaryParts
+        return parts.isEmpty ? "nothing" : parts.joined(separator: ", ")
+    }
+
+    /// The same list, joined the way a sentence joins one: "20 chapter names
+    /// and 1 audio language". `changeSummary` above keeps its comma-joined
+    /// shape, which the Done card and its tests pin.
+    var plainChangeSummary: String {
+        let parts = summaryParts
+        return parts.isEmpty ? "nothing" : PlainLanguage.andList(parts)
+    }
+
+    private var summaryParts: [String] {
         var parts: [String] = []
         if !chapters.isEmpty {
             parts.append("\(chapters.count) chapter name\(chapters.count == 1 ? "" : "s")")
@@ -52,7 +65,7 @@ nonisolated struct UpgradePlan: Codable, Hashable, Sendable {
         if titles > 0 {
             parts.append("\(titles) audio track name\(titles == 1 ? "" : "s")")
         }
-        return parts.isEmpty ? "nothing" : parts.joined(separator: ", ")
+        return parts
     }
 }
 
@@ -115,6 +128,21 @@ nonisolated enum UpgradeProposal {
         var overwriteWouldHelp: Bool
 
         var offersUpgrade: Bool { plan != nil }
+
+        /// True when the disc had something to give for a row and a rule
+        /// **refused** it — the Oppenheimer 20/21 chapter-count case and its
+        /// siblings.
+        ///
+        /// Deliberately not `.needsRerip`: a subtitle a remux cannot add is
+        /// not something Changeover declined to do, it is what Replace is
+        /// for, and every file this app produces carries no subtitles
+        /// (#0036), so counting it would make "declined" the answer on every
+        /// duplicate. Matches `headline(plan:rows:overwriteWouldHelp:)`
+        /// exactly, so the plain sentence and the verbatim headline can never
+        /// disagree about which of the two "no upgrade" cases this is.
+        var declinedSomething: Bool {
+            rows.contains { if case .refused = $0.verdict { return true } else { return false } }
+        }
     }
 
     /// - Parameters:

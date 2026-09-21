@@ -50,6 +50,11 @@ nonisolated struct DuplicateNotice: Equatable, Sendable {
     /// Per matched file: "name · size · added date"; then the folder path;
     /// then the sentence saying what ripping again will do.
     let lines: [String]
+    /// `docs/plain-language-ui.md` §3.7 — the same notice in one short
+    /// sentence, with no path, no byte count and no folder name. `headline`
+    /// and `lines` above are kept verbatim as the detail.
+    let plainHeadline: String
+    let plainLines: [String]
     let tone: JobPresentation.Tone
     /// `present && !acknowledged` — the one click that unblocks Start.
     let offersReplace: Bool
@@ -83,6 +88,8 @@ nonisolated enum DuplicatePresentation {
                 kind: .checking,
                 headline: "Checking the Plex library…",
                 lines: [],
+                plainHeadline: "Checking whether this movie is already in Plex…",
+                plainLines: [],
                 tone: .neutral,
                 offersReplace: false,
                 offersRecheck: false,
@@ -99,6 +106,8 @@ nonisolated enum DuplicatePresentation {
                     kind: .unreachable,
                     headline: "Couldn't check the Plex library: \(reason)",
                     lines: ["If this movie is already there, it will be replaced."],
+                    plainHeadline: "Couldn't check whether this movie is already in Plex.",
+                    plainLines: ["If it is, it will be replaced."],
                     tone: .neutral,
                     offersReplace: false,
                     offersRecheck: true,
@@ -131,6 +140,8 @@ nonisolated enum DuplicatePresentation {
                 kind: .acknowledged,
                 headline: single ? "Will replace \(fileLines[0])" : "Will replace the existing copy in Plex",
                 lines: single ? [first.folderPath] : fileLines + [first.folderPath],
+                plainHeadline: "OK — the existing copy will be replaced.",
+                plainLines: [],
                 tone: .success,
                 offersReplace: false,
                 offersRecheck: false,
@@ -142,21 +153,35 @@ nonisolated enum DuplicatePresentation {
         lines.append(first.folderPath)
 
         let headline: String
+        let plainHeadline: String
+        var plainLines: [String] = []
         if entries.count > 1 {
             headline = "Already in Plex — \(entries.count) folders carry \(LibraryMatch.tag(for: metadata.tmdbID))"
             lines.append("Ripping again replaces the file in \(first.folderName) once the new encode succeeds.")
+            plainHeadline = "This movie is in Plex more than once."
+            plainLines.append("Ripping it again will replace one of the copies.")
         } else if first.folderName != metadata.folderName {
             headline = "Already in Plex, as “\(first.folderName)”"
             lines.append("The new file will be filed as \(metadata.folderName); the old folder is left in place.")
+            plainHeadline = "This movie is already in Plex under a different name."
+            plainLines.append("The new copy will be added alongside it.")
         } else {
             headline = "Already in Plex"
             lines.append("Ripping again replaces this file once the new encode succeeds.")
+            plainHeadline = "This movie is already in Plex."
+            // The date is the one fact on the file line that tells the person
+            // whether the copy they have is the one they remember.
+            let added = first.files.compactMap(\.modified).first
+            let when = added.map { " (added \(formatDate($0, now: now)))" } ?? ""
+            plainLines.append("Ripping it again will replace the copy that's there\(when).")
         }
 
         return DuplicateNotice(
             kind: .present,
             headline: headline,
             lines: lines,
+            plainHeadline: plainHeadline,
+            plainLines: plainLines,
             tone: .warning,
             offersReplace: true,
             offersRecheck: false,
