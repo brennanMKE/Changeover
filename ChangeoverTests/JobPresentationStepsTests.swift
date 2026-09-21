@@ -235,4 +235,154 @@ struct JobPresentationStepsTests {
             #expect(card.actions.last == .nextDisc)
         }
     }
+    // MARK: - The plain register (docs/plain-language-ui.md §3.9, §3.10)
+
+    @Test func plainETADropsTheAbbreviationAndRoundsToMinutes() {
+        #expect(JobPresentation.plainETA(seconds: 2_729) == "About 45 minutes left")
+        #expect(JobPresentation.plainETA(seconds: 30) == "Almost done")
+        #expect(JobPresentation.plainETA(seconds: 59) == "Almost done")
+        #expect(JobPresentation.plainETA(seconds: 60) == "About 1 minute left")
+        #expect(JobPresentation.plainETA(seconds: 3_900) == "About 1 h 5 min left")
+        // The verbatim form is untouched.
+        #expect(JobPresentation.formatETA(seconds: 2_729) == "ETA 45 min")
+    }
+
+    @Test func plainElapsedIsWholeMinutes() {
+        #expect(JobPresentation.plainElapsed(2_472) == "41 minutes")
+        #expect(JobPresentation.plainElapsed(30) == "under a minute")
+        #expect(JobPresentation.formatElapsed(2_472) == "41m 12s")
+    }
+
+    /// One plain unit label per phase, and never the word "encode".
+    @Test func everyUnitLabelHasItsOwnPlainForm() throws {
+        let feature = JobPresentation.progressSummary(for: try Self.running(phase: .encoding, progress: Self.progress(0.31)), now: Self.start)
+        #expect(feature.unitLabel == "Encoding the feature")
+        #expect(feature.plainUnitLabel == "Ripping the movie")
+        #expect(feature.plainETAText == "About 45 minutes left")
+
+        let scanning = JobPresentation.progressSummary(
+            for: try Self.running(phase: .encoding, progress: Self.progress(0.1, stage: .scanning)),
+            now: Self.start
+        )
+        #expect(scanning.plainUnitLabel == "Reading the disc")
+
+        let remux = JobPresentation.progressSummary(
+            for: try Self.running(phase: .encoding, progress: Self.progress(0.5, unit: .remux)),
+            now: Self.start
+        )
+        #expect(remux.unitLabel.hasPrefix("Rewriting metadata in"))
+        #expect(remux.plainUnitLabel == "Updating the copy in Plex")
+
+        let extra = JobPresentation.progressSummary(
+            for: try Self.running(phase: .extras, progress: Self.progress(0.2, unit: .extra(index: 2, count: 3, titleIndex: 7))),
+            now: Self.start
+        )
+        #expect(extra.unitLabel == "Encoding extra 2 of 3 — title 7")
+        // The disc's own title number is the one part that means nothing.
+        #expect(extra.plainUnitLabel == "Ripping extra 2 of 3")
+
+        let fallback = JobPresentation.progressSummary(for: try Self.running(phase: .fallback), now: Self.start)
+        #expect(fallback.plainUnitLabel == "Trying another way to read the disc")
+
+        let organizing = JobPresentation.progressSummary(for: try Self.running(phase: .organizing), now: Self.start)
+        #expect(organizing.plainUnitLabel == "Moving into Plex")
+
+        let cancelling = JobPresentation.progressSummary(for: try Self.running(phase: .encoding), now: Self.start, isCancelling: true)
+        #expect(cancelling.plainUnitLabel == "Cancelling…")
+    }
+
+    /// A blank line beside a moving bar reads as a stall, so an unknown ETA
+    /// is itself worth one sentence — unlike `etaText`, which stays `nil`.
+    @Test func anUnknownETAStillSaysSomethingPlain() throws {
+        let summary = JobPresentation.progressSummary(for: try Self.running(phase: .encoding), now: Self.start)
+        #expect(summary.etaText == nil)
+        #expect(summary.plainETAText == "Working out how long this will take…")
+    }
+
+    @Test func aSucceededCardSaysItLandedWithoutNamingThePath() throws {
+        let snapshot = try Self.finished(.succeeded(destination: Self.destination), from: .organizing)
+        let card = JobPresentation.outcomeCard(for: snapshot, retryDecision: .retry, discEjected: true)
+        #expect(card.plainHeadline == "Fargo (1996)")
+        #expect(card.plainLines == ["Added to Plex.", "Took 41 minutes. The disc has been ejected."])
+        // The path is still there, verbatim, under Details.
+        #expect(card.lines[0] == "Filed as \(Self.destination.path)")
+    }
+
+    @Test func thePlainDiscSentenceSaysWhereTheDiscIs() throws {
+        let snapshot = try Self.finished(.succeeded(destination: Self.destination), from: .organizing)
+        let stillIn = JobPresentation.outcomeCard(for: snapshot, retryDecision: .retry, discEjected: false)
+        #expect(stillIn.plainLines.last == "Took 41 minutes. The disc is still in the drive.")
+
+        let stuck = JobPresentation.outcomeCard(for: snapshot, retryDecision: .retry, discEjected: false, discUnavailable: true)
+        #expect(stuck.plainLines.contains("Took 41 minutes. The disc couldn't be ejected."))
+        #expect(stuck.plainLines.last == "The disc is stuck in the drive. Try Eject again, or take it out by hand.")
+    }
+
+    @Test func aFailedCardLeadsWithThePlainHeadlineAndKeepsTheDetails() throws {
+        let failure = JobFailure(stage: .encode, reason: .discUnreadable)
+        let snapshot = try Self.finished(.failed(failure), from: .encoding, elapsed: 700)
+        let card = JobPresentation.outcomeCard(for: snapshot, retryDecision: .retry, discEjected: false)
+
+        #expect(card.plainLines[0] == "This disc couldn't be read. Clean it and try again.")
+        #expect(card.plainLines.last == "Took 11 minutes. The disc is still in the drive.")
+        // Every `FailurePresenter` detail line is still on the card, verbatim.
+        #expect(card.lines.contains("Clean the disc and try again."))
+    }
+
+    @Test func aCancelledCardSaysStoppedRatherThanFinished() throws {
+        let snapshot = try Self.finished(.failed(JobFailure(stage: .encode, reason: .cancelled)), from: .encoding, elapsed: 700)
+        let card = JobPresentation.outcomeCard(for: snapshot, retryDecision: .retry, discEjected: false)
+        #expect(card.plainHeadline == "Fargo (1996) — Cancelled")
+        #expect(card.plainLines == ["Stopped after 11 minutes. The disc is still in the drive."])
+    }
+
+    @Test func aDiscPulledMidJobSaysSoInOneSentence() throws {
+        let snapshot = try Self.finished(.failed(JobFailure(stage: .encode, reason: .cancelled)), from: .encoding)
+        let card = JobPresentation.outcomeCard(
+            for: snapshot, discRemovedDuringJob: true, retryDecision: .refuse(reason: "x"), discEjected: false
+        )
+        #expect(card.plainHeadline == "Disc removed")
+        #expect(card.plainLines == ["The disc was taken out before ripping finished. Nothing was added to Plex."])
+        #expect(card.lines.first == JobPresentation.discRemovedDetail)
+    }
+
+    /// "Upgrade" is this project's word for a remux and not anyone else's.
+    @Test func anUpgradedCardSaysUpdatedInThePlainRegister() throws {
+        let snapshot = try Self.finished(.succeeded(destination: Self.destination), from: .organizing)
+        let plan = UpgradePlan(
+            filePath: "/Plex/Movies/Fargo (1996) {tmdb-275}/Fargo (1996).mp4",
+            chapters: (1...20).map { MarkerRow(number: $0, name: "Name \($0)") },
+            audio: [AudioTag(track: 0, language: "eng", title: nil)]
+        )
+        let card = JobPresentation.outcomeCard(for: snapshot, retryDecision: .retry, discEjected: true, upgrade: plan)
+        #expect(card.headline == "Fargo (1996) — Upgraded")
+        #expect(card.plainHeadline == "Fargo (1996) — Updated")
+        #expect(card.plainLines[0] == "Added 20 chapter names and 1 audio language to the copy in Plex. Nothing was re-encoded.")
+        #expect(card.lines[0] == "Upgraded: 20 chapter names, 1 audio language. Video and audio untouched.")
+    }
+
+    /// Every plain sentence the Done card can produce survives the sweep.
+    @Test func noOutcomeCardsPlainSentenceNamesATool() throws {
+        let cards = [
+            JobPresentation.outcomeCard(
+                for: try Self.finished(.succeeded(destination: Self.destination), from: .organizing),
+                retryDecision: .retry, discEjected: true
+            ),
+            JobPresentation.outcomeCard(
+                for: try Self.finished(.failed(JobFailure(stage: .encode, reason: .toolExited(code: 3))), from: .encoding),
+                retryDecision: .retry, discEjected: false
+            ),
+            JobPresentation.outcomeCard(
+                for: try Self.finished(.failed(JobFailure(stage: .encode, reason: .cancelled)), from: .encoding),
+                retryDecision: .retry, discEjected: false
+            ),
+        ]
+        for card in cards {
+            #expect(PlainLanguage.violations(in: card.plainHeadline).isEmpty, "\(card.plainHeadline)")
+            for line in card.plainLines {
+                #expect(PlainLanguage.violations(in: line).isEmpty, "\(line)")
+            }
+        }
+    }
+
 }

@@ -28,6 +28,25 @@ nonisolated enum CancelPolicy {
             if case .refuse(let reason) = self { return reason }
             return nil
         }
+
+        /// `docs/plain-language-ui.md` §3.9 — the same refusal as a caption
+        /// beside the disabled button. `refusalReason` above stays the
+        /// tooltip, verbatim.
+        ///
+        /// Only the one refusal a person can actually meet has a plain form:
+        /// "no job with that id is currently running" and "the job has
+        /// already finished" describe a button that should not have been
+        /// pressable, which is a bug report, not a sentence for the user.
+        var plainRefusalReason: String? {
+            guard case .refuse(let reason) = self else { return nil }
+            return reason == Self.organizingRefusal
+                ? "Almost done — this can't be stopped now."
+                : nil
+        }
+
+        /// The one refusal with a plain sibling, named so the two cannot
+        /// drift apart.
+        static let organizingRefusal = "the job is being moved into Plex and can't be interrupted"
     }
 
     /// `currentID`/`phase` are `JobController.current?.id`/`current?.state
@@ -37,7 +56,7 @@ nonisolated enum CancelPolicy {
             return .refuse(reason: "no job with that id is currently running")
         }
         if phase == .organizing {
-            return .refuse(reason: "the job is being moved into Plex and can't be interrupted")
+            return .refuse(reason: Decision.organizingRefusal)
         }
         if phase.isTerminal {
             return .refuse(reason: "the job has already finished")

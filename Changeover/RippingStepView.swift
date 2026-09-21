@@ -27,8 +27,13 @@ struct RippingStepView: View {
 
             Divider()
             StepActionBar {
-                Button("Show log…") { AppDelegate.shared?.showHistory(selecting: jobID) }
-                    .buttonStyle(.link)
+                // `docs/plain-language-ui.md` §4: the log leaves the default
+                // bar. The header's History button is one click away on
+                // every step, so nothing is lost.
+                if settings.showsDetails {
+                    Button("Show log…") { AppDelegate.shared?.showHistory(selecting: jobID) }
+                        .buttonStyle(.link)
+                }
                 Spacer()
                 cancelButton
             }
@@ -46,15 +51,19 @@ struct RippingStepView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(snapshot.metadata.baseName)
                     .font(.title3)
-                Text("Movies/\(snapshot.metadata.folderName)/\(snapshot.metadata.fileName)")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .truncationMode(.middle)
+                // Where it will land is Plex's folder convention, not a
+                // decision: detail.
+                if settings.showsDetails {
+                    Text("Movies/\(snapshot.metadata.folderName)/\(snapshot.metadata.fileName)")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(summary.unitLabel)
+                Text(settings.showsDetails ? summary.unitLabel : summary.plainUnitLabel)
                     .font(.headline)
                 if summary.isDeterminate, let percent = summary.percentText {
                     HStack(spacing: 10) {
@@ -68,9 +77,13 @@ struct RippingStepView: View {
                     ProgressView()
                         .progressViewStyle(.linear)
                 }
-                Text(detailLine(summary))
+                // The plain register keeps the one number that answers "how
+                // much longer?"; the frame rate and the elapsed clock are
+                // detail (§3.9).
+                Text(summary.plainETAText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                DetailOnlyText(text: detailLine(summary))
             }
 
             if let extras = extrasLine(job) {
@@ -78,6 +91,8 @@ struct RippingStepView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            DetailsDisclosure { EmptyView() }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
@@ -104,7 +119,9 @@ struct RippingStepView: View {
     private func extrasLine(_ job: Job) -> String? {
         guard job.state.phase != .extras,
               let count = job.request?.extraTitleIndices.count, count > 0 else { return nil }
-        return "Then: \(count) extra\(count == 1 ? "" : "s")"
+        return settings.showsDetails
+            ? "Then: \(count) extra\(count == 1 ? "" : "s")"
+            : "Then \(count) extra\(count == 1 ? "" : "s")"
     }
 
     // MARK: - Cancel (#0046)
@@ -120,10 +137,20 @@ struct RippingStepView: View {
 
     private var cancelButton: some View {
         let isCancelling = jobs.cancellingJobID == jobID
-        return Button(isCancelling ? "Cancelling…" : "Cancel Job") {
-            Task { @MainActor in AppDelegate.shared?.requestCancel(jobID: jobID) }
+        return HStack(spacing: 8) {
+            // The one refusal a person can actually meet, said plainly
+            // beside the greyed button; the tooltip stays verbatim.
+            if let plain = cancelDecision.plainRefusalReason {
+                Text(plain)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button(isCancelling ? "Cancelling…" : "Cancel Job") {
+                Task { @MainActor in AppDelegate.shared?.requestCancel(jobID: jobID) }
+            }
+            .disabled(cancelDecision != .cancel || isCancelling)
+            .help(cancelDecision.refusalReason ?? "Stop the running job.")
         }
-        .disabled(cancelDecision != .cancel || isCancelling)
-        .help(cancelDecision.refusalReason ?? "Stop the running job.")
     }
 }

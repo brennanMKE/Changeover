@@ -85,7 +85,7 @@ struct JobNotifierTests {
         let (title, body) = JobNotifier.message(for: try Self.metadata(), outcome: .failed(failure))
 
         #expect(title.contains("Blade Runner"))
-        #expect(body == FailurePresenter.message(for: failure).headline)
+        #expect(body == FailurePresenter.plainHeadline(for: failure))
     }
 
     /// #0046 review: a user cancel is not reported as "couldn't finish".
@@ -149,7 +149,12 @@ struct JobNotifierTests {
         let (_, body) = JobNotifier.message(for: try Self.metadata(), outcome: .failed(failure))
 
         #expect(!body.contains("toolMissing"))
-        #expect(body.contains("HandBrakeCLI"))
+        // `docs/plain-language-ui.md` §3.18: a banner has no disclosure to
+        // open, so it speaks plainly — which means it does not name the tool
+        // either. The verbatim headline and its `brew` line are in the
+        // History window a click on this banner opens.
+        #expect(!body.contains("HandBrakeCLI"))
+        #expect(body == FailurePresenter.plainHeadline(for: failure))
     }
 
     @Test func differentFailureReasonsProduceDifferentBodies() throws {
@@ -187,7 +192,7 @@ struct JobNotifierTests {
         await JobNotifier.post(metadata: try Self.metadata(), outcome: .failed(failure), jobID: "job-1", poster: poster)
 
         #expect(poster.posted.count == 1)
-        #expect(poster.posted.first?.body == FailurePresenter.message(for: failure).headline)
+        #expect(poster.posted.first?.body == FailurePresenter.plainHeadline(for: failure))
     }
 
     // MARK: - authorize: forwarding to the poster (un-gated seam)

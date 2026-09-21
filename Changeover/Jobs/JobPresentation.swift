@@ -20,6 +20,15 @@ nonisolated struct JobPresentation: Equatable, Sendable {
     }
 
     let label: String
+    /// `docs/plain-language-ui.md` §3.12 — the same phase, said the way the
+    /// person ripping the disc would say it.
+    ///
+    /// `label` above stays exactly as it is: the History sidebar, the History
+    /// card and their tests are the Record tier and keep "Encoding Fargo
+    /// (1996)". The menu bar and the Insert step's "Last job" line read this
+    /// instead, so the same phase reads "Ripping Fargo (1996)" where a person
+    /// is glancing at it. Two words for one phase, on purpose, by tier.
+    let plainLabel: String
     let tone: Tone
     let progress: ProgressMode
     /// `FailurePresenter.message(for:)`'s headline followed by its details —
@@ -49,16 +58,20 @@ nonisolated struct JobPresentation: Equatable, Sendable {
     ///   is shown exactly like any other success.
     nonisolated static func make(for snapshot: JobSnapshot, isCancelling: Bool = false, discRemovedDuringJob: Bool = false) -> JobPresentation {
         if isCancelling, !snapshot.state.phase.isTerminal {
-            return JobPresentation(label: "Cancelling…", tone: .warning, progress: .indeterminate, detail: [])
+            return JobPresentation(label: "Cancelling…", plainLabel: "Cancelling…", tone: .warning, progress: .indeterminate, detail: [])
         }
         switch snapshot.state.phase {
         case .starting:
-            return JobPresentation(label: "Checking setup", tone: .neutral, progress: .none, detail: [])
+            return JobPresentation(label: "Checking setup", plainLabel: "Getting ready", tone: .neutral, progress: .none, detail: [])
         case .encoding:
+            let isRemux = snapshot.progress?.unit == .remux
             return JobPresentation(
-                label: snapshot.progress?.unit == .remux
+                label: isRemux
                     ? "Rewriting metadata in \(snapshot.metadata.fileName)"
                     : "Encoding \(snapshot.metadata.baseName)",
+                plainLabel: isRemux
+                    ? "Updating \(snapshot.metadata.baseName) in Plex"
+                    : "Ripping \(snapshot.metadata.baseName)",
                 tone: .active,
                 progress: progressMode(for: snapshot),
                 detail: []
@@ -67,20 +80,27 @@ nonisolated struct JobPresentation: Equatable, Sendable {
             // #0061: MakeMKV's own `PRGV:` lines are not parsed, so the rip
             // half of the fallback stays indeterminate; the second HandBrake
             // pass over the `.mkv` does report.
-            return JobPresentation(label: "Retrying with MakeMKV", tone: .warning, progress: progressMode(for: snapshot), detail: [])
+            return JobPresentation(
+                label: "Retrying with MakeMKV",
+                plainLabel: "Trying another way to read the disc",
+                tone: .warning,
+                progress: progressMode(for: snapshot),
+                detail: []
+            )
         case .organizing:
-            return JobPresentation(label: "Moving into Plex", tone: .active, progress: .indeterminate, detail: [])
+            return JobPresentation(label: "Moving into Plex", plainLabel: "Moving into Plex", tone: .active, progress: .indeterminate, detail: [])
         case .extras:
-            return JobPresentation(label: "Encoding extras", tone: .active, progress: progressMode(for: snapshot), detail: [])
+            return JobPresentation(label: "Encoding extras", plainLabel: "Ripping extras", tone: .active, progress: progressMode(for: snapshot), detail: [])
         case .succeeded:
-            return JobPresentation(label: elapsedLabel(snapshot), tone: .success, progress: .none, detail: [])
+            let elapsed = elapsedLabel(snapshot)
+            return JobPresentation(label: elapsed, plainLabel: elapsed, tone: .success, progress: .none, detail: [])
         case .failed:
-            return JobPresentation(label: "Failed", tone: .failure, progress: .none, detail: failureDetail(snapshot))
+            return JobPresentation(label: "Failed", plainLabel: "Failed", tone: .failure, progress: .none, detail: failureDetail(snapshot))
         case .cancelled:
             if discRemovedDuringJob {
-                return JobPresentation(label: "Disc removed", tone: .neutral, progress: .none, detail: [Self.discRemovedDetail])
+                return JobPresentation(label: "Disc removed", plainLabel: "Disc removed", tone: .neutral, progress: .none, detail: [Self.discRemovedDetail])
             }
-            return JobPresentation(label: "Cancelled", tone: .neutral, progress: .none, detail: [])
+            return JobPresentation(label: "Cancelled", plainLabel: "Cancelled", tone: .neutral, progress: .none, detail: [])
         }
     }
 
@@ -158,14 +178,17 @@ nonisolated struct JobPresentation: Equatable, Sendable {
         isConfigured: Bool,
         isCancelling: Bool = false
     ) -> String {
-        guard isConfigured else { return "Settings required" }
+        // The menu bar is a glance, not a record: it reads the plain register
+        // throughout (`docs/plain-language-ui.md` §3.12). The History window
+        // beside it keeps every verbatim sentence.
+        guard isConfigured else { return "Set up in Settings first" }
         if let current {
-            return make(for: current, isCancelling: isCancelling).label
+            return make(for: current, isCancelling: isCancelling).plainLabel
         }
         if let failure = reportableFailure(lastFinished) {
-            return "Last job failed — \(FailurePresenter.message(for: failure).headline)"
+            return "Last rip failed — \(FailurePresenter.plainHeadline(for: failure))"
         }
-        return "Idle — insert a DVD to begin"
+        return "Ready — insert a DVD"
     }
 
     /// #0048 review — the status dot beside `menuSummary`, decided by the

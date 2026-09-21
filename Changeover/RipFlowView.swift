@@ -153,11 +153,17 @@ struct RipFlowView: View {
     /// The disc's volume name, on the two steps where "which disc is this?"
     /// is a live question. Never on Ripping/Done — the job is the truth
     /// there, and its disc may already be out.
+    ///
+    /// `docs/plain-language-ui.md`: the volume name is the disc's own
+    /// internal label — `FARGO_WS` — and means nothing to the person reading
+    /// it, so it is detail. The step title beside it already says where they
+    /// are.
     private func subtitle(for step: FlowStep) -> String? {
+        guard settings.showsDetails else { return nil }
         switch step {
         case .chooseMovie, .confirm:
             guard let disc = jobs.insertedDisc else { return nil }
-            return "Disc: \(disc.mountURL.lastPathComponent)"
+            return disc.mountURL.lastPathComponent
         case .insertDisc, .ripping, .done:
             return nil
         }

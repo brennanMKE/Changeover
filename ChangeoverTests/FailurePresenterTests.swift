@@ -165,4 +165,67 @@ struct FailurePresenterTests {
         let message = FailurePresenter.message(for: failure)
         #expect(message.details.contains { $0.contains("MakeMKV's registration key has expired") })
     }
+    // MARK: - The plain register (docs/plain-language-ui.md §3.11)
+
+    /// One plain headline per reason × stage, none of them empty, none of
+    /// them leaking a path or an exit status. `headline(for:stage:)` and
+    /// every `details` line above are untouched — they are what
+    /// `bugReportText` pastes into a bug report.
+    @Test func everyReasonAndStageHasAPlainHeadline() {
+        for reason in Self.sampleReasons {
+            for stage: JobStage in [.encode, .rip, .preflight, .organize] {
+                let plain = FailurePresenter.plainHeadline(for: reason, stage: stage)
+                #expect(!plain.isEmpty, "\(reason) at \(stage)")
+                #expect(!plain.contains("/opt/homebrew"), "\(reason) at \(stage): \(plain)")
+                #expect(!plain.contains("status"), "\(reason) at \(stage): \(plain)")
+            }
+        }
+    }
+
+    /// Preflight's two `.toolMissing` shapes stay distinct in the plain
+    /// register too: "not set up yet" is a different thing to fix from
+    /// "not installed".
+    @Test func anUnsetPathAndAMissingToolReadDifferently() {
+        #expect(FailurePresenter.plainHeadline(for: .toolMissing(path: ""), stage: .preflight)
+                == "A program Changeover needs isn't set up yet. Open Settings to fix it.")
+        #expect(FailurePresenter.plainHeadline(for: .toolMissing(path: "/opt/homebrew/bin/HandBrakeCLI"), stage: .preflight)
+                == "A program Changeover needs isn't installed. Open Settings to fix it.")
+    }
+
+    /// The Plex media root itself gets the "is the drive connected" wording;
+    /// its subfolders get the generic one — the same split `headline` makes.
+    @Test func theDestinationSplitSurvivesIntoThePlainRegister() {
+        #expect(FailurePresenter.plainHeadline(for: .destinationUnwritable(path: "/Volumes/Media/Plex Media"), stage: .preflight)
+                == "Your Plex drive isn't connected.")
+        #expect(FailurePresenter.plainHeadline(for: .destinationUnwritable(path: "/Volumes/Media/Plex Media/Movies"), stage: .preflight)
+                == "Changeover can't save to your Plex folder. Check the drive is connected.")
+    }
+
+    /// `plainHeadline(for:)` applies the same CSS refinement `message(for:)`
+    /// does, so the banner and the card describe the same failure.
+    @Test func theCSSKeyRefinementReachesThePlainHeadlineToo() {
+        let failure = JobFailure(
+            stage: .encode,
+            reason: .discUnreadable,
+            logTail: [
+                "libdvdread: Attempting to retrieve all CSS keys",
+                "libdvdread: Error cracking CSS key for /VIDEO_TS/VTS_01_1.VOB",
+            ]
+        )
+        #expect(FailurePresenter.message(for: failure).headline == "HandBrake couldn't unlock this disc's copy protection.")
+        #expect(FailurePresenter.plainHeadline(for: failure) == "This disc's copy protection couldn't be unlocked.")
+        // Without the evidence it stays the ordinary unreadable sentence.
+        let plain = JobFailure(stage: .encode, reason: .discUnreadable)
+        #expect(FailurePresenter.plainHeadline(for: plain) == "This disc couldn't be read. Clean it and try again.")
+    }
+
+    /// The one documented exemption from the forbidden-terms rule: the
+    /// person has to open MakeMKV.app to fix this, so the name is the
+    /// instruction.
+    @Test func onlyTheExpiredKeyNamesATool() {
+        let plain = FailurePresenter.plainHeadline(for: .activationExpired, stage: .rip)
+        #expect(plain == "The backup disc reader (MakeMKV) needs a new registration key.")
+        #expect(PlainLanguage.violations(in: plain) == ["MakeMKV"])
+    }
+
 }

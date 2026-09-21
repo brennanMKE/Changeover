@@ -27,12 +27,16 @@ struct InsertDiscStepView: View {
             Image(systemName: "opticaldisc")
                 .font(.system(size: 42))
                 .foregroundStyle(.secondary)
+                .help("Insert a DVD to begin. The disc is scanned automatically and this window opens on it.")
             message
             if reason == .discUnavailable {
                 Button("Eject") {
                     Task { await jobs.ejectDisc() }
                 }
                 .buttonStyle(.borderedProminent)
+                // #0049's verbatim sentence, kept where a disabled-looking
+                // state still has to explain itself precisely.
+                .help(StartDecision.discUnavailable.reason ?? "")
             }
             if let lastJob = lastJobLine {
                 Text(lastJob)
@@ -50,7 +54,10 @@ struct InsertDiscStepView: View {
     private var message: some View {
         switch reason {
         case .noDisc:
-            Text("Insert a DVD to begin. The disc is scanned automatically and this window opens on it.")
+            // The second sentence describes what the app does on its own,
+            // which is nothing the person has to know to begin. It stays as
+            // the glyph's tooltip.
+            Text("Put a DVD in the drive to begin.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -64,9 +71,10 @@ struct InsertDiscStepView: View {
                     .foregroundStyle(.secondary)
             }
         case .discUnavailable:
-            // #0049: the same sentence `StartGate` gives the Start button,
-            // so the window never explains this state two different ways.
-            Text(StartDecision.discUnavailable.reason ?? "")
+            // #0049: the same decision `StartGate` gives the Start button, so
+            // the window never explains this state two different ways — in
+            // the plain register here, verbatim as Eject's tooltip.
+            Text(StartDecision.discUnavailable.plainReason ?? "")
                 .font(.subheadline)
                 .foregroundStyle(.orange)
                 .multilineTextAlignment(.center)
@@ -77,6 +85,6 @@ struct InsertDiscStepView: View {
     /// happened. `JobPresentation` decides what a finished job reads like.
     private var lastJobLine: String? {
         guard let last = jobs.history.last else { return nil }
-        return "Last job: \(last.metadata.baseName) — \(JobPresentation.make(for: last.snapshot).label)"
+        return "Last job: \(last.metadata.baseName) — \(JobPresentation.make(for: last.snapshot).plainLabel)"
     }
 }

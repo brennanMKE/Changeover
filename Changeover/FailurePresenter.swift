@@ -194,6 +194,70 @@ nonisolated enum FailurePresenter {
         }
     }
 
+    // MARK: - The plain register (docs/plain-language-ui.md §3.11)
+
+    /// One sentence a person with no vocabulary for DVDs can act on.
+    ///
+    /// Takes the whole `JobFailure`, not just the reason and stage, so it can
+    /// apply the same two refinements `message(for:)` does: the CSS-key
+    /// variant of `.discUnreadable`, and the signal death that reads as
+    /// "stopped unexpectedly" rather than an exit status. `headline(for:
+    /// stage:)` and every `details` line stay exactly as they are — they are
+    /// what `bugReportText` pastes into a bug report — and appear under this
+    /// sentence with Details open.
+    ///
+    /// `.activationExpired` names MakeMKV on purpose, and is the one tool
+    /// name the forbidden-terms sweep allows: the person has to open that
+    /// app to fix it, so the name *is* the instruction.
+    nonisolated static func plainHeadline(for failure: JobFailure) -> String {
+        if failure.reason == .discUnreadable,
+           let cssMatch = HandBrakeFailureClassifier.evidence(in: failure.logTail, for: .discUnreadable, outputPath: ""),
+           cssMatch.id == .cssKeyFailure {
+            return "This disc's copy protection couldn't be unlocked."
+        }
+        return plainHeadline(for: failure.reason, stage: failure.stage)
+    }
+
+    /// The per-reason rendering, before `plainHeadline(for:)`'s refinements.
+    /// Exhaustive, so a new `FailureReason` cannot forget its plain wording.
+    nonisolated static func plainHeadline(for reason: FailureReason, stage: JobStage) -> String {
+        switch reason {
+        case .toolMissing(let path):
+            if stage == .preflight, path.isEmpty {
+                return "A program Changeover needs isn't set up yet. Open Settings to fix it."
+            }
+            return "A program Changeover needs isn't installed. Open Settings to fix it."
+        case .toolLaunchFailed:
+            return "A program Changeover needs couldn't start. Open Settings to check it."
+        case .toolIncompatible:
+            return "The installed ripping program is the wrong kind or too old. It needs updating."
+        case .toolExited:
+            return "Ripping stopped unexpectedly. Try again; if it keeps happening the disc may be damaged."
+        case .noTitlesProduced:
+            return "Nothing playable could be read from this disc."
+        case .destinationUnwritable(let path):
+            if stage == .preflight, !isMoviesOrEncodingPath(path) {
+                return "Your Plex drive isn't connected."
+            }
+            return "Changeover can't save to your Plex folder. Check the drive is connected."
+        case .diskFull:
+            if stage == .preflight {
+                return "Your Plex drive doesn't have enough free space."
+            }
+            return "Your Plex drive is full."
+        case .activationExpired:
+            return "The backup disc reader (MakeMKV) needs a new registration key."
+        case .discUnreadable:
+            return "This disc couldn't be read. Clean it and try again."
+        case .cancelled:
+            // Already plain, and already the whole truth.
+            return "The job was cancelled before it finished."
+        case .unknown:
+            // The `detail` is a machine's word for it, every time.
+            return "Something went wrong."
+        }
+    }
+
     // MARK: - Helpers
 
     nonisolated private static func toolName(for stage: JobStage) -> String {

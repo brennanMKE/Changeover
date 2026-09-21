@@ -34,15 +34,29 @@ struct DoneStepView: View {
                             Circle()
                                 .fill(card.tone.color)
                                 .frame(width: 8, height: 8)
-                            Text(card.headline)
+                            Text(settings.showsDetails ? card.headline : card.plainHeadline)
                                 .font(.title3)
                         }
-                        ForEach(card.lines, id: \.self) { line in
+                        // The plain lines always; the verbatim ones — the
+                        // full path, "Finished in 41m 12s · disc ejected",
+                        // every `FailurePresenter` detail — under Details.
+                        ForEach(card.plainLines, id: \.self) { line in
                             Text(line)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        DetailsDisclosure {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(card.lines, id: \.self) { line in
+                                    Text(line)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
                         }
                     }
                     .padding()
@@ -68,7 +82,7 @@ struct DoneStepView: View {
                 // The job was pruned from history (`historyLimit`) while its
                 // card was up. Never an empty window with no way out.
                 Spacer()
-                Text("That job is no longer in this session's history.")
+                Text("That rip is no longer listed.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -109,9 +123,13 @@ struct DoneStepView: View {
         switch action {
         case .showLog:
             // #0043's log lives only here now — per job, in the History
-            // window (#0048), which a notification click already opens.
-            Button("Show log…") { AppDelegate.shared?.showHistory(selecting: jobID) }
-                .buttonStyle(.link)
+            // window (#0048), which a notification click already opens. It
+            // leaves the default bar with `docs/plain-language-ui.md` §4:
+            // the header's History button is always present.
+            if settings.showsDetails {
+                Button("Show log…") { AppDelegate.shared?.showHistory(selecting: jobID) }
+                    .buttonStyle(.link)
+            }
         case .revealInFinder(let url):
             Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                 .buttonStyle(.link)
@@ -119,7 +137,7 @@ struct DoneStepView: View {
             // Back to Confirm with the movie, title, tracks and extras
             // intact — the other half of Retry, which replays the recorded
             // request unchanged.
-            Button("Adjust & Retry") { flow.adjustAndRetry(jobs: jobs) }
+            Button("Go Back & Retry") { flow.adjustAndRetry(jobs: jobs) }
         case .retry:
             // Replays the job's own recorded request (#0048) — never the
             // live selection, which can have moved on.

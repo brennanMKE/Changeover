@@ -156,7 +156,12 @@ enum JobNotifier {
         case .failed(let failure):
             return (
                 "Changeover couldn't finish \(metadata.title)",
-                FailurePresenter.message(for: failure).headline
+                // `docs/plain-language-ui.md` §3.18: a notification is the
+                // plainest surface the app has — a banner with no disclosure
+                // to open and no log beside it. The verbatim headline and
+                // every detail are one click away, in the History window the
+                // click on this banner opens.
+                FailurePresenter.plainHeadline(for: failure)
             )
         }
     }

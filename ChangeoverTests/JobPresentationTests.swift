@@ -305,35 +305,35 @@ struct JobPresentationTests {
 
     @Test func menuSummaryWhenNotConfiguredAlwaysWins() throws {
         let running = try Self.snapshot(phase: .encoding)
-        #expect(JobPresentation.menuSummary(current: running, lastFinished: nil, isConfigured: false) == "Settings required")
-        #expect(JobPresentation.menuSummary(current: nil, lastFinished: nil, isConfigured: false) == "Settings required")
+        #expect(JobPresentation.menuSummary(current: running, lastFinished: nil, isConfigured: false) == "Set up in Settings first")
+        #expect(JobPresentation.menuSummary(current: nil, lastFinished: nil, isConfigured: false) == "Set up in Settings first")
     }
 
     @Test func menuSummaryWhenIdleWithNoHistory() {
-        #expect(JobPresentation.menuSummary(current: nil, lastFinished: nil, isConfigured: true) == "Idle — insert a DVD to begin")
+        #expect(JobPresentation.menuSummary(current: nil, lastFinished: nil, isConfigured: true) == "Ready — insert a DVD")
     }
 
     @Test func menuSummaryWhenRunningReflectsThePhase() throws {
         let running = try Self.snapshot(phase: .encoding)
-        #expect(JobPresentation.menuSummary(current: running, lastFinished: nil, isConfigured: true) == "Encoding Blade Runner (1982)")
+        #expect(JobPresentation.menuSummary(current: running, lastFinished: nil, isConfigured: true) == "Ripping Blade Runner (1982)")
     }
 
     @Test func menuSummaryAfterAFailureNamesTheReason() throws {
         let finished = try Self.terminalSnapshot(outcome: .failed(Self.failure(.diskFull)))
         let summary = JobPresentation.menuSummary(current: nil, lastFinished: finished, isConfigured: true)
-        #expect(summary == "Last job failed — \(FailurePresenter.message(for: Self.failure(.diskFull)).headline)")
+        #expect(summary == "Last rip failed — \(FailurePresenter.plainHeadline(for: Self.failure(.diskFull)))")
     }
 
     /// A cancel is the user's own request, not a problem to keep reporting —
     /// mirrors `JobNotifier.message(for:outcome:)`'s own distinction.
     @Test func menuSummaryAfterACancelReadsAsIdle() throws {
         let finished = try Self.terminalSnapshot(outcome: .failed(Self.failure(.cancelled)), via: .encoding)
-        #expect(JobPresentation.menuSummary(current: nil, lastFinished: finished, isConfigured: true) == "Idle — insert a DVD to begin")
+        #expect(JobPresentation.menuSummary(current: nil, lastFinished: finished, isConfigured: true) == "Ready — insert a DVD")
     }
 
     @Test func menuSummaryAfterASuccessReadsAsIdle() throws {
         let finished = try Self.terminalSnapshot(outcome: .succeeded(destination: URL(fileURLWithPath: "/tmp/x.mp4")))
-        #expect(JobPresentation.menuSummary(current: nil, lastFinished: finished, isConfigured: true) == "Idle — insert a DVD to begin")
+        #expect(JobPresentation.menuSummary(current: nil, lastFinished: finished, isConfigured: true) == "Ready — insert a DVD")
     }
 
     // MARK: - menuTone / menuSummary while cancelling (#0048 review)
@@ -474,4 +474,41 @@ struct JobPresentationTests {
         #expect(JobPresentation.statusSymbolName(isRunning: true) == "opticaldisc.fill")
         #expect(JobPresentation.statusSymbolName(isRunning: false) == "opticaldisc")
     }
+    // MARK: - The plain register (docs/plain-language-ui.md §3.12)
+
+    /// `label` is the History tier and keeps "Encoding Fargo (1996)"; the
+    /// menu bar and the Insert step's "Last job" line read `plainLabel`.
+    /// Two words for one phase, on purpose, by tier.
+    @Test func everyPhaseHasAPlainLabelBesideItsVerbatimOne() throws {
+        let starting = JobPresentation.make(for: try Self.snapshot(phase: .starting))
+        #expect(starting.label == "Checking setup")
+        #expect(starting.plainLabel == "Getting ready")
+
+        let encoding = JobPresentation.make(for: try Self.snapshot(phase: .encoding))
+        #expect(encoding.label == "Encoding Blade Runner (1982)")
+        #expect(encoding.plainLabel == "Ripping Blade Runner (1982)")
+
+        let fallback = JobPresentation.make(for: try Self.snapshot(phase: .fallback))
+        #expect(fallback.label == "Retrying with MakeMKV")
+        #expect(fallback.plainLabel == "Trying another way to read the disc")
+
+        let organizing = JobPresentation.make(for: try Self.snapshot(phase: .organizing))
+        #expect(organizing.plainLabel == "Moving into Plex")
+
+        let extras = JobPresentation.make(for: try Self.snapshot(phase: .extras))
+        #expect(extras.label == "Encoding extras")
+        #expect(extras.plainLabel == "Ripping extras")
+
+        let cancelling = JobPresentation.make(for: try Self.snapshot(phase: .encoding), isCancelling: true)
+        #expect(cancelling.plainLabel == "Cancelling…")
+    }
+
+    /// No plain label names a tool — the menu bar reads them straight out.
+    @Test func noPlainLabelNamesATool() throws {
+        for phase: JobPhase in [.starting, .encoding, .fallback, .organizing, .extras] {
+            let plain = JobPresentation.make(for: try Self.snapshot(phase: phase)).plainLabel
+            #expect(PlainLanguage.violations(in: plain).isEmpty, "\(phase): \(plain)")
+        }
+    }
+
 }
