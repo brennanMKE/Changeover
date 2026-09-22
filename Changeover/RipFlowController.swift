@@ -715,8 +715,40 @@ final class RipFlowController {
         autoStartRemaining = nil
     }
 
+    /// Discs ejected because their film was already in the library, so the
+    /// eject is attempted once per disc.
+    private var autoEjectedDiscs: Set<DiscInsertion> = []
+
+    /// Take out a disc whose film is already in the library, so the next one
+    /// can go in.
+    ///
+    /// Unattended, a duplicate is the one outcome that stops the line: the
+    /// rip is correctly refused and then the disc waits for a decision nobody
+    /// is there to make. Ejecting turns "already have it" into the same
+    /// gesture as "finished with it".
+    private func evaluateAutoEject(jobs: JobController, settings: AppSettings) {
+        guard let disc = jobs.insertedDisc,
+              !autoEjectedDiscs.contains(disc),
+              !jobs.isRunning,
+              !jobs.isEjecting,
+              AutoStartPolicy.shouldEjectDuplicate(
+                  enabled: settings.autoStartRipping,
+                  libraryCheck: libraryCheck,
+                  selectedMovieID: selectedMovieID,
+                  recommendedMovieID: recommendedMovieID,
+                  acknowledgedReplace: replaceAcknowledgement != nil
+              )
+        else { return }
+
+        autoEjectedDiscs.insert(disc)
+        cancelAutoStart()
+        FlowDiagnostics.note("autoeject: already in the library — " + (search.selectedMovie?.title ?? "?"))
+        Task { await jobs.ejectDisc() }
+    }
+
     /// Begin, continue or abandon the countdown, from whatever just changed.
     func evaluateAutoStart(jobs: JobController, settings: AppSettings) {
+        evaluateAutoEject(jobs: jobs, settings: settings)
         let decision = AutoStartPolicy.decide(
             enabled: settings.autoStartRipping,
             start: startDecision(jobs: jobs),

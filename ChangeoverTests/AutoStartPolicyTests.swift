@@ -79,3 +79,66 @@ struct AutoStartPolicyTests {
         }
     }
 }
+
+/// Taking out a disc whose film is already in the library, so an unattended
+/// run is not stopped by the one disc it cannot rip.
+struct AutoEjectDuplicateTests {
+
+    static let present = LibraryCheck.done(
+        tmdbID: "853",
+        .present([LibraryEntry(
+            folderName: "Enemy at the Gates (2001) {tmdb-853}",
+            folderPath: "/Movies/Enemy at the Gates (2001) {tmdb-853}",
+            files: [LibraryFile(name: "Enemy at the Gates (2001).mp4", sizeBytes: 1_000_000)]
+        )])
+    )
+    static let absent = LibraryCheck.done(tmdbID: "853", .absent)
+
+    static func shouldEject(
+        enabled: Bool = true,
+        check: LibraryCheck = AutoEjectDuplicateTests.present,
+        selected: Int? = 853,
+        recommended: Int? = 853,
+        acknowledged: Bool = false
+    ) -> Bool {
+        AutoStartPolicy.shouldEjectDuplicate(
+            enabled: enabled, libraryCheck: check,
+            selectedMovieID: selected, recommendedMovieID: recommended,
+            acknowledgedReplace: acknowledged
+        )
+    }
+
+    @Test func aFilmAlreadyInTheLibraryIsEjected() {
+        #expect(Self.shouldEject())
+    }
+
+    @Test func aFilmNotInTheLibraryIsKeptSoItCanBeRipped() {
+        #expect(!Self.shouldEject(check: Self.absent))
+        #expect(!Self.shouldEject(check: .checking(tmdbID: "853")))
+        #expect(!Self.shouldEject(check: .idle))
+    }
+
+    /// An unreachable library is not a duplicate. Ejecting on it would throw
+    /// discs out because a volume was briefly unmounted.
+    @Test func anUnreachableLibraryEjectsNothing() {
+        #expect(!Self.shouldEject(check: .done(tmdbID: "853", .unreachable(reason: "not mounted"))))
+    }
+
+    /// With automatic ripping off, a person is choosing, and they may well
+    /// want to re-rip over a copy they already have.
+    @Test func nothingIsEjectedWhenTheFeatureIsOff() {
+        #expect(!Self.shouldEject(enabled: false))
+    }
+
+    /// A duplicate found for a film the *user* picked is a question for the
+    /// user, and taking the disc out would answer it for them.
+    @Test func aHandPickedFilmIsLeftAlone() {
+        #expect(!Self.shouldEject(selected: 999, recommended: 853))
+        #expect(!Self.shouldEject(recommended: nil))
+    }
+
+    /// "Replace it" is a rip, not an eject.
+    @Test func anAcknowledgedReplaceIsNotAnEject() {
+        #expect(!Self.shouldEject(acknowledged: true))
+    }
+}

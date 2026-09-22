@@ -36,6 +36,38 @@ nonisolated enum AutoStartPolicy {
         var startsCountdown: Bool { self == .countDown }
     }
 
+    /// Whether a disc that is already in the library should be ejected
+    /// rather than left sitting there.
+    ///
+    /// Unattended, a duplicate is the one outcome that stops the line: the
+    /// rip is correctly refused, and then the disc stays in the drive waiting
+    /// for a decision nobody is there to make, so every disc behind it waits
+    /// too. Ejecting turns "already have it" into the same gesture as
+    /// "finished with it" — the tray opens and the next disc goes in.
+    ///
+    /// Only in unattended mode. With automatic ripping off, a person is
+    /// choosing, and they may well want to re-rip over a copy they have; the
+    /// duplicate notice and its Replace tick stay exactly as they are.
+    ///
+    /// The same confidence bar as starting: the app must have identified the
+    /// film itself. A duplicate found for a film the *user* picked is a
+    /// question for the user, and taking the disc out from under them would
+    /// be answering it on their behalf.
+    static func shouldEjectDuplicate(
+        enabled: Bool,
+        libraryCheck: LibraryCheck,
+        selectedMovieID: Int?,
+        recommendedMovieID: Int?,
+        acknowledgedReplace: Bool
+    ) -> Bool {
+        guard enabled else { return false }
+        // The user has said "replace it" — that is a rip, not an eject.
+        guard !acknowledgedReplace else { return false }
+        guard let selected = selectedMovieID, selected == recommendedMovieID else { return false }
+        guard case .done(_, let lookup) = libraryCheck, case .present = lookup else { return false }
+        return true
+    }
+
     /// - Parameters:
     ///   - enabled: `AppSettings.autoStartRipping`.
     ///   - start: what `StartGate.decide` says about the Start button.
