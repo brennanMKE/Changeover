@@ -28,6 +28,108 @@ nonisolated enum MenuArchive {
         return encoder
     }
 
+    // MARK: - What the disc was called, and what it turned out to be
+
+    /// One disc's label paired with the movie the user actually chose for it.
+    ///
+    /// This is the ground truth for the disc-name problem
+    /// (`docs/disc-name-inference.md`). `DiscNameSearchTerm` turns a volume
+    /// label into a search term with a short rule list, and the rules only
+    /// cover labels that carry their own word boundaries: `ARMY_OF_DARKNESS`
+    /// works, `ENEMYATTHEGATES` does not, and the user retypes it. Deciding
+    /// whether a smarter route is worth having — and later, whether it
+    /// actually answers correctly — needs pairs of (what the disc called
+    /// itself, what it really was), and nothing was keeping them.
+    ///
+    /// Recorded when the rip starts rather than when it finishes: the choice
+    /// is the evidence, and a rip that fails and is retried rewrites this
+    /// record rather than losing it.
+    nonisolated struct DiscNaming: Codable, Equatable, Sendable {
+        var format: String = "changeover-disc-naming/1"
+        var recordedAt: String
+        /// The volume label exactly as the drive reported it, unmodified —
+        /// the input any future inference has to work from.
+        var volumeName: String
+        var discID: String?
+        /// What `DiscNameSearchTerm.derive` offered, or `nil` when it
+        /// declined. `nil` beside a real title is precisely the case worth
+        /// studying.
+        var derivedSearchTerm: String?
+        /// Whether the heuristic's term already matches the chosen title,
+        /// case- and punctuation-insensitively. Recorded rather than computed
+        /// later so the comparison used to judge a run is the same one every
+        /// time.
+        var derivedMatchesChoice: Bool
+        var chosenTitle: String
+        var chosenYear: String
+        var tmdbID: String
+    }
+
+    /// Fold a title to the form the match check compares: lowercase, letters
+    /// and digits, and **word boundaries kept** as single spaces.
+    ///
+    /// Keeping the boundaries is the entire point, and the first version of
+    /// this got it backwards. Folding all the way down to letters made
+    /// "Enemyatthegates" and "Enemy at the Gates" equal — so the one disc
+    /// this feature exists for was recorded as a *match*, and the archive
+    /// would have reported the rules working perfectly on exactly the labels
+    /// where they fail. A term with the spaces missing finds nothing on TMDB,
+    /// which is the thing being measured.
+    ///
+    /// Punctuation and case still fold away: "The Girl in the Spider's Web"
+    /// and "THE_GIRL_IN_THE_SPIDERS_WEB" are the same search.
+    /// An apostrophe is dropped rather than spaced, because it sits *inside*
+    /// a word: spacing it would split "Spider's" into "spider s" and stop
+    /// `THE_GIRL_IN_THE_SPIDERS_WEB` matching the title it plainly is.
+    static func fold(_ text: String) -> String {
+        let withoutApostrophes = text.lowercased()
+            .replacingOccurrences(of: "'", with: "")
+            .replacingOccurrences(of: "\u{2019}", with: "")
+        let spaced = String(withoutApostrophes.unicodeScalars.map {
+            CharacterSet.alphanumerics.contains($0) ? Character($0) : " "
+        })
+        return spaced.split(separator: " ").joined(separator: " ")
+    }
+
+    static func naming(
+        volumeName: String,
+        discID: String?,
+        derivedSearchTerm: String?,
+        chosenTitle: String,
+        chosenYear: String,
+        tmdbID: String,
+        recordedAt: Date = Date()
+    ) -> DiscNaming {
+        DiscNaming(
+            recordedAt: ISO8601DateFormatter().string(from: recordedAt),
+            volumeName: volumeName,
+            discID: discID,
+            derivedSearchTerm: derivedSearchTerm,
+            derivedMatchesChoice: derivedSearchTerm.map { fold($0) == fold(chosenTitle) } ?? false,
+            chosenTitle: chosenTitle,
+            chosenYear: chosenYear,
+            tmdbID: tmdbID
+        )
+    }
+
+    /// Write the naming record for one disc. Best-effort, like every other
+    /// write here: a rip is never failed for the archive's sake.
+    @discardableResult
+    static func writeNaming(
+        root: String,
+        slug: String,
+        naming: DiscNaming,
+        fileManager: FileManager = .default
+    ) -> String? {
+        let directory = discDirectory(root: root, slug: slug)
+        guard (try? fileManager.createDirectory(atPath: directory, withIntermediateDirectories: true)) != nil,
+              let data = try? encoder().encode(naming)
+        else { return nil }
+        let path = (directory as NSString).appendingPathComponent("naming.json")
+        guard (try? data.write(to: URL(fileURLWithPath: path))) != nil else { return nil }
+        return path
+    }
+
     // MARK: - Naming
 
     /// The directory name for a disc, from whatever identity it has.

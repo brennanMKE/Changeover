@@ -660,6 +660,28 @@ final class JobController {
         // `DVDPipeline` names its working directory and `▶ Job` log line
         // after, and that `JobNotifier` uses as the notification identifier.
         let jobID = JobID.make()
+
+        // What this disc called itself, beside what it turned out to be.
+        // Recorded here, at the moment the user commits, because the choice
+        // is the evidence — and only for a real rip, since an upgrade job
+        // re-reads a disc whose movie was settled long ago and would only
+        // restate a pairing the archive already has.
+        if !request.isUpgrade, !settings.menuArchivePath.isEmpty {
+            let volumeName = currentDisc.mountURL.lastPathComponent
+            MenuArchive.writeNaming(
+                root: settings.menuArchivePath,
+                slug: MenuArchive.slug(discID: currentDisc.discID, volumeName: volumeName),
+                naming: MenuArchive.naming(
+                    volumeName: volumeName,
+                    discID: currentDisc.discID,
+                    derivedSearchTerm: DiscNameSearchTerm.derive(volumeName: volumeName),
+                    chosenTitle: request.metadata.title,
+                    chosenYear: request.metadata.year,
+                    tmdbID: request.metadata.tmdbID
+                )
+            )
+        }
+
         // #0042: one `Job` per job, holding its own fresh `JobLog` — never a
         // wipe-in-place of some shared buffer. Setting `current` here is
         // what makes `isRunning`/`currentJobID`/`currentJobState`/
