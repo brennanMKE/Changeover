@@ -36,6 +36,15 @@ struct ChooseMovieStepView: View {
             // #0140: the results fill the flexible body slot and scroll
             // inside it. No `minHeight`, so however many results TMDB
             // returns, the window's minimum stays the action bar's.
+            if search.results.isEmpty {
+                // A blank panel is not an answer. Seen on ENEMYATTHEGATES:
+                // the prefilled term matched nothing, and the screen said so
+                // by showing an empty list — indistinguishable from a search
+                // nobody had run. Whatever the state, something says what it
+                // is and what to do next.
+                SearchEmptyState(search: search)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
             List(search.results, selection: selection) { movie in
                 MovieRow(movie: movie, posterURL: search.posterURL(for: movie))
                     .tag(movie.id)
@@ -49,6 +58,7 @@ struct ChooseMovieStepView: View {
             }
             .listStyle(.inset)
             .frame(maxHeight: .infinity)
+            }
 
             Divider()
             StepActionBar {
@@ -198,5 +208,53 @@ struct MovieRow: View {
             }
         }
         .frame(width: 40, height: 60)
+    }
+}
+
+/// What the results area says when it has no results.
+///
+/// Four different situations reach an empty list, and before this they were
+/// one blank rectangle: searching, a search that failed, a search that found
+/// nothing, and a search nobody has run. The disc that surfaced it,
+/// `ENEMYATTHEGATES`, produces the third — its volume label prefills a term
+/// that matches no film — and the app's entire response was empty space.
+private struct SearchEmptyState: View {
+    let search: MovieSearchViewModel
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if search.isLoading {
+                ProgressView()
+                Text("Searching…")
+                    .foregroundStyle(.secondary)
+            } else if let wording = search.errorWording {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                WordingText(wording: wording)
+                    .multilineTextAlignment(.center)
+            } else if let searched = search.lastSearchedQuery, !searched.isEmpty {
+                Image(systemName: "magnifyingglass")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                Text("No movies found for “\(searched)”.")
+                    .font(.headline)
+                // The disc's own label is often the title with the spaces
+                // taken out, so this is the actionable thing to try — and it
+                // is what the user has to do by hand until
+                // docs/disc-name-inference.md is built.
+                Text("The disc's name may be missing spaces, or be spelled differently. Try editing the search above.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            } else {
+                Image(systemName: "film")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                Text("Type the movie's name and press Search.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 24)
     }
 }

@@ -20,6 +20,13 @@ final class MovieSearchViewModel {
     var results:      [TMDBMovie] = []
     var isLoading:    Bool        = false
     var errorMessage: String?
+    /// The query the newest finished search actually asked TMDB, or `nil`
+    /// when none has finished. `results.isEmpty` alone cannot tell "searched
+    /// and found nothing" from "has not searched yet", and on the disc this
+    /// was found on — `ENEMYATTHEGATES`, whose prefilled term matches no
+    /// film — the two look identical on screen: an empty panel that says
+    /// nothing at all.
+    private(set) var lastSearchedQuery: String?
     var selectedMovie: TMDBMovie?
 
     /// `docs/plain-language-ui.md` §3.14 — what the Choose step says when a
@@ -95,9 +102,15 @@ final class MovieSearchViewModel {
             let fetched = try await client.searchMovies(query: searchedQuery, apiKey: apiKey)
             guard isCurrent(generation) else { return }
             results = Self.sorted(fetched, for: searchedQuery)
+            // What was actually asked, recorded only once an answer arrives,
+            // so the empty state can say "no matches for X" rather than
+            // leaving a blank panel — and can tell that apart from a search
+            // nobody has run yet.
+            lastSearchedQuery = searchedQuery
         } catch {
             guard isCurrent(generation) else { return }
             results = []
+            lastSearchedQuery = searchedQuery
             errorMessage = (error as? LocalizedError)?.errorDescription
                         ?? error.localizedDescription
         }

@@ -440,7 +440,42 @@ final class RipFlowController {
         case .fill(let term):
             prefillAttemptedFor = disc
             search.query = term
-            runSearchNow(apiKey: apiKey)
+            searchThenTryTheDiscsOwnTitle(jobs: jobs, disc: disc, apiKey: apiKey)
+        }
+    }
+
+    /// Search the volume-derived term, and if it matches nothing, search the
+    /// title the disc printed on its own menu.
+    ///
+    /// The volume label is a filename and the menu is typography, so they
+    /// fail in opposite directions: `ENEMYATTHEGATES` has had its spaces
+    /// taken out and matches no film, while the same disc's main menu prints
+    /// "Enemy at the Gates" in words. `MenuTitleGuess` has been reading that
+    /// text all along — it was simply never consulted unless the volume name
+    /// produced nothing at all, and a label that produces a *wrong* term is
+    /// not a label that produces nothing.
+    ///
+    /// Deliberately keyed on the search coming back empty rather than on the
+    /// label looking odd. There is no reliable tell in the label itself:
+    /// `OPPENHEIMER` is one long word and is right, `ENEMYATTHEGATES` is one
+    /// long word and is wrong. "TMDB knows of no such film" is the signal
+    /// that means what it says.
+    private func searchThenTryTheDiscsOwnTitle(jobs: JobController, disc: DiscInsertion, apiKey: String) {
+        Task { [weak self] in
+            await self?.search.search(apiKey: apiKey)
+            guard let self else { return }
+            // Nothing is retried if the disc changed under us, if the user
+            // has started typing, or if the first search actually worked.
+            guard jobs.insertedDisc == disc,
+                  self.search.results.isEmpty,
+                  self.search.errorMessage == nil,
+                  let printed = jobs.menuState.intelligence?.titleText?.text,
+                  !printed.isEmpty,
+                  MenuArchive.fold(printed) != MenuArchive.fold(self.search.query)
+            else { return }
+
+            self.search.query = printed
+            self.search.runSearchNow(apiKey: apiKey)
         }
     }
 
