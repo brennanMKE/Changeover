@@ -83,6 +83,14 @@ final class RipFlowController {
     /// fought.
     private(set) var prefillAttemptedFor: DiscInsertion?
 
+    /// The disc whose printed menu title has already been tried as a search
+    /// term, so the retry happens once rather than on every reconcile.
+    private var menuTitleTriedFor: DiscInsertion?
+
+    /// The disc the model has already been asked about. One question per
+    /// disc, whatever the answer.
+    private var inferenceTriedFor: DiscInsertion?
+
     /// `search` is optional rather than defaulted to `MovieSearchViewModel()`
     /// in the signature: a default argument expression is evaluated in a
     /// `nonisolated` context, and the view model is explicitly `@MainActor`.
@@ -392,7 +400,7 @@ final class RipFlowController {
     /// search); it defaults to `""` so every existing caller — including the
     /// tests that predate the prefill — keeps compiling. The real call site,
     /// `RipFlowView`, always passes `settings.tmdbAPIKey`.
-    func reconcile(jobs: JobController, apiKey: String = "") {
+    func reconcile(jobs: JobController, apiKey: String = "", settings: AppSettings? = nil) {
         switch SelectionReset.reconcile(
             selectionDisc: selectionDisc,
             hasSelection: selectedMovieID != nil,
@@ -414,6 +422,8 @@ final class RipFlowController {
             clearLibraryCheck()
         }
         attemptSearchPrefill(jobs: jobs, apiKey: apiKey)
+        attemptMenuTitleFallback(jobs: jobs, apiKey: apiKey)
+        if let settings { attemptInferredTitle(jobs: jobs, settings: settings) }
     }
 
     // MARK: - Search prefill from the disc name
@@ -441,6 +451,88 @@ final class RipFlowController {
             prefillAttemptedFor = disc
             search.query = term
             searchThenTryTheDiscsOwnTitle(jobs: jobs, disc: disc, apiKey: apiKey)
+        }
+    }
+
+    /// Retry the search with the disc's own printed title, once the menu read
+    /// has produced one.
+    ///
+    /// The timing is why this exists separately from the prefill. The scan
+    /// finishes, the box is prefilled from the volume label and searched —
+    /// and the menu read, which is what knows the disc's printed title, only
+    /// finishes about a minute later. The first search's own completion is
+    /// therefore too early to ask: on Enemy at the Gates the fallback ran,
+    /// found `titleText` still nil, and did nothing, which looked exactly
+    /// like the fallback not working at all.
+    ///
+    /// Driven instead by the menus arriving. Once per disc, and never over a
+    /// search that worked or a query the user has touched.
+    private func attemptMenuTitleFallback(jobs: JobController, apiKey: String) {
+        guard let disc = jobs.insertedDisc,
+              menuTitleTriedFor != disc,
+              search.lastSearchedQuery != nil,
+              search.results.isEmpty,
+              !search.isLoading,
+              search.errorMessage == nil,
+              search.selectedMovie == nil,
+              let printed = jobs.menuState.intelligence?.titleText?.text,
+              !printed.isEmpty,
+              // The box still holds what we put there, so nothing the user
+              // typed is about to be overwritten.
+              search.query == search.lastSearchedQuery,
+              MenuArchive.fold(printed) != MenuArchive.fold(search.query)
+        else { return }
+
+        menuTitleTriedFor = disc
+        search.query = printed
+        search.runSearchNow(apiKey: apiKey)
+    }
+
+    /// Ask the on-device model what film this is, from everything the disc
+    /// printed on its menus.
+    ///
+    /// Last of all, and only when every deterministic route has produced a
+    /// term TMDB does not recognise. The rules read structure — word
+    /// boundaries in a label, the tallest text on an entry menu — and a disc
+    /// that hides its title from both of those is asking a language question:
+    /// a person reading SCENE SELECTION, THE WOLF HUNTER and INSIDE ENEMY AT
+    /// THE GATES names the film at once.
+    ///
+    /// The answer is searched, never selected. If TMDB knows no such film,
+    /// nothing changes and the user types as they do today.
+    private func attemptInferredTitle(jobs: JobController, settings: AppSettings) {
+        guard settings.usesAppleIntelligence,
+              let disc = jobs.insertedDisc,
+              inferenceTriedFor != disc,
+              search.lastSearchedQuery != nil,
+              search.results.isEmpty,
+              !search.isLoading,
+              search.errorMessage == nil,
+              search.selectedMovie == nil,
+              search.query == search.lastSearchedQuery,
+              let question = DiscTitleInference.question(
+                  volumeName: disc.mountURL.lastPathComponent,
+                  ocr: jobs.menuState.intelligence?.ocr
+              )
+        else { return }
+
+        inferenceTriedFor = disc
+        let apiKey = settings.tmdbAPIKey
+        Task { [weak self] in
+            let answer = await DiscTitleInference.answer(for: question)
+            guard let self, jobs.insertedDisc == disc else { return }
+            // Everything that was true when the question was asked has to
+            // still be true: a minute has passed and the user may have typed,
+            // searched or chosen in it.
+            guard let title = answer.title,
+                  self.search.results.isEmpty,
+                  self.search.selectedMovie == nil,
+                  self.search.query == self.search.lastSearchedQuery,
+                  MenuArchive.fold(title) != MenuArchive.fold(self.search.query)
+            else { return }
+
+            self.search.query = title
+            self.search.runSearchNow(apiKey: apiKey)
         }
     }
 

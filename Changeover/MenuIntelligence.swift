@@ -28,6 +28,12 @@ nonisolated struct MenuIntelligence: Equatable, Sendable {
     var buttonLabels: [MenuButtonRef: String] = [:]
 
     /// The stills the chapter names were read from, in page order.
+    /// The OCR document the rest of this was derived from, kept so a later
+    /// stage can ask a question of the disc's own words without re-reading
+    /// the disc — `DiscTitleInference` needs every line, not the handful the
+    /// rules picked out.
+    var ocr: MenuOCRDocument?
+
     var chapterPages: [String] = []
     var chapterNames: [ChapterNames.Candidate] = []
     /// The rows that will be written as `--markers=<file>`, or empty when the
@@ -253,6 +259,7 @@ extension MenuIntelligence {
         }
 
         if let ocr {
+            result.ocr = ocr
             let pages = MenuPages.chapterPages(
                 ocr: ocr,
                 structure: structure,
