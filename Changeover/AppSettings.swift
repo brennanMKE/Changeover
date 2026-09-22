@@ -29,6 +29,18 @@ final class AppSettings {
     /// track also carries the original AC3 mix — the layout #0017 verified
     /// direct-plays on Apple TV — at the cost of the extra bitrate.
     var keepOriginalAudioTrack: Bool = false
+    /// Whether Apple Intelligence may be used to read a disc's own words.
+    ///
+    /// Covers every model-backed use at once (`docs/foundation-models.md`):
+    /// the play-button caption today, and the search-term and result-picking
+    /// help planned in `docs/disc-name-inference.md`. On by default, because
+    /// each use only ever fills something in that the user is already looking
+    /// at and can change — and off is always a working app, since none of
+    /// them decides what gets encoded.
+    ///
+    /// Read on every call rather than captured at launch, so switching it
+    /// takes effect on the next disc without relaunching.
+    var usesAppleIntelligence: Bool = true
     /// Menu intelligence — `Tools/menudump`'s helper, which reads a disc's
     /// menu tables and button geometry. Empty means "find it": the app looks
     /// in its own bundle, then Homebrew's and `/usr/local`'s bins, then a
@@ -135,6 +147,12 @@ final class AppSettings {
             preferredAudioLanguages = v.compactMap(LanguageCode.normalize)
         }
         keepOriginalAudioTrack = d.bool(forKey: Keys.keepOriginalAudioTrack)
+        // `bool(forKey:)` is false for a key that was never written, which
+        // would turn this off for every existing install. Default on unless
+        // the user has actually said otherwise.
+        if d.object(forKey: Keys.usesAppleIntelligence) != nil {
+            usesAppleIntelligence = d.bool(forKey: Keys.usesAppleIntelligence)
+        }
         // Both may legitimately be empty ("find it" / "not installed"), so a
         // stored empty string is honoured rather than falling back to the
         // default the way the required paths above do.
@@ -155,6 +173,7 @@ final class AppSettings {
         d.set(tmdbAPIKey,     forKey: Keys.tmdbAPIKey)
         d.set(preferredAudioLanguages.compactMap(LanguageCode.normalize), forKey: Keys.preferredAudioLanguages)
         d.set(keepOriginalAudioTrack, forKey: Keys.keepOriginalAudioTrack)
+        d.set(usesAppleIntelligence, forKey: Keys.usesAppleIntelligence)
         d.set(menudumpPath, forKey: Keys.menudumpPath)
         d.set(menuArchivePath, forKey: Keys.menuArchivePath)
         d.set(ffmpegPath,   forKey: Keys.ffmpegPath)
@@ -180,6 +199,7 @@ final class AppSettings {
         static let tmdbAPIKey     = "tmdbAPIKey"
         static let preferredAudioLanguages = "preferredAudioLanguages"
         static let keepOriginalAudioTrack = "keepOriginalAudioTrack"
+        static let usesAppleIntelligence = "usesAppleIntelligence"
         static let menudumpPath = "menudumpPath"
         static let menuArchivePath = "menuArchivePath"
         static let ffmpegPath   = "ffmpegPath"

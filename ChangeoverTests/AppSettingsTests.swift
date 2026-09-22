@@ -105,4 +105,37 @@ struct AppSettingsTests {
         #expect(reloaded.tmdbAPIKey.isEmpty)
     }
 
+    // MARK: - Apple Intelligence
+
+    /// On by default, and — the part that actually bites — on for an install
+    /// that predates the key. `UserDefaults.bool(forKey:)` answers false for
+    /// a key never written, so reading it unconditionally would silently turn
+    /// the feature off for every existing user the moment it shipped.
+    @Test func appleIntelligenceDefaultsOnIncludingForAnOlderInstall() {
+        let settings = AppSettings()
+        #expect(settings.usesAppleIntelligence, "a fresh install has it on")
+
+        let suite = "changeover.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        // An older install: every other key present, this one never written.
+        defaults.set("/Volumes/Media/Media", forKey: "plexMediaRoot")
+        let loaded = AppSettings(defaults: defaults)
+        #expect(loaded.usesAppleIntelligence, "an install predating the key keeps it on")
+    }
+
+    /// And an explicit off survives a reload — the toggle has to mean
+    /// something.
+    @Test func turningAppleIntelligenceOffIsRemembered() {
+        let suite = "changeover.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+
+        let settings = AppSettings(defaults: defaults)
+        settings.usesAppleIntelligence = false
+        settings.persist()
+
+        #expect(!AppSettings(defaults: defaults).usesAppleIntelligence)
+    }
+
 }

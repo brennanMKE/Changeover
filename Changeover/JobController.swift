@@ -292,6 +292,12 @@ final class JobController {
     /// Plain `var` for the same reason `scanState` is: a test puts the
     /// controller in a known menu state without a helper or a disc.
     var menuState: MenuState = .idle
+    /// Mirror of `AppSettings.usesAppleIntelligence`, refreshed each time a
+    /// disc's menus are read — `askTheModel` runs from a task with no
+    /// `AppSettings` in hand, and threading one through every menu callback
+    /// to read a single Bool would be a worse trade than keeping this in
+    /// step at the one point the setting can matter.
+    private var usesAppleIntelligence: Bool = true
 
     /// The settled feature title index — the heuristic's `.single`
     /// preselection, or an explicit user pick from the table (#0026). `nil`
@@ -1255,6 +1261,7 @@ final class JobController {
         let scanTitles = Set(scan.disc.titles.map(\.index))
         let read = menuRunner
 
+        usesAppleIntelligence = settings.usesAppleIntelligence
         menuState = .reading
         menuTask = Task { [weak self] in
             let state = await read(discPath, tools, chapterCount, scanTitles, { line in
@@ -1282,6 +1289,9 @@ final class JobController {
     /// button does not resolve to a title the scan found produces no caption
     /// at all. Unavailable, refused, guarded, "none of these": all silence.
     private func askTheModel(forDisc disc: DiscInsertion, generation: Int) {
+        // The Settings switch, read here rather than captured at launch, so
+        // turning it off takes effect on the next disc without relaunching.
+        guard usesAppleIntelligence else { return }
         guard case .ready(let menu) = menuState, let question = menu.judgeQuestion else { return }
         guard case .scanned(let scan) = scanState else { return }
         let scanTitles = Set(scan.disc.titles.map(\.index))
