@@ -3,7 +3,7 @@ import Foundation
 /// #0024 — runs the disc scan and tells a real failure apart from a disc
 /// with nothing on it.
 ///
-/// Runs `HandBrakeCLI -i <VIDEO_TS> --scan --title 0 --min-duration 1
+/// Runs `HandBrakeCLI -i <VIDEO_TS> --scan --title 0 --min-duration 30
 /// --json` via the shared `ProcessRunner` (whose line splitting and
 /// drain-before-resume behaviour this ticket's Notes flagged as the latent
 /// bug to not inherit — it is already fixed there). `--title 0` is
@@ -91,8 +91,33 @@ nonisolated enum DiscScanner {
     /// for long stretches by design (progress arrives in bursts).
     static let scanWatchdog: ProcessRunner.Watchdog = .absolute(15 * 60)
 
+    /// The shortest title worth examining, in seconds.
+    ///
+    /// A scan seeks to every title it is willing to consider and reads a
+    /// little of each, so this is the main thing deciding how long the drive
+    /// works and how loud it is about it. The measured drive is USB 2.0 at
+    /// about 5.6 MB/s, where a full scan runs for minutes of near-continuous
+    /// head movement — the "strange sounds" reported on 2026-09-21, which the
+    /// system log showed were seeking rather than any read error.
+    ///
+    /// **Why sub-30-second titles are never wanted.** Discs pad their title
+    /// tables with stubs: Oppenheimer declares four (titles 8, 9, 11 and 34)
+    /// of half a second each, and one of them, title 9, is what a naive
+    /// menu-chain follower would have reported as the feature. Nothing in the
+    /// app can ever choose one — `MainFeature`, the 45-minute fallback and
+    /// the runtime cross-check all rule them out — so reading them costs
+    /// drive time to produce rows that exist only to be discarded.
+    ///
+    /// 30 seconds rather than something larger because **extras are real
+    /// content** (`ExtrasPlan`): a trailer runs about ninety seconds and a
+    /// menu-loop featurette can be shorter still, and the user rips those on
+    /// purpose. The cut is aimed at half-second stubs, with an order of
+    /// magnitude of headroom under the shortest thing anyone would keep.
+    static let minimumTitleSeconds = 30
+
     nonisolated static func scanArguments(discPath: String) -> [String] {
-        ["-i", discPath, "--scan", "--title", "0", "--min-duration", "1", "--json"]
+        ["-i", discPath, "--scan", "--title", "0",
+         "--min-duration", String(minimumTitleSeconds), "--json"]
     }
 
     @concurrent

@@ -212,8 +212,21 @@ struct DiscScannerTests {
         let argv = try #require(lines.first)
         #expect(argv.contains("--scan"))
         #expect(argv.contains("--title 0"))
-        #expect(argv.contains("--min-duration 1"))
+        #expect(argv.contains("--min-duration \(DiscScanner.minimumTitleSeconds)"))
         #expect(argv.contains("--json"))
+    }
+
+    /// The floor is a drive-time decision with a content risk on the other
+    /// side of it, so it is stated rather than left to whoever edits the
+    /// argument vector next.
+    ///
+    /// Above half a second, because sub-second stubs are the whole point —
+    /// Oppenheimer declares four and nothing in the app can ever choose one.
+    /// Below ninety, because a trailer is about that long and extras are
+    /// content the user rips on purpose (`ExtrasPlan`).
+    @Test func theTitleFloorSkipsStubsWithoutReachingExtras() {
+        #expect(DiscScanner.minimumTitleSeconds > 1)
+        #expect(DiscScanner.minimumTitleSeconds < 90)
     }
 
     // MARK: - Warning classification (pure)

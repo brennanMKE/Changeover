@@ -1,6 +1,6 @@
 import Foundation
 
-/// #0023 — parses `HandBrakeCLI --scan --title 0 --min-duration 1 --json`
+/// #0023 — parses `HandBrakeCLI --scan --title 0 --min-duration 30 --json`
 /// output into a `DiscInfo`.
 ///
 /// Pure function: bytes in, `DiscInfo` out. No `Process`, no file system, no
