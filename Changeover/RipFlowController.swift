@@ -102,6 +102,11 @@ final class RipFlowController {
     /// this instead of a half-finished guess.
     private(set) var isResolvingDisc = false
 
+    /// The row to mark as the recommendation, when the disc's runtime
+    /// identified one. Presentation only — the selection itself is
+    /// `search.selectedMovie`, and clearing this would not unpick anything.
+    private(set) var recommendedMovieID: Int?
+
     /// `search` is optional rather than defaulted to `MovieSearchViewModel()`
     /// in the signature: a default argument expression is evaluated in a
     /// `nonisolated` context, and the view model is explicitly `@MainActor`.
@@ -565,7 +570,12 @@ final class RipFlowController {
               let searched = search.lastSearchedQuery,
               autoSelectTriedFor != searched,
               let featureSeconds = jobs.featureDurationSeconds
-        else { return }
+        else {
+            FlowDiagnostics.note("""
+                autoselect skipped: on=\(settings.autoSelectSearchResult)                 results=\(search.results.count)                 selected=\(search.selectedMovie?.id.description ?? "nil")                 searched=\(search.lastSearchedQuery ?? "nil")                 tried=\(autoSelectTriedFor ?? "nil")                 feature=\(jobs.featureDurationSeconds.map(String.init) ?? "nil")
+                """)
+            return
+        }
 
         autoSelectTriedFor = searched
         let apiKey = settings.tmdbAPIKey
@@ -584,8 +594,23 @@ final class RipFlowController {
                 discDurationSeconds: featureSeconds,
                 searchTerm: searched
             )
+            FlowDiagnostics.note("""
+                autoselect ran: disc=\(featureSeconds)s                 candidates=\(candidates.map { "\($0.id):\($0.runtimeMinutes.map(String.init) ?? "nil")" }.joined(separator: ","))                 -> \(decision)
+                """)
+            // Order the list by the disc's own runtime before anything is
+            // chosen. TMDB ranks by its popularity, which put a 2021 film of
+            // the same name above the 2001 one actually in the drive; a user
+            // who disagrees with the pick should still find the plausible
+            // rows together at the top rather than hunting for them.
+            let order = MovieAutoSelect.ranked(
+                candidates: candidates, discDurationSeconds: featureSeconds
+            ).map(\.id)
+            self.search.reorder(byID: order)
+            self.recommendedMovieID = decision.selectedID
+
             guard let id = decision.selectedID else { return }
             self.select(movieID: id, jobs: jobs, apiKey: apiKey)
+            FlowDiagnostics.note("autoselect applied: \(id); selectedMovie=\(self.search.selectedMovie?.id.description ?? "nil")")
         }
     }
 

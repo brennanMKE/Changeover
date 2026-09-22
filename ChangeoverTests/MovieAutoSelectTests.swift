@@ -8,12 +8,12 @@ struct MovieAutoSelectTests {
 
     /// The real result set, as TMDB returned it on 2026-09-22, with the
     /// runtimes a details lookup gives. The disc's feature runs 131 minutes.
-    static let enemyAtTheGates = [
-        MovieAutoSelect.Candidate(id: 874214, title: "Enemy at the Gates", runtimeMinutes: 8),
+    nonisolated static let enemyAtTheGates = [
+        MovieAutoSelect.Candidate(id: 874214, title: "Enemy at the Gates", runtimeMinutes: 106),
         MovieAutoSelect.Candidate(id: 853, title: "Enemy at the Gates", runtimeMinutes: 131),
-        MovieAutoSelect.Candidate(id: 1556038, title: "Enemy at the Gates Iran's Threat to America", runtimeMinutes: 45),
+        MovieAutoSelect.Candidate(id: 1556038, title: "Enemy at the Gates Iran's Threat to America", runtimeMinutes: 43),
     ]
-    static let discSeconds = 131 * 60
+    nonisolated static let discSeconds = 131 * 60
 
     @Test func theDiscsRuntimePicksTheRightFilmFromIdenticalTitles() {
         let decision = MovieAutoSelect.decide(
@@ -111,6 +111,53 @@ struct MovieAutoSelectTests {
 
     @Test func anHourOutDoesNotMatch() {
         #expect(!MovieAutoSelect.withinTolerance(discSeconds: 131 * 60, runtimeMinutes: 45))
-        #expect(!MovieAutoSelect.withinTolerance(discSeconds: 131 * 60, runtimeMinutes: 8))
+        #expect(!MovieAutoSelect.withinTolerance(discSeconds: 131 * 60, runtimeMinutes: 106))
+    }
+}
+
+/// Ordering the list by the disc's runtime, so the plausible rows are
+/// together at the top whether or not the pre-selection is accepted.
+struct MovieAutoSelectRankingTests {
+
+    @Test func theClosestRuntimeLeadsAndTMDBsOrderIsOverridden() {
+        // TMDB returned the 2021 film first; the disc runs 131 minutes.
+        let ranked = MovieAutoSelect.ranked(
+            candidates: MovieAutoSelectTests.enemyAtTheGates,
+            discDurationSeconds: MovieAutoSelectTests.discSeconds
+        )
+        #expect(ranked.first?.id == 853)
+    }
+
+    /// Candidates the runtime cannot speak for keep the order TMDB gave
+    /// them, rather than being shuffled by a number that does not apply.
+    @Test func unmatchedCandidatesKeepTheirOriginalOrder() {
+        let candidates = [
+            MovieAutoSelect.Candidate(id: 1, title: "A", runtimeMinutes: nil),
+            MovieAutoSelect.Candidate(id: 2, title: "B", runtimeMinutes: 200),
+            MovieAutoSelect.Candidate(id: 3, title: "C", runtimeMinutes: 131),
+            MovieAutoSelect.Candidate(id: 4, title: "D", runtimeMinutes: nil),
+        ]
+        let ranked = MovieAutoSelect.ranked(candidates: candidates, discDurationSeconds: 131 * 60)
+        #expect(ranked.map(\.id) == [3, 1, 2, 4])
+    }
+
+    /// With no disc runtime there is nothing to rank by, and TMDB's order
+    /// stands untouched.
+    @Test func withoutADiscRuntimeNothingIsReordered() {
+        let ranked = MovieAutoSelect.ranked(
+            candidates: MovieAutoSelectTests.enemyAtTheGates, discDurationSeconds: nil
+        )
+        #expect(ranked.map(\.id) == MovieAutoSelectTests.enemyAtTheGates.map(\.id))
+    }
+
+    /// Two equally close candidates keep their relative order, so the
+    /// ranking is stable and a redraw never reshuffles the list.
+    @Test func equallyCloseCandidatesKeepTheirRelativeOrder() {
+        let candidates = [
+            MovieAutoSelect.Candidate(id: 10, title: "First", runtimeMinutes: 131),
+            MovieAutoSelect.Candidate(id: 11, title: "Second", runtimeMinutes: 131),
+        ]
+        let ranked = MovieAutoSelect.ranked(candidates: candidates, discDurationSeconds: 131 * 60)
+        #expect(ranked.map(\.id) == [10, 11])
     }
 }

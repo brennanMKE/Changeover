@@ -250,6 +250,19 @@ final class MovieSearchViewModel {
         self.isLoading = false
     }
 
+    /// Put the results in a given order, leaving anything unnamed at the end
+    /// in its current order. Presentation only — no request, no selection
+    /// change.
+    func reorder(byID order: [Int]) {
+        guard !order.isEmpty else { return }
+        let rank = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
+        results = results.enumerated().sorted { a, b in
+            let rankA = rank[a.element.id] ?? Int.max
+            let rankB = rank[b.element.id] ?? Int.max
+            return rankA == rankB ? a.offset < b.offset : rankA < rankB
+        }.map(\.element)
+    }
+
     /// The current results as auto-select candidates, each with the runtime
     /// a details lookup gives.
     ///

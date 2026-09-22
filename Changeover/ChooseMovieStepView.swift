@@ -46,7 +46,9 @@ struct ChooseMovieStepView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
             List(search.results, selection: selection) { movie in
-                MovieRow(movie: movie, posterURL: search.posterURL(for: movie))
+                MovieRow(movie: movie, posterURL: search.posterURL(for: movie),
+                         isRecommended: movie.id == flow.recommendedMovieID,
+                         isChosen: movie.id == flow.selectedMovieID)
                     .tag(movie.id)
                     .contentShape(Rectangle())
                     // Double-click is the shortcut for "this one, go" —
@@ -166,14 +168,40 @@ struct MovieRow: View {
 
     let movie:     TMDBMovie
     let posterURL: URL?
+    /// The row the disc's own runtime identified. Marked as well as
+    /// pre-selected, because a selection highlight alone reads as "this is
+    /// where the cursor is" rather than "this is the one that matches".
+    var isRecommended = false
+    /// Whether this is the chosen row.
+    ///
+    /// Drawn by the row rather than left to the List, because an unfocused
+    /// List draws its selection in a grey faint enough to read as nothing at
+    /// all — and this is a menu bar app whose window is usually not key, so
+    /// unfocused is the normal case. A pre-selection nobody can see is the
+    /// same as no pre-selection.
+    var isChosen = false
 
     var body: some View {
         HStack(spacing: 10) {
+            Image(systemName: isChosen ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isChosen ? Color.accentColor : Color.secondary.opacity(0.35))
+                .accessibilityHidden(true)
             posterThumb
             VStack(alignment: .leading, spacing: 3) {
-                Text(movie.title)
-                    .font(.headline)
-                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(movie.title)
+                        .font(.headline)
+                        .lineLimit(2)
+                    if isRecommended {
+                        Text("Best match")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.accentColor.opacity(0.2), in: Capsule())
+                            .foregroundStyle(Color.accentColor)
+                            .accessibilityLabel("Best match — this film's length matches the disc")
+                    }
+                }
                 // The year is what tells two films of the same name apart on
                 // screen; the database id is what tells Plex. Only one of
                 // those is the person's problem, so the id is detail.

@@ -113,6 +113,44 @@ nonisolated enum MovieAutoSelect {
         return .abstain(reason: "\(matching.count) results are the right length — pick one")
     }
 
+    /// The candidates in the order they should be shown: closest runtime
+    /// first, then everything else in the order TMDB gave.
+    ///
+    /// TMDB ranks by its own popularity, which put a 2021 film of the same
+    /// name above the 2001 one actually in the drive. The disc's runtime is
+    /// the better ordering and it costs nothing to apply — a user who
+    /// disagrees with the pre-selection still finds the plausible rows
+    /// together at the top instead of hunting.
+    ///
+    /// Stable: candidates with no runtime, or outside tolerance, keep their
+    /// original relative order rather than being shuffled by a number that
+    /// does not apply to them.
+    static func ranked(candidates: [Candidate], discDurationSeconds: Int?) -> [Candidate] {
+        guard let disc = discDurationSeconds else { return candidates }
+        func distance(_ candidate: Candidate) -> Int? {
+            guard let minutes = candidate.runtimeMinutes else { return nil }
+            guard withinTolerance(discSeconds: disc, runtimeMinutes: minutes) else { return nil }
+            return abs(disc - minutes * 60)
+        }
+        struct Scored {
+            var order: Int
+            var candidate: Candidate
+            var delta: Int
+        }
+        var scored: [Scored] = []
+        for (index, candidate) in candidates.enumerated() {
+            guard let delta = distance(candidate) else { continue }
+            scored.append(Scored(order: index, candidate: candidate, delta: delta))
+        }
+        scored.sort { left, right in
+            left.delta == right.delta ? left.order < right.order : left.delta < right.delta
+        }
+        let matching: [Candidate] = scored.map { $0.candidate }
+        let matchingIDs = Set(matching.map { $0.id })
+        let rest = candidates.filter { !matchingIDs.contains($0.id) }
+        return matching + rest
+    }
+
     /// The same tolerance the cross-check uses, for the same reason: a PAL
     /// transfer runs about 4% fast, so anything tighter rejects correct
     /// matches on perfectly ordinary discs.
