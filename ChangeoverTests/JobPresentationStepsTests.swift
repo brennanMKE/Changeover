@@ -182,7 +182,11 @@ struct JobPresentationStepsTests {
         #expect(card.headline == "Fargo (1996) — Failed")
         #expect(card.tone == .failure)
         #expect(card.lines.first == FailurePresenter.message(for: failure).headline)
-        #expect(card.actions == [.showLog, .adjustAndRetry, .retry, .nextDisc])
+        // Eject is offered because the disc is still in the drive. A failed
+        // job deliberately keeps it there for a retry, but the user must
+        // still have a way to take it out without hunting through the menu
+        // bar — the tray opening is what says "ready for the next one".
+        #expect(card.actions == [.showLog, .adjustAndRetry, .retry, .eject, .nextDisc])
     }
 
     /// Retry is offered only when `JobController.retryDecision` allows it —
@@ -195,7 +199,7 @@ struct JobPresentationStepsTests {
             retryDecision: .refuse(reason: "a different disc is in the drive — insert this job's disc"),
             discEjected: false
         )
-        #expect(card.actions == [.showLog, .nextDisc])
+        #expect(card.actions == [.showLog, .eject, .nextDisc])
     }
 
     @Test func aCancelledJobIsNotAFailure() throws {
@@ -204,7 +208,7 @@ struct JobPresentationStepsTests {
         let card = JobPresentation.outcomeCard(for: snapshot, retryDecision: .retry, discEjected: false)
         #expect(card.headline == "Fargo (1996) — Cancelled")
         #expect(card.tone == .neutral)
-        #expect(card.actions == [.showLog, .adjustAndRetry, .retry, .nextDisc])
+        #expect(card.actions == [.showLog, .adjustAndRetry, .retry, .eject, .nextDisc])
     }
 
     /// #0052 — a disc pulled mid-job ends `.cancelled`, and the card says so

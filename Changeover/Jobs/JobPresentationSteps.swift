@@ -252,7 +252,7 @@ extension JobPresentation {
                 tone: .failure,
                 lines: lines,
                 plainLines: plainLines,
-                actions: retryActions(retryDecision: retryDecision, discUnavailable: discUnavailable)
+                actions: retryActions(retryDecision: retryDecision, discUnavailable: discUnavailable, discEjected: discEjected)
             )
 
         case .cancelled where discRemovedDuringJob:
@@ -275,7 +275,7 @@ extension JobPresentation {
                 tone: .neutral,
                 lines: [elapsed],
                 plainLines: [plainStoppedLine(snapshot, discEjected: discEjected, discUnavailable: discUnavailable)],
-                actions: retryActions(retryDecision: retryDecision, discUnavailable: discUnavailable)
+                actions: retryActions(retryDecision: retryDecision, discUnavailable: discUnavailable, discEjected: discEjected)
             )
 
         case .starting, .encoding, .fallback, .organizing, .extras:
@@ -313,13 +313,23 @@ extension JobPresentation {
         return discEjected ? "The disc has been ejected." : "The disc is still in the drive."
     }
 
-    private static func retryActions(retryDecision: RetryDecision, discUnavailable: Bool) -> [OutcomeCard.Action] {
+    private static func retryActions(
+        retryDecision: RetryDecision,
+        discUnavailable: Bool,
+        discEjected: Bool
+    ) -> [OutcomeCard.Action] {
         var actions: [OutcomeCard.Action] = [.showLog]
         if retryDecision == .retry {
             actions.append(.adjustAndRetry)
             actions.append(.retry)
         }
-        if discUnavailable { actions.append(.eject) }
+        // Offer Eject whenever the disc is still there, not only after a
+        // partial eject. The tray opening is what tells the user the machine
+        // is ready for the next disc, so a disc that stayed in — because the
+        // automatic eject was refused, or because this job failed and the
+        // disc was deliberately kept for a retry — otherwise leaves them with
+        // nothing to press and no explanation on screen.
+        if discUnavailable || !discEjected { actions.append(.eject) }
         actions.append(.nextDisc)
         return actions
     }

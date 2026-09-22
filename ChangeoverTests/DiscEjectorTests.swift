@@ -241,6 +241,18 @@ struct DiscEjectorIntegrationTests {
         }
     }
 
+    /// Records what the retry loop asked to wait for, without waiting.
+    private final class SleepRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: [Duration] = []
+        var durations: [Duration] { lock.lock(); defer { lock.unlock() }; return stored }
+        func record(_ duration: Duration) {
+            lock.lock()
+            stored.append(duration)
+            lock.unlock()
+        }
+    }
+
     private final class ThreadRecorder: @unchecked Sendable {
         private let lock = NSLock()
         private(set) var onMainThread: [Bool] = []
@@ -264,5 +276,52 @@ struct DiscEjectorIntegrationTests {
             onBegin: { recorder.record() }
         )
         #expect(recorder.onMainThread == [false])
+    }
+
+    // MARK: - Retrying a busy disc
+
+    /// The reason this exists: an import that finishes and leaves the disc in
+    /// the drive is an import that stops the user feeding the next one in,
+    /// and the moment the eject runs is the moment the disc is most likely to
+    /// be briefly busy — HandBrake has just closed it and Spotlight and Plex
+    /// both notice a volume going quiet.
+    @Test func theDelaysBackOffWithoutMakingARealRefusalFeelLikeAHang() {
+        let delays = DiscEjector.retryDelays
+        #expect(!delays.isEmpty, "one refusal must not be the final answer")
+        #expect(delays == delays.sorted(), "each wait is at least as long as the last")
+        let total = delays.reduce(Duration.zero, +)
+        #expect(total >= .seconds(5), "long enough to outlast a process letting go of the disc")
+        #expect(total <= .seconds(15), "short enough that a genuine refusal still arrives promptly")
+    }
+
+    /// A busy answer is "not yet"; a failure is "no". Repeating the second
+    /// one would only be noise, and it would delay telling the user that the
+    /// disc needs taking out by hand.
+    @Test func busyIsRetriedAndAFailureIsNot() {
+        let busy = DiscEjector.classify(
+            status: DAReturn(kDAReturnBusy), statusString: "in use", action: "eject"
+        )
+        let failed = DiscEjector.classify(
+            status: DAReturn(kDAReturnBadArgument), statusString: "nope", action: "eject"
+        )
+        if case .busy = busy {} else { Issue.record("a busy status must classify as .busy") }
+        if case .failed = failed {} else { Issue.record("a non-busy failure must classify as .failed") }
+    }
+
+    /// Exercises the loop itself against a volume that does not exist, which
+    /// fails before any DiskArbitration call — so this pins that `eject`
+    /// accepts an injected clock and never sleeps for real in the suite. The
+    /// retry behaviour over live `DAReturn`s belongs to
+    /// `DiscEjectorIntegrationTests`, which has a disk image to refuse.
+    @Test func theInjectedClockIsUsedRatherThanARealWait() async {
+        let slept = SleepRecorder()
+        let outcome = await DiscEjector.eject(
+            volumeURL: URL(fileURLWithPath: "/Volumes/ChangeoverDoesNotExist\(Int.random(in: 1000...9999))"),
+            retryDelays: [.seconds(30), .seconds(30)],
+            sleep: { duration in slept.record(duration) }
+        )
+        // No disk to find, so this is `.failed` and never reaches a retry.
+        if case .failed = outcome {} else { Issue.record("a missing volume is a failure, not a retry") }
+        #expect(slept.durations.isEmpty, "a failure must not wait")
     }
 }

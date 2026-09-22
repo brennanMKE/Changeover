@@ -64,6 +64,45 @@ nonisolated enum DiscEjector {
         outcome.failure == nil
     }
 
+    /// How long to keep asking, when the answer is "busy".
+    ///
+    /// A disc that will not eject is the thing that stops the user feeding
+    /// the next one in, so an eject that gives up on its first refusal is an
+    /// eject that sometimes silently ends the evening's ripping. And the
+    /// moment this runs is the worst one to ask: HandBrake has just closed a
+    /// file it read for forty minutes, and Spotlight and Plex both notice a
+    /// volume going quiet. `kDAReturnBusy` there means "not yet", not "no" —
+    /// whoever holds the disc is finishing, not settling in.
+    ///
+    /// Backing off to about eight seconds in total covers that window without
+    /// making a genuine refusal feel like a hang. Only `.busy` is retried: a
+    /// `.failed` is a different answer and repeating it would just be noise.
+    static let retryDelays: [Duration] = [
+        .milliseconds(500), .seconds(1), .seconds(2), .seconds(4),
+    ]
+
+    /// Run one DiskArbitration step until it succeeds, refuses for a reason
+    /// other than busy, or the delays run out.
+    ///
+    /// `sleep` is a parameter so the retry logic is exercised at full speed
+    /// in tests — a suite that actually waited eight seconds per case is a
+    /// suite that stops being run.
+    private static func attempting(
+        _ action: String,
+        retryDelays: [Duration],
+        sleep: @Sendable (Duration) async -> Void,
+        step: () async -> (DAReturn, String?)
+    ) async -> Outcome {
+        var remaining = retryDelays[...]
+        while true {
+            let (status, message) = await step()
+            let outcome = classify(status: status, statusString: message, action: action)
+            guard case .busy = outcome, let delay = remaining.first else { return outcome }
+            remaining = remaining.dropFirst()
+            await sleep(delay)
+        }
+    }
+
     /// Unmounts and ejects the disc mounted at `volumeURL`. Creates its own
     /// private `DASession`, scheduled on a private dispatch queue for the
     /// lifetime of this one call only (mirroring `DVDMonitor`'s init/deinit
@@ -80,7 +119,12 @@ nonisolated enum DiscEjector {
     /// `DiscEjectorIntegrationTests.ejectNeverRunsOnTheMainActor` uses to
     /// pin it.
     @concurrent
-    nonisolated static func eject(volumeURL: URL, onBegin: @Sendable () -> Void = {}) async -> Outcome {
+    nonisolated static func eject(
+        volumeURL: URL,
+        onBegin: @Sendable () -> Void = {},
+        retryDelays: [Duration] = DiscEjector.retryDelays,
+        sleep: @Sendable @escaping (Duration) async -> Void = { try? await Task.sleep(for: $0) }
+    ) async -> Outcome {
         onBegin()
 
         guard let session = DASessionCreate(kCFAllocatorDefault) else {
@@ -105,12 +149,18 @@ nonisolated enum DiscEjector {
             return .failed(message: "Could not find the whole-disk object for \(volumeURL.path).")
         }
 
-        let (unmountStatus, unmountMessage) = await unmount(disk)
-        let unmountOutcome = classify(status: unmountStatus, statusString: unmountMessage, action: "unmount")
+        // Both halves get their own retry budget. The disk object is resolved
+        // once, above, and reused: after a successful unmount the volume path
+        // no longer resolves, so re-deriving it per attempt would turn a
+        // retryable eject into "could not find a disk".
+        let unmountOutcome = await attempting(
+            "unmount", retryDelays: retryDelays, sleep: sleep
+        ) { await unmount(disk) }
         guard unmountOutcome == .ejected else { return unmountOutcome }
 
-        let (ejectStatus, ejectMessage) = await ejectFromDrive(disk)
-        let ejectOutcome = classify(status: ejectStatus, statusString: ejectMessage, action: "eject")
+        let ejectOutcome = await attempting(
+            "eject", retryDelays: retryDelays, sleep: sleep
+        ) { await ejectFromDrive(disk) }
         return combine(unmountOutcome: unmountOutcome, ejectOutcome: ejectOutcome)
     }
 
