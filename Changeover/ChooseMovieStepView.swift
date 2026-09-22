@@ -42,7 +42,7 @@ struct ChooseMovieStepView: View {
                 // by showing an empty list — indistinguishable from a search
                 // nobody had run. Whatever the state, something says what it
                 // is and what to do next.
-                SearchEmptyState(search: search)
+                SearchEmptyState(search: search, isResolvingDisc: flow.isResolvingDisc)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
             List(search.results, selection: selection) { movie in
@@ -220,10 +220,18 @@ struct MovieRow: View {
 /// that matches no film — and the app's entire response was empty space.
 private struct SearchEmptyState: View {
     let search: MovieSearchViewModel
+    /// The disc is being looked up: its label tried, its menus read, and the
+    /// model asked if those failed. Shown instead of a half-finished guess,
+    /// because a guess in the box is something the user starts correcting.
+    var isResolvingDisc = false
 
     var body: some View {
         VStack(spacing: 8) {
-            if search.isLoading {
+            if isResolvingDisc {
+                ProgressView()
+                Text("Looking up this disc…")
+                    .foregroundStyle(.secondary)
+            } else if search.isLoading {
                 ProgressView()
                 Text("Searching…")
                     .foregroundStyle(.secondary)

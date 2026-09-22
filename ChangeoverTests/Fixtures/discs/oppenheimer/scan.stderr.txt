@@ -1,0 +1,382 @@
+[17:00:33] Compile-time hardening features are enabled
+[17:00:33] hb_init: starting libhb thread
+[17:00:33] thread 16f987000 started ("libhb")
+HandBrake 1.11.2 (2026060700) - Darwin arm64 - https://handbrake.fr
+8 CPUs detected
+Opening /dev/disk4...
+[17:00:33] OS: macOS 27.0 (26A428)
+[17:00:33] CPU: Apple M1
+[17:00:33]  - logical processor count: 8
+[17:00:33] hb_scan: path=/dev/disk4, title_index=0
+disc.c:333: failed opening UDF image /dev/disk4
+disc.c:437: error opening file BDMV/index.bdmv
+disc.c:437: error opening file BDMV/BACKUP/index.bdmv
+[17:00:33] bd: not a bd - trying as a stream/file instead
+libdvdread: Could not open /dev/disk4 with libdvdcss.
+libdvdread: Can't open /dev/disk4 for reading
+libdvdnav: Unable to open device file /dev/disk4.
+libdvdread: Attempting to retrieve all CSS keys
+libdvdread: This can take a _long_ time, please be patient
+libdvdread: Get key for /VIDEO_TS/VIDEO_TS.VOB at 0x00000163
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_01_0.VOB at 0x0000c6f9
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_01_1.VOB at 0x0000c700
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_02_0.VOB at 0x0000c7ae
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_02_1.VOB at 0x0000c7b5
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_03_0.VOB at 0x0000c810
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_03_1.VOB at 0x0001480f
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_04_0.VOB at 0x003e5689
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_04_1.VOB at 0x003e5690
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_05_0.VOB at 0x003e5ad9
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_05_1.VOB at 0x003e5ae0
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_06_0.VOB at 0x003e5e05
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_06_1.VOB at 0x003e5e0c
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_07_0.VOB at 0x003e5eb7
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_07_1.VOB at 0x003e5ebe
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_08_0.VOB at 0x003e5eef
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_08_1.VOB at 0x003e5ef6
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_09_0.VOB at 0x003e5f1f
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_09_1.VOB at 0x003e5f26
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_10_0.VOB at 0x003e5f4f
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_10_1.VOB at 0x003e5f56
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_11_0.VOB at 0x003e8257
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_11_1.VOB at 0x003e825e
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_12_0.VOB at 0x003e8287
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_12_1.VOB at 0x003e828e
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_13_0.VOB at 0x003e8484
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_13_1.VOB at 0x003e848b
+libdvdread: Elapsed time 0
+libdvdread: Found 13 VTS's
+libdvdread: Elapsed time 0
+libdvdread: Could not open /dev/disk4 with libdvdcss.
+libdvdread: Can't open /dev/disk4 for reading
+[17:00:34] scan: DVD has 38 title(s)
+[17:00:34] scan: scanning title 1
+[17:00:34] scan: duration is 00:00:03 (3000 ms)
+[17:00:34] pgc_id: 1, pgn: 1: pgc: 0x79bb803e80
+[17:00:34] scan: checking audio 1
+[17:00:34] scan: id=0x80bd, lang=Unknown (AC3), 3cc=und ext=0
+[17:00:34] scan: title 1 has 1 chapters
+[17:00:34] scan: chap 1, 3000 ms
+[17:00:34] scan: aspect = 16:9
+[17:00:34] scan: scanning title 2
+[17:00:34] scan: duration is 00:00:00 (500 ms)
+[17:00:34] scan: ignoring title (too short)
+[17:00:34] scan: scanning title 3
+[17:00:35] scan: duration is 00:00:00 (500 ms)
+[17:00:35] scan: ignoring title (too short)
+[17:00:35] scan: scanning title 4
+[17:00:35] scan: duration is 00:00:00 (500 ms)
+[17:00:35] scan: ignoring title (too short)
+[17:00:35] scan: scanning title 5
+[17:00:35] scan: duration is 00:00:00 (500 ms)
+[17:00:35] scan: ignoring title (too short)
+[17:00:35] scan: scanning title 6
+[17:00:35] scan: duration is 00:00:00 (500 ms)
+[17:00:35] scan: ignoring title (too short)
+[17:00:35] scan: scanning title 7
+[17:00:35] scan: duration is 03:00:11 (10811500 ms)
+[17:00:35] pgc_id: 1, pgn: 1: pgc: 0x79bb803e80
+[17:00:35] scan: checking audio 1
+[17:00:35] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[17:00:35] scan: checking audio 2
+[17:00:35] scan: id=0x81bd, lang=español (AC3), 3cc=spa ext=0
+[17:00:35] scan: checking audio 3
+[17:00:35] scan: id=0x82bd, lang=English (AC3), 3cc=eng ext=0
+[17:00:35] scan: checking subtitle 1
+[17:00:35] scan: id=0x20bd, lang=English (Wide Screen) [VOBSUB], 3cc=eng ext=0
+[17:00:35] scan: checking subtitle 2
+[17:00:35] scan: id=0x21bd, lang=español (Wide Screen) [VOBSUB], 3cc=spa ext=0
+[17:00:35] scan: checking subtitle 3
+[17:00:35] scan: id=0x22bd, lang=中文 (Wide Screen) [VOBSUB], 3cc=zho ext=0
+[17:00:35] scan: checking subtitle 4
+[17:00:35] scan: id=0x23bd, lang=中文 (Wide Screen) [VOBSUB], 3cc=zho ext=0
+[17:00:35] scan: checking subtitle 5
+[17:00:35] scan: id=0x24bd, lang=한국어 (Wide Screen) [VOBSUB], 3cc=kor ext=0
+[17:00:35] scan: checking subtitle 6
+[17:00:35] scan: id=0x25bd, lang=español (Wide Screen) [VOBSUB], 3cc=spa ext=0
+[17:00:35] scan: title 7 has 21 chapters
+[17:00:35] scan: chap 1, 443166 ms
+[17:00:35] scan: chap 2, 552000 ms
+[17:00:35] scan: chap 3, 647166 ms
+[17:00:35] scan: chap 4, 517033 ms
+[17:00:35] scan: chap 5, 409800 ms
+[17:00:35] scan: chap 6, 579333 ms
+[17:00:35] scan: chap 7, 444500 ms
+[17:00:35] scan: chap 8, 656333 ms
+[17:00:35] scan: chap 9, 424200 ms
+[17:00:35] scan: chap 10, 375800 ms
+[17:00:35] scan: chap 11, 712000 ms
+[17:00:35] scan: chap 12, 419500 ms
+[17:00:35] scan: chap 13, 492166 ms
+[17:00:35] scan: chap 14, 538166 ms
+[17:00:35] scan: chap 15, 523333 ms
+[17:00:35] scan: chap 16, 486000 ms
+[17:00:35] scan: chap 17, 895333 ms
+[17:00:35] scan: chap 18, 934834 ms
+[17:00:35] scan: chap 19, 391333 ms
+[17:00:35] scan: chap 20, 369000 ms
+[17:00:35] scan: chap 21, 500 ms
+[17:00:35] scan: aspect = 16:9
+[17:00:35] scan: scanning title 8
+[17:00:35] scan: duration is 00:00:43 (43500 ms)
+[17:00:35] pgc_id: 3, pgn: 1: pgc: 0x79bb824140
+[17:00:35] scan: checking audio 1
+[17:00:35] scan: id=0x80bd, lang=Unknown (AC3), 3cc=und ext=0
+[17:00:35] scan: title 8 has 9 chapters
+[17:00:35] scan: chap 1, 7000 ms
+[17:00:35] scan: chap 2, 7000 ms
+[17:00:35] scan: chap 3, 7000 ms
+[17:00:35] scan: chap 4, 7000 ms
+[17:00:35] scan: chap 5, 7000 ms
+[17:00:35] scan: chap 6, 500 ms
+[17:00:35] scan: chap 7, 7000 ms
+[17:00:35] scan: chap 8, 500 ms
+[17:00:35] scan: chap 9, 500 ms
+[17:00:35] scan: aspect = 16:9
+[17:00:35] scan: scanning title 9
+[17:00:35] scan: duration is 00:00:15 (15000 ms)
+[17:00:35] pgc_id: 3, pgn: 1: pgc: 0x79bb824140
+[17:00:35] scan: checking audio 1
+[17:00:35] scan: id=0x80bd, lang=Unknown (AC3), 3cc=und ext=0
+[17:00:35] scan: checking subtitle 1
+[17:00:35] scan: subtitle channel is not active
+[17:00:35] scan: checking subtitle 2
+[17:00:35] scan: subtitle channel is not active
+[17:00:35] scan: checking subtitle 3
+[17:00:35] scan: subtitle channel is not active
+[17:00:35] scan: checking subtitle 4
+[17:00:35] scan: subtitle channel is not active
+[17:00:35] scan: checking subtitle 5
+[17:00:35] scan: subtitle channel is not active
+[17:00:35] scan: checking subtitle 6
+[17:00:35] scan: subtitle channel is not active
+[17:00:35] scan: checking subtitle 7
+[17:00:35] scan: subtitle channel is not active
+[17:00:35] scan: checking subtitle 8
+[17:00:35] scan: subtitle channel is not active
+[17:00:35] scan: checking subtitle 9
+[17:00:35] scan: subtitle channel is not active
+[17:00:35] scan: title 9 has 4 chapters
+[17:00:35] scan: chap 1, 7000 ms
+[17:00:35] scan: chap 2, 7000 ms
+[17:00:35] scan: chap 3, 500 ms
+[17:00:35] scan: chap 4, 500 ms
+[17:00:35] scan: aspect = 16:9
+[17:00:35] scan: scanning title 10
+[17:00:35] scan: duration is 00:00:07 (7500 ms)
+[17:00:35] pgc_id: 1, pgn: 1: pgc: 0x79bb803e80
+[17:00:35] scan: checking audio 1
+[17:00:35] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[17:00:35] scan: title 10 has 2 chapters
+[17:00:35] scan: chap 1, 7000 ms
+[17:00:35] scan: chap 2, 500 ms
+[17:00:35] scan: aspect = 16:9
+[17:00:35] scan: scanning title 11
+[17:00:36] scan: duration is 00:00:01 (1000 ms)
+[17:00:36] pgc_id: 3, pgn: 1: pgc: 0x79bb824140
+[17:00:36] scan: checking subtitle 1
+[17:00:36] scan: subtitle channel is not active
+[17:00:36] scan: checking subtitle 2
+[17:00:36] scan: subtitle channel is not active
+[17:00:36] scan: checking subtitle 3
+[17:00:36] scan: subtitle channel is not active
+[17:00:36] scan: checking subtitle 4
+[17:00:36] scan: subtitle channel is not active
+[17:00:36] scan: checking subtitle 5
+[17:00:36] scan: subtitle channel is not active
+[17:00:36] scan: checking subtitle 6
+[17:00:36] scan: subtitle channel is not active
+[17:00:36] scan: checking subtitle 7
+[17:00:36] scan: subtitle channel is not active
+[17:00:36] scan: checking subtitle 8
+[17:00:36] scan: subtitle channel is not active
+[17:00:36] scan: checking subtitle 9
+[17:00:36] scan: subtitle channel is not active
+[17:00:36] scan: title 11 has 2 chapters
+[17:00:36] scan: chap 1, 500 ms
+[17:00:36] scan: chap 2, 500 ms
+[17:00:36] scan: aspect = 16:9
+[17:00:36] scan: scanning title 12
+[17:00:36] scan: duration is 00:00:00 (500 ms)
+[17:00:36] scan: ignoring title (too short)
+[17:00:36] scan: scanning title 13
+[17:00:36] scan: duration is 00:00:00 (500 ms)
+[17:00:36] scan: ignoring title (too short)
+[17:00:36] scan: scanning title 14
+[17:00:36] scan: duration is 00:00:00 (500 ms)
+[17:00:36] scan: ignoring title (too short)
+[17:00:36] scan: scanning title 15
+[17:00:36] scan: duration is 00:00:00 (500 ms)
+[17:00:36] scan: ignoring title (too short)
+[17:00:36] scan: scanning title 16
+[17:00:36] scan: duration is 00:00:00 (500 ms)
+[17:00:36] scan: ignoring title (too short)
+[17:00:36] scan: scanning title 17
+[17:00:36] scan: duration is 00:00:00 (500 ms)
+[17:00:36] scan: ignoring title (too short)
+[17:00:36] scan: scanning title 18
+[17:00:36] scan: duration is 00:00:00 (500 ms)
+[17:00:36] scan: ignoring title (too short)
+[17:00:36] scan: scanning title 19
+[17:00:36] scan: duration is 00:00:00 (500 ms)
+[17:00:36] scan: ignoring title (too short)
+[17:00:36] scan: scanning title 20
+[17:00:36] scan: duration is 00:00:26 (26467 ms)
+[17:00:36] pgc_id: 1, pgn: 1: pgc: 0x79bb803e80
+[17:00:36] scan: checking audio 1
+[17:00:36] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[17:00:36] scan: title 20 has 2 chapters
+[17:00:36] scan: chap 1, 25967 ms
+[17:00:36] scan: chap 2, 500 ms
+[17:00:36] scan: aspect = 16:9
+[17:00:36] scan: scanning title 21
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 22
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 23
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 24
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 25
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 26
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 27
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 28
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 29
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 30
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 31
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 32
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 33
+[17:00:37] scan: duration is 00:00:00 (500 ms)
+[17:00:37] scan: ignoring title (too short)
+[17:00:37] scan: scanning title 34
+[17:00:38] scan: duration is 00:00:08 (8000 ms)
+[17:00:38] pgc_id: 3, pgn: 1: pgc: 0x79bb824140
+[17:00:38] scan: checking audio 1
+[17:00:38] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[17:00:38] scan: checking subtitle 1
+[17:00:38] scan: subtitle channel is not active
+[17:00:38] scan: checking subtitle 2
+[17:00:38] scan: subtitle channel is not active
+[17:00:38] scan: checking subtitle 3
+[17:00:38] scan: subtitle channel is not active
+[17:00:38] scan: checking subtitle 4
+[17:00:38] scan: subtitle channel is not active
+[17:00:38] scan: checking subtitle 5
+[17:00:38] scan: subtitle channel is not active
+[17:00:38] scan: checking subtitle 6
+[17:00:38] scan: subtitle channel is not active
+[17:00:38] scan: checking subtitle 7
+[17:00:38] scan: subtitle channel is not active
+[17:00:38] scan: checking subtitle 8
+[17:00:38] scan: subtitle channel is not active
+[17:00:38] scan: checking subtitle 9
+[17:00:38] scan: subtitle channel is not active
+[17:00:38] scan: title 34 has 3 chapters
+[17:00:38] scan: chap 1, 7000 ms
+[17:00:38] scan: chap 2, 500 ms
+[17:00:38] scan: chap 3, 500 ms
+[17:00:38] scan: aspect = 16:9
+[17:00:38] scan: scanning title 35
+[17:00:38] scan: duration is 00:00:00 (500 ms)
+[17:00:38] scan: ignoring title (too short)
+[17:00:38] scan: scanning title 36
+[17:00:38] scan: duration is 00:00:00 (500 ms)
+[17:00:38] scan: ignoring title (too short)
+[17:00:38] scan: scanning title 37
+[17:00:38] scan: duration is 00:00:00 (500 ms)
+[17:00:38] scan: ignoring title (too short)
+[17:00:38] scan: scanning title 38
+[17:00:38] scan: duration is 00:00:00 (500 ms)
+[17:00:38] scan: ignoring title (too short)
+libdvdnav: Suspected RCE Region Protection!!!
+[17:00:49] scan: decoding previews for title 1
+[17:00:49] scan: title angle(s) 1
+[17:00:49] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 Unknown (AC3, 2.0 ch, 192 kbps)
+libdvdnav: Error when seeking
+ERROR: dvd: dvdnav_sector_search failed - Error when seeking.
+[17:00:49] using bitstream PAR 32:27
+[17:00:49] scan: 9 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[17:00:49] scan: decoding previews for title 7
+[17:00:50] scan: title angle(s) 1
+[17:00:50] scan: audio 0x81bd: ac3, rate=48000Hz, bitrate=384000 español (AC3, 5.1 ch, 384 kbps)
+[17:00:50] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=448000 English (AC3, 5.1 ch, 448 kbps)
+[17:00:50] scan: audio 0x82bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, 192 kbps)
+[17:00:52] using bitstream PAR 32:27
+[17:00:52] scan: 10 previews, 720x480, 23.976 fps, autocrop = 46/48/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[17:00:52] scan: decoding previews for title 8
+[17:00:53] scan: title angle(s) 1
+[17:00:53] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 Unknown (AC3, 2.0 ch, 192 kbps)
+[17:00:56] using bitstream PAR 32:27
+[17:00:56] scan: 10 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[17:00:56] scan: decoding previews for title 9
+[17:00:56] scan: title angle(s) 1
+[17:00:56] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 Unknown (AC3, 2.0 ch, 192 kbps)
+[17:00:59] using bitstream PAR 32:27
+[17:00:59] scan: 10 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[17:00:59] scan: decoding previews for title 10
+[17:00:59] scan: title angle(s) 1
+[17:00:59] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, 192 kbps)
+[17:01:01] using bitstream PAR 32:27
+[17:01:01] scan: 10 previews, 720x480, 23.976 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[17:01:01] scan: decoding previews for title 11
+[17:01:02] scan: title angle(s) 1
+[17:01:03] using bitstream PAR 32:27
+[17:01:03] scan: 10 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[17:01:03] scan: decoding previews for title 20
+[17:01:03] scan: title angle(s) 1
+[17:01:04] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=448000 English (AC3, 5.1 ch, 448 kbps)
+[17:01:06] using bitstream PAR 32:27
+[17:01:06] scan: 10 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[17:01:06] scan: decoding previews for title 34
+[17:01:09] scan: title angle(s) 1
+[17:01:09] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, 192 kbps)
+[17:01:11] using bitstream PAR 32:27
+[17:01:11] scan: 10 previews, 720x480, 23.976 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[17:01:11] libhb: scan thread found 8 valid title(s)
+HandBrake has exited.

@@ -78,6 +78,19 @@ nonisolated enum MenuState: Equatable, Sendable {
         if case .ready(let value) = self { return value }
         return nil
     }
+
+    /// Whether the menu read has finished, however it finished.
+    ///
+    /// The disc lookup waits for this rather than for `.ready`, because a
+    /// disc with no menus, no helper or no libdvdcss is a settled answer too
+    /// — waiting for `.ready` on one of those would wait forever and the
+    /// search box would never fill in.
+    var hasSettled: Bool {
+        switch self {
+        case .idle, .reading: return false
+        case .ready, .unavailable: return true
+        }
+    }
 }
 
 // Lives here, beside `MenuState`, rather than in `MenuHelper`: the state and

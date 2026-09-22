@@ -224,6 +224,32 @@ final class MovieSearchViewModel {
     /// runtime. A stale response — from a reselect that lands after a newer
     /// one, or after `search` clears the selection — is dropped: it never
     /// overwrites a different movie's state.
+    /// Search TMDB without touching anything the view shows.
+    ///
+    /// The disc-resolution ladder tries two or three terms before it knows
+    /// which one works, and the user must not watch it type each of them into
+    /// the box and clear the list again. This is the same request `search`
+    /// makes, with none of the state.
+    func probe(_ query: String, apiKey: String) async -> [TMDBMovie] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        guard let fetched = try? await client.searchMovies(query: trimmed, apiKey: apiKey) else { return [] }
+        return Self.sorted(fetched, for: trimmed)
+    }
+
+    /// Show a term and its results, as though the user had typed and searched
+    /// it — the end of the resolution ladder, and the only point at which any
+    /// of it becomes visible.
+    func present(query: String, results: [TMDBMovie]) {
+        cancelSearch()
+        self.query = query
+        self.results = results
+        self.lastSearchedQuery = query
+        self.errorMessage = nil
+        self.selectedMovie = nil
+        self.isLoading = false
+    }
+
     /// The current results as auto-select candidates, each with the runtime
     /// a details lookup gives.
     ///

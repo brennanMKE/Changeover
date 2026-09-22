@@ -1,0 +1,212 @@
+{
+  "buttons" : [
+    {
+      "label" : "yes",
+      "menu" : "vmgm-lu1-pgc13",
+      "number" : 1,
+      "target" : "unresolved:LinkTailPGC"
+    },
+    {
+      "label" : "stop",
+      "menu" : "vmgm-lu1-pgc13",
+      "number" : 2,
+      "target" : "unresolved:LinkPGN"
+    },
+    {
+      "label" : "Elija \"sí\" para continuar.",
+      "menu" : "vmgm-lu1-pgc14",
+      "number" : 1,
+      "target" : "unresolved:LinkTailPGC"
+    },
+    {
+      "label" : "alto",
+      "menu" : "vmgm-lu1-pgc14",
+      "number" : 2,
+      "target" : "unresolved:LinkPGN"
+    },
+    {
+      "label" : "oui",
+      "menu" : "vmgm-lu1-pgc15",
+      "number" : 1,
+      "target" : "unresolved:LinkTailPGC"
+    },
+    {
+      "label" : "arrêt",
+      "menu" : "vmgm-lu1-pgc15",
+      "number" : 2,
+      "target" : "unresolved:LinkPGN"
+    },
+    {
+      "label" : "PLAY",
+      "menu" : "vtsm-03-lu1-pgc18",
+      "number" : 1,
+      "target" : "menu:3.pgc16"
+    },
+    {
+      "label" : "CHAPTERS",
+      "menu" : "vtsm-03-lu1-pgc18",
+      "number" : 2,
+      "target" : "menu:3.pgc19"
+    },
+    {
+      "label" : "SETUP",
+      "menu" : "vtsm-03-lu1-pgc18",
+      "number" : 3,
+      "target" : "menu:3.pgc25"
+    },
+    {
+      "menu" : "vtsm-03-lu1-pgc19",
+      "number" : 1,
+      "target" : "menu:3.pgc24"
+    },
+    {
+      "label" : "2.",
+      "menu" : "vtsm-03-lu1-pgc19",
+      "number" : 2,
+      "target" : "menu:3.pgc24"
+    },
+    {
+      "menu" : "vtsm-03-lu1-pgc19",
+      "number" : 3,
+      "target" : "menu:3.pgc24"
+    },
+    {
+      "menu" : "vtsm-03-lu1-pgc19",
+      "number" : 4,
+      "target" : "menu:3.pgc24"
+    },
+    {
+      "label" : "1-4",
+      "menu" : "vtsm-03-lu1-pgc19",
+      "number" : 5,
+      "target" : "unresolved:LinkPGN"
+    },
+    {
+      "label" : "5-8",
+      "menu" : "vtsm-03-lu1-pgc19",
+      "number" : 6,
+      "target" : "unresolved:LinkPGN"
+    },
+    {
+      "label" : "9-12",
+      "menu" : "vtsm-03-lu1-pgc19",
+      "number" : 7,
+      "target" : "unresolved:LinkPGN"
+    },
+    {
+      "label" : "13-16",
+      "menu" : "vtsm-03-lu1-pgc19",
+      "number" : 8,
+      "target" : "unresolved:LinkPGN"
+    },
+    {
+      "label" : "17-20",
+      "menu" : "vtsm-03-lu1-pgc19",
+      "number" : 9,
+      "target" : "unresolved:LinkPGN"
+    },
+    {
+      "label" : "MENU",
+      "menu" : "vtsm-03-lu1-pgc19",
+      "number" : 10,
+      "target" : "menu:3.pgc18"
+    },
+    {
+      "menu" : "vtsm-03-lu1-pgc19",
+      "number" : 11,
+      "target" : "unresolved:LinkPGN"
+    },
+    {
+      "menu" : "vtsm-03-lu1-pgc19",
+      "number" : 12,
+      "target" : "unresolved:LinkPGN"
+    },
+    {
+      "label" : "ENGLISH 5.1",
+      "menu" : "vtsm-03-lu1-pgc25",
+      "number" : 1,
+      "target" : "menu:3.pgc5"
+    },
+    {
+      "label" : "ESPAÑOL 5.1",
+      "menu" : "vtsm-03-lu1-pgc25",
+      "number" : 2,
+      "target" : "menu:3.pgc5"
+    },
+    {
+      "label" : "(DESCRIPTIVE VIDEO SERVICE)",
+      "menu" : "vtsm-03-lu1-pgc25",
+      "number" : 3,
+      "target" : "menu:3.pgc5"
+    },
+    {
+      "label" : "SUBTITLES",
+      "menu" : "vtsm-03-lu1-pgc25",
+      "number" : 4,
+      "target" : "menu:3.pgc26"
+    },
+    {
+      "label" : "MENU",
+      "menu" : "vtsm-03-lu1-pgc25",
+      "number" : 5,
+      "target" : "menu:3.pgc18"
+    },
+    {
+      "label" : "ENGLISH SDH*",
+      "menu" : "vtsm-03-lu1-pgc26",
+      "number" : 1,
+      "target" : "menu:3.pgc6"
+    },
+    {
+      "label" : "ESPAÑOL",
+      "menu" : "vtsm-03-lu1-pgc26",
+      "number" : 2,
+      "target" : "menu:3.pgc6"
+    },
+    {
+      "label" : "粤語",
+      "menu" : "vtsm-03-lu1-pgc26",
+      "number" : 3,
+      "target" : "menu:3.pgc6"
+    },
+    {
+      "label" : "緊體中文",
+      "menu" : "vtsm-03-lu1-pgc26",
+      "number" : 4,
+      "target" : "menu:3.pgc6"
+    },
+    {
+      "label" : "한국어",
+      "menu" : "vtsm-03-lu1-pgc26",
+      "number" : 5,
+      "target" : "menu:3.pgc6"
+    },
+    {
+      "label" : "OFF",
+      "menu" : "vtsm-03-lu1-pgc26",
+      "number" : 6,
+      "target" : "menu:3.pgc7"
+    },
+    {
+      "label" : "AUDIO",
+      "menu" : "vtsm-03-lu1-pgc26",
+      "number" : 7,
+      "target" : "menu:3.pgc25"
+    },
+    {
+      "label" : "MENU",
+      "menu" : "vtsm-03-lu1-pgc26",
+      "number" : 8,
+      "target" : "menu:3.pgc18"
+    }
+  ],
+  "format" : "changeover-menu-derived/1",
+  "resolver" : {
+    "app" : "slice1",
+    "lexicon" : 106
+  },
+  "tvSignal" : {
+    "reason" : "no menu with ≥3 title-jumping buttons",
+    "value" : false
+  }
+}

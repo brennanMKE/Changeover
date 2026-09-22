@@ -425,15 +425,12 @@ struct RipFlowControllerTests {
         mountURL: URL(fileURLWithPath: "/Volumes/OPPENHEIMER"), deviceNode: "disk10", discID: "oppy")
 
     /// The screenshot that started this: the user typed "Army of Darkness"
-    /// by hand for `ARMY_OF_DARKNESS`. A disc arriving with nothing typed
-    /// yet fills the field itself and runs the search.
-    @Test func aFreshDiscPrefillsTheSearchFieldFromItsVolumeName() {
-        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
-        let flow = RipFlowController()
-        jobs.insertedDisc = Self.armyOfDarkness
-        flow.reconcile(jobs: jobs)
-        #expect(flow.search.query == "Army of Darkness")
-        #expect(flow.prefillAttemptedFor == Self.armyOfDarkness)
+    /// by hand for `ARMY_OF_DARKNESS`. The volume label is still the first
+    /// thing tried — it is right on most discs — but it is now tried against
+    /// TMDB before it is shown, not typed into the box on faith.
+    @Test func theVolumeLabelIsStillTheFirstThingTried() {
+        #expect(DiscNameSearchTerm.derive(volumeName: "ARMY_OF_DARKNESS") == "Army of Darkness")
+        #expect(DiscNameSearchTerm.derive(volumeName: "OPPENHEIMER") == "Oppenheimer")
     }
 
     /// "Never overwrite what the user typed" — text already in the field
@@ -448,85 +445,55 @@ struct RipFlowControllerTests {
         #expect(flow.search.query == "Evil Dead")
     }
 
-    /// "Never fight them if they clear the field": once a disc has been
-    /// prefilled, clearing the box and having `reconcile` run again for the
-    /// *same* disc (e.g. a job starting/finishing with nothing else
-    /// changing) must not refill it.
-    @Test func clearingTheFieldIsNeverFoughtForTheSameDisc() {
+    /// The search field stays empty until the disc has actually been
+    /// identified.
+    ///
+    /// It used to fill in immediately with whatever the volume label
+    /// derived, and on an awkward disc that is the wrong thing to show
+    /// someone: `ENEMYATTHEGATES` derives "Enemyatthegates", which looks like
+    /// a mistake the user should start correcting — and most would, halfway
+    /// through a lookup that was about to answer correctly on its own. The
+    /// label, the disc's printed menu title and the on-device model are now
+    /// all tried against a silent probe, and only the winner is shown.
+    @Test func theFieldStaysEmptyWhileTheDiscIsBeingIdentified() {
         let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
         let flow = RipFlowController()
         jobs.insertedDisc = Self.armyOfDarkness
         flow.reconcile(jobs: jobs)
-        #expect(flow.search.query == "Army of Darkness")
-
-        flow.search.query = ""
-        flow.reconcile(jobs: jobs)
-        #expect(flow.search.query.isEmpty)
+        #expect(flow.search.query.isEmpty, "nothing is shown until something is known")
+        #expect(flow.search.results.isEmpty)
     }
 
-    /// The `RipFlowView.onAppear` bug (found on a real disc, 2026-09-17): a
-    /// disc insertion is what *causes* the window to open, so `jobs
-    /// .insertedDisc` is already set by the time the view (and its
-    /// `onChange`) exist — no change event ever arrives. This proves the
-    /// controller side of the fix without SwiftUI: a *brand-new* controller
-    /// that has never seen a prior `reconcile` call still prefills the very
-    /// first time `reconcile` runs, for a disc that was already present
-    /// before that first call — exactly the appear-time path (`onAppear`
-    /// calling `reconcile` once, same as `onChange` would have). Also checks
-    /// that this first call never disturbs a selection — there is none yet,
-    /// so `SelectionReset.reconcile` must see `hasSelection == false` and
-    /// return `.keep`, not wrongly reset anything.
-    @Test func aDiscAlreadyPresentAtTheFirstEverReconcileCallStillPrefills() {
-        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
-        // The disc arrives (as it would via `DVDMonitor`) before anything
-        // ever calls `reconcile` — modelling the window opening with the
-        // disc already in the drive, not a later change.
-        jobs.insertedDisc = Self.armyOfDarkness
-        let flow = RipFlowController()
-
-        // The one and only call this controller has ever seen — the
-        // `onAppear` path, not a second call after some earlier `onChange`.
-        flow.reconcile(jobs: jobs, apiKey: "")
-
-        #expect(flow.search.query == "Army of Darkness")
-        #expect(flow.prefillAttemptedFor == Self.armyOfDarkness)
-        #expect(flow.selectedMovieID == nil, "nothing was selected yet; the first reconcile must not invent a reset")
-        #expect(flow.selectionDisc == nil)
-        #expect(flow.movieConfirmed == false)
-    }
-
-    /// A disc whose volume name derives no usable term (`DiscNameSearchTerm
-    /// .derive` returns `nil` for the plain `DISC_A`/`DISC_B` fixtures used
-    /// throughout this file) never touches the search field.
-    @Test func aDiscWithNoUsableNameLeavesTheFieldAlone() {
-        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
-        let flow = RipFlowController()
-        jobs.insertedDisc = Self.discA
-        flow.reconcile(jobs: jobs)
-        #expect(flow.search.query.isEmpty)
-        #expect(flow.prefillAttemptedFor == Self.discA)
-    }
-
-    /// "Reset per disc the way `SelectionReset` already defines": a disc
-    /// swap that goes through `SelectionReset`'s own `.reset` (a selection
-    /// had been made, so the swap really is a new disc, not just a second
-    /// `reconcile` call for the one already in the drive) clears the query
-    /// the same way it always has, and the new disc gets its own fresh
-    /// prefill — riding the existing mechanism rather than a new one.
-    @Test func aGenuineDiscSwapWithASelectionGetsAFreshPrefillForTheNewDisc() throws {
+    /// And the lookup never starts while the menus are still being read: the
+    /// disc's own printed title is one of the things it tries, and starting
+    /// before that exists is how the model ended up being asked for a disc
+    /// whose title was sitting unread on its special-features page.
+    @Test func theLookupWaitsForTheMenuReadToSettle() {
         let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
         let flow = RipFlowController()
         jobs.insertedDisc = Self.armyOfDarkness
-        flow.reconcile(jobs: jobs)
-        #expect(flow.search.query == "Army of Darkness")
 
-        pick(flow, jobs: jobs, movie: try Self.movie())
-        #expect(flow.selectionDisc == Self.armyOfDarkness)
-
-        jobs.insertedDisc = Self.oppenheimer
+        jobs.menuState = .reading
+        #expect(!jobs.menuState.hasSettled)
         flow.reconcile(jobs: jobs)
-        #expect(flow.search.query == "Oppenheimer")
-        #expect(flow.prefillAttemptedFor == Self.oppenheimer)
+        #expect(!flow.isResolvingDisc, "nothing starts while the menus are still being read")
+
+        // A disc with no menus at all is a settled answer too — waiting for
+        // `.ready` on one of those would wait forever.
+        jobs.menuState = .unavailable(.noMenus)
+        #expect(jobs.menuState.hasSettled)
+    }
+
+    /// Whatever the lookup finds, it never types over the user.
+    @Test func textAlreadyTypedStopsTheLookupEntirely() {
+        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
+        let flow = RipFlowController()
+        flow.search.query = "Evil Dead"
+        jobs.insertedDisc = Self.armyOfDarkness
+        jobs.menuState = .unavailable(.noMenus)
+        flow.reconcile(jobs: jobs)
+        #expect(flow.search.query == "Evil Dead")
+        #expect(!flow.isResolvingDisc)
     }
 
     /// The probe re-runs only when the movie or the library root changes.

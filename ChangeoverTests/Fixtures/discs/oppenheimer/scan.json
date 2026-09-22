@@ -24,6 +24,17 @@ Progress: {
     },
     "State": "SCANNING"
 }
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
 libdvdnav: vm: dvd_read_name failed
 libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
 Progress: {
@@ -52,6 +63,28 @@ Progress: {
     "Scanning": {
         "Preview": 0,
         "PreviewCount": 1,
+        "Progress": 0.0,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 1
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.01315789483487606,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
         "Progress": 0.03947368264198303,
         "SequenceID": 0,
         "Title": 3,
@@ -66,6 +99,17 @@ Progress: {
         "Progress": 0.09210526198148727,
         "SequenceID": 0,
         "Title": 7,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.10526315867900848,
+        "SequenceID": 0,
+        "Title": 8,
         "TitleCount": 38
     },
     "State": "SCANNING"
@@ -107,9 +151,31 @@ Progress: {
     "Scanning": {
         "Preview": 0,
         "PreviewCount": 1,
+        "Progress": 0.14473684132099152,
+        "SequenceID": 0,
+        "Title": 11,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
         "Progress": 0.15789473056793213,
         "SequenceID": 0,
         "Title": 12,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.22368420660495758,
+        "SequenceID": 0,
+        "Title": 17,
         "TitleCount": 38
     },
     "State": "SCANNING"
@@ -140,9 +206,64 @@ Progress: {
     "Scanning": {
         "Preview": 0,
         "PreviewCount": 1,
+        "Progress": 0.2763157784938812,
+        "SequenceID": 0,
+        "Title": 21,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.2763157784938812,
+        "SequenceID": 0,
+        "Title": 21,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.2763157784938812,
+        "SequenceID": 0,
+        "Title": 21,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.2763157784938812,
+        "SequenceID": 0,
+        "Title": 21,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
         "Progress": 0.44736841320991516,
         "SequenceID": 0,
         "Title": 34,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.46052631735801697,
+        "SequenceID": 0,
+        "Title": 35,
         "TitleCount": 38
     },
     "State": "SCANNING"
@@ -434,12 +555,342 @@ Progress: {
     },
     "State": "SCANNING"
 }
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 0,
+        "PreviewCount": 1,
+        "Progress": 0.5,
+        "SequenceID": 0,
+        "Title": 38,
+        "TitleCount": 38
+    },
+    "State": "SCANNING"
+}
 libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
 Progress: {
     "Scanning": {
-        "Preview": 4,
+        "Preview": 1,
         "PreviewCount": 10,
-        "Progress": 0.5249999761581421,
+        "Progress": 0.5062500238418579,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 5,
+        "PreviewCount": 10,
+        "Progress": 0.53125,
+        "SequenceID": 0,
+        "Title": 1,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 8,
+        "PreviewCount": 10,
+        "Progress": 0.550000011920929,
         "SequenceID": 0,
         "Title": 1,
         "TitleCount": 8
@@ -453,6 +904,28 @@ Progress: {
         "Preview": 1,
         "PreviewCount": 10,
         "Progress": 0.5625,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.5687500238418579,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.5687500238418579,
         "SequenceID": 0,
         "Title": 2,
         "TitleCount": 8
@@ -483,9 +956,31 @@ Progress: {
 }
 Progress: {
     "Scanning": {
-        "Preview": 5,
+        "Preview": 4,
         "PreviewCount": 10,
-        "Progress": 0.59375,
+        "Progress": 0.5874999761581421,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 6,
+        "PreviewCount": 10,
+        "Progress": 0.6000000238418579,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 6,
+        "PreviewCount": 10,
+        "Progress": 0.6000000238418579,
         "SequenceID": 0,
         "Title": 2,
         "TitleCount": 8
@@ -516,6 +1011,28 @@ Progress: {
 }
 Progress: {
     "Scanning": {
+        "Preview": 9,
+        "PreviewCount": 10,
+        "Progress": 0.6187499761581421,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 10,
+        "PreviewCount": 10,
+        "Progress": 0.625,
+        "SequenceID": 0,
+        "Title": 2,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
         "Preview": 10,
         "PreviewCount": 10,
         "Progress": 0.625,
@@ -531,6 +1048,39 @@ Progress: {
         "Preview": 1,
         "PreviewCount": 10,
         "Progress": 0.625,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.625,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.6312500238418579,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.6312500238418579,
         "SequenceID": 0,
         "Title": 3,
         "TitleCount": 8
@@ -573,6 +1123,39 @@ Progress: {
 }
 Progress: {
     "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.637499988079071,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.637499988079071,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 3,
+        "PreviewCount": 10,
+        "Progress": 0.643750011920929,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
         "Preview": 3,
         "PreviewCount": 10,
         "Progress": 0.643750011920929,
@@ -606,9 +1189,42 @@ Progress: {
 }
 Progress: {
     "Scanning": {
+        "Preview": 5,
+        "PreviewCount": 10,
+        "Progress": 0.65625,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 6,
+        "PreviewCount": 10,
+        "Progress": 0.6625000238418579,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
         "Preview": 7,
         "PreviewCount": 10,
         "Progress": 0.668749988079071,
+        "SequenceID": 0,
+        "Title": 3,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 8,
+        "PreviewCount": 10,
+        "Progress": 0.675000011920929,
         "SequenceID": 0,
         "Title": 3,
         "TitleCount": 8
@@ -626,7 +1242,6 @@ Progress: {
     },
     "State": "SCANNING"
 }
-libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
 Progress: {
     "Scanning": {
         "Preview": 1,
@@ -639,6 +1254,40 @@ Progress: {
     "State": "SCANNING"
 }
 libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.6875,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.6937500238418579,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.699999988079071,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
 Progress: {
     "Scanning": {
         "Preview": 2,
@@ -675,9 +1324,53 @@ Progress: {
 }
 Progress: {
     "Scanning": {
+        "Preview": 3,
+        "PreviewCount": 10,
+        "Progress": 0.706250011920929,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 4,
+        "PreviewCount": 10,
+        "Progress": 0.7124999761581421,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 4,
+        "PreviewCount": 10,
+        "Progress": 0.7124999761581421,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
         "Preview": 5,
         "PreviewCount": 10,
         "Progress": 0.71875,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 6,
+        "PreviewCount": 10,
+        "Progress": 0.7250000238418579,
         "SequenceID": 0,
         "Title": 4,
         "TitleCount": 8
@@ -697,11 +1390,33 @@ Progress: {
 }
 Progress: {
     "Scanning": {
+        "Preview": 8,
+        "PreviewCount": 10,
+        "Progress": 0.737500011920929,
+        "SequenceID": 0,
+        "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
         "Preview": 9,
         "PreviewCount": 10,
         "Progress": 0.7437499761581421,
         "SequenceID": 0,
         "Title": 4,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.75,
+        "SequenceID": 0,
+        "Title": 5,
         "TitleCount": 8
     },
     "State": "SCANNING"
@@ -712,6 +1427,17 @@ Progress: {
         "Preview": 1,
         "PreviewCount": 10,
         "Progress": 0.75,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.7562500238418579,
         "SequenceID": 0,
         "Title": 5,
         "TitleCount": 8
@@ -730,7 +1456,29 @@ Progress: {
     },
     "State": "SCANNING"
 }
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.762499988079071,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
 libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 3,
+        "PreviewCount": 10,
+        "Progress": 0.768750011920929,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
 Progress: {
     "Scanning": {
         "Preview": 3,
@@ -756,9 +1504,31 @@ Progress: {
 }
 Progress: {
     "Scanning": {
+        "Preview": 4,
+        "PreviewCount": 10,
+        "Progress": 0.7749999761581421,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
         "Preview": 6,
         "PreviewCount": 10,
         "Progress": 0.7875000238418579,
+        "SequenceID": 0,
+        "Title": 5,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 8,
+        "PreviewCount": 10,
+        "Progress": 0.800000011920929,
         "SequenceID": 0,
         "Title": 5,
         "TitleCount": 8
@@ -777,6 +1547,17 @@ Progress: {
     "State": "SCANNING"
 }
 libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.8125,
+        "SequenceID": 0,
+        "Title": 6,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
 Progress: {
     "Scanning": {
         "Preview": 1,
@@ -800,7 +1581,29 @@ Progress: {
     },
     "State": "SCANNING"
 }
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.824999988079071,
+        "SequenceID": 0,
+        "Title": 6,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
 libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 3,
+        "PreviewCount": 10,
+        "Progress": 0.831250011920929,
+        "SequenceID": 0,
+        "Title": 6,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
 Progress: {
     "Scanning": {
         "Preview": 3,
@@ -815,6 +1618,17 @@ Progress: {
 libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
 Progress: {
     "Scanning": {
+        "Preview": 4,
+        "PreviewCount": 10,
+        "Progress": 0.8374999761581421,
+        "SequenceID": 0,
+        "Title": 6,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
         "Preview": 5,
         "PreviewCount": 10,
         "Progress": 0.84375,
@@ -826,9 +1640,9 @@ Progress: {
 }
 Progress: {
     "Scanning": {
-        "Preview": 10,
+        "Preview": 8,
         "PreviewCount": 10,
-        "Progress": 0.875,
+        "Progress": 0.862500011920929,
         "SequenceID": 0,
         "Title": 6,
         "TitleCount": 8
@@ -840,7 +1654,40 @@ Progress: {
     "Scanning": {
         "Preview": 1,
         "PreviewCount": 10,
+        "Progress": 0.875,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
         "Progress": 0.8812500238418579,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.8812500238418579,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 2,
+        "PreviewCount": 10,
+        "Progress": 0.887499988079071,
         "SequenceID": 0,
         "Title": 7,
         "TitleCount": 8
@@ -860,9 +1707,42 @@ Progress: {
 }
 Progress: {
     "Scanning": {
+        "Preview": 4,
+        "PreviewCount": 10,
+        "Progress": 0.8999999761581421,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
         "Preview": 5,
         "PreviewCount": 10,
         "Progress": 0.90625,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 5,
+        "PreviewCount": 10,
+        "Progress": 0.90625,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 6,
+        "PreviewCount": 10,
+        "Progress": 0.9125000238418579,
         "SequenceID": 0,
         "Title": 7,
         "TitleCount": 8
@@ -882,6 +1762,17 @@ Progress: {
 }
 Progress: {
     "Scanning": {
+        "Preview": 8,
+        "PreviewCount": 10,
+        "Progress": 0.925000011920929,
+        "SequenceID": 0,
+        "Title": 7,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
         "Preview": 9,
         "PreviewCount": 10,
         "Progress": 0.9312499761581421,
@@ -891,7 +1782,150 @@ Progress: {
     },
     "State": "SCANNING"
 }
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
 libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 1,
+        "PreviewCount": 10,
+        "Progress": 0.9375,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
 Progress: {
     "Scanning": {
         "Preview": 1,
@@ -936,17 +1970,6 @@ Progress: {
     },
     "State": "SCANNING"
 }
-Progress: {
-    "Scanning": {
-        "Preview": 1,
-        "PreviewCount": 10,
-        "Progress": 0.9437500238418579,
-        "SequenceID": 0,
-        "Title": 8,
-        "TitleCount": 8
-    },
-    "State": "SCANNING"
-}
 libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
 Progress: {
     "Scanning": {
@@ -970,40 +1993,7 @@ Progress: {
     },
     "State": "SCANNING"
 }
-Progress: {
-    "Scanning": {
-        "Preview": 2,
-        "PreviewCount": 10,
-        "Progress": 0.949999988079071,
-        "SequenceID": 0,
-        "Title": 8,
-        "TitleCount": 8
-    },
-    "State": "SCANNING"
-}
 libdvdnav: DVD disk reports itself with Region mask 0x00fa0000. Regions: 01 03
-Progress: {
-    "Scanning": {
-        "Preview": 3,
-        "PreviewCount": 10,
-        "Progress": 0.956250011920929,
-        "SequenceID": 0,
-        "Title": 8,
-        "TitleCount": 8
-    },
-    "State": "SCANNING"
-}
-Progress: {
-    "Scanning": {
-        "Preview": 3,
-        "PreviewCount": 10,
-        "Progress": 0.956250011920929,
-        "SequenceID": 0,
-        "Title": 8,
-        "TitleCount": 8
-    },
-    "State": "SCANNING"
-}
 Progress: {
     "Scanning": {
         "Preview": 3,
@@ -1040,9 +2030,31 @@ Progress: {
 }
 Progress: {
     "Scanning": {
+        "Preview": 4,
+        "PreviewCount": 10,
+        "Progress": 0.9624999761581421,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
         "Preview": 6,
         "PreviewCount": 10,
         "Progress": 0.9750000238418579,
+        "SequenceID": 0,
+        "Title": 8,
+        "TitleCount": 8
+    },
+    "State": "SCANNING"
+}
+Progress: {
+    "Scanning": {
+        "Preview": 8,
+        "PreviewCount": 10,
+        "Progress": 0.987500011920929,
         "SequenceID": 0,
         "Title": 8,
         "TitleCount": 8
