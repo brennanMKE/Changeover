@@ -151,6 +151,19 @@ final class MovieSearchViewModel {
     func queryChanged(apiKey: String) {
         cancelSearch()
 
+        // The text already matches the newest finished search, so there is
+        // nothing new to ask. This is not an optimisation: `present` writes
+        // the resolved term into `query`, which reaches here as an ordinary
+        // keystroke, and the search it used to start replaced the results a
+        // moment after the disc lookup had ordered them and pre-selected the
+        // matching film — wiping both. The flow log caught it exactly:
+        //
+        //     applied: 853 selectedMovieID=853 order=853,874214,1556038
+        //     after:       selectedMovieID=nil order=874214,853,1556038
+        //
+        // A user retyping the same text expects nothing to happen either.
+        if query == lastSearchedQuery, !results.isEmpty { return }
+
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             select(movieID: nil, apiKey: "")
             results = []

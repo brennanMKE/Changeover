@@ -607,10 +607,24 @@ final class RipFlowController {
             ).map(\.id)
             self.search.reorder(byID: order)
             self.recommendedMovieID = decision.selectedID
+            FlowDiagnostics.note("autoselect order: wanted=" + order.map(String.init).joined(separator: ",") + " got=" + self.search.results.map { String($0.id) }.joined(separator: ","))
 
             guard let id = decision.selectedID else { return }
             self.select(movieID: id, jobs: jobs, apiKey: apiKey)
-            FlowDiagnostics.note("autoselect applied: \(id); selectedMovie=\(self.search.selectedMovie?.id.description ?? "nil")")
+            FlowDiagnostics.note("autoselect applied: " + String(id)
+                + " selectedMovieID=" + (self.selectedMovieID.map(String.init) ?? "nil")
+                + " selectedMovie=" + (self.search.selectedMovie?.id.description ?? "nil")
+                + " recommended=" + (self.recommendedMovieID.map(String.init) ?? "nil"))
+            // A second later, after every onChange this triggered has
+            // run: is any of it still true?
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2))
+                guard let self else { return }
+                FlowDiagnostics.note("autoselect after: selectedMovieID="
+                    + (self.selectedMovieID.map(String.init) ?? "nil")
+                    + " recommended=" + (self.recommendedMovieID.map(String.init) ?? "nil")
+                    + " order=" + self.search.results.map { String($0.id) }.joined(separator: ","))
+            }
         }
     }
 
