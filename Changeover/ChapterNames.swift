@@ -121,7 +121,7 @@ nonisolated enum ChapterNames {
                 if rest.trimmingCharacters(in: .whitespaces).hasPrefix("-") { continue }
                 out.append(Fragment(
                     printedNumber: number,
-                    text: rest,
+                    text: stripNumberSeparator(rest),
                     rect: rect,
                     confidence: observation.confidence
                 ))
@@ -160,6 +160,23 @@ nonisolated enum ChapterNames {
             index = end
         }
         return starts
+    }
+
+    /// Drop the punctuation a menu puts between a chapter's number and its
+    /// name: "1. The Wolf Hunter" → "The Wolf Hunter".
+    ///
+    /// `splitLeadingNumber` takes only the digits, because the page-range
+    /// guard above has to see a raw leading "-" to recognise "1-4" as
+    /// navigation. That left the separator on every name Enemy at the Gates
+    /// produced — twenty of them, each arriving as ". The Wolf Hunter" — and
+    /// `clean` never caught it, because `clean` trims the *end* of a caption.
+    static func stripNumberSeparator(_ text: String) -> String {
+        let separators: Set<Character> = [".", ")", ":", "-", "–", "—", " ", "\u{00A0}"]
+        var rest = Substring(text)
+        while let first = rest.first, separators.contains(first) {
+            rest = rest.dropFirst()
+        }
+        return String(rest)
     }
 
     private static func splitLeadingNumber(_ piece: String) -> (Int?, String) {

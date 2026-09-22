@@ -278,6 +278,14 @@ extension MenuIntelligence {
             result.titleText = MenuTitleGuess.candidate(
                 entryStills: MenuPages.entryStills(ocr: ocr, structure: structure)
             )
+            // Last resort: the film's name lifted out of a bonus feature's
+            // name, from any page. Only when the entry menus gave nothing at
+            // all — Enemy at the Gates opens every one of them on a colour-bar
+            // leader, so its title card is never readable, while its special
+            // features page prints "INSIDE ENEMY AT THE GATES" in plain type.
+            if result.titleText == nil {
+                result.titleText = MenuTitleGuess.featuretteCandidate(stills: ocr.stills)
+            }
         }
 
         return result
