@@ -139,6 +139,13 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Toggle("Use Apple Intelligence to help identify discs", isOn: $settings.usesAppleIntelligence)
                     Toggle("Pick the matching movie automatically", isOn: $settings.autoSelectSearchResult)
+                    Toggle("Start ripping on its own when the disc is recognised", isOn: $settings.autoStartRipping)
+                    if settings.autoStartRipping {
+                        Text("A \(settings.autoStartSeconds)-second countdown appears first, with a Cancel button. A disc whose film is already in your library never starts on its own.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     DetailOnlyText(text: "On by default. Runs entirely on this Mac; nothing is sent anywhere. It reads the words a disc prints on its own menus to fill things in for you — which button starts the film, and what the movie is called. It never chooses what gets ripped: the title, the tracks and the file name are decided by the disc scan and by you, and anything it fills in is shown before ripping starts so you can change it.")
                 }
                 .padding(6)

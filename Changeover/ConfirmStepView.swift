@@ -269,9 +269,32 @@ struct ConfirmStepView: View {
         )
     }
 
+    /// The countdown, when this disc is about to start on its own.
+    ///
+    /// Shown beside the button rather than as a dialog: a dialog would have
+    /// to be dismissed, which is the manual step this feature exists to
+    /// remove. Anyone present sees the film's name and a Cancel; anyone not
+    /// present gets the rip.
+    @ViewBuilder
+    private var autoStartNotice: some View {
+        if let remaining = flow.autoStartRemaining {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Starting in \(remaining)…")
+                    .font(.subheadline)
+                Button("Cancel") { flow.cancelAutoStart() }
+                    .buttonStyle(.link)
+            }
+            .padding(.trailing, 8)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Starting automatically in \(remaining) seconds. Cancel to stop.")
+        }
+    }
+
     private var actionBar: some View {
         StepActionBar {
             Spacer()
+            autoStartNotice
             // #0053: the caption beside the button — so a disabled Start
             // never leaves the user guessing why (found twice on a real
             // disc, 2026-09-16). Since `docs/plain-language-ui.md` the

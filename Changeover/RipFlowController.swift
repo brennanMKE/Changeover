@@ -651,6 +651,95 @@ final class RipFlowController {
         )
     }
 
+    /// The same decision the Start button is gated on, so nothing can start
+    /// automatically that a person could not start by pressing it.
+    func startDecision(jobs: JobController) -> StartDecision {
+        StartGate.decide(
+            hasMovieSelected:    search.selectedMovie != nil,
+            isRunning:           jobs.isRunning,
+            hasDisc:             jobs.insertedDisc != nil && !jobs.isEjecting,
+            discUnavailable:     jobs.discUnavailable,
+            scanState:           jobs.scanState,
+            selectedTitleIndex:  jobs.selectedTitleIndex,
+            selectedAudioTrackNumbers: jobs.selectedAudioTrackNumbers,
+            runtimeLookup:       search.runtimeLookup,
+            mismatchAcknowledgement: jobs.mismatchAcknowledgement,
+            libraryCheck:            libraryCheck,
+            replaceAcknowledgement:  replaceAcknowledgement
+        )
+    }
+
+    // MARK: - Ripping without being asked
+
+    /// Seconds left before this disc starts on its own, or `nil` when no
+    /// countdown is running.
+    private(set) var autoStartRemaining: Int?
+
+    /// Discs already started automatically in this session, so a finished
+    /// job cannot immediately restart the same disc while it sits in the
+    /// drive waiting to be swapped.
+    private var autoStartedDiscs: Set<DiscInsertion> = []
+
+    private var autoStartTask: Task<Void, Never>?
+
+    /// Stop any countdown. Called by every deliberate user action, because a
+    /// person who has started interacting is a person who is present, and
+    /// the whole point of the countdown is to be interruptible.
+    func cancelAutoStart() {
+        autoStartTask?.cancel()
+        autoStartTask = nil
+        autoStartRemaining = nil
+    }
+
+    /// Begin, continue or abandon the countdown, from whatever just changed.
+    func evaluateAutoStart(jobs: JobController, settings: AppSettings) {
+        let decision = AutoStartPolicy.decide(
+            enabled: settings.autoStartRipping,
+            start: startDecision(jobs: jobs),
+            selectedMovieID: selectedMovieID,
+            recommendedMovieID: recommendedMovieID,
+            alreadyRipped: jobs.insertedDisc.map { autoStartedDiscs.contains($0) } ?? false
+        )
+        guard decision.startsCountdown else {
+            if autoStartRemaining != nil { cancelAutoStart() }
+            return
+        }
+        guard autoStartTask == nil, let disc = jobs.insertedDisc else { return }
+
+        // Confirm is where the film, the title and the tracks are shown, so
+        // the countdown runs there and not over a list of search results.
+        if !movieConfirmed { continueToConfirm() }
+
+        autoStartRemaining = max(1, settings.autoStartSeconds)
+        autoStartTask = Task { [weak self] in
+            while let remaining = self?.autoStartRemaining, remaining > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                if Task.isCancelled { return }
+                guard let self else { return }
+                // Re-checked every tick, not only at the start: a disc pulled
+                // or a job begun during the countdown must stop it.
+                let still = AutoStartPolicy.decide(
+                    enabled: settings.autoStartRipping,
+                    start: self.startDecision(jobs: jobs),
+                    selectedMovieID: self.selectedMovieID,
+                    recommendedMovieID: self.recommendedMovieID,
+                    alreadyRipped: self.autoStartedDiscs.contains(disc)
+                )
+                guard still.startsCountdown, jobs.insertedDisc == disc else {
+                    self.cancelAutoStart()
+                    return
+                }
+                self.autoStartRemaining = remaining - 1
+            }
+            guard let self, jobs.insertedDisc == disc else { return }
+            self.autoStartRemaining = nil
+            self.autoStartTask = nil
+            self.autoStartedDiscs.insert(disc)
+            FlowDiagnostics.note("autostart: starting " + (self.search.selectedMovie?.title ?? "?"))
+            self.startRipping(jobs: jobs, settings: settings)
+        }
+    }
+
     /// Starts the job, if there is one to start. Returns whatever
     /// `JobController.start` decided, so a refusal is still logged there.
     @discardableResult

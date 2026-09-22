@@ -77,21 +77,27 @@ struct RipFlowView: View {
         // on `prefillAttemptedFor` by disc identity, not on call count, so a
         // second call for the same disc after `onAppear` already prefilled
         // it is a no-op (`.skip`).
-        .onAppear { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings) }
-        .onChange(of: jobs.insertedDisc) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings) }
-        .onChange(of: jobs.isRunning) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings) }
+        .onAppear { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings)
+            flow.evaluateAutoStart(jobs: jobs, settings: settings) }
+        .onChange(of: jobs.insertedDisc) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings)
+            flow.evaluateAutoStart(jobs: jobs, settings: settings) }
+        .onChange(of: jobs.isRunning) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings)
+            flow.evaluateAutoStart(jobs: jobs, settings: settings) }
         // The menu read finishes about a minute after the scan, long after
         // the search box was prefilled and searched. On a disc whose volume
         // label matches nothing, the title the disc prints on its own menus
         // is the answer — and it does not exist yet at prefill time, so the
         // retry has to be driven from the menus arriving, not from the disc.
-        .onChange(of: jobs.menuState) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings) }
+        .onChange(of: jobs.menuState) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings)
+            flow.evaluateAutoStart(jobs: jobs, settings: settings) }
         // Results arriving is its own event. The auto-select needs a result
         // set to work on, and every other trigger here fires before the
         // search that produces one — which is exactly how the first version
         // of this shipped doing nothing at all.
-        .onChange(of: flow.search.results.count) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings) }
-        .onChange(of: jobs.selectedTitleIndex) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings) }
+        .onChange(of: flow.search.results.count) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings)
+            flow.evaluateAutoStart(jobs: jobs, settings: settings) }
+        .onChange(of: jobs.selectedTitleIndex) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings)
+            flow.evaluateAutoStart(jobs: jobs, settings: settings) }
     }
 
     // MARK: - Header

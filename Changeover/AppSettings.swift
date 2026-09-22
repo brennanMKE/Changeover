@@ -49,6 +49,23 @@ final class AppSettings {
     /// result is the right length — so the failure mode is a click, not a
     /// wrong film. Off for anyone who would rather always choose themselves.
     var autoSelectSearchResult: Bool = true
+    /// Whether a disc that identified itself unambiguously starts ripping on
+    /// its own, after a visible countdown.
+    ///
+    /// **Off by default**, and the only setting here that is. Everything else
+    /// in this group fills something in for the user to look at; this one
+    /// writes a file into their library without anyone having looked. The
+    /// gate is `StartDecision.ready`, which a disc already in the library
+    /// cannot reach without a person ticking the box — so the feature cannot
+    /// silently overwrite anything — but "cannot overwrite" is not the same
+    /// as "should run unattended", and that is the user's call to make once,
+    /// deliberately.
+    var autoStartRipping: Bool = false
+
+    /// How long the countdown runs. Long enough to read the film's name and
+    /// stop it, short enough that feeding a stack of discs is not mostly
+    /// waiting.
+    var autoStartSeconds: Int = 10
     /// Menu intelligence — `Tools/menudump`'s helper, which reads a disc's
     /// menu tables and button geometry. Empty means "find it": the app looks
     /// in its own bundle, then Homebrew's and `/usr/local`'s bins, then a
@@ -164,6 +181,10 @@ final class AppSettings {
         if d.object(forKey: Keys.autoSelectSearchResult) != nil {
             autoSelectSearchResult = d.bool(forKey: Keys.autoSelectSearchResult)
         }
+        autoStartRipping = d.bool(forKey: Keys.autoStartRipping)
+        if let seconds = d.object(forKey: Keys.autoStartSeconds) as? Int, seconds > 0 {
+            autoStartSeconds = seconds
+        }
         // Both may legitimately be empty ("find it" / "not installed"), so a
         // stored empty string is honoured rather than falling back to the
         // default the way the required paths above do.
@@ -186,6 +207,8 @@ final class AppSettings {
         d.set(keepOriginalAudioTrack, forKey: Keys.keepOriginalAudioTrack)
         d.set(usesAppleIntelligence, forKey: Keys.usesAppleIntelligence)
         d.set(autoSelectSearchResult, forKey: Keys.autoSelectSearchResult)
+        d.set(autoStartRipping, forKey: Keys.autoStartRipping)
+        d.set(autoStartSeconds, forKey: Keys.autoStartSeconds)
         d.set(menudumpPath, forKey: Keys.menudumpPath)
         d.set(menuArchivePath, forKey: Keys.menuArchivePath)
         d.set(ffmpegPath,   forKey: Keys.ffmpegPath)
@@ -213,6 +236,8 @@ final class AppSettings {
         static let keepOriginalAudioTrack = "keepOriginalAudioTrack"
         static let usesAppleIntelligence = "usesAppleIntelligence"
         static let autoSelectSearchResult = "autoSelectSearchResult"
+        static let autoStartRipping = "autoStartRipping"
+        static let autoStartSeconds = "autoStartSeconds"
         static let menudumpPath = "menudumpPath"
         static let menuArchivePath = "menuArchivePath"
         static let ffmpegPath   = "ffmpegPath"
