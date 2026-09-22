@@ -579,6 +579,7 @@ final class RipFlowController {
 
         autoSelectTriedFor = searched
         let apiKey = settings.tmdbAPIKey
+        let settings = settings
 
         Task { [weak self] in
             guard let candidates = await self?.search.autoSelectCandidates(
@@ -611,6 +612,13 @@ final class RipFlowController {
 
             guard let id = decision.selectedID else { return }
             self.select(movieID: id, jobs: jobs, apiKey: apiKey)
+            // Choosing the film is the event automatic ripping waits for, and
+            // nothing else re-evaluates on it — the view's onChange handlers
+            // watch the disc, the job, the menus and the title, all of which
+            // have already happened by now. Without this the policy was asked
+            // exactly once, before there was a film to start, and answered
+            // "no movie is chosen" forever.
+            self.evaluateAutoStart(jobs: jobs, settings: settings)
             FlowDiagnostics.note("autoselect applied: " + String(id)
                 + " selectedMovieID=" + (self.selectedMovieID.map(String.init) ?? "nil")
                 + " selectedMovie=" + (self.search.selectedMovie?.id.description ?? "nil")
@@ -682,6 +690,22 @@ final class RipFlowController {
 
     private var autoStartTask: Task<Void, Never>?
 
+    /// The countdown's clock, injectable so a test can run it instantly.
+    /// A suite that really waited ten seconds a case is a suite that stops
+    /// being run.
+    @ObservationIgnored
+    var autoStartSleeper: @Sendable (Duration) async -> Void = {
+        try? await Task.sleep(for: $0)
+    }
+
+    /// How many times the countdown has run all the way down and asked for a
+    /// rip. Observed by tests; nothing branches on it.
+    private(set) var autoStartFiredCount = 0
+
+    /// The last hold reason written to the log, so a reason that is true on
+    /// every reconcile is recorded once rather than hundreds of times.
+    private var lastAutoStartHold: String?
+
     /// Stop any countdown. Called by every deliberate user action, because a
     /// person who has started interacting is a person who is present, and
     /// the whole point of the countdown is to be interruptible.
@@ -702,20 +726,38 @@ final class RipFlowController {
         )
         guard decision.startsCountdown else {
             if autoStartRemaining != nil { cancelAutoStart() }
+            if case .hold(let reason) = decision, reason != lastAutoStartHold {
+                lastAutoStartHold = reason
+                FlowDiagnostics.note("autostart hold: " + reason)
+            }
             return
         }
+        lastAutoStartHold = nil
         guard autoStartTask == nil, let disc = jobs.insertedDisc else { return }
 
         // Confirm is where the film, the title and the tracks are shown, so
         // the countdown runs there and not over a list of search results.
         if !movieConfirmed { continueToConfirm() }
 
-        autoStartRemaining = max(1, settings.autoStartSeconds)
+        var remaining = max(1, settings.autoStartSeconds)
+        autoStartRemaining = remaining
         autoStartTask = Task { [weak self] in
-            while let remaining = self?.autoStartRemaining, remaining > 0 {
-                try? await Task.sleep(for: .seconds(1))
+            // The loop counts a local variable and reaching zero is the ONLY
+            // way out of it that starts anything.
+            //
+            // It used to be `while let remaining = self?.autoStartRemaining`,
+            // and `cancelAutoStart` sets that to nil — so cancelling the
+            // countdown exited the loop and fell straight through into the
+            // start call, exactly as though it had finished. Pressing Cancel
+            // began the rip. It only ever failed to rip because
+            // `JobController.start` refused on its own, which is a failsafe,
+            // not the behaviour.
+            while remaining > 0 {
+                await self?.autoStartSleeper(.seconds(1))
                 if Task.isCancelled { return }
                 guard let self else { return }
+                // Cancelled from outside while we slept.
+                guard self.autoStartRemaining != nil else { return }
                 // Re-checked every tick, not only at the start: a disc pulled
                 // or a job begun during the countdown must stop it.
                 let still = AutoStartPolicy.decide(
@@ -729,14 +771,22 @@ final class RipFlowController {
                     self.cancelAutoStart()
                     return
                 }
-                self.autoStartRemaining = remaining - 1
+                remaining -= 1
+                self.autoStartRemaining = remaining
             }
             guard let self, jobs.insertedDisc == disc else { return }
             self.autoStartRemaining = nil
             self.autoStartTask = nil
-            self.autoStartedDiscs.insert(disc)
+            self.autoStartFiredCount += 1
             FlowDiagnostics.note("autostart: starting " + (self.search.selectedMovie?.title ?? "?"))
-            self.startRipping(jobs: jobs, settings: settings)
+            // Marked only when the job is actually accepted. Marking on the
+            // attempt meant a refusal — a library check that had not finished,
+            // say — permanently blocked the disc from ever trying again.
+            if self.startRipping(jobs: jobs, settings: settings) {
+                self.autoStartedDiscs.insert(disc)
+            } else {
+                FlowDiagnostics.note("autostart: refused by JobController")
+            }
         }
     }
 

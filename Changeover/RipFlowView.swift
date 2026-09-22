@@ -98,6 +98,11 @@ struct RipFlowView: View {
             flow.evaluateAutoStart(jobs: jobs, settings: settings) }
         .onChange(of: jobs.selectedTitleIndex) { flow.reconcile(jobs: jobs, apiKey: settings.tmdbAPIKey, settings: settings)
             flow.evaluateAutoStart(jobs: jobs, settings: settings) }
+        // The film being chosen, and the library answering whether it is
+        // already there, are the last two things automatic ripping waits on.
+        .onChange(of: flow.selectedMovieID) { flow.evaluateAutoStart(jobs: jobs, settings: settings) }
+        .onChange(of: flow.libraryCheck) { flow.evaluateAutoStart(jobs: jobs, settings: settings) }
+        .onChange(of: flow.search.runtimeLookup) { flow.evaluateAutoStart(jobs: jobs, settings: settings) }
     }
 
     // MARK: - Header
