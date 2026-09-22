@@ -41,6 +41,14 @@ final class AppSettings {
     /// Read on every call rather than captured at launch, so switching it
     /// takes effect on the next disc without relaunching.
     var usesAppleIntelligence: Bool = true
+    /// Whether the search result whose runtime matches the disc is
+    /// pre-selected for the user.
+    ///
+    /// On by default. The evidence is the disc's own feature duration, not
+    /// anything TMDB or a model said, and it abstains whenever more than one
+    /// result is the right length — so the failure mode is a click, not a
+    /// wrong film. Off for anyone who would rather always choose themselves.
+    var autoSelectSearchResult: Bool = true
     /// Menu intelligence — `Tools/menudump`'s helper, which reads a disc's
     /// menu tables and button geometry. Empty means "find it": the app looks
     /// in its own bundle, then Homebrew's and `/usr/local`'s bins, then a
@@ -153,6 +161,9 @@ final class AppSettings {
         if d.object(forKey: Keys.usesAppleIntelligence) != nil {
             usesAppleIntelligence = d.bool(forKey: Keys.usesAppleIntelligence)
         }
+        if d.object(forKey: Keys.autoSelectSearchResult) != nil {
+            autoSelectSearchResult = d.bool(forKey: Keys.autoSelectSearchResult)
+        }
         // Both may legitimately be empty ("find it" / "not installed"), so a
         // stored empty string is honoured rather than falling back to the
         // default the way the required paths above do.
@@ -174,6 +185,7 @@ final class AppSettings {
         d.set(preferredAudioLanguages.compactMap(LanguageCode.normalize), forKey: Keys.preferredAudioLanguages)
         d.set(keepOriginalAudioTrack, forKey: Keys.keepOriginalAudioTrack)
         d.set(usesAppleIntelligence, forKey: Keys.usesAppleIntelligence)
+        d.set(autoSelectSearchResult, forKey: Keys.autoSelectSearchResult)
         d.set(menudumpPath, forKey: Keys.menudumpPath)
         d.set(menuArchivePath, forKey: Keys.menuArchivePath)
         d.set(ffmpegPath,   forKey: Keys.ffmpegPath)
@@ -200,6 +212,7 @@ final class AppSettings {
         static let preferredAudioLanguages = "preferredAudioLanguages"
         static let keepOriginalAudioTrack = "keepOriginalAudioTrack"
         static let usesAppleIntelligence = "usesAppleIntelligence"
+        static let autoSelectSearchResult = "autoSelectSearchResult"
         static let menudumpPath = "menudumpPath"
         static let menuArchivePath = "menuArchivePath"
         static let ffmpegPath   = "ffmpegPath"

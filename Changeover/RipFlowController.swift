@@ -91,6 +91,10 @@ final class RipFlowController {
     /// disc, whatever the answer.
     private var inferenceTriedFor: DiscInsertion?
 
+    /// The search term whose results have already been offered to the
+    /// auto-selector, so a new search is considered and a redraw is not.
+    private var autoSelectTriedFor: String?
+
     /// `search` is optional rather than defaulted to `MovieSearchViewModel()`
     /// in the signature: a default argument expression is evaluated in a
     /// `nonisolated` context, and the view model is explicitly `@MainActor`.
@@ -424,6 +428,7 @@ final class RipFlowController {
         attemptSearchPrefill(jobs: jobs, apiKey: apiKey)
         attemptMenuTitleFallback(jobs: jobs, apiKey: apiKey)
         if let settings { attemptInferredTitle(jobs: jobs, settings: settings) }
+        if let settings { attemptAutoSelect(jobs: jobs, settings: settings) }
     }
 
     // MARK: - Search prefill from the disc name
@@ -451,6 +456,55 @@ final class RipFlowController {
             prefillAttemptedFor = disc
             search.query = term
             searchThenTryTheDiscsOwnTitle(jobs: jobs, disc: disc, apiKey: apiKey)
+        }
+    }
+
+    /// Pre-select the result whose runtime matches the disc, when exactly one
+    /// does.
+    ///
+    /// Searching "Enemy at the Gates" returns three films with effectively
+    /// the same title; the disc's feature runs 131 minutes and only one of
+    /// them does. The evidence is the disc's, not TMDB's and not a model's,
+    /// which is why this is allowed to touch something as consequential as
+    /// the row that decides the Plex folder and the `{tmdb-ID}`.
+    ///
+    /// Still a pre-selection. The list stays open, nothing advances, and
+    /// every other result is one click away. It runs once per result set and
+    /// never over a choice the user has made.
+    private func attemptAutoSelect(jobs: JobController, settings: AppSettings) {
+        guard settings.autoSelectSearchResult,
+              jobs.insertedDisc != nil,
+              search.selectedMovie == nil,
+              !search.results.isEmpty,
+              !search.isLoading,
+              autoSelectTriedFor != search.lastSearchedQuery,
+              let searched = search.lastSearchedQuery
+        else { return }
+
+        // The **feature** title's duration, not the disc's longest — an
+        // extras-heavy disc would otherwise be measured against a
+        // documentary.
+        guard let featureSeconds = jobs.featureDurationSeconds else { return }
+
+        autoSelectTriedFor = searched
+        let apiKey = settings.tmdbAPIKey
+
+        Task { [weak self] in
+            guard let candidates = await self?.search.autoSelectCandidates(
+                apiKey: apiKey, limit: MovieAutoSelect.maximumLookups
+            ) else { return }
+            guard let self,
+                  self.search.lastSearchedQuery == searched,
+                  self.search.selectedMovie == nil
+            else { return }
+
+            let decision = MovieAutoSelect.decide(
+                candidates: candidates,
+                discDurationSeconds: featureSeconds,
+                searchTerm: searched
+            )
+            guard let id = decision.selectedID else { return }
+            self.select(movieID: id, jobs: jobs, apiKey: apiKey)
         }
     }
 

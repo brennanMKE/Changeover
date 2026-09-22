@@ -1307,6 +1307,20 @@ final class JobController {
         }
     }
 
+    /// The settled feature title's duration, in seconds, or `nil` when no
+    /// title is settled yet.
+    ///
+    /// The **feature**, not the disc's longest title: on an extras-heavy disc
+    /// those differ, and matching a search result against a documentary is
+    /// how the wrong film gets pre-selected.
+    var featureDurationSeconds: Int? {
+        guard let index = selectedTitleIndex,
+              case .scanned(let scan) = scanState,
+              let title = scan.disc.titles.first(where: { $0.index == index })
+        else { return nil }
+        return title.durationSeconds
+    }
+
     /// Whether the disc's chapter names may be written into the encode of
     /// `titleIndex`, decided against **that** title's chapter count.
     ///

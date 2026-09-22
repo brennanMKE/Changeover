@@ -224,6 +224,23 @@ final class MovieSearchViewModel {
     /// runtime. A stale response — from a reselect that lands after a newer
     /// one, or after `search` clears the selection — is dropped: it never
     /// overwrites a different movie's state.
+    /// The current results as auto-select candidates, each with the runtime
+    /// a details lookup gives.
+    ///
+    /// Lives here rather than in the flow so `client` stays private — the
+    /// view model owns every TMDB call, which is what lets a test drive the
+    /// whole path with one stubbed client.
+    func autoSelectCandidates(apiKey: String, limit: Int) async -> [MovieAutoSelect.Candidate] {
+        var candidates: [MovieAutoSelect.Candidate] = []
+        for movie in results.prefix(limit) {
+            let minutes = try? await client.movieDetails(id: movie.id, apiKey: apiKey).runtimeMinutes
+            candidates.append(MovieAutoSelect.Candidate(
+                id: movie.id, title: movie.title, runtimeMinutes: minutes ?? nil
+            ))
+        }
+        return candidates
+    }
+
     func select(movieID: Int?, apiKey: String) {
         runtimeTask?.cancel()
         runtimeTask = nil
