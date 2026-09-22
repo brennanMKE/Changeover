@@ -52,15 +52,16 @@ final class AppSettings {
     /// Whether a disc that identified itself unambiguously starts ripping on
     /// its own, after a visible countdown.
     ///
-    /// **Off by default**, and the only setting here that is. Everything else
-    /// in this group fills something in for the user to look at; this one
-    /// writes a file into their library without anyone having looked. The
-    /// gate is `StartDecision.ready`, which a disc already in the library
-    /// cannot reach without a person ticking the box — so the feature cannot
-    /// silently overwrite anything — but "cannot overwrite" is not the same
-    /// as "should run unattended", and that is the user's call to make once,
-    /// deliberately.
-    var autoStartRipping: Bool = false
+    /// On by default, at the owner's instruction (2026-09-22). Feeding a
+    /// stack of discs is what this app is for, and the manual press was a
+    /// press on an answer the app had already worked out.
+    ///
+    /// What makes that defensible is the gate: `StartDecision.ready`, the
+    /// same condition that enables the Start button. A film already in the
+    /// library cannot reach it without a person ticking a box, so an
+    /// unattended rip can never overwrite one — and the countdown is visible
+    /// and cancellable for everything else.
+    var autoStartRipping: Bool = true
 
     /// How long the countdown runs. Long enough to read the film's name and
     /// stop it, short enough that feeding a stack of discs is not mostly
@@ -181,7 +182,12 @@ final class AppSettings {
         if d.object(forKey: Keys.autoSelectSearchResult) != nil {
             autoSelectSearchResult = d.bool(forKey: Keys.autoSelectSearchResult)
         }
-        autoStartRipping = d.bool(forKey: Keys.autoStartRipping)
+        // `bool(forKey:)` answers false for a key never written, which would
+        // turn a default-on setting off for every existing install. Only an
+        // explicit choice overrides the default.
+        if d.object(forKey: Keys.autoStartRipping) != nil {
+            autoStartRipping = d.bool(forKey: Keys.autoStartRipping)
+        }
         if let seconds = d.object(forKey: Keys.autoStartSeconds) as? Int, seconds > 0 {
             autoStartSeconds = seconds
         }

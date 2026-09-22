@@ -138,4 +138,31 @@ struct AppSettingsTests {
         #expect(!AppSettings(defaults: defaults).usesAppleIntelligence)
     }
 
+    /// Automatic ripping is on by default, and — the part that bites — stays
+    /// on for an install that predates the key, since `bool(forKey:)` answers
+    /// false for one never written.
+    @Test func automaticRippingDefaultsOnIncludingForAnOlderInstall() {
+        #expect(AppSettings().autoStartRipping)
+
+        let suite = "changeover.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+        defaults.set("/Volumes/Media/Media", forKey: "plexMediaRoot")
+        #expect(AppSettings(defaults: defaults).autoStartRipping)
+    }
+
+    /// And turning it off is remembered — the countdown has to be refusable
+    /// for good.
+    @Test func turningAutomaticRippingOffIsRemembered() {
+        let suite = "changeover.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { UserDefaults().removePersistentDomain(forName: suite) }
+
+        let settings = AppSettings(defaults: defaults)
+        settings.autoStartRipping = false
+        settings.persist()
+
+        #expect(!AppSettings(defaults: defaults).autoStartRipping)
+    }
+
 }
