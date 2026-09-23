@@ -150,7 +150,8 @@ struct DiscEjectorTests {
         let outcome = await DiscEjector.defaultEject(
             volumeURL: URL(fileURLWithPath: "/Volumes/ChangeoverDoesNotExist\(Int.random(in: 1000...9999))"),
             environment: [:],
-            onBegin: { beganDiskArbitration = true }
+            onBegin: { beganDiskArbitration = true },
+            retryDelays: [], sleep: { _ in }
         )
         #expect(beganDiskArbitration)
         guard case .failed = outcome else {
@@ -226,7 +227,12 @@ struct DiscEjectorIntegrationTests {
         let (imagePath, mountPoint) = try attachImage(name: name)
         defer { forceDetachAndDelete(imagePath: imagePath, mountPoint: mountPoint) }
 
-        let outcome = await DiscEjector.eject(volumeURL: URL(fileURLWithPath: mountPoint))
+        // No real waiting: the budget exists for a drive that is briefly
+        // busy, and a suite that spends thirty seconds per case stops being
+        // run.
+        let outcome = await DiscEjector.eject(
+            volumeURL: URL(fileURLWithPath: mountPoint), retryDelays: [], sleep: { _ in }
+        )
 
         #expect(outcome == .ejected)
         #expect(!FileManager.default.fileExists(atPath: mountPoint), "the volume should be gone after a successful eject")
@@ -234,7 +240,10 @@ struct DiscEjectorIntegrationTests {
 
     @Test func ejectingAVolumeThatIsAlreadyGoneFails() async throws {
         // Never attached — DADiskCreateFromVolumePath finds nothing there.
-        let outcome = await DiscEjector.eject(volumeURL: URL(fileURLWithPath: "/Volumes/ChangeoverDoesNotExist\(Int.random(in: 1000...9999))"))
+        let outcome = await DiscEjector.eject(
+            volumeURL: URL(fileURLWithPath: "/Volumes/ChangeoverDoesNotExist\(Int.random(in: 1000...9999))"),
+            retryDelays: [], sleep: { _ in }
+        )
         guard case .failed = outcome else {
             Issue.record("expected .failed for a volume that was never mounted, got \(outcome)")
             return
@@ -273,7 +282,8 @@ struct DiscEjectorIntegrationTests {
         let recorder = ThreadRecorder()
         _ = await DiscEjector.eject(
             volumeURL: URL(fileURLWithPath: "/Volumes/ChangeoverDoesNotExist\(Int.random(in: 1000...9999))"),
-            onBegin: { recorder.record() }
+            onBegin: { recorder.record() },
+            retryDelays: [], sleep: { _ in }
         )
         #expect(recorder.onMainThread == [false])
     }
@@ -325,9 +335,13 @@ struct DiscEjectorIntegrationTests {
             retryDelays: [.seconds(30), .seconds(30)],
             sleep: { duration in slept.record(duration) }
         )
-        // No disk to find, so this is `.failed` and never reaches a retry.
-        if case .failed = outcome {} else { Issue.record("a missing volume is a failure, not a retry") }
-        #expect(slept.durations.isEmpty, "a failure must not wait")
+        // A failure now *does* wait, and that is the fix: `diskutil` being
+        // dissented is transient, and the identical command succeeded minutes
+        // later. What is pinned here is that the injected clock is used, so
+        // the suite never spends the real budget.
+        if case .ejected = outcome { Issue.record("a missing volume cannot be ejected") }
+        #expect(slept.durations == [.seconds(30), .seconds(30)],
+                "the budget is spent through the injected clock, not a real wait")
     }
 }
 
@@ -339,6 +353,15 @@ struct DiscEjectorIntegrationTests {
 /// finished. `diskutil` talks to the same daemon as the logged-in user and is
 /// not refused.
 struct DiscEjectorFallbackTests {
+
+    /// Records what the retry loop asked to wait for, without waiting.
+    final class SleepRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: [Duration] = []
+        var durations: [Duration] { lock.lock(); defer { lock.unlock() }; return stored }
+        func record(_ duration: Duration) { lock.lock(); stored.append(duration); lock.unlock() }
+    }
+
 
     /// The status that was actually seen, so the arithmetic behind the
     /// diagnosis is written down rather than recalculated from memory.
@@ -353,6 +376,30 @@ struct DiscEjectorFallbackTests {
         if case .failed = outcome {} else {
             Issue.record("not-permitted must classify as .failed, never .busy — retrying it is pointless")
         }
+    }
+
+    /// The two refusals seen on the real drive want opposite responses, and
+    /// the budget now covers the one that is transient.
+    ///
+    /// `kDAReturnNotPermitted` is permanent — an app needs consent for
+    /// removable volumes and this one declares none — so retrying it is
+    /// pointless and `diskutil` is the answer. A dissent is the opposite:
+    /// after Die Hard 3, `diskutil` reported "Unmount was dissented by PID
+    /// 634 (loginwindow)" and the identical command succeeded minutes later
+    /// with nothing holding the disc.
+    @Test func aDissentIsTransientAndAPermissionRefusalIsNot() async {
+        // A run against a volume that does not exist exhausts the budget and
+        // still answers, rather than hanging or claiming success.
+        let slept = SleepRecorder()
+        let outcome = await DiscEjector.eject(
+            volumeURL: URL(fileURLWithPath: "/Volumes/ChangeoverDoesNotExist\(Int.random(in: 1000...9999))"),
+            retryDelays: [.seconds(1), .seconds(1)],
+            sleep: { slept.record($0) }
+        )
+        if case .ejected = outcome {
+            Issue.record("a volume that does not exist cannot be ejected")
+        }
+        #expect(slept.durations.count == 2, "the budget is spent on the tool that works, not only on the framework")
     }
 
     /// `diskutil` is the primary route now, so "not there to ask" must fall

@@ -132,8 +132,21 @@ nonisolated enum DiscEjector {
     ) async -> Outcome {
         onBegin()
 
-        // `diskutil` first, because on this hardware it is the one that
-        // works. Every end-of-job eject through DiskArbitration came back
+        // `diskutil` first, and keep asking across the whole budget.
+        //
+        // Two different refusals have been seen on this drive, and they need
+        // opposite responses. `kDAReturnNotPermitted` from the framework is
+        // permanent — an app needs consent to touch removable volumes and
+        // this one declares none — so retrying it is pointless and `diskutil`
+        // is the answer. A dissent is the opposite: after Die Hard 3,
+        // `diskutil` reported "Unmount was dissented by PID 634
+        // (loginwindow)" and the very same command succeeded a few minutes
+        // later with nothing holding the disc. That one is transient and
+        // retrying is the whole fix.
+        //
+        // So the budget wraps the tool that works, rather than only the
+        // framework's own busy path — which is what left a finished rip's
+        // disc in the drive with a one-shot failure recorded against it. Every end-of-job eject through DiskArbitration came back
         // `kDAReturnNotPermitted` (0xF8DA0008): an app needs consent to touch
         // removable volumes on macOS 13+, this app declares no
         // `NSRemovableVolumesUsageDescription`, so macOS cannot even ask and
@@ -144,8 +157,15 @@ nonisolated enum DiscEjector {
         // it explains *why* it refused, through the dissenter's status
         // string, where `diskutil` only exits non-zero. When the simple route
         // fails, the one that can say something useful gets its turn.
-        if case .ejected = await diskutilEject(volumeURL: volumeURL) {
-            return .ejected
+        var remaining = retryDelays[...]
+        var lastDiskutil: Outcome?
+        while true {
+            let attempt = await diskutilEject(volumeURL: volumeURL)
+            if case .ejected = attempt { return .ejected }
+            lastDiskutil = attempt
+            guard let delay = remaining.first else { break }
+            remaining = remaining.dropFirst()
+            await sleep(delay)
         }
 
         guard let session = DASessionCreate(kCFAllocatorDefault) else {
@@ -188,7 +208,7 @@ nonisolated enum DiscEjector {
             //
             // #0005 dropped a `drutil` fallback as untestable dead code. It
             // is neither now: this is the path that actually opens the tray.
-            return await ejectWithDiskutil(volumeURL: volumeURL, after: unmountOutcome)
+            return lastDiskutil ?? unmountOutcome
         }
 
         let ejectOutcome = await attempting(
@@ -284,12 +304,19 @@ nonisolated enum DiscEjector {
     static func defaultEject(
         volumeURL: URL,
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        onBegin: @Sendable () -> Void = {}
+        onBegin: @Sendable () -> Void = {},
+        retryDelays: [Duration] = DiscEjector.retryDelays,
+        sleep: @Sendable @escaping (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) async -> Outcome {
         guard !isTestHost(environment: environment) else {
             return .failed(message: "real ejector called from tests")
         }
-        return await eject(volumeURL: volumeURL, onBegin: onBegin)
+        // The budget is forwarded so a test that deliberately reaches the
+        // real path can still run instantly. Without it the one test that
+        // proves the guard is *not* tripped spent the whole thirty seconds,
+        // which took the suite from forty seconds to a hundred.
+        return await eject(volumeURL: volumeURL, onBegin: onBegin,
+                           retryDelays: retryDelays, sleep: sleep)
     }
 
     // MARK: - Pure decision seam
