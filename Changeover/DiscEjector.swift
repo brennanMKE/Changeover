@@ -77,8 +77,13 @@ nonisolated enum DiscEjector {
     /// Backing off to about eight seconds in total covers that window without
     /// making a genuine refusal feel like a hang. Only `.busy` is retried: a
     /// `.failed` is a different answer and repeating it would just be noise.
+    /// About thirty seconds in total. The moment this runs is when a real
+    /// "busy" is most likely — HandBrake has just closed a file it read for
+    /// forty minutes — and waiting costs nothing when the eject succeeds,
+    /// because it only waits while something is actually holding the disc.
     static let retryDelays: [Duration] = [
         .milliseconds(500), .seconds(1), .seconds(2), .seconds(4),
+        .seconds(6), .seconds(8), .seconds(8),
     ]
 
     /// Run one DiskArbitration step until it succeeds, refuses for a reason
@@ -126,6 +131,22 @@ nonisolated enum DiscEjector {
         sleep: @Sendable @escaping (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     ) async -> Outcome {
         onBegin()
+
+        // `diskutil` first, because on this hardware it is the one that
+        // works. Every end-of-job eject through DiskArbitration came back
+        // `kDAReturnNotPermitted` (0xF8DA0008): an app needs consent to touch
+        // removable volumes on macOS 13+, this app declares no
+        // `NSRemovableVolumesUsageDescription`, so macOS cannot even ask and
+        // denies outright. `diskutil` is Apple's own tool acting for the
+        // logged-in user and is not subject to it.
+        //
+        // The framework path stays as the fallback rather than being deleted:
+        // it explains *why* it refused, through the dissenter's status
+        // string, where `diskutil` only exits non-zero. When the simple route
+        // fails, the one that can say something useful gets its turn.
+        if case .ejected = await diskutilEject(volumeURL: volumeURL) {
+            return .ejected
+        }
 
         guard let session = DASessionCreate(kCFAllocatorDefault) else {
             return .failed(message: "Could not open a DiskArbitration session.")
@@ -188,7 +209,21 @@ nonisolated enum DiscEjector {
         after original: Outcome,
         diskutilPath: String = "/usr/sbin/diskutil"
     ) async -> Outcome {
-        guard FileManager.default.isExecutableFile(atPath: diskutilPath) else { return original }
+        await diskutilEject(volumeURL: volumeURL, diskutilPath: diskutilPath) ?? original
+    }
+
+    /// `diskutil`'s own verdict, or `nil` when it is not there to ask.
+    ///
+    /// Separate from the `after:` wrapper because the two callers need
+    /// opposite defaults: as the primary route, "no diskutil" must fall
+    /// through to DiskArbitration, and folding that into a wrapper that
+    /// returns the caller's value would have reported a successful eject on a
+    /// Mac without the tool.
+    static func diskutilEject(
+        volumeURL: URL,
+        diskutilPath: String = "/usr/sbin/diskutil"
+    ) async -> Outcome? {
+        guard FileManager.default.isExecutableFile(atPath: diskutilPath) else { return nil }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: diskutilPath)
@@ -200,7 +235,7 @@ nonisolated enum DiscEjector {
         do {
             try process.run()
         } catch {
-            return original
+            return nil
         }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()

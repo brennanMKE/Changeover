@@ -290,8 +290,13 @@ struct DiscEjectorIntegrationTests {
         #expect(!delays.isEmpty, "one refusal must not be the final answer")
         #expect(delays == delays.sorted(), "each wait is at least as long as the last")
         let total = delays.reduce(Duration.zero, +)
-        #expect(total >= .seconds(5), "long enough to outlast a process letting go of the disc")
-        #expect(total <= .seconds(15), "short enough that a genuine refusal still arrives promptly")
+        // Widened from about eight seconds to about thirty on 2026-09-23. The
+        // moment after an encode is when a real "busy" is most likely, and
+        // waiting costs nothing when the eject succeeds — it only waits while
+        // something is actually holding the disc. The upper bound is what
+        // keeps a genuine refusal from feeling like a hang.
+        #expect(total >= .seconds(25), "long enough to outlast a process letting go of the disc")
+        #expect(total <= .seconds(45), "short enough that a genuine refusal still arrives promptly")
     }
 
     /// A busy answer is "not yet"; a failure is "no". Repeating the second
@@ -348,6 +353,18 @@ struct DiscEjectorFallbackTests {
         if case .failed = outcome {} else {
             Issue.record("not-permitted must classify as .failed, never .busy — retrying it is pointless")
         }
+    }
+
+    /// `diskutil` is the primary route now, so "not there to ask" must fall
+    /// through to DiskArbitration rather than read as success. Folding that
+    /// into the `after:` wrapper would have reported a successful eject on a
+    /// Mac without the tool.
+    @Test func aMissingDiskutilIsNoAnswerAtAll() async {
+        let outcome = await DiscEjector.diskutilEject(
+            volumeURL: URL(fileURLWithPath: "/Volumes/DoesNotExist"),
+            diskutilPath: "/nonexistent/diskutil"
+        )
+        #expect(outcome == nil)
     }
 
     /// A missing `diskutil` leaves the original answer untouched rather than
