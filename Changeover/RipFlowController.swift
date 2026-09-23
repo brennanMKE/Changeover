@@ -685,7 +685,16 @@ final class RipFlowController {
     func ripRequest(jobs: JobController) -> RipRequest? {
         guard let movie = search.selectedMovie, let featureTitleIndex = jobs.selectedTitleIndex else { return nil }
         return RipRequest(
-            metadata: MovieMetadata(from: movie, selectionDisc: selectionDisc),
+            metadata: MovieMetadata(
+                from: movie,
+                selectionDisc: selectionDisc,
+                // Read from the volume label: THE_JACKAL_COLLECTORS_EDITION
+                // and friends. `nil` is the ordinary release, which is what
+                // an untagged filename means to Plex.
+                edition: jobs.insertedDisc.flatMap {
+                    DiscEdition.derive(volumeName: $0.mountURL.lastPathComponent)
+                }
+            ),
             featureTitleIndex: featureTitleIndex,
             extraTitleIndices: jobs.selectedExtraTitleIndices.sorted(),
             audioTrackNumbers: jobs.selectedAudioTrackNumbers,
@@ -873,7 +882,8 @@ final class RipFlowController {
                   libraryCheck: libraryCheck,
                   selectedMovieID: selectedMovieID,
                   recommendedMovieID: recommendedMovieID,
-                  acknowledgedReplace: replaceAcknowledgement != nil
+                  acknowledgedReplace: replaceAcknowledgement != nil,
+                  edition: DiscEdition.derive(volumeName: disc.mountURL.lastPathComponent)
               )
         else { return }
 

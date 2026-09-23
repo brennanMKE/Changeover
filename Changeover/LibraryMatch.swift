@@ -80,6 +80,37 @@ nonisolated enum LibraryMatch {
     /// A matched folder holding no video file — empty, or only a poster and a
     /// `.nfo` — is **not** a duplicate: nothing there would be overwritten,
     /// so warning about it would be a stop-and-ask with nothing behind it.
+    /// The `{edition-…}` tag a filename carries, or `nil` for an untagged
+    /// file — Plex's unnamed default, which is the ordinary release.
+    static func edition(ofFileName name: String) -> String? {
+        guard let open = name.range(of: "{edition-"),
+              let close = name.range(of: "}", range: open.upperBound..<name.endIndex)
+        else { return nil }
+        let value = String(name[open.upperBound..<close.lowerBound])
+            .trimmingCharacters(in: .whitespaces)
+        return value.isEmpty ? nil : value
+    }
+
+    /// Whether this folder already holds the cut the disc in the drive is.
+    ///
+    /// The `{tmdb-…}` tag alone is the wrong question once editions exist:
+    /// The Jackal and The Jackal collector's edition share a film and a
+    /// folder, so matching on the id would call the second disc a duplicate
+    /// of the first and — with automatic ripping on — eject it as one.
+    ///
+    /// Compared case- and punctuation-insensitively, because the name comes
+    /// from a volume label on one side and a filename on the other, and
+    /// "Collector's Edition" must match "Collectors Edition".
+    static func holdsEdition(_ wanted: String?, in entries: [LibraryEntry]) -> Bool {
+        let want = MenuArchive.fold(wanted ?? "")
+        for entry in entries {
+            for file in entry.files where MenuArchive.fold(edition(ofFileName: file.name) ?? "") == want {
+                return true
+            }
+        }
+        return false
+    }
+
     static func lookup(folders: [(name: String, path: String, files: [LibraryFile])]) -> LibraryLookup {
         let entries: [LibraryEntry] = folders.compactMap { folder in
             let videos = folder.files

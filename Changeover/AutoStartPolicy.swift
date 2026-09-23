@@ -58,14 +58,19 @@ nonisolated enum AutoStartPolicy {
         libraryCheck: LibraryCheck,
         selectedMovieID: Int?,
         recommendedMovieID: Int?,
-        acknowledgedReplace: Bool
+        acknowledgedReplace: Bool,
+        edition: String? = nil
     ) -> Bool {
         guard enabled else { return false }
         // The user has said "replace it" — that is a rip, not an eject.
         guard !acknowledgedReplace else { return false }
         guard let selected = selectedMovieID, selected == recommendedMovieID else { return false }
-        guard case .done(_, let lookup) = libraryCheck, case .present = lookup else { return false }
-        return true
+        guard case .done(_, let lookup) = libraryCheck, case .present(let entries) = lookup else { return false }
+        // The film is in the library, but this disc may be a different cut of
+        // it. Plex keeps every edition in one folder, so the folder matching
+        // is not enough: a collector's edition would be ejected as a
+        // duplicate of the theatrical release it is meant to sit beside.
+        return LibraryMatch.holdsEdition(edition, in: entries)
     }
 
     /// - Parameters:

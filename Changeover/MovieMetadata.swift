@@ -17,6 +17,14 @@ nonisolated struct MovieMetadata: Codable, Hashable, Sendable {
     let title:  String
     let year:   String
     let tmdbID: String
+    /// Which cut of the film this disc holds — "Collector's Edition",
+    /// "Director's Cut", "Extended" — or `nil` for the ordinary release.
+    ///
+    /// Plex keeps every cut of a film in **one** folder and tells them apart
+    /// by an `{edition-…}` tag on the filename, so this never changes
+    /// `folderName`: The Jackal and The Jackal collector's edition are one
+    /// movie with two editions, not two movies.
+    var edition: String? = nil
     /// The disc identity this selection was made for, when the caller has
     /// one to attach — #0034. `JobController.start` compares this against
     /// the disc actually in the drive as a defence-in-depth check, backing
@@ -25,20 +33,40 @@ nonisolated struct MovieMetadata: Codable, Hashable, Sendable {
     /// `start`, such as the folder-name preview and pipeline tests.
     let selectionDisc: DiscInsertion?
 
-    init(from movie: TMDBMovie, selectionDisc: DiscInsertion? = nil) {
+    init(from movie: TMDBMovie, selectionDisc: DiscInsertion? = nil, edition: String? = nil) {
         self.title  = movie.title
         self.year   = movie.yearText
         self.tmdbID = String(movie.id)
         self.selectionDisc = selectionDisc
+        self.edition = MovieMetadata.normalizedEdition(edition)
     }
 
     /// Plain memberwise init — for tests, `RipRequest` decoding, and any
     /// future caller with no `TMDBMovie` on hand.
-    init(title: String, year: String, tmdbID: String, selectionDisc: DiscInsertion? = nil) {
+    init(
+        title: String,
+        year: String,
+        tmdbID: String,
+        selectionDisc: DiscInsertion? = nil,
+        edition: String? = nil
+    ) {
         self.title = title
         self.year = year
         self.tmdbID = tmdbID
         self.selectionDisc = selectionDisc
+        self.edition = MovieMetadata.normalizedEdition(edition)
+    }
+
+    /// Trim an edition name, drop an empty one, and make it safe to sit in a
+    /// filename. `}` in particular would close Plex's tag early and leave the
+    /// rest of the name dangling outside it.
+    nonisolated static func normalizedEdition(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return pathSafe(trimmed)
+            .replacingOccurrences(of: "{", with: "(")
+            .replacingOccurrences(of: "}", with: ")")
     }
 
     /// Plex folder name, e.g. "Blade Runner (1982) {tmdb-78}"
@@ -54,9 +82,15 @@ nonisolated struct MovieMetadata: Codable, Hashable, Sendable {
         "\(Self.pathSafe(title)) (\(year))"
     }
 
-    /// Encoded file name, e.g. "Blade Runner (1982).mp4"
+    /// Encoded file name, e.g. "Blade Runner (1982).mp4", or
+    /// "The Jackal (1997) {edition-Collector's Edition}.mp4" when this disc
+    /// is a particular cut.
+    ///
+    /// Plex's own convention: the tag lives on the file, inside the one
+    /// `{tmdb-…}` folder, so the editions group under a single movie.
     nonisolated var fileName: String {
-        "\(baseName).mp4"
+        guard let edition else { return "\(baseName).mp4" }
+        return "\(baseName) {edition-\(edition)}.mp4"
     }
 
     /// Makes an arbitrary title safe to sit inside a single filesystem path

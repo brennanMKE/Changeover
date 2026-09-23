@@ -124,6 +124,13 @@ nonisolated enum DuplicatePresentation {
                     revealPath: nil
                 )
             case .present(let entries):
+                // The film is there, but is *this cut* of it? Plex keeps
+                // every edition in one folder, so the `{tmdb-…}` match alone
+                // would call a collector's edition a duplicate of the
+                // theatrical release — and, with automatic ripping on, eject
+                // the disc as one. A different edition is a new file beside
+                // the old, not a replacement for it.
+                guard LibraryMatch.holdsEdition(metadata.edition, in: entries) else { return nil }
                 return presentNotice(entries: entries, acknowledgement: acknowledgement, metadata: metadata, now: now)
             }
         }
