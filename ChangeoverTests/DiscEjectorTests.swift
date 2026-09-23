@@ -325,3 +325,55 @@ struct DiscEjectorIntegrationTests {
         #expect(slept.durations.isEmpty, "a failure must not wait")
     }
 }
+
+/// The fallback that actually opens the tray.
+///
+/// Measured on the Plex host, 2026-09-23: every end-of-job eject came back
+/// `kDAReturnNotPermitted` (0xF8DA0008) from `DADiskUnmount` — not busy, so
+/// no amount of retrying helped, and Die Hard sat in the drive with its rip
+/// finished. `diskutil` talks to the same daemon as the logged-in user and is
+/// not refused.
+struct DiscEjectorFallbackTests {
+
+    /// The status that was actually seen, so the arithmetic behind the
+    /// diagnosis is written down rather than recalculated from memory.
+    @Test func theMeasuredStatusIsNotPermittedRatherThanBusy() {
+        // The flow log printed it in decimal: -119930872, which is
+        // 0xF8DA0008 — kDAReturnNotPermitted. Written down here so the next
+        // reader does not have to redo the arithmetic.
+        let seen = DAReturn(kDAReturnNotPermitted)
+        #expect("\(seen)" == "-119930872", "the number the flow log printed")
+
+        let outcome = DiscEjector.classify(status: seen, statusString: nil, action: "unmount")
+        if case .failed = outcome {} else {
+            Issue.record("not-permitted must classify as .failed, never .busy — retrying it is pointless")
+        }
+    }
+
+    /// A missing `diskutil` leaves the original answer untouched rather than
+    /// inventing a vaguer one.
+    @Test func withoutDiskutilTheOriginalReasonSurvives() async {
+        let original = DiscEjector.Outcome.failed(message: "Could not unmount the disc: status -119930872.")
+        let outcome = await DiscEjector.ejectWithDiskutil(
+            volumeURL: URL(fileURLWithPath: "/Volumes/DoesNotExist"),
+            after: original,
+            diskutilPath: "/nonexistent/diskutil"
+        )
+        #expect(outcome == original)
+    }
+
+    /// And a `diskutil` that runs but fails reports its own words, so the
+    /// next diagnosis starts from what the tool said.
+    @Test func aFailedDiskutilReportsWhatItSaid() async {
+        let outcome = await DiscEjector.ejectWithDiskutil(
+            volumeURL: URL(fileURLWithPath: "/Volumes/ChangeoverDoesNotExist\(Int.random(in: 1000...9999))"),
+            after: .failed(message: "original"),
+            diskutilPath: "/usr/sbin/diskutil"
+        )
+        if case .failed(let message) = outcome {
+            #expect(message != "original", "the fallback's own reason replaces the framework's")
+        } else {
+            Issue.record("ejecting a volume that does not exist cannot succeed")
+        }
+    }
+}

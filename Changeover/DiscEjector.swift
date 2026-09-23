@@ -156,12 +156,61 @@ nonisolated enum DiscEjector {
         let unmountOutcome = await attempting(
             "unmount", retryDelays: retryDelays, sleep: sleep
         ) { await unmount(disk) }
-        guard unmountOutcome == .ejected else { return unmountOutcome }
+        guard unmountOutcome == .ejected else {
+            // DiskArbitration refused. Measured on the Plex host, 2026-09-23:
+            // every end-of-job eject came back
+            // `kDAReturnNotPermitted` (0xF8DA0008) — not busy, so no amount
+            // of retrying helps, and Die Hard sat in the drive with its rip
+            // finished. Unmounting a whole removable disk is privileged in a
+            // way `diskutil`, which talks to diskarbitrationd as the logged-in
+            // user, is not.
+            //
+            // #0005 dropped a `drutil` fallback as untestable dead code. It
+            // is neither now: this is the path that actually opens the tray.
+            return await ejectWithDiskutil(volumeURL: volumeURL, after: unmountOutcome)
+        }
 
         let ejectOutcome = await attempting(
             "eject", retryDelays: retryDelays, sleep: sleep
         ) { await ejectFromDrive(disk) }
         return combine(unmountOutcome: unmountOutcome, ejectOutcome: ejectOutcome)
+    }
+
+    /// The fallback: `diskutil eject`, which unmounts and ejects in one go.
+    ///
+    /// Runs as the logged-in user and needs no entitlement, which is the
+    /// whole point — it succeeds where the framework call is refused. Its
+    /// exit status is the verdict; `after` is carried through so a refusal
+    /// still reports the original DiskArbitration reason rather than a
+    /// second, vaguer one.
+    static func ejectWithDiskutil(
+        volumeURL: URL,
+        after original: Outcome,
+        diskutilPath: String = "/usr/sbin/diskutil"
+    ) async -> Outcome {
+        guard FileManager.default.isExecutableFile(atPath: diskutilPath) else { return original }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: diskutilPath)
+        process.arguments = ["eject", volumeURL.path]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        do {
+            try process.run()
+        } catch {
+            return original
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        if process.terminationStatus == 0 { return .ejected }
+        let text = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return .failed(message: text.isEmpty
+            ? "Could not eject the disc: diskutil exited \(process.terminationStatus)."
+            : "Could not eject the disc: \(text)")
     }
 
     // MARK: - #0050: guarding the default ejector
