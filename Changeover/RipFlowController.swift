@@ -604,7 +604,7 @@ final class RipFlowController {
             // who disagrees with the pick should still find the plausible
             // rows together at the top rather than hunting for them.
             let order = MovieAutoSelect.ranked(
-                candidates: candidates, discDurationSeconds: featureSeconds
+                candidates: candidates, discDurationSeconds: featureSeconds, searchTerm: searched
             ).map(\.id)
             self.search.reorder(byID: order)
             self.recommendedMovieID = decision.selectedID

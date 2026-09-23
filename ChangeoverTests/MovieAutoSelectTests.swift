@@ -61,16 +61,30 @@ struct MovieAutoSelectTests {
         }
     }
 
-    /// A single result that is the wrong length is the case where a
-    /// confident pre-selection does the most harm: it is the only row, so it
-    /// looks like the answer.
-    @Test func aLoneResultOfTheWrongLengthIsNotChosen() {
+    /// A lone result whose title is *not* what the disc says, and whose
+    /// length does not fit either, is not chosen — being the only row makes
+    /// a wrong pre-selection look like the answer.
+    @Test func aLoneResultThatMatchesNeitherTitleNorLengthIsNotChosen() {
         let decision = MovieAutoSelect.decide(
             candidates: [MovieAutoSelect.Candidate(id: 9, title: "Fargo", runtimeMinutes: 60)],
             discDurationSeconds: 98 * 60,
-            searchTerm: "Fargo"
+            searchTerm: "Raising Arizona"
         )
         #expect(decision.selectedID == nil)
+    }
+
+    /// But a lone result titled exactly what the disc says *is* chosen, even
+    /// when the length is well off. That is the deliberate trade after
+    /// Wedding Crashers: the title is the stronger signal, a runtime gap is
+    /// usually an extended cut, and this is a pre-selection the user can
+    /// change with one click.
+    @Test func aLoneResultTitledExactlyRightIsChosenDespiteTheLength() {
+        let decision = MovieAutoSelect.decide(
+            candidates: [MovieAutoSelect.Candidate(id: 275, title: "Fargo", runtimeMinutes: 60)],
+            discDurationSeconds: 98 * 60,
+            searchTerm: "Fargo"
+        )
+        #expect(decision.selectedID == 275)
     }
 
     @Test func aLoneResultOfTheRightLengthIsChosen() {
@@ -159,5 +173,85 @@ struct MovieAutoSelectRankingTests {
         ]
         let ranked = MovieAutoSelect.ranked(candidates: candidates, discDurationSeconds: 131 * 60)
         #expect(ranked.map(\.id) == [10, 11])
+    }
+}
+
+/// Wedding Crashers, 2026-09-22 — the auto-select picking the wrong film.
+///
+/// The disc's settled feature ran 107.7 minutes. The real film runs 119 and
+/// failed the tolerance; *Undercover Wedding Crashers* at 101 squeaked
+/// through. So the runtime chose a different film with a similar name, the
+/// copy already in the library was never looked for, and the disc sat there.
+struct MovieAutoSelectContradictionTests {
+
+    static let candidates = [
+        MovieAutoSelect.Candidate(id: 9522, title: "Wedding Crashers", runtimeMinutes: 119),
+        MovieAutoSelect.Candidate(id: 613098, title: "Undercover Wedding Crashers", runtimeMinutes: 101),
+    ]
+    /// 107.7 minutes, as the scan settled it.
+    static let discSeconds = 6464
+
+    /// The title is the answer. The runtime disagreeing with it means an
+    /// extended cut far more often than it means a different film — the disc
+    /// in the drive an hour later was literally THE_HANGOVER_EXTENDED_CUT,
+    /// which TMDB lists at its theatrical length.
+    @Test func theExactlyTitledFilmWinsEvenWhenTheRuntimeDisagrees() {
+        let decision = MovieAutoSelect.decide(
+            candidates: Self.candidates,
+            discDurationSeconds: Self.discSeconds,
+            searchTerm: "Wedding Crashers"
+        )
+        #expect(decision.selectedID == 9522, "the film whose name the disc carries, not the one whose length it happens to share")
+    }
+
+    /// An extended cut on its own is still chosen, rather than refused for
+    /// running longer than the cinema release.
+    @Test func aLoneExtendedCutIsStillChosen() {
+        let decision = MovieAutoSelect.decide(
+            candidates: [MovieAutoSelect.Candidate(id: 18785, title: "The Hangover", runtimeMinutes: 100)],
+            discDurationSeconds: 108 * 60,
+            searchTerm: "The Hangover"
+        )
+        #expect(decision.selectedID == 18785)
+    }
+
+    /// The numbers behind it, so a tolerance change shows up here rather than
+    /// as a silently different verdict.
+    @Test func theRightFilmFailsTheToleranceAndTheWrongOnePasses() {
+        #expect(!MovieAutoSelect.withinTolerance(discSeconds: Self.discSeconds, runtimeMinutes: 119))
+        #expect(MovieAutoSelect.withinTolerance(discSeconds: Self.discSeconds, runtimeMinutes: 101))
+    }
+
+    /// Even with nothing chosen, the list must not lead with the wrong film.
+    @Test func theExactlyTitledFilmIsShownFirst() {
+        let ranked = MovieAutoSelect.ranked(
+            candidates: Self.candidates,
+            discDurationSeconds: Self.discSeconds,
+            searchTerm: "Wedding Crashers"
+        )
+        #expect(ranked.first?.id == 9522)
+    }
+
+    /// The contradiction rule must not break the case it was built beside:
+    /// Enemy at the Gates has two candidates titled exactly alike, and the
+    /// runtime is the only thing that separates them.
+    @Test func identicalTitlesStillLetTheRuntimeDecide() {
+        let decision = MovieAutoSelect.decide(
+            candidates: MovieAutoSelectTests.enemyAtTheGates,
+            discDurationSeconds: MovieAutoSelectTests.discSeconds,
+            searchTerm: "Enemy at the Gates"
+        )
+        #expect(decision.selectedID == 853)
+    }
+
+    /// And a disc with one result whose title matches and whose runtime
+    /// agrees is still chosen — the rule only fires on disagreement.
+    @Test func agreementIsStillAChoice() {
+        let decision = MovieAutoSelect.decide(
+            candidates: [MovieAutoSelect.Candidate(id: 275, title: "Fargo", runtimeMinutes: 98)],
+            discDurationSeconds: 98 * 60,
+            searchTerm: "Fargo"
+        )
+        #expect(decision.selectedID == 275)
     }
 }

@@ -77,6 +77,12 @@ nonisolated enum MovieAutoSelect {
         // case where a confident pre-selection does the most harm.
         if candidates.count == 1 {
             let only = candidates[0]
+            // A title that is exactly what the disc says it is settles it,
+            // whatever the runtime says: an extended cut is listed at its
+            // theatrical length and would otherwise be refused every time.
+            if fold(only.title) == fold(searchTerm) {
+                return .select(id: only.id, reason: "its title is exactly what the disc says it is")
+            }
             guard let disc = discDurationSeconds, let minutes = only.runtimeMinutes else {
                 return .select(id: only.id, reason: "the only result")
             }
@@ -89,49 +95,82 @@ nonisolated enum MovieAutoSelect {
             return .abstain(reason: "the disc's runtime is not known yet")
         }
 
-        let matching = candidates.filter { candidate in
+        func matchesRuntime(_ candidate: Candidate) -> Bool {
             guard let minutes = candidate.runtimeMinutes else { return false }
             return withinTolerance(discSeconds: disc, runtimeMinutes: minutes)
         }
 
+        // The title leads; the runtime only separates films the title cannot.
+        //
+        // It was the other way round, and Wedding Crashers showed why that is
+        // wrong: the disc's feature ran 107.7 minutes, the real film runs 119
+        // and failed the tolerance, and *Undercover Wedding Crashers* at 101
+        // squeaked through — so a different film with a similar name was
+        // chosen and the copy already in the library was never looked for.
+        //
+        // A runtime that disagrees with an exactly-matching title is not
+        // evidence of a different film. It is usually an extended or unrated
+        // cut, which TMDB lists at its theatrical length; the disc in the
+        // drive at the time was literally THE_HANGOVER_EXTENDED_CUT. That
+        // happens often enough that treating it as a mismatch would refuse
+        // the ordinary case.
+        let wantedTitle = fold(searchTerm)
+        let exactTitled = candidates.filter { fold($0.title) == wantedTitle }
+
+        if exactTitled.count == 1 {
+            return .select(id: exactTitled[0].id, reason: "its title is exactly what the disc says it is")
+        }
+
+        if exactTitled.count > 1 {
+            // Two films of the same name — a remake, or a short and a
+            // feature. Now the runtime is the only thing that can separate
+            // them, which is what it is for.
+            let matching = exactTitled.filter(matchesRuntime)
+            if matching.count == 1 {
+                return .select(id: matching[0].id, reason: "its title matches and its runtime fits the disc")
+            }
+            return .abstain(reason: "\(exactTitled.count) films share that title — pick one")
+        }
+
+        // Nothing is titled what the disc says. The runtime alone may still
+        // answer, but only when it answers once.
+        let matching = candidates.filter(matchesRuntime)
         if matching.count == 1 {
             return .select(id: matching[0].id, reason: "its runtime is the only one that matches the disc")
         }
         if matching.isEmpty {
             return .abstain(reason: "no result's runtime matches the disc")
         }
-
-        // Several within tolerance: two cuts of the same film, or a remake
-        // of similar length. The title breaks the tie only when it is exact,
-        // and only when exactly one is.
-        let wanted = fold(searchTerm)
-        let exact = matching.filter { fold($0.title) == wanted }
-        if exact.count == 1 {
-            return .select(id: exact[0].id, reason: "its title and runtime both match")
-        }
-
         return .abstain(reason: "\(matching.count) results are the right length — pick one")
     }
 
-    /// The candidates in the order they should be shown: closest runtime
-    /// first, then everything else in the order TMDB gave.
+    /// The candidates in the order they should be shown: an exactly-titled
+    /// film first, then closest runtime, then the order TMDB gave.
     ///
-    /// TMDB ranks by its own popularity, which put a 2021 film of the same
-    /// name above the 2001 one actually in the drive. The disc's runtime is
-    /// the better ordering and it costs nothing to apply — a user who
-    /// disagrees with the pre-selection still finds the plausible rows
-    /// together at the top instead of hunting.
+    /// TMDB ranks by its own popularity, which put a 2021 film above the 2001
+    /// one actually in the drive; and runtime alone put *Undercover Wedding
+    /// Crashers* above *Wedding Crashers*. A user who disagrees with the
+    /// pre-selection should still find the plausible rows at the top.
     ///
-    /// Stable: candidates with no runtime, or outside tolerance, keep their
-    /// original relative order rather than being shuffled by a number that
-    /// does not apply to them.
-    static func ranked(candidates: [Candidate], discDurationSeconds: Int?) -> [Candidate] {
-        guard let disc = discDurationSeconds else { return candidates }
-        func distance(_ candidate: Candidate) -> Int? {
-            guard let minutes = candidate.runtimeMinutes else { return nil }
-            guard withinTolerance(discSeconds: disc, runtimeMinutes: minutes) else { return nil }
-            return abs(disc - minutes * 60)
+    /// Stable: candidates the ordering cannot speak for keep their original
+    /// relative order rather than being shuffled by a number that does not
+    /// apply to them.
+    static func ranked(
+        candidates: [Candidate],
+        discDurationSeconds: Int?,
+        searchTerm: String = ""
+    ) -> [Candidate] {
+        let wanted = fold(searchTerm)
+        if !wanted.isEmpty {
+            let exact = candidates.filter { fold($0.title) == wanted }
+            let rest = candidates.filter { fold($0.title) != wanted }
+            if !exact.isEmpty, !rest.isEmpty {
+                return ranked(candidates: exact, discDurationSeconds: discDurationSeconds)
+                     + ranked(candidates: rest, discDurationSeconds: discDurationSeconds)
+            }
         }
+        guard let disc = discDurationSeconds else { return candidates }
+
         struct Scored {
             var order: Int
             var candidate: Candidate
@@ -139,16 +178,16 @@ nonisolated enum MovieAutoSelect {
         }
         var scored: [Scored] = []
         for (index, candidate) in candidates.enumerated() {
-            guard let delta = distance(candidate) else { continue }
-            scored.append(Scored(order: index, candidate: candidate, delta: delta))
+            guard let minutes = candidate.runtimeMinutes,
+                  withinTolerance(discSeconds: disc, runtimeMinutes: minutes) else { continue }
+            scored.append(Scored(order: index, candidate: candidate, delta: abs(disc - minutes * 60)))
         }
         scored.sort { left, right in
             left.delta == right.delta ? left.order < right.order : left.delta < right.delta
         }
         let matching: [Candidate] = scored.map { $0.candidate }
         let matchingIDs = Set(matching.map { $0.id })
-        let rest = candidates.filter { !matchingIDs.contains($0.id) }
-        return matching + rest
+        return matching + candidates.filter { !matchingIDs.contains($0.id) }
     }
 
     /// The same tolerance the cross-check uses, for the same reason: a PAL
