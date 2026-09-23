@@ -248,8 +248,16 @@ final class RipFlowController {
     /// there is nothing to look up.
     func libraryCheckKey(settings: AppSettings) -> LibraryCheckKey? {
         guard let movie = search.selectedMovie else { return nil }
-        return LibraryCheckKey(movieID: movie.id, moviesPath: settings.plexMoviesPath)
+        return LibraryCheckKey(
+            movieID: movie.id,
+            moviesPath: settings.plexMoviesPath,
+            epoch: libraryEpoch
+        )
     }
+
+    /// Bumped when a rip finishes, so the library answer is asked again
+    /// rather than reused from before the encode.
+    private var libraryEpoch = 0
 
     /// Runs the probe for the movie currently selected, and stores the answer
     /// — unless the selection moved on while it was in flight, in which case
@@ -717,7 +725,19 @@ final class RipFlowController {
     /// Discs already started automatically in this session, so a finished
     /// job cannot immediately restart the same disc while it sits in the
     /// drive waiting to be swapped.
-    private var autoStartedDiscs: Set<DiscInsertion> = []
+    private var autoStartedDiscs: Set<String> = []
+
+    /// A key for "this physical disc", which survives it being re-reported.
+    ///
+    /// `DiscInsertion` mints a fresh token per insertion event (#0034), so two
+    /// insertions are never equal even when every other field matches. That is
+    /// right for "is this the disc the selection was made for" and wrong for
+    /// "have we already ripped this disc": when Die Hard's eject was refused
+    /// the disc was re-reported, the set no longer contained it, and it was
+    /// ripped a second time ten seconds after the first finished.
+    nonisolated static func discIdentity(_ disc: DiscInsertion) -> String {
+        disc.discID ?? disc.mountURL.lastPathComponent
+    }
 
     private var autoStartTask: Task<Void, Never>?
 
@@ -748,11 +768,11 @@ final class RipFlowController {
 
     /// Discs ejected because their film was already in the library, so the
     /// eject is attempted once per disc.
-    private var autoEjectedDiscs: Set<DiscInsertion> = []
+    private var autoEjectedDiscs: Set<String> = []
 
     /// Discs a finished job has already been asked to eject, so the sweep
     /// asks once.
-    private var postJobEjectedDiscs: Set<DiscInsertion> = []
+    private var postJobEjectedDiscs: Set<String> = []
 
     /// The disc a job was last seen running for, so a finished job's outcome
     /// is never attributed to a disc that was swapped in afterwards.
@@ -785,12 +805,20 @@ final class RipFlowController {
                   isEjecting: jobs.isEjecting,
                   currentDisc: disc,
                   ranJobForDisc: ranJobForDisc,
-                  alreadyAsked: postJobEjectedDiscs.contains(disc),
+                  alreadyAsked: postJobEjectedDiscs.contains(Self.discIdentity(disc)),
                   outcome: jobs.lastOutcome
               )
         else { return }
 
-        postJobEjectedDiscs.insert(disc)
+        postJobEjectedDiscs.insert(Self.discIdentity(disc))
+
+        // The film is in the library now, and the answer on screen was taken
+        // before the encode. Ask again — otherwise a disc that stays in the
+        // drive looks like a fresh one and is ripped a second time, which is
+        // what happened to Die Hard when its eject was refused.
+        libraryEpoch += 1
+        clearLibraryCheck()
+
         FlowDiagnostics.note("post-job eject: the job finished with the disc still in the drive")
         Task { await jobs.ejectDisc() }
     }
@@ -804,7 +832,7 @@ final class RipFlowController {
     /// gesture as "finished with it".
     private func evaluateAutoEject(jobs: JobController, settings: AppSettings) {
         guard let disc = jobs.insertedDisc,
-              !autoEjectedDiscs.contains(disc),
+              !autoEjectedDiscs.contains(Self.discIdentity(disc)),
               !jobs.isRunning,
               !jobs.isEjecting,
               AutoStartPolicy.shouldEjectDuplicate(
@@ -816,7 +844,7 @@ final class RipFlowController {
               )
         else { return }
 
-        autoEjectedDiscs.insert(disc)
+        autoEjectedDiscs.insert(Self.discIdentity(disc))
         cancelAutoStart()
         FlowDiagnostics.note("autoeject: already in the library — " + (search.selectedMovie?.title ?? "?"))
         Task { await jobs.ejectDisc() }
@@ -831,7 +859,7 @@ final class RipFlowController {
             start: startDecision(jobs: jobs),
             selectedMovieID: selectedMovieID,
             recommendedMovieID: recommendedMovieID,
-            alreadyRipped: jobs.insertedDisc.map { autoStartedDiscs.contains($0) } ?? false
+            alreadyRipped: jobs.insertedDisc.map { autoStartedDiscs.contains(Self.discIdentity($0)) } ?? false
         )
         guard decision.startsCountdown else {
             if autoStartRemaining != nil { cancelAutoStart() }
@@ -874,7 +902,7 @@ final class RipFlowController {
                     start: self.startDecision(jobs: jobs),
                     selectedMovieID: self.selectedMovieID,
                     recommendedMovieID: self.recommendedMovieID,
-                    alreadyRipped: self.autoStartedDiscs.contains(disc)
+                    alreadyRipped: self.autoStartedDiscs.contains(Self.discIdentity(disc))
                 )
                 guard still.startsCountdown, jobs.insertedDisc == disc else {
                     self.cancelAutoStart()
@@ -892,7 +920,7 @@ final class RipFlowController {
             // attempt meant a refusal — a library check that had not finished,
             // say — permanently blocked the disc from ever trying again.
             if self.startRipping(jobs: jobs, settings: settings) {
-                self.autoStartedDiscs.insert(disc)
+                self.autoStartedDiscs.insert(Self.discIdentity(disc))
             } else {
                 FlowDiagnostics.note("autostart: refused by JobController")
             }

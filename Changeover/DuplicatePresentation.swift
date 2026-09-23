@@ -34,6 +34,16 @@ nonisolated struct ReplaceAcknowledgement: Equatable, Sendable {
 nonisolated struct LibraryCheckKey: Hashable, Sendable {
     let movieID: Int
     let moviesPath: String
+    /// Bumped whenever something has happened that could change the answer —
+    /// in practice, a rip finishing.
+    ///
+    /// Without it the key is (film, folder), neither of which changes when a
+    /// rip completes, so `ConfirmStepView.task(id:)` never re-ran and the
+    /// notice kept saying what it had found *before* the encode. A disc that
+    /// then lingered in the drive looked like a fresh one: on 2026-09-23 Die
+    /// Hard finished, failed to eject, and was ripped again ten seconds
+    /// later, with the duplicate guard holding a stale "not in the library".
+    var epoch: Int = 0
 }
 
 /// #0062 — the notice on the Confirm step, as plain values.
