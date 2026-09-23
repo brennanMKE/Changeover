@@ -750,6 +750,51 @@ final class RipFlowController {
     /// eject is attempted once per disc.
     private var autoEjectedDiscs: Set<DiscInsertion> = []
 
+    /// Discs a finished job has already been asked to eject, so the sweep
+    /// asks once.
+    private var postJobEjectedDiscs: Set<DiscInsertion> = []
+
+    /// The disc a job was last seen running for, so a finished job's outcome
+    /// is never attributed to a disc that was swapped in afterwards.
+    private var ranJobForDisc: DiscInsertion?
+
+    /// Take the disc out after a job that finished with it still in the
+    /// drive.
+    ///
+    /// The pipeline ejects on success (`DVDPipeline` step 3), and when that
+    /// fails it writes a warning into the job log and nothing else happens.
+    /// Limitless finished at 02:04 and its disc was still there forty minutes
+    /// later — it only came out when an unrelated reconcile re-ran the
+    /// library check, found the film now present, and ejected it as a
+    /// duplicate. Unattended, the tray opening is the signal to feed the next
+    /// disc, so an eject that silently did not happen stops the line.
+    ///
+    /// This is a retry, not a second mechanism: same `ejectDisc`, asked again
+    /// once the job is over and nothing holds the disc.
+    private func evaluatePostJobEject(jobs: JobController) {
+        // Remember whose job this is while it runs. `lastOutcome` outlives
+        // the disc it belongs to, so testing it alone would eject the *next*
+        // disc the moment it was inserted after a successful rip.
+        if jobs.isRunning {
+            ranJobForDisc = jobs.insertedDisc
+            return
+        }
+        guard let disc = jobs.insertedDisc,
+              AutoStartPolicy.shouldEjectAfterJob(
+                  isRunning: jobs.isRunning,
+                  isEjecting: jobs.isEjecting,
+                  currentDisc: disc,
+                  ranJobForDisc: ranJobForDisc,
+                  alreadyAsked: postJobEjectedDiscs.contains(disc),
+                  outcome: jobs.lastOutcome
+              )
+        else { return }
+
+        postJobEjectedDiscs.insert(disc)
+        FlowDiagnostics.note("post-job eject: the job finished with the disc still in the drive")
+        Task { await jobs.ejectDisc() }
+    }
+
     /// Take out a disc whose film is already in the library, so the next one
     /// can go in.
     ///
@@ -779,6 +824,7 @@ final class RipFlowController {
 
     /// Begin, continue or abandon the countdown, from whatever just changed.
     func evaluateAutoStart(jobs: JobController, settings: AppSettings) {
+        evaluatePostJobEject(jobs: jobs)
         evaluateAutoEject(jobs: jobs, settings: settings)
         let decision = AutoStartPolicy.decide(
             enabled: settings.autoStartRipping,

@@ -897,7 +897,13 @@ struct DVDPipeline {
         // reported but never turns this successful job into a failed one:
         // the movie is already in Plex, so `outcome` stays `.succeeded`
         // regardless of what `DiscEjector` reports.
-        switch await eject(disc) {
+        let ejectOutcome = await eject(disc)
+        // Recorded outside the job log as well: the job log lives in the
+        // History window, and an eject that quietly fails is exactly the
+        // thing nobody is watching for. Limitless finished at 02:04 and its
+        // disc was still in the drive forty minutes later.
+        FlowDiagnostics.note("pipeline eject: \(ejectOutcome)")
+        switch ejectOutcome {
         case .ejected:
             log("✓ Disc ejected — safe to insert the next one")
         case .busy(let message):

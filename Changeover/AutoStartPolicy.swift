@@ -98,4 +98,33 @@ nonisolated enum AutoStartPolicy {
         }
         return .countDown
     }
+
+    /// Whether a finished job's disc should be ejected now.
+    ///
+    /// `DVDPipeline` ejects on success, and when that fails it writes a
+    /// warning into the job log and stops. Limitless finished at 02:04 and
+    /// its disc was still in the drive at 02:44 — it only came out when an
+    /// unrelated reconcile re-ran the library check and ejected it as a
+    /// duplicate. Unattended, the tray opening is the signal to feed the next
+    /// disc, so a silent failure stops the line.
+    ///
+    /// - Parameters:
+    ///   - ranJobForDisc: the disc a job was last seen running for.
+    ///     `lastOutcome` outlives the disc it belongs to, so without this a
+    ///     fresh disc inserted after a successful rip is thrown straight back
+    ///     out.
+    static func shouldEjectAfterJob(
+        isRunning: Bool,
+        isEjecting: Bool,
+        currentDisc: DiscInsertion?,
+        ranJobForDisc: DiscInsertion?,
+        alreadyAsked: Bool,
+        outcome: JobOutcome?
+    ) -> Bool {
+        guard !isRunning, !isEjecting, !alreadyAsked else { return false }
+        guard let disc = currentDisc, ranJobForDisc == disc else { return false }
+        // A failure deliberately keeps its disc in for a retry (#0005).
+        guard let outcome, outcome.failure == nil else { return false }
+        return true
+    }
 }
