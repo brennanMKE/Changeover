@@ -774,6 +774,13 @@ final class RipFlowController {
     /// asks once.
     private var postJobEjectedDiscs: Set<String> = []
 
+    /// How long to keep asking for a disc a finished job left behind. The
+    /// dissent that causes this clears on its own, in minutes rather than
+    /// seconds, so the window has to outlast it without holding a task open
+    /// all evening.
+    static let postJobEjectAttempts = 10
+    static let postJobEjectInterval: Duration = .seconds(30)
+
     /// The disc a job was last seen running for, so a finished job's outcome
     /// is never attributed to a disc that was swapped in afterwards.
     private var ranJobForDisc: DiscInsertion?
@@ -820,7 +827,33 @@ final class RipFlowController {
         clearLibraryCheck()
 
         FlowDiagnostics.note("post-job eject: the job finished with the disc still in the drive")
-        Task { await jobs.ejectDisc() }
+
+        // Keep asking for a few minutes, not once.
+        //
+        // The refusal seen on this drive is a dissent from loginwindow, and
+        // it clears on its own — but it took minutes, not the thirty seconds
+        // `DiscEjector`'s own budget covers. A single attempt meant a
+        // finished rip left its disc in the drive with one failure recorded
+        // against it, and the next disc could not go in.
+        //
+        // Stops the moment the disc is gone, the drive holds something else,
+        // or a new job starts. Nothing here can eject a disc a job is
+        // reading, because `ejectDisc` refuses while one is running.
+        Task { [weak self] in
+            for attempt in 0..<Self.postJobEjectAttempts {
+                if attempt > 0 {
+                    await self?.autoStartSleeper(Self.postJobEjectInterval)
+                }
+                guard let self, jobs.insertedDisc == disc, !jobs.isRunning else { return }
+                let accepted = await jobs.ejectDisc()
+                if jobs.insertedDisc != disc {
+                    FlowDiagnostics.note("post-job eject: out after \(attempt + 1) attempt(s)")
+                    return
+                }
+                FlowDiagnostics.note("post-job eject: attempt \(attempt + 1) accepted=\(accepted); still in the drive")
+            }
+            FlowDiagnostics.note("post-job eject: gave up; the disc is still in the drive")
+        }
     }
 
     /// Take out a disc whose film is already in the library, so the next one

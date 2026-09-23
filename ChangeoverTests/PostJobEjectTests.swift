@@ -67,3 +67,24 @@ struct PostJobEjectTests {
         #expect(!Self.should(current: nil))
     }
 }
+
+/// How long the app keeps asking for a disc a finished job left behind.
+///
+/// The refusal on this drive is a dissent from loginwindow, and it clears on
+/// its own — but in minutes, not the thirty seconds `DiscEjector`'s own
+/// budget covers. A single attempt left a finished rip's disc in the drive
+/// with one failure recorded against it, three imports running.
+struct PostJobEjectWindowTests {
+
+    @Test func theWindowOutlastsADissentWithoutRunningAllEvening() {
+        let total = RipFlowController.postJobEjectInterval
+            * RipFlowController.postJobEjectAttempts
+        #expect(total >= .seconds(240), "long enough to outlast a dissent that took minutes")
+        #expect(total <= .seconds(600), "short enough not to hold a task open all evening")
+    }
+
+    /// More than one attempt is the entire point.
+    @Test func itAsksMoreThanOnce() {
+        #expect(RipFlowController.postJobEjectAttempts > 1)
+    }
+}
