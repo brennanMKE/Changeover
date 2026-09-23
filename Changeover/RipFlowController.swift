@@ -417,6 +417,7 @@ final class RipFlowController {
     /// tests that predate the prefill — keeps compiling. The real call site,
     /// `RipFlowView`, always passes `settings.tmdbAPIKey`.
     func reconcile(jobs: JobController, apiKey: String = "", settings: AppSettings? = nil) {
+        clearWhatBelongedToTheLastDisc(jobs: jobs)
         switch SelectionReset.reconcile(
             selectionDisc: selectionDisc,
             hasSelection: selectedMovieID != nil,
@@ -452,7 +453,37 @@ final class RipFlowController {
     /// user looks at the Choose-movie step, the way typing the title by hand
     /// used to make them wait for it.
     ///
-     /// Work out what this disc is, quietly, and only then show anything.
+     /// Wipe everything shown for the previous disc when a different one goes
+    /// in — whether or not a film had been chosen for it.
+    ///
+    /// `SelectionReset` only fires when there *is* a selection, so a disc
+    /// whose search found nothing left its term and its "No movies found
+    /// for…" panel on screen for the next disc to sit under. Reported on a
+    /// swap after Wedding Crashers.
+    ///
+    /// Keyed on the disc the lookup was last started for, which is set for
+    /// every disc that reaches the search step, selection or not. A running
+    /// job is left alone: its disc is the one it is reading.
+    private func clearWhatBelongedToTheLastDisc(jobs: JobController) {
+        guard !jobs.isRunning else { return }
+        let current = jobs.insertedDisc
+        guard let previous = resolutionStartedFor, previous != current else { return }
+
+        resolutionStartedFor = nil
+        menuTitleTriedFor = nil
+        inferenceTriedFor = nil
+        autoSelectTriedFor = nil
+        recommendedMovieID = nil
+        isResolvingDisc = false
+        cancelAutoStart()
+        search.resetForNewDisc()
+        selectedMovieID = nil
+        selectionDisc = nil
+        movieConfirmed = false
+        clearLibraryCheck()
+    }
+
+    /// Work out what this disc is, quietly, and only then show anything.
     ///
     /// The ladder needs two or three attempts on an awkward disc — the volume
     /// label, then the title the disc prints on its own menus, then the

@@ -347,6 +347,10 @@ final class MovieSearchViewModel {
         query = ""
         results = []
         errorMessage = nil
+        // Without this the empty state keeps naming the *previous* disc:
+        // "No movies found for 'Wedding Crashers'" sitting under a blank box
+        // after the next disc went in.
+        lastSearchedQuery = nil
     }
 
     // MARK: - Poster URL
