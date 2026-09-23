@@ -122,3 +122,83 @@ struct DiscEditionTests {
         ))
     }
 }
+
+/// The edition as something the user can type, because the volume label
+/// often will not say.
+///
+/// The Jackal's collector's edition arrived on a disc labelled `WILLIS`.
+@MainActor
+struct EditionFieldTests {
+
+    static func disc(_ volume: String) -> DiscInsertion {
+        DiscInsertion(mountURL: URL(fileURLWithPath: "/Volumes/\(volume)"),
+                      deviceNode: "disk9", discID: volume.lowercased())
+    }
+
+    /// A label that says which cut it is fills the field in.
+    @Test func aTellingLabelSeedsTheField() {
+        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
+        let flow = RipFlowController()
+        jobs.insertedDisc = Self.disc("THE_HANGOVER_EXTENDED_CUT")
+        flow.reconcile(jobs: jobs)
+        #expect(flow.edition == "Extended Cut")
+    }
+
+    /// One that does not leaves it empty — the ordinary release.
+    @Test func anUnhelpfulLabelLeavesItEmpty() {
+        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
+        let flow = RipFlowController()
+        jobs.insertedDisc = Self.disc("WILLIS")
+        flow.reconcile(jobs: jobs)
+        #expect(flow.edition.isEmpty)
+    }
+
+    /// And the seed never types over the person. The label is a guess; they
+    /// are not.
+    @Test func theSeedNeverOverwritesWhatWasTyped() {
+        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
+        let flow = RipFlowController()
+        jobs.insertedDisc = Self.disc("WILLIS")
+        flow.edition = "Collector's Edition"
+        flow.reconcile(jobs: jobs)
+        flow.reconcile(jobs: jobs)
+        #expect(flow.edition == "Collector's Edition")
+    }
+
+    /// A new disc starts fresh, or the previous disc's cut is written into
+    /// this one's filename.
+    @Test func aDiscSwapClearsTheEdition() {
+        let jobs = JobController(ejector: PipelineTestSupport.fakeEject)
+        let flow = RipFlowController()
+        jobs.insertedDisc = Self.disc("THE_HANGOVER_EXTENDED_CUT")
+        flow.reconcile(jobs: jobs)
+        #expect(flow.edition == "Extended Cut")
+
+        jobs.insertedDisc = Self.disc("WILLIS")
+        flow.reconcile(jobs: jobs)
+        #expect(flow.edition.isEmpty, "the next disc is not an extended cut because the last one was")
+    }
+
+    /// The whole point: with an edition typed, a film already in the library
+    /// stops reading as a duplicate — so Start is offered and an unattended
+    /// run does not eject the disc.
+    @Test func typingAnEditionClearsTheDuplicate() {
+        let flow = RipFlowController()
+        let entry = LibraryEntry(
+            folderName: "The Jackal (1997) {tmdb-9297}",
+            folderPath: "/Movies/The Jackal (1997) {tmdb-9297}",
+            files: [LibraryFile(name: "The Jackal (1997).mp4", sizeBytes: 1)]
+        )
+        flow.setLibraryCheckForTesting(.done(tmdbID: "9297", .present([entry])))
+
+        // No edition: this is the same cut, so it is a duplicate.
+        if case .done(_, .present) = flow.libraryCheckForThisEdition {} else {
+            Issue.record("the plain release is already there")
+        }
+
+        flow.edition = "Collector's Edition"
+        if case .done(_, .absent) = flow.libraryCheckForThisEdition {} else {
+            Issue.record("a different cut is not a duplicate")
+        }
+    }
+}

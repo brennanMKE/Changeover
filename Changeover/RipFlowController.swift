@@ -50,6 +50,32 @@ final class RipFlowController {
     /// was checked resets it (see `clearLibraryCheck`).
     private(set) var libraryCheck: LibraryCheck = .idle
 
+    /// The library answer as it applies to **this cut** of the film.
+    ///
+    /// The probe answers "is this film in the library", which is the wrong
+    /// question once editions exist: a collector's edition would inherit the
+    /// theatrical release's answer and be refused as a duplicate of it. A
+    /// folder that holds the film but not this cut reads as `.absent`, so
+    /// every consumer — the Start gate, the notice, the unattended eject —
+    /// gets the right answer without each having to know about editions.
+    ///
+    /// Computed rather than stored because `edition` is a text field the user
+    /// can still be typing in; re-probing the filesystem on every keystroke
+    /// would be the wrong trade when the answer is already in hand.
+    /// Set the library answer directly. Tests only — the production path is
+    /// `checkLibrary`, which probes the filesystem.
+    func setLibraryCheckForTesting(_ value: LibraryCheck) {
+        libraryCheck = value
+    }
+
+    var libraryCheckForThisEdition: LibraryCheck {
+        guard case .done(let tmdbID, .present(let entries)) = libraryCheck else { return libraryCheck }
+        let wanted = MovieMetadata.normalizedEdition(edition)
+        return LibraryMatch.holdsEdition(wanted, in: entries)
+            ? libraryCheck
+            : .done(tmdbID: tmdbID, .absent)
+    }
+
     /// #0062 — the user's "Replace the Existing File", keyed on the movie
     /// *and* the folder it was shown for (#0032's `MismatchAcknowledgement`
     /// pattern). A confirmation for one film must never enable Start for
@@ -81,6 +107,25 @@ final class RipFlowController {
     /// actually filled the field — so a disc is only ever offered one
     /// automatic prefill per insertion, and clearing the field is never
     /// fought.
+    /// Which cut of the film this disc holds, as it will be written into the
+    /// filename — "Collector's Edition", "Director's Cut", or empty for the
+    /// ordinary release.
+    ///
+    /// Seeded from the volume label, which often says
+    /// (`THE_HANGOVER_EXTENDED_CUT`), and editable because just as often it
+    /// does not: The Jackal's collector's edition arrived on a disc labelled
+    /// `WILLIS`. Without a way to say so, the second cut of a film reads as a
+    /// duplicate of the first and — unattended — is ejected as one.
+    var edition: String = ""
+
+    /// The disc `edition` was seeded for, so the seed happens once per disc
+    /// and never types over what the user has entered.
+    private var editionSeededFor: DiscInsertion?
+
+    /// The disc the last `reconcile` saw, so a swap is noticed however early
+    /// it happens.
+    private var lastSeenDisc: DiscInsertion?
+
     private(set) var prefillAttemptedFor: DiscInsertion?
 
     /// The disc whose printed menu title has already been tried as a search
@@ -446,6 +491,7 @@ final class RipFlowController {
             // `selectionDisc`.
             clearLibraryCheck()
         }
+        seedEdition(jobs: jobs)
         if let settings {
             resolveDiscSearch(jobs: jobs, settings: settings)
             attemptAutoSelect(jobs: jobs, settings: settings)
@@ -461,7 +507,17 @@ final class RipFlowController {
     /// user looks at the Choose-movie step, the way typing the title by hand
     /// used to make them wait for it.
     ///
-     /// Wipe everything shown for the previous disc when a different one goes
+     /// Fill the edition field from the volume label, once per disc.
+    ///
+    /// Never over anything typed: the label is a guess and the person is not.
+    private func seedEdition(jobs: JobController) {
+        guard let disc = jobs.insertedDisc, editionSeededFor != disc else { return }
+        editionSeededFor = disc
+        guard edition.isEmpty else { return }
+        edition = DiscEdition.derive(volumeName: disc.mountURL.lastPathComponent) ?? ""
+    }
+
+    /// Wipe everything shown for the previous disc when a different one goes
     /// in — whether or not a film had been chosen for it.
     ///
     /// `SelectionReset` only fires when there *is* a selection, so a disc
@@ -475,9 +531,16 @@ final class RipFlowController {
     private func clearWhatBelongedToTheLastDisc(jobs: JobController) {
         guard !jobs.isRunning else { return }
         let current = jobs.insertedDisc
-        guard let previous = resolutionStartedFor, previous != current else { return }
+        // Keyed on the disc last *seen*, not on the lookup having started.
+        // Keying it on the lookup meant a swap that happened before the menus
+        // settled — or with no settings to hand — cleared nothing, and the
+        // previous disc's edition was written into the next disc's filename.
+        defer { lastSeenDisc = current }
+        guard let previous = lastSeenDisc, previous != current else { return }
 
         resolutionStartedFor = nil
+        editionSeededFor = nil
+        edition = ""
         menuTitleTriedFor = nil
         inferenceTriedFor = nil
         autoSelectTriedFor = nil
@@ -691,9 +754,9 @@ final class RipFlowController {
                 // Read from the volume label: THE_JACKAL_COLLECTORS_EDITION
                 // and friends. `nil` is the ordinary release, which is what
                 // an untagged filename means to Plex.
-                edition: jobs.insertedDisc.flatMap {
-                    DiscEdition.derive(volumeName: $0.mountURL.lastPathComponent)
-                }
+                // The field, not the label: it was seeded from the label
+                // and may since have been corrected.
+                edition: edition
             ),
             featureTitleIndex: featureTitleIndex,
             extraTitleIndices: jobs.selectedExtraTitleIndices.sorted(),
@@ -879,11 +942,11 @@ final class RipFlowController {
               !jobs.isEjecting,
               AutoStartPolicy.shouldEjectDuplicate(
                   enabled: settings.autoStartRipping,
-                  libraryCheck: libraryCheck,
+                  libraryCheck: libraryCheckForThisEdition,
                   selectedMovieID: selectedMovieID,
                   recommendedMovieID: recommendedMovieID,
                   acknowledgedReplace: replaceAcknowledgement != nil,
-                  edition: DiscEdition.derive(volumeName: disc.mountURL.lastPathComponent)
+                  edition: MovieMetadata.normalizedEdition(edition)
               )
         else { return }
 

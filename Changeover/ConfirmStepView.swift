@@ -76,7 +76,7 @@ struct ConfirmStepView: View {
         let proposal = flow.upgradeProposal(jobs: jobs)
         let decision = flow.upgradeDecision(jobs: jobs, settings: settings)
         let card = UpgradePresentation.card(
-            libraryCheck: flow.libraryCheck,
+            libraryCheck: flow.libraryCheckForThisEdition,
             fileCheck: flow.fileCheck,
             proposal: proposal,
             menuState: jobs.menuState,
@@ -116,7 +116,7 @@ struct ConfirmStepView: View {
     private var duplicateNotice: some View {
         if let movie = flow.search.selectedMovie,
            let notice = DuplicatePresentation.notice(
-               check: flow.libraryCheck,
+               check: flow.libraryCheckForThisEdition,
                acknowledgement: flow.replaceAcknowledgement,
                metadata: MovieMetadata(from: movie),
                now: Date()
@@ -178,7 +178,7 @@ struct ConfirmStepView: View {
     @ViewBuilder
     private var movieCard: some View {
         if let movie = flow.search.selectedMovie {
-            let meta = MovieMetadata(from: movie)
+            let meta = MovieMetadata(from: movie, edition: flow.edition)
             HStack(alignment: .top, spacing: 10) {
                 poster(for: movie)
                 VStack(alignment: .leading, spacing: 3) {
@@ -202,8 +202,51 @@ struct ConfirmStepView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
+
+            editionField
         }
     }
+
+    /// Which cut of the film this disc holds.
+    ///
+    /// Plex keeps every cut of a film in one folder and tells them apart by
+    /// this name, so it is what lets a collector's edition sit beside the
+    /// ordinary release instead of reading as a duplicate of it. Seeded from
+    /// the volume label when that says (`THE_HANGOVER_EXTENDED_CUT`) and
+    /// typed when it does not — The Jackal's collector's edition arrived on a
+    /// disc labelled `WILLIS`.
+    ///
+    /// Empty is the ordinary release, which is the common case, so the field
+    /// stays quiet: a short label, a placeholder that says what it is for,
+    /// and no explanation unless Details is on.
+    @ViewBuilder
+    private var editionField: some View {
+        @Bindable var flow = flow
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text("Edition")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                TextField("Ordinary release", text: $flow.edition)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 260)
+                    .help("The cut this disc holds — Collector's Edition, Director's Cut, Extended. Leave empty for the ordinary release.")
+                ForEach(Self.commonEditions, id: \.self) { name in
+                    Button(name) { flow.edition = name }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                }
+            }
+            DetailOnlyText(text: "Written into the file name as {edition-…}. Plex keeps every cut of a film in one folder and uses this to tell them apart, so two discs of the same film can both be kept.")
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 10)
+    }
+
+    /// The two that come up most, as one click each. Not a menu: the field
+    /// has to accept anything a disc calls itself, and a closed list would
+    /// only be right until the next box set.
+    private static let commonEditions = ["Collector's Edition", "Director's Cut"]
 
     private func poster(for movie: TMDBMovie) -> some View {
         AsyncImage(url: flow.search.posterURL(for: movie)) { phase in
@@ -264,7 +307,7 @@ struct ConfirmStepView: View {
             // #0062: checked last, so the caption still names the first thing
             // to do and a duplicate is never reported before the disc has
             // even been scanned.
-            libraryCheck:            flow.libraryCheck,
+            libraryCheck:            flow.libraryCheckForThisEdition,
             replaceAcknowledgement:  flow.replaceAcknowledgement
         )
     }
