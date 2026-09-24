@@ -68,13 +68,13 @@ struct DoneStepView: View {
                 StepActionBar {
                     // `outcomeCard` returns the actions in display order
                     // with the way forward last, so the bar lays them out
-                    // without deciding anything itself: the two link-style
-                    // ones go left, everything else right.
-                    ForEach(Array(card.actions.filter(Self.isLink).enumerated()), id: \.offset) { _, action in
+                    // without deciding anything itself: the two symbol ones
+                    // go left, everything else right.
+                    ForEach(Array(card.actions.filter(Self.isIconAction).enumerated()), id: \.offset) { _, action in
                         button(for: action)
                     }
                     Spacer()
-                    ForEach(Array(card.actions.filter { !Self.isLink($0) }.enumerated()), id: \.offset) { _, action in
+                    ForEach(Array(card.actions.filter { !Self.isIconAction($0) }.enumerated()), id: \.offset) { _, action in
                         button(for: action)
                     }
                 }
@@ -109,9 +109,9 @@ struct DoneStepView: View {
         )
     }
 
-    /// The actions that read as links beside the buttons, rather than as
-    /// buttons of their own.
-    nonisolated private static func isLink(_ action: JobPresentation.OutcomeCard.Action) -> Bool {
+    /// The actions that show as a symbol off to the left, rather than as a
+    /// worded button among the ways forward.
+    nonisolated private static func isIconAction(_ action: JobPresentation.OutcomeCard.Action) -> Bool {
         switch action {
         case .showLog, .revealInFinder: return true
         case .nextDisc, .retry, .adjustAndRetry, .eject: return false
@@ -127,12 +127,14 @@ struct DoneStepView: View {
             // leaves the default bar with `docs/plain-language-ui.md` §4:
             // the header's History button is always present.
             if settings.showsDetails {
-                Button("Show log…") { AppDelegate.shared?.showHistory(selecting: jobID) }
-                    .buttonStyle(.link)
+                IconActionButton(symbol: IconActionButton.Symbol.log, title: "Show log") {
+                    AppDelegate.shared?.showHistory(selecting: jobID)
+                }
             }
         case .revealInFinder(let url):
-            Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-                .buttonStyle(.link)
+            IconActionButton(symbol: IconActionButton.Symbol.reveal, title: "Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
         case .adjustAndRetry:
             // Back to Confirm with the movie, title, tracks and extras
             // intact — the other half of Retry, which replays the recorded

@@ -165,7 +165,7 @@ struct RipFlowView: View {
 
     /// `nil` selection for History: `JobPresentation.historySelection`
     /// resolves that to the running job, or the newest finished one — which
-    /// is where the job-specific "Show log…" would have landed anyway.
+    /// is where the job-specific "Show log" would have landed anyway.
     private func open(_ destination: WindowChrome.Destination) {
         switch destination {
         case .history:  AppDelegate.shared?.showHistory(selecting: nil)
@@ -230,7 +230,7 @@ extension FlowStep {
 
 /// The pinned bottom bar every step with an action of its own shares — the
 /// province of *this step's* actions (Continue, Start Ripping, Cancel Job,
-/// Next Disc, "Show log…"). The window's two destinations are not among
+/// Next Disc, "Show log"). The window's two destinations are not among
 /// them; they live in the header (`docs/window-chrome.md`), which is why
 /// *Insert a disc* has no bar at all.
 ///

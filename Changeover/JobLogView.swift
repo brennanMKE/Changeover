@@ -78,11 +78,9 @@ struct LogPane: View {
             .frame(maxWidth: 220)
             Spacer(minLength: 8)
             if let revealURL {
-                Button("Reveal in Finder") {
+                IconActionButton(symbol: IconActionButton.Symbol.reveal, title: "Reveal in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([revealURL])
                 }
-                .buttonStyle(.link)
-                .font(.caption)
             }
             Button("Copy Log", action: onCopy)
                 .font(.caption)

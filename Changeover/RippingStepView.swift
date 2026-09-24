@@ -31,8 +31,9 @@ struct RippingStepView: View {
                 // bar. The header's History button is one click away on
                 // every step, so nothing is lost.
                 if settings.showsDetails {
-                    Button("Show log…") { AppDelegate.shared?.showHistory(selecting: jobID) }
-                        .buttonStyle(.link)
+                    IconActionButton(symbol: IconActionButton.Symbol.log, title: "Show log") {
+                        AppDelegate.shared?.showHistory(selecting: jobID)
+                    }
                 }
                 Spacer()
                 cancelButton
