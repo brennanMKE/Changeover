@@ -36,6 +36,7 @@ CLONE="changeover-uitest-$RUN_ID"
 EXPORT="$(mktemp -d "${TMPDIR:-/tmp}/changeover-uitest-export.XXXXXX")"
 RESULTS_DIR="$REPO/build/ui-tests/$RUN_ID"
 BOOT_TIMEOUT_SECS=120
+LEASE_ID=""
 
 log()  { print -r -- "==> $*"; }
 fail() { print -r -- "!! $*" >&2; exit 1; }
@@ -44,6 +45,12 @@ cleanup() {
   local rc=$?
   trap - EXIT
   log "Cleaning up (exit $rc)"
+  # Give the Tart slot back before the slower teardown, so a waiting session
+  # starts sooner. Losing this is not fatal: leases are pid-stamped and the
+  # next acquire prunes ours. See Homelab protocols/tart-lease/PROTOCOL.md
+  if [[ -n "$LEASE_ID" ]]; then
+    tart-lease release --id "$LEASE_ID" 2>/dev/null || true
+  fi
   # memory-signal release: tell the observer this run is done with any
   # memory it freed. Best effort — never affects the exit code.
   if [[ -n "${MEMORY_REQUEST_ID:-}" ]]; then
@@ -193,6 +200,18 @@ mkdir -p "$EXPORT/src"
 log "Exporting HEAD to $EXPORT/src"
 git -C "$REPO" archive HEAD | tar -x -C "$EXPORT/src"
 cp "$REPO/Changeover/Secrets.xcconfig" "$EXPORT/src/Changeover/Secrets.xcconfig"
+
+# --- Wait for a Tart slot --------------------------------------------------
+# One host, several repos and sessions. `tart-lease` admits at most two guests
+# and only grants the second when memory allows; it blocks until our turn.
+# Acquired after the memory-signal work above so it sees any memory the
+# observer just freed.
+
+if command -v tart-lease >/dev/null; then
+  LEASE_ID=$(tart-lease acquire --label changeover --pid $$)
+else
+  log "WARNING: tart-lease not on PATH — running without admission control"
+fi
 
 # --- Clone and boot --------------------------------------------------------
 
