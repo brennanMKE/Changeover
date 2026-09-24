@@ -12,7 +12,22 @@ import Foundation
 /// is capped so a long session cannot fill a disk.
 nonisolated enum FlowDiagnostics {
 
-    static let path = "/tmp/changeover-flow.log"
+    /// Application Support, not `/tmp`.
+    ///
+    /// `/tmp` is world-writable (`drwxrwxrwt`), and both writes below follow
+    /// symlinks: `FileHandle(forWritingTo:)` opens the resolved path, and
+    /// `Data.write(to:)` without `.atomic` is an `O_CREAT|O_TRUNC` open. So a
+    /// symlink planted at a predictable name by any local process turned this
+    /// into an append-to-any-file-you-own, with part of the appended text —
+    /// the disc's volume name — chosen by whoever labelled the disc. Nothing
+    /// about a debug log needs a shared directory.
+    static let path: String = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Changeover", isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent("flow.log").path
+    }()
+
     private static let maximumBytes = 256 * 1024
 
     static func note(_ message: String) {

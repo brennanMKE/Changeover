@@ -65,7 +65,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         registerLoginItem()
         // Lets a session with no access to the window server ask this app to
         // photograph its own windows. See WindowCapture.
+        #if DEBUG
         WindowCapture.startWatching()
+        #endif
         // #0048: the status item isn't SwiftUI, so nothing re-renders it on
         // its own when a job starts or ends — this arms the one observer
         // that keeps its glyph in sync with `jobs.isRunning`.

@@ -1,6 +1,8 @@
 import AppKit
 import Foundation
 
+#if DEBUG
+
 /// Changeover photographing its own windows, on request.
 ///
 /// `screencapture` asks the window server for the framebuffer, and the window
@@ -21,6 +23,19 @@ import Foundation
 ///
 /// The request file is deleted as soon as it is seen, and the PNGs land in
 /// `/tmp/changeover-capture-<n>.png`.
+///
+/// **Debug builds only**, and it must stay that way. `/tmp` is world-writable,
+/// so in a shipped build this is an unauthenticated local trigger: any process
+/// under any user could touch one path and make the app photograph every
+/// window it has into a world-readable file. The images carry library paths,
+/// folder names and film titles (not the TMDB key, which is used but never
+/// shown). The write is worse than the read — `Data.write(to:)` with no
+/// options follows symlinks, so a planted symlink turns this into overwriting
+/// a file of someone else's choosing, as the user running the app.
+///
+/// It exists because a session with no access to the window server cannot
+/// screenshot anything, and that is a development problem, not a user-facing
+/// feature.
 @MainActor
 enum WindowCapture {
 
@@ -71,3 +86,4 @@ enum WindowCapture {
         return written
     }
 }
+#endif

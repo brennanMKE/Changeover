@@ -580,7 +580,7 @@ nonisolated enum DiscEjector {
             return .failed(message: "This Mac's screen is locked, so macOS won't let go of the disc. "
                            + "Unlock it, or turn off Lock Screen → “Require password after… display is turned off”.")
         }
-        return .failed(message: "Could not eject the disc — every method was tried. See /tmp/changeover-flow.log.")
+        return .failed(message: "Could not eject the disc — every method was tried. See the flow log in Application Support.")
     }
 
     static func defaultEject(
