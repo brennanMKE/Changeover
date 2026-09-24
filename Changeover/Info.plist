@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>Changeover needs to use the DVD drive so it can eject a disc for you when it has finished copying it.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Changeover uses your local network so Macs, iPhones and iPads in your home can see the disc, choose what to rip, and watch progress.</string>
 	<key>NSBonjourServices</key>

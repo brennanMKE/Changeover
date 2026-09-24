@@ -58,6 +58,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
+        LaunchAttribution.note()
         setupMenuBarIcon()
         setupPopover()
         startDVDMonitor()
