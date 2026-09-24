@@ -492,25 +492,49 @@ struct DiscEjectorForceTests {
     @Test func theLadderRunsEveryMethodGentlestFirst() {
         #expect(DiscEjector.strategies.map(\.name) == [
             "diskutil eject",
+            "diskutil unmount force",
             "NSWorkspace.unmountAndEjectDevice",
             "DiskArbitration unmount+eject",
-            "diskutil unmount force",
             "umount -f",
             "drutil eject",
             "drutil tray eject",
         ])
     }
 
+    /// The rung that survives a locked screen comes second, because on a
+    /// locked Mac the three polite ones are all refused and this is what
+    /// actually got Top Gun: Maverick out. Measured on joe, 2026-09-24.
+    @Test func forcingComesBeforeTheRoutesALockedScreenRefuses() throws {
+        let names = DiscEjector.strategies.map(\.name)
+        let force = try #require(names.firstIndex(of: "diskutil unmount force"))
+        let framework = try #require(names.firstIndex(of: "DiskArbitration unmount+eject"))
+        let workspace = try #require(names.firstIndex(of: "NSWorkspace.unmountAndEjectDevice"))
+        #expect(force < workspace)
+        #expect(force < framework)
+    }
+
+    /// `loginwindow` names itself in diskutil's dissent, and the framework
+    /// route returns the status number. Both mean the same thing.
+    @Test func aLockedScreenIsRecognisedFromWhatTheToolSaid() {
+        #expect(DiscEjector.mentionsLockedScreen(
+            "Unmount was dissented by PID 634 (/System/Library/CoreServices/loginwindow.app/Contents/MacOS/loginwindow)"
+        ))
+        #expect(DiscEjector.mentionsLockedScreen(
+            "Could not unmount the disc: status -119930872."
+        ))
+        #expect(!DiscEjector.mentionsLockedScreen("Unmount failed: resource busy"))
+    }
+
     /// The same guard `forceEject` has, at the top of every rung: a ladder
     /// that kept climbing after the volume went away would reach `drutil`
     /// and eject whatever disc had been swapped in.
     @Test func theLadderStopsWhenThereIsNoVolume() async {
-        let worked = await DiscEjector.ejectTryingEverything(
+        let result = await DiscEjector.ejectTryingEverything(
             volumeURL: URL(fileURLWithPath: "/Volumes/ChangeoverDoesNotExist\(Int.random(in: 1000...9999))"),
             between: .zero,
             sleep: { _ in }
         )
-        #expect(worked == nil, "no volume, no rungs, and above all no drutil")
+        #expect(result.winner == nil, "no volume, no rungs, and above all no drutil")
     }
 
     /// #0050's guard still holds for the route the app actually calls now.

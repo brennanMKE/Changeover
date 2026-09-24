@@ -281,15 +281,21 @@ nonisolated enum DiscEjector {
             Strategy(name: "diskutil eject") { url in
                 describe(run("/usr/sbin/diskutil", ["eject", url.path]))
             },
+            // Second, not fourth, and this is the whole lesson of the ladder.
+            //
+            // Measured on joe with the screen locked: `diskutil eject`,
+            // `NSWorkspace` and the framework pair were all refused, and this
+            // one worked. `loginwindow` dissents *approval* — it is asked
+            // whether the volume may come down. Forcing does not ask.
+            Strategy(name: "diskutil unmount force") { url in
+                describe(run("/usr/sbin/diskutil", ["unmount", "force", url.path]))
+            },
             Strategy(name: "NSWorkspace.unmountAndEjectDevice") { url in
                 await workspaceEject(url)
             },
             Strategy(name: "DiskArbitration unmount+eject") { url in
                 let outcome = await diskArbitrationEject(volumeURL: url)
                 return String(describing: outcome)
-            },
-            Strategy(name: "diskutil unmount force") { url in
-                describe(run("/usr/sbin/diskutil", ["unmount", "force", url.path]))
             },
             Strategy(name: "umount -f") { url in
                 describe(run("/sbin/umount", ["-f", url.path]))
@@ -301,6 +307,25 @@ nonisolated enum DiscEjector {
                 describe(run("/usr/bin/drutil", ["tray", "eject"]))
             },
         ]
+    }
+
+    /// Whether a rung's output is the locked-screen refusal.
+    ///
+    /// `loginwindow` names itself in `diskutil`'s dissent text, and the
+    /// framework route returns its status number. Either way the cause is the
+    /// same and the remedy is nothing to do with this app, so it is worth
+    /// recognising rather than reporting as a mystery — six rounds of fixes
+    /// went into what this one string would have said.
+    static func mentionsLockedScreen(_ text: String) -> Bool {
+        text.contains("loginwindow") || text.contains("\(kDAReturnNotPermitted)")
+    }
+
+    /// What a run of the ladder found out.
+    struct LadderResult: Sendable {
+        /// The rung that actually removed the volume, if any.
+        var winner: String?
+        /// Whether anything along the way was refused by `loginwindow`.
+        var sawLockedScreen: Bool
     }
 
     private static func describe(_ result: (ok: Bool, output: String)?) -> String {
@@ -323,15 +348,18 @@ nonisolated enum DiscEjector {
     @discardableResult
     static func ejectTryingEverything(
         volumeURL: URL,
-        between: Duration = .seconds(30),
+        between: Duration = .seconds(10),
         sleep: @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
-    ) async -> String? {
+    ) async -> LadderResult {
+        var sawLockedScreen = false
         for (index, strategy) in strategies.enumerated() {
             guard FileManager.default.fileExists(atPath: volumeURL.path) else {
                 FlowDiagnostics.note("eject ladder: the volume went away before \(strategy.name)")
-                return index == 0 ? nil : strategies[index - 1].name
+                return LadderResult(winner: index == 0 ? nil : strategies[index - 1].name,
+                                    sawLockedScreen: sawLockedScreen)
             }
             let said = await strategy.attempt(volumeURL)
+            if mentionsLockedScreen(said) { sawLockedScreen = true }
             // The tool's own claim is not the verdict — the volume going away
             // is. drutil reports success on an empty drive, and a dissented
             // unmount sometimes reports nothing useful at all.
@@ -352,12 +380,12 @@ nonisolated enum DiscEjector {
                     FlowDiagnostics.note("eject ladder: opening the tray after \(strategy.name)")
                     _ = run("/usr/bin/drutil", ["eject"])
                 }
-                return strategy.name
+                return LadderResult(winner: strategy.name, sawLockedScreen: sawLockedScreen)
             }
             if index < strategies.count - 1 { await sleep(between) }
         }
         FlowDiagnostics.note("eject ladder: nothing worked; the disc is still in the drive")
-        return nil
+        return LadderResult(winner: nil, sawLockedScreen: sawLockedScreen)
     }
 
     /// The escalation, when a polite eject is refused.
@@ -539,9 +567,18 @@ nonisolated enum DiscEjector {
             return .failed(message: "real ejector called from tests")
         }
         FlowDiagnostics.note("eject ladder: starting on \(volumeURL.path)")
-        if let worked = await ejectTryingEverything(volumeURL: volumeURL, between: between, sleep: sleep) {
+        let result = await ejectTryingEverything(volumeURL: volumeURL, between: between, sleep: sleep)
+        if let worked = result.winner {
             FlowDiagnostics.note("eject ladder: \(worked) did it")
             return .ejected
+        }
+        // Name the cause when it is known. A locked screen is not this app's
+        // to fix, but "could not eject the disc" sent six rounds of work
+        // after the wrong thing, and the person reading it can act on this in
+        // a way they could never act on a status code.
+        if result.sawLockedScreen {
+            return .failed(message: "This Mac's screen is locked, so macOS won't let go of the disc. "
+                           + "Unlock it, or turn off Lock Screen → “Require password after… display is turned off”.")
         }
         return .failed(message: "Could not eject the disc — every method was tried. See /tmp/changeover-flow.log.")
     }
