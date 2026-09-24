@@ -75,25 +75,69 @@ screensaver is not involved (`idleTime 0`). So on any unattended rip longer
 than twenty minutes — which is all of them — the screen is locked by the time
 the encode finishes.
 
-## The two fixes
+## The fix
 
-**Stop the screen locking.** No code, immediate, and the whole problem goes
-away:
+**Not** turning off the screen lock. An earlier version of this document
+recommended exactly that — *Require password → Never*, or
+`sudo pmset -a displaysleep 0` — and it was wrong. It trades a real security
+control for a convenience, on a machine that sits unattended, and no user
+should be asked to accept it. It is recorded here only so the next person does
+not rediscover it and think it is the answer.
 
-- System Settings → Lock Screen → *Require password after screen saver begins
-  or display is turned off* → **Never**, or
-- `sudo pmset -a displaysleep 0`, which keeps the display awake so the lock is
-  never armed.
+`loginwindow` has a preference for precisely this, which turns off **only the
+disk-mount blocking** and leaves the lock itself untouched. From its own
+strings:
 
-Joe sits on a shelf running Plex, so the security this gives up is small. It
-is still a real trade and it belongs to whoever owns the machine, not to this
-app.
+```
+DisableScreenLockDiskPolicy
+EnableScreenLockDiskPolicy to block disk mounts during screen lock
+DiskArb - screen locked; blocking removable disk mounts
+DiskArb - screen unlocked; allowing removable disk mounts
+```
 
-**Or move the eject into a root daemon** — `docs/eject-privileged-helper.md`.
-This finding is what makes that option make sense rather than merely sound
-robust: a daemon runs outside the login session, which is exactly why the same
-command already succeeds over SSH while the screen is locked. It is the only
-one of the two that survives a machine nobody has unlocked since it booted.
+Set in the **system** domain — a write to the user domain is read and ignored,
+confirmed by locking the screen and watching loginwindow still take the
+`EnableScreenLockDiskPolicy` branch:
+
+```bash
+sudo defaults write /Library/Preferences/com.apple.loginwindow \
+    DisableScreenLockDiskPolicy -bool true
+```
+
+The screen still locks, the password is still required, the display still
+hides. What changes is that an inserted disc is allowed to mount instead of
+being ejected unread.
+
+It is not a free trade, and it should be described honestly rather than sold:
+the policy exists so that a machine nobody is watching will not mount whatever
+is pushed into it. Turning it off on a Plex host in a house is a small risk;
+turning it off on a laptop that travels is not. It is narrow, reversible with
+`sudo defaults delete`, and it is the only part of the lock being given up.
+
+To confirm it took effect, lock the screen and look for the branch name:
+
+```bash
+log show --last 2m --predicate 'process == "loginwindow"' --style compact \
+  | grep -i DiskPolicy
+```
+
+`DisableScreenLockDiskPolicy | DiskArb - …` means it is honoured.
+
+### The eject side needs none of this
+
+Getting a disc *out* already works while locked, and the ladder proved which
+rung does it — `diskutil unmount force`, which is why it now runs second. See
+the commit that reordered it. `loginwindow` dissents *approval*: it is asked
+whether the volume may come down, and it says no. Forcing does not ask.
+
+So the two halves have different answers: the eject is solved in this app, and
+the mount is solved by the preference above.
+
+### If the preference is not enough
+
+`docs/eject-privileged-helper.md` — a root daemon, outside the login session.
+Worth reaching for only if the preference turns out to be MDM-only or removed
+in a later macOS.
 
 ## What this means for the app
 
