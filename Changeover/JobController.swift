@@ -523,12 +523,18 @@ final class JobController {
         await MenuJudge.answer(for: question)
     }
 
-    /// The production ejector: the real `DiskArbitration` unmount + eject.
-    /// #0050: routed through `DiscEjector.defaultEject`, which refuses on
-    /// its own under a test host, so a `JobController` built without an
-    /// injected `ejector:` in a test never reaches real `DiskArbitration`.
+    /// The production ejector: every eject method this Mac has, tried in
+    /// sequence thirty seconds apart, with each attempt and its result
+    /// written to `/tmp/changeover-flow.log`.
+    ///
+    /// Six single-theory fixes failed to settle why a finished disc stays in
+    /// the drive, so the app stops guessing and measures instead. Once the
+    /// log names the method that works, this collapses back to that one.
+    /// #0050: `ladderEject` refuses on its own under a test host, so a
+    /// `JobController` built without an injected `ejector:` in a test never
+    /// reaches a real drive.
     static let defaultEjector: Ejector = { volumeURL in
-        await DiscEjector.defaultEject(volumeURL: volumeURL)
+        await DiscEjector.ladderEject(volumeURL: volumeURL)
     }
 
     // MARK: - Status

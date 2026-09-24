@@ -1,3 +1,4 @@
+import AppKit
 import DiskArbitration
 import Foundation
 
@@ -256,6 +257,109 @@ nonisolated enum DiscEjector {
         return (process.terminationStatus == 0, text)
     }
 
+    /// Every way this Mac knows to eject a disc, tried in turn.
+    ///
+    /// Six rounds of single-theory fixes did not settle why a finished disc
+    /// stays in the drive, and one observation broke every theory: the *same*
+    /// `diskutil eject`, on the same machine seconds apart, succeeds from an
+    /// SSH session and is dissented from inside this app. So rather than
+    /// guess again, try them all and write down what each one says. Whichever
+    /// works becomes the route; the log says which.
+    ///
+    /// Ordered least to most violent. Each is given thirty seconds before the
+    /// next — both because a refusal is sometimes temporary and because the
+    /// gap makes the log readable afterwards.
+    struct Strategy: Sendable {
+        var name: String
+        /// Runs it and says what happened. Success is judged by the volume
+        /// going away, not by what the tool claims.
+        var attempt: @Sendable (URL) async -> String
+    }
+
+    static var strategies: [Strategy] {
+        [
+            Strategy(name: "diskutil eject") { url in
+                describe(run("/usr/sbin/diskutil", ["eject", url.path]))
+            },
+            Strategy(name: "NSWorkspace.unmountAndEjectDevice") { url in
+                await workspaceEject(url)
+            },
+            Strategy(name: "DiskArbitration unmount+eject") { url in
+                let outcome = await diskArbitrationEject(volumeURL: url)
+                return String(describing: outcome)
+            },
+            Strategy(name: "diskutil unmount force") { url in
+                describe(run("/usr/sbin/diskutil", ["unmount", "force", url.path]))
+            },
+            Strategy(name: "umount -f") { url in
+                describe(run("/sbin/umount", ["-f", url.path]))
+            },
+            Strategy(name: "drutil eject") { _ in
+                describe(run("/usr/bin/drutil", ["eject"]))
+            },
+            Strategy(name: "drutil tray eject") { _ in
+                describe(run("/usr/bin/drutil", ["tray", "eject"]))
+            },
+        ]
+    }
+
+    private static func describe(_ result: (ok: Bool, output: String)?) -> String {
+        guard let result else { return "not executable" }
+        return "ok=\(result.ok) \(result.output)"
+    }
+
+    @MainActor
+    private static func workspaceEject(_ url: URL) -> String {
+        do {
+            try NSWorkspace.shared.unmountAndEjectDevice(at: url)
+            return "ok=true"
+        } catch {
+            return "ok=false \(error.localizedDescription)"
+        }
+    }
+
+    /// Run the whole ladder, stopping at the first rung that actually removes
+    /// the volume. Returns the name that worked, or `nil` if none did.
+    @discardableResult
+    static func ejectTryingEverything(
+        volumeURL: URL,
+        between: Duration = .seconds(30),
+        sleep: @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
+    ) async -> String? {
+        for (index, strategy) in strategies.enumerated() {
+            guard FileManager.default.fileExists(atPath: volumeURL.path) else {
+                FlowDiagnostics.note("eject ladder: the volume went away before \(strategy.name)")
+                return index == 0 ? nil : strategies[index - 1].name
+            }
+            let said = await strategy.attempt(volumeURL)
+            // The tool's own claim is not the verdict — the volume going away
+            // is. drutil reports success on an empty drive, and a dissented
+            // unmount sometimes reports nothing useful at all.
+            var gone = false
+            for _ in 0..<10 {
+                if !FileManager.default.fileExists(atPath: volumeURL.path) { gone = true; break }
+                await sleep(.milliseconds(500))
+            }
+            FlowDiagnostics.note("eject ladder: \(strategy.name) → \(said) | volume gone: \(gone)")
+            if gone {
+                // The volume is down, which is not the same as the tray being
+                // open — `umount -f` and a plain unmount both leave the disc
+                // sitting in the drive on a path that no longer resolves,
+                // which is #0049's half-eject. `drutil` commands the drive
+                // itself, so it finishes the job; it is safe here precisely
+                // because the disc is known to still be in there.
+                if !strategy.name.hasPrefix("drutil") {
+                    FlowDiagnostics.note("eject ladder: opening the tray after \(strategy.name)")
+                    _ = run("/usr/bin/drutil", ["eject"])
+                }
+                return strategy.name
+            }
+            if index < strategies.count - 1 { await sleep(between) }
+        }
+        FlowDiagnostics.note("eject ladder: nothing worked; the disc is still in the drive")
+        return nil
+    }
+
     /// The escalation, when a polite eject is refused.
     ///
     /// `loginwindow` dissents the unmount of a finished disc for tens of
@@ -318,6 +422,35 @@ nonisolated enum DiscEjector {
         return .failed(message: reasons.isEmpty
             ? "Could not eject the disc, even forcing it."
             : "Could not eject the disc, even forcing it — " + reasons.joined(separator: "; "))
+    }
+
+    /// One pass of the framework route — unmount the whole disk, then eject
+    /// the drive — with no retry budget of its own.
+    ///
+    /// The retrying version lives inline in `eject`, where the budget covers
+    /// the whole escalation. The ladder wants a single attempt, because the
+    /// thirty seconds between rungs is the retry.
+    static func diskArbitrationEject(volumeURL: URL) async -> Outcome {
+        guard let session = DASessionCreate(kCFAllocatorDefault) else {
+            return .failed(message: "Could not open a DiskArbitration session.")
+        }
+        let queue = DispatchQueue(label: "com.changeover.DiscEjector.ladder")
+        DASessionSetDispatchQueue(session, queue)
+        defer { DASessionSetDispatchQueue(session, nil) }
+
+        guard let volumeDisk = DADiskCreateFromVolumePath(kCFAllocatorDefault, session, volumeURL as CFURL) else {
+            return .failed(message: "no disk for \(volumeURL.path)")
+        }
+        guard let disk = DADiskCopyWholeDisk(volumeDisk) else {
+            return .failed(message: "no whole-disk object for \(volumeURL.path)")
+        }
+
+        let (unmountStatus, unmountReason) = await unmount(disk)
+        let unmountOutcome = classify(status: unmountStatus, statusString: unmountReason, action: "unmount")
+        guard unmountOutcome == .ejected else { return unmountOutcome }
+
+        let (ejectStatus, ejectReason) = await ejectFromDrive(disk)
+        return classify(status: ejectStatus, statusString: ejectReason, action: "eject")
     }
 
     /// `diskutil`'s own verdict, or `nil` when it is not there to ask.
@@ -389,6 +522,30 @@ nonisolated enum DiscEjector {
     /// coverage intact while closing the actual hole (a test that never
     /// meant to touch `DiscEjector` at all, reaching it only because nothing
     /// was injected).
+    /// What the app actually calls: the whole ladder, guarded against tests.
+    ///
+    /// Deliberately separate from `defaultEject` rather than replacing it.
+    /// `defaultEject` and `eject` carry a retry budget the existing tests
+    /// drive, and the ladder's pacing is its own — wiring one through the
+    /// other would have made both harder to read for no gain. When the log
+    /// says which rung works, this collapses to that rung.
+    static func ladderEject(
+        volumeURL: URL,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        between: Duration = .seconds(30),
+        sleep: @Sendable @escaping (Duration) async -> Void = { try? await Task.sleep(for: $0) }
+    ) async -> Outcome {
+        guard !isTestHost(environment: environment) else {
+            return .failed(message: "real ejector called from tests")
+        }
+        FlowDiagnostics.note("eject ladder: starting on \(volumeURL.path)")
+        if let worked = await ejectTryingEverything(volumeURL: volumeURL, between: between, sleep: sleep) {
+            FlowDiagnostics.note("eject ladder: \(worked) did it")
+            return .ejected
+        }
+        return .failed(message: "Could not eject the disc — every method was tried. See /tmp/changeover-flow.log.")
+    }
+
     static func defaultEject(
         volumeURL: URL,
         environment: [String: String] = ProcessInfo.processInfo.environment,

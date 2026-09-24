@@ -484,4 +484,43 @@ struct DiscEjectorForceTests {
         )
         #expect(outcome == nil, "nothing to force, and nothing else in the drive to throw out")
     }
+
+    // MARK: - The ladder
+
+    /// The order is the experiment. Least violent first, so the log shows
+    /// the gentlest method that works rather than only that *something* did.
+    @Test func theLadderRunsEveryMethodGentlestFirst() {
+        #expect(DiscEjector.strategies.map(\.name) == [
+            "diskutil eject",
+            "NSWorkspace.unmountAndEjectDevice",
+            "DiskArbitration unmount+eject",
+            "diskutil unmount force",
+            "umount -f",
+            "drutil eject",
+            "drutil tray eject",
+        ])
+    }
+
+    /// The same guard `forceEject` has, at the top of every rung: a ladder
+    /// that kept climbing after the volume went away would reach `drutil`
+    /// and eject whatever disc had been swapped in.
+    @Test func theLadderStopsWhenThereIsNoVolume() async {
+        let worked = await DiscEjector.ejectTryingEverything(
+            volumeURL: URL(fileURLWithPath: "/Volumes/ChangeoverDoesNotExist\(Int.random(in: 1000...9999))"),
+            between: .zero,
+            sleep: { _ in }
+        )
+        #expect(worked == nil, "no volume, no rungs, and above all no drutil")
+    }
+
+    /// #0050's guard still holds for the route the app actually calls now.
+    @Test func theLadderRefusesToRunFromATestHost() async {
+        let outcome = await DiscEjector.ladderEject(
+            volumeURL: URL(fileURLWithPath: "/Volumes/Anything"),
+            environment: ["XCTestConfigurationFilePath": "/tmp/whatever"],
+            between: .zero,
+            sleep: { _ in }
+        )
+        #expect(outcome == .failed(message: "real ejector called from tests"))
+    }
 }
