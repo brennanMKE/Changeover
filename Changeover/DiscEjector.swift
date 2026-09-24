@@ -162,6 +162,7 @@ nonisolated enum DiscEjector {
         while true {
             let attempt = await diskutilEject(volumeURL: volumeURL)
             if case .ejected = attempt { return .ejected }
+            FlowDiagnostics.note("eject: diskutil said \(attempt.map(String.init(describing:)) ?? "nothing — not executable")")
             lastDiskutil = attempt
             guard let delay = remaining.first else { break }
             remaining = remaining.dropFirst()
@@ -288,7 +289,10 @@ nonisolated enum DiscEjector {
 
         if let forced = run("/usr/sbin/diskutil", ["unmount", "force", volumeURL.path]) {
             tried = true
+            FlowDiagnostics.note("force: unmount force ok=\(forced.ok) — \(forced.output)")
             if !forced.ok { reasons.append("unmount force: \(forced.output)") }
+        } else {
+            FlowDiagnostics.note("force: diskutil is not executable from this process")
         }
         if !FileManager.default.fileExists(atPath: volumeURL.path) {
             // The volume is down. The tray still has to open.
@@ -297,10 +301,17 @@ nonisolated enum DiscEjector {
         }
         if let ejected = run("/usr/bin/drutil", ["eject"]) {
             tried = true
-            if ejected.ok, !FileManager.default.fileExists(atPath: volumeURL.path) {
-                return .ejected
+            FlowDiagnostics.note("force: drutil eject ok=\(ejected.ok) — \(ejected.output)")
+            // The tray takes a moment. Checking the volume the instant drutil
+            // returns reported failure for an eject that was already under
+            // way.
+            for _ in 0..<10 {
+                if !FileManager.default.fileExists(atPath: volumeURL.path) { return .ejected }
+                try? await Task.sleep(for: .milliseconds(500))
             }
             if !ejected.ok { reasons.append("drutil: \(ejected.output)") }
+        } else {
+            FlowDiagnostics.note("force: drutil is not executable from this process")
         }
 
         guard tried else { return nil }
