@@ -139,6 +139,98 @@ the mount is solved by the preference above.
 Worth reaching for only if the preference turns out to be MDM-only or removed
 in a later macOS.
 
+## The requirement, for whoever sets this Mac up
+
+**Unattended ripping needs one system setting.** Without it, the drive works
+only while somebody is looking at the screen, which is the opposite of the
+point.
+
+```bash
+sudo defaults write /Library/Preferences/com.apple.loginwindow \
+    DisableScreenLockDiskPolicy -bool true
+```
+
+Read the name as **Disable [ScreenLock Disk Policy]** — the policy *about
+disks* during screen lock — not *[Disable ScreenLock]*. The screen still
+locks, the password is still required, the display still hides. The only thing
+that changes is that an inserted disc is allowed to mount instead of being
+ejected unread.
+
+It must be the **system** domain; a user-domain write is read and ignored.
+
+**Then reboot.** `loginwindow` reads this once and caches it for its own
+lifetime, which is the lifetime of the login session — on joe it had been
+running for nine days when the key was set, and it went on blocking mounts
+with the new value sitting right there in the plist. Setting it and testing
+without a restart looks exactly like the setting not working. A logout is
+enough in principle; a reboot is what to tell a user, because it also proves
+the setting survives one, which is the case that matters on a machine expected
+to come back up on its own.
+
+Verify afterwards by locking the screen and reading the branch name:
+
+```bash
+log show --last 2m --predicate 'process == "loginwindow"' --style compact \
+  | grep -i DiskPolicy
+```
+
+`DisableScreenLockDiskPolicy | DiskArb - …` means it is honoured.
+`EnableScreenLockDiskPolicy | DiskArb - screen locked; blocking removable disk
+mounts` means it is not — check the domain, then check whether loginwindow has
+been restarted since.
+
+Honestly stated, because it is a real trade and not a formality: this policy
+exists so a machine nobody is watching will not mount whatever is pushed into
+it. On a Plex host in a house that risk is small. On a laptop that leaves the
+house it is not. It is narrow — the lock itself is untouched — and it is
+reversible:
+
+```bash
+sudo defaults delete /Library/Preferences/com.apple.loginwindow DisableScreenLockDiskPolicy
+```
+
+### The app can check this, and should
+
+`/Library/Preferences/com.apple.loginwindow.plist` is world-readable
+(`-rw-r--r-- root wheel`), so Changeover can read the key with no privilege,
+no helper and no prompt. That makes this a first-run check rather than a line
+in a README nobody reads:
+
+- **Detect** on launch and in Settings, beside the HandBrakeCLI check that is
+  already there. The same shape: a thing the app needs, a clear statement of
+  whether it is present.
+- **Explain, in one sentence** — "Discs inserted while this Mac's screen is
+  locked are ejected before Changeover can see them." That is the symptom the
+  person will actually hit, and it is the sentence that would have saved this
+  project a week.
+- **Offer the command to copy**, and say what it does and does not change.
+  Never run it silently.
+
+**The app must not escalate to set this itself.** Writing to
+`/Library/Preferences` needs root, and the ways to get there from an app —
+a privileged helper, or the deprecated `AuthorizationExecuteWithPrivileges` —
+all mean an app that ships with the power to change a security policy without
+being watched. Weakening a lock-screen protection is a decision that belongs
+to the person who owns the Mac, taken deliberately, with the trade in front of
+them. Detect and explain; let them type it.
+
+The exception is the daemon route below, and only because it makes the
+preference unnecessary rather than setting it.
+
+### This or the daemon, not both
+
+These are alternatives:
+
+| | Needs a system setting | Needs privileged code | Survives a Mac nobody has logged into |
+|---|---|---|---|
+| `DisableScreenLockDiskPolicy` | yes, once, by hand | no | no — the console session must exist |
+| Root daemon (`docs/eject-privileged-helper.md`) | no | yes | yes |
+
+If the daemon is ever built, the preference stops being needed: a root daemon
+runs outside the login session, which is exactly why `diskutil` already
+succeeds over SSH while the screen is locked. Until then, the preference is
+the whole of the fix and the setup step above is a real requirement.
+
 ## What this means for the app
 
 The app cannot fix this, but it should stop pretending the failure is a

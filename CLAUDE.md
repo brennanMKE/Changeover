@@ -60,7 +60,25 @@ Unit tests in `ChangeoverTests/` use the **Swift Testing** framework (`import Te
 ### Setup required before building
 
 1. Copy `Changeover/Secrets.xcconfig.example` → `Changeover/Secrets.xcconfig` (gitignored) and set `TMDB_API_KEY`. The xcconfig is wired as the project's `baseConfigurationReference`; the key flows in via `INFOPLIST_KEY_TMDB_API_KEY = $(TMDB_API_KEY)`.
-2. Install the CLI tool the app shells out to: `brew install handbrake` (default path `/opt/homebrew/bin/HandBrakeCLI` on Apple Silicon, user-editable in Settings). `makemkvcon` (`brew install --cask makemkv`) is optional and not currently invoked; its Settings path is kept for the #0015 fallback. `lsdvd` (`brew install lsdvd`) is optional and only strengthens disc identity.
+2. **Allow discs to mount while the screen is locked** — required for
+   unattended ripping, and the one setup step that is not about this repo:
+
+   ```bash
+   sudo defaults write /Library/Preferences/com.apple.loginwindow \
+       DisableScreenLockDiskPolicy -bool true
+   ```
+
+   Then **reboot**. Read the name as *Disable [ScreenLock Disk Policy]*: the
+   screen still locks and still demands a password: what changes is that
+   `loginwindow` stops ejecting an inserted disc before it can mount. Without
+   it, a disc put in while the screen is locked is ejected within half a
+   second and Changeover never sees it — and since every rip outlasts the
+   20-minute display-sleep timer, that is every unattended disc. `loginwindow`
+   caches the key for its whole lifetime, so it does nothing until restarted.
+   Full reasoning, and the eject half of the same problem, in
+   [`docs/eject-and-the-locked-screen.md`](docs/eject-and-the-locked-screen.md).
+
+3. Install the CLI tool the app shells out to: `brew install handbrake` (default path `/opt/homebrew/bin/HandBrakeCLI` on Apple Silicon, user-editable in Settings). `makemkvcon` (`brew install --cask makemkv`) is optional and not currently invoked; its Settings path is kept for the #0015 fallback. `lsdvd` (`brew install lsdvd`) is optional and only strengthens disc identity.
 
 ### Capturing a real disc into the test corpus (#0055)
 
