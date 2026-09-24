@@ -166,7 +166,10 @@ nonisolated enum DependencyPanel {
         menudump: ToolState?,
         ffmpeg: ToolState?,
         lsdvdInstalled: Bool,
-        dependencies: MenuDependencies?
+        dependencies: MenuDependencies?,
+        /// `nil` while the probe has not run. Defaulted so every caller that
+        /// predates the check — including its tests — is unaffected.
+        screenLockPolicy: ScreenLockDiskPolicy.State? = nil
     ) -> [Row] {
         var rows: [Row] = []
 
@@ -220,6 +223,34 @@ nonisolated enum DependencyPanel {
             reportPresent: dependencies != nil,
             fallbackInstall: libdvdcssInstall
         ))
+
+        // Last, and `.optional`, both deliberately.
+        //
+        // It is not a tool and it is not required to rip: with the screen
+        // unlocked everything works, which is exactly why this went unnoticed
+        // for a week. Calling it `.required` made the summary announce that
+        // nothing could be ripped at all, which is false and a worse error
+        // than the one this row exists to prevent. What it actually costs is
+        // *unattended* ripping, and that belongs in the purpose line rather
+        // than in a role the summary reads.
+        //
+        // Omitted entirely while the answer is unknown. The probe is a file
+        // read, so "checking" would be a flash rather than information.
+        if let screenLockPolicy {
+            rows.append(Row(
+                name: "Discs while locked",
+                role: .optional,
+                status: {
+                    switch screenLockPolicy {
+                    case .discsMount:          return .installed(detail: nil)
+                    case .discsEjected:        return .missing
+                    case .unreadable(let why): return .unusable(detail: why)
+                    }
+                }(),
+                purpose: ScreenLockDiskPolicy.purpose,
+                install: ScreenLockDiskPolicy.command + "  # " + ScreenLockDiskPolicy.restartNote
+            ))
+        }
 
         return rows
     }
