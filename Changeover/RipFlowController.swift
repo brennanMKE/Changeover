@@ -922,7 +922,23 @@ final class RipFlowController {
                     FlowDiagnostics.note("post-job eject: out after \(attempt + 1) attempt(s)")
                     return
                 }
-                FlowDiagnostics.note("post-job eject: attempt \(attempt + 1) accepted=\(accepted); still in the drive")
+                // `accepted == false` means `EjectPolicy` refused before any
+                // eject ran, which is a different failure from the eject
+                // being refused by the system — and the two were
+                // indistinguishable in the log while The Jackal sat in the
+                // drive through ten of these.
+                let gate = EjectPolicy.decide(
+                    isRunning: jobs.isRunning,
+                    isScanning: jobs.scanState == .scanning,
+                    isEjecting: jobs.isEjecting,
+                    hasDisc: jobs.insertedDisc != nil
+                )
+                FlowDiagnostics.note(
+                    "post-job eject: attempt \(attempt + 1) accepted=\(accepted)"
+                    + " gate=\(gate)"
+                    + " running=\(jobs.isRunning) scanning=\(jobs.scanState == .scanning)"
+                    + " ejecting=\(jobs.isEjecting) unavailable=\(jobs.discUnavailable)"
+                )
             }
             FlowDiagnostics.note("post-job eject: gave up; the disc is still in the drive")
         }

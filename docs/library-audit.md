@@ -78,13 +78,26 @@ would just be a list of chores.
 - **Tag as an edition** — rename the file to add `{edition-…}`, then ask Plex
   to refresh that section. No re-rip. This is the common case and the one The
   Hangover needs.
+- **Change the film** — search TMDB and re-point the import at a different
+  id. This is the fix for an import matched to the wrong film, which a
+  runtime mismatch is often the first sign of, and it is a bigger operation
+  than tagging an edition: the `{tmdb-…}` tag lives on the **folder**, so the
+  folder is renamed and the file inside it with it. The search UI is the one
+  already in the rip flow (`ChooseMovieStepView`), pointed at an existing
+  import rather than a disc — which is most of why this is worth building on
+  the same code rather than beside it.
 - **Reveal in Finder** — for anything the app should not decide.
 - **Re-rip** — hand it to the existing flow with the movie pre-selected, so
   the disc goes in and everything else is already known.
 
-Renaming is the only destructive action, and it is the safe kind: the file's
-bytes are untouched, the folder does not move, and Plex re-reads it in place.
-Even so it wants the same care `PlexOrganizer` takes — refuse if the
+Renaming a **file** is the safe kind of destructive: the bytes are untouched,
+the folder does not move, and Plex re-reads it in place. Renaming a **folder**
+— which changing the TMDB id requires — is a bigger claim, because Plex loses
+and re-creates the library item, and anything attached to it (watched state,
+ratings, collections) goes with it. Worth saying out loud in the UI rather
+than discovering afterwards.
+
+Either way it wants the same care `PlexOrganizer` takes — refuse if the
 destination name already exists, and never rename a file Plex is currently
 playing.
 
@@ -99,6 +112,13 @@ touches nothing the rip does, and with the Plex server unreachable it shows
 that and nothing else.
 
 ## Sequencing
+
+0. **Re-pointing an import at a different TMDB id** is part of this, not a
+   follow-on. An import whose runtime is wrong is as likely to be the wrong
+   film as the wrong cut, and a tool that can only say "tag this as an
+   edition" would file a misidentified import under a cut of a film it is
+   not. The two fixes are the same gesture from the user's side — *this is
+   actually X* — and differ only in whether the folder moves.
 
 1. **The read.** Plex sections → items with duration, guid, path. No UI.
    Provable against joe's real library from a test tool before any view
