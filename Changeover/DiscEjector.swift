@@ -168,6 +168,11 @@ nonisolated enum DiscEjector {
             await sleep(delay)
         }
 
+        // Asking nicely has failed for the whole budget. Stop asking.
+        if case .ejected = await forceEject(volumeURL: volumeURL) {
+            return .ejected
+        }
+
         guard let session = DASessionCreate(kCFAllocatorDefault) else {
             return .failed(message: "Could not open a DiskArbitration session.")
         }
@@ -230,6 +235,78 @@ nonisolated enum DiscEjector {
         diskutilPath: String = "/usr/sbin/diskutil"
     ) async -> Outcome {
         await diskutilEject(volumeURL: volumeURL, diskutilPath: diskutilPath) ?? original
+    }
+
+    /// Run a command line and report whether it exited zero, with whatever
+    /// it said. `nil` when the tool is not installed.
+    static func run(_ path: String, _ arguments: [String]) -> (ok: Bool, output: String)? {
+        guard FileManager.default.isExecutableFile(atPath: path) else { return nil }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        do { try process.run() } catch { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        let text = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return (process.terminationStatus == 0, text)
+    }
+
+    /// The escalation, when a polite eject is refused.
+    ///
+    /// `loginwindow` dissents the unmount of a finished disc for tens of
+    /// minutes, with Spotlight indexing disabled on the volume and nothing
+    /// holding it open — so waiting it out is not a fix, it is a delay. These
+    /// two steps stop asking permission:
+    ///
+    /// 1. `diskutil unmount force` — take the volume down rather than request
+    ///    it. Safe here in a way it would not be on a writable disk: the disc
+    ///    is read-only, the rip finished before this runs, and there is
+    ///    nothing to flush or corrupt.
+    /// 2. `drutil eject` — command the drive itself, which is what actually
+    ///    opens the tray and needs no volume to have come down at all. #0005
+    ///    planned this and dropped it as untestable; the drive has since
+    ///    spent hours holding discs it would have released.
+    ///
+    /// Returns `.ejected` the moment the volume is gone, whichever step did
+    /// it, or `nil` when neither tool is installed to try.
+    static func forceEject(volumeURL: URL) async -> Outcome? {
+        // Only ever force a disc that is actually there.
+        //
+        // `drutil eject` commands the *drive*, not a volume, and succeeds on
+        // an empty one — so escalating for a volume that has already gone
+        // would report a successful eject of nothing, and worse, would open
+        // the tray on whatever disc the user had just put in. The polite
+        // route cannot make that mistake because it names the volume.
+        guard FileManager.default.fileExists(atPath: volumeURL.path) else { return nil }
+
+        var tried = false
+        var reasons: [String] = []
+
+        if let forced = run("/usr/sbin/diskutil", ["unmount", "force", volumeURL.path]) {
+            tried = true
+            if !forced.ok { reasons.append("unmount force: \(forced.output)") }
+        }
+        if !FileManager.default.fileExists(atPath: volumeURL.path) {
+            // The volume is down. The tray still has to open.
+            _ = run("/usr/bin/drutil", ["eject"])
+            return .ejected
+        }
+        if let ejected = run("/usr/bin/drutil", ["eject"]) {
+            tried = true
+            if ejected.ok, !FileManager.default.fileExists(atPath: volumeURL.path) {
+                return .ejected
+            }
+            if !ejected.ok { reasons.append("drutil: \(ejected.output)") }
+        }
+
+        guard tried else { return nil }
+        return .failed(message: reasons.isEmpty
+            ? "Could not eject the disc, even forcing it."
+            : "Could not eject the disc, even forcing it — " + reasons.joined(separator: "; "))
     }
 
     /// `diskutil`'s own verdict, or `nil` when it is not there to ask.

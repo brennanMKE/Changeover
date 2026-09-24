@@ -441,3 +441,47 @@ struct DiscEjectorFallbackTests {
         }
     }
 }
+
+/// Forcing the disc out when asking politely has failed for long enough.
+///
+/// `loginwindow` dissents the unmount of a finished disc for tens of minutes,
+/// with Spotlight indexing disabled on the volume and nothing holding it
+/// open. Waiting that out is a delay, not a fix — and the cost is the user's
+/// evening, because the tray opening is what tells them to swap the disc.
+///
+/// Verified on the real drive, 2026-09-24: `diskutil unmount force` took the
+/// volume down and `drutil eject` opened the tray.
+struct DiscEjectorForceTests {
+
+    /// Neither tool installed is "nothing to try", not "it failed" — the
+    /// caller keeps whatever the polite route reported.
+    @Test func withNeitherToolThereIsNothingToTry() async {
+        // Both paths are absolute and always present on macOS, so this pins
+        // the shape rather than the absence: `run` returns nil for a missing
+        // tool and `forceEject` must not invent a failure from that.
+        #expect(DiscEjector.run("/nonexistent/diskutil", ["x"]) == nil)
+    }
+
+    /// A tool that runs and fails reports what it said, so the next
+    /// diagnosis starts from the tool's own words rather than a guess.
+    @Test func aFailingToolReportsItsOwnOutput() {
+        let result = DiscEjector.run("/usr/sbin/diskutil", ["unmount", "force", "/Volumes/ChangeoverDoesNotExist"])
+        let unwrapped = try? #require(result)
+        #expect(unwrapped?.ok == false)
+        #expect(unwrapped?.output.isEmpty == false, "diskutil says why, and that is worth keeping")
+    }
+
+    /// The dangerous case, and the reason forcing is gated on the volume
+    /// existing.
+    ///
+    /// `drutil eject` commands the drive, not a volume, and succeeds on an
+    /// empty one. Without the guard, asking to eject a disc that had already
+    /// gone would report success — and would open the tray on whatever disc
+    /// the user had just put in its place.
+    @Test func forcingIsRefusedForAVolumeThatIsNotThere() async {
+        let outcome = await DiscEjector.forceEject(
+            volumeURL: URL(fileURLWithPath: "/Volumes/ChangeoverDoesNotExist\(Int.random(in: 1000...9999))")
+        )
+        #expect(outcome == nil, "nothing to force, and nothing else in the drive to throw out")
+    }
+}

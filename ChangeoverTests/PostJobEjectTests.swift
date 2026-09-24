@@ -79,8 +79,10 @@ struct PostJobEjectWindowTests {
     @Test func theWindowOutlastsADissentWithoutRunningAllEvening() {
         let total = RipFlowController.postJobEjectInterval
             * RipFlowController.postJobEjectAttempts
-        #expect(total >= .seconds(240), "long enough to outlast a dissent that took minutes")
-        #expect(total <= .seconds(600), "short enough not to hold a task open all evening")
+        // Measured, not guessed: The Jackal's disc was refused for the whole
+        // of a ten-minute window and came out around twenty-five minutes.
+        #expect(total >= .seconds(1500), "long enough to outlast the refusal actually observed")
+        #expect(total <= .seconds(3600), "short enough not to hold a task open all night")
     }
 
     /// More than one attempt is the entire point.

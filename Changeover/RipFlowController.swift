@@ -850,7 +850,18 @@ final class RipFlowController {
     /// dissent that causes this clears on its own, in minutes rather than
     /// seconds, so the window has to outlast it without holding a task open
     /// all evening.
-    static let postJobEjectAttempts = 10
+    /// Half an hour of asking, because that is how long the refusal has
+    /// actually lasted.
+    ///
+    /// The Jackal's disc was refused for the full ten minutes of the first
+    /// window and only came out around the twenty-five minute mark. The
+    /// manual Eject in the menu "works every time" for the same reason: it is
+    /// pressed late, once the dissent has cleared. It calls this identical
+    /// function — there is no second code path that works.
+    ///
+    /// Asking costs nothing while the disc sits there. The loop stops the
+    /// moment it leaves, a different disc arrives, or a job starts.
+    static let postJobEjectAttempts = 60
     static let postJobEjectInterval: Duration = .seconds(30)
 
     /// The disc a job was last seen running for, so a finished job's outcome
