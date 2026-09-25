@@ -708,7 +708,25 @@ final class RipFlowController {
                   self.search.selectedMovie == nil
             else { return }
 
-            let trust = self.termTrust(jobs: jobs, term: searched)
+            var trust = self.termTrust(jobs: jobs, term: searched)
+            // #0071 — a disc whose label says nothing can still vouch for an
+            // answer, by printing the cast on its own menus. That is evidence
+            // from the disc rather than from the guess, which is precisely
+            // what the gate wants and what `WILLIS` and `BLUSBRO` could never
+            // otherwise supply.
+            if trust == .unverified,
+               let best = MovieAutoSelect.rank(candidates: candidates,
+                                               discDurationSeconds: featureSeconds,
+                                               searchTerm: searched).selectedID,
+               let cast = self.search.castByID[best] {
+                let matched = CastCorroboration.matchingNames(
+                    cast: cast, menuText: self.menuTextForCorroboration(jobs: jobs))
+                if matched.count >= CastCorroboration.requiredMatches {
+                    trust = .labelBacked
+                    FlowDiagnostics.note("autoselect: menus name \(matched.joined(separator: ", "))"
+                                         + " — the disc corroborates \(best)")
+                }
+            }
             let decision = MovieAutoSelect.decide(
                 candidates: candidates,
                 discDurationSeconds: featureSeconds,
@@ -1052,6 +1070,16 @@ final class RipFlowController {
                 occasion: "identified"
             )
         )
+    }
+
+    /// Every line the disc's menus printed, for cast matching.
+    ///
+    /// The same OCR the inference rung reads, flattened — a name may be its
+    /// own observation, or share a line with a menu word, and the match runs
+    /// over the joined text either way.
+    func menuTextForCorroboration(jobs: JobController) -> [String] {
+        guard let ocr = jobs.menuState.intelligence?.ocr else { return [] }
+        return ocr.stills.flatMap { $0.observations.map(\.text) }
     }
 
     /// Whether anything outside the search term corroborates it.

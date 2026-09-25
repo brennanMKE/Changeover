@@ -57,6 +57,10 @@ final class MovieSearchViewModel {
     /// no second line, which is exactly how the list looked before.
     private(set) var creditsByID: [Int: String] = [:]
 
+    /// The billed leads per TMDB id, as names rather than a rendered line.
+    /// #0071's trust upgrade compares these against the disc's menu text.
+    private(set) var castByID: [Int: [String]] = [:]
+
     /// How many rows get a credits lookup.
     ///
     /// One request each, and they are the rows a person actually reads before
@@ -73,6 +77,7 @@ final class MovieSearchViewModel {
         let wanted = results.prefix(Self.maximumCreditsLookups).map(\.id)
         for id in wanted where creditsByID[id] == nil {
             guard let details = try? await client.movieDetails(id: id, apiKey: apiKey) else { continue }
+            if !details.leadCast.isEmpty { castByID[id] = details.leadCast }
             guard let line = CreditsLine.summary(details: details) else { continue }
             creditsByID[id] = line
         }
@@ -122,6 +127,7 @@ final class MovieSearchViewModel {
         runtimeTask = nil
         runtimeLookup = .idle
         creditsByID = [:]
+        castByID = [:]
         errorMessage  = nil
         selectedMovie = nil
         isLoading     = true
