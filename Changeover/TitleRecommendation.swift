@@ -95,3 +95,12 @@ nonisolated enum TitleRecommendation {
                           reason: "It's the longest part on the disc")
     }
 }
+
+extension String {
+    /// "Its length matches…" → "its length matches…", so a reason can be
+    /// dropped into the middle of a sentence without reading like a title.
+    var lowercasedFirst: String {
+        guard let first else { return self }
+        return first.lowercased() + dropFirst()
+    }
+}

@@ -35,6 +35,15 @@ struct DiscTitleListView: View {
     /// source of truth.
     private var showsDetails: Bool { settings.showsDetails }
 
+    /// TMDB's runtime for the chosen film, in seconds — the one outside fact
+    /// that separates titles a minute apart. `nil` until a movie is chosen
+    /// and its runtime has arrived, which is why the recommendation appears a
+    /// moment after the table does.
+    private var listedRuntimeSeconds: Int? {
+        if case .loaded(_, let minutes) = runtimeLookup { return minutes * 60 }
+        return nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             switch jobs.scanState {
@@ -167,7 +176,12 @@ struct DiscTitleListView: View {
 
         case .none:
             WordingText(wording: DiscTitleFormatting.noFeatureWording, font: .subheadline)
-            titleTable(result.disc, badgeIndex: nil)
+            let suggestion = TitleRecommendation.suggest(
+                titles: result.disc.titles, runtimeSeconds: listedRuntimeSeconds)
+            if let suggestion {
+                recommendationLine(suggestion, disc: result.disc)
+            }
+            titleTable(result.disc, badgeIndex: suggestion?.index, badgeLabel: "Recommended")
 
         case .noTitles:
             // #0039 — a scan that read zero titles is a failure-shaped
@@ -316,20 +330,20 @@ struct DiscTitleListView: View {
     // MARK: - Full title table (the 0-candidate and Play All fallback; the
     // "Show all titles" disclosure for `.single`)
 
-    private func titleTable(_ disc: DiscInfo, badgeIndex: Int?) -> some View {
+    private func titleTable(_ disc: DiscInfo, badgeIndex: Int?, badgeLabel: String? = nil) -> some View {
         let selection = Binding<Int?>(
             get: { jobs.selectedTitleIndex },
             set: { jobs.selectTitle($0, settings: settings) }
         )
         return List(disc.titles, selection: selection) { title in
-            titleRow(title, badgeIndex: badgeIndex)
+            titleRow(title, badgeIndex: badgeIndex, badgeLabel: badgeLabel)
                 .tag(title.index)
         }
         .listStyle(.inset)
         .frame(minHeight: 160, maxHeight: 260)
     }
 
-    private func titleRow(_ title: DiscTitle, badgeIndex: Int?) -> some View {
+    private func titleRow(_ title: DiscTitle, badgeIndex: Int?, badgeLabel: String? = nil) -> some View {
         HStack(spacing: 10) {
             // Which row is the movie, stated rather than implied. The list's
             // own highlight is nearly invisible when the window is not focused
@@ -370,7 +384,7 @@ struct DiscTitleListView: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
             if title.index == badgeIndex {
-                Text(showsDetails ? "Main feature" : DiscTitleFormatting.plainFeatureLabel)
+                Text(badgeLabel ?? (showsDetails ? "Main feature" : DiscTitleFormatting.plainFeatureLabel))
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -395,6 +409,38 @@ struct DiscTitleListView: View {
             }
         }
         .padding(.vertical, 2)
+    }
+
+    // MARK: - Recommendation (#0068)
+
+    /// Says which row the app would choose and why, and — only when the
+    /// evidence is decisive — chooses it.
+    ///
+    /// The split is the point. A `.certain` suggestion is one candidate that
+    /// matches the listing, which is not a guess and does not need a person.
+    /// A `.leaning` one is two titles a minute apart, where the app cannot
+    /// tell extra front-matter from extra film, so it names its pick, gives
+    /// its reason, and leaves the click to somebody who can look at the box.
+    @ViewBuilder
+    private func recommendationLine(_ suggestion: TitleRecommendation.Suggestion,
+                                    disc: DiscInfo) -> some View {
+        let duration = DiscTitleFormatting.plainDuration(
+            disc.titles.first { $0.index == suggestion.index }?.durationSeconds ?? 0)
+        HStack(spacing: 6) {
+            Image(systemName: "sparkles")
+                .foregroundStyle(Color.accentColor)
+            Text(suggestion.strength == .certain
+                 ? "Picked the \(duration) part — \(suggestion.reason.lowercasedFirst)."
+                 : "Suggested: the \(duration) part — \(suggestion.reason.lowercasedFirst).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .task(id: suggestion) {
+            // Only a decisive suggestion selects. Anything else waits.
+            guard suggestion.strength == .certain, jobs.selectedTitleIndex == nil else { return }
+            jobs.selectTitle(suggestion.index, settings: settings)
+        }
     }
 
     // MARK: - Extras running total (#0031 Step B)

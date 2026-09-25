@@ -85,4 +85,12 @@ import Testing
         #expect(!suggestion.reason.isEmpty)
         #expect(suggestion.reason.first?.isUppercase == true)
     }
+
+    /// The reason is written as a standalone clause but shown mid-sentence,
+    /// so it has to survive being lowercased without losing a proper noun.
+    @Test func aReasonReadsAsPartOfASentence() {
+        #expect("Its length matches what this movie should be".lowercasedFirst
+                == "its length matches what this movie should be")
+        #expect("".lowercasedFirst == "")
+    }
 }
