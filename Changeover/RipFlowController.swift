@@ -708,13 +708,15 @@ final class RipFlowController {
                   self.search.selectedMovie == nil
             else { return }
 
+            let trust = self.termTrust(jobs: jobs, term: searched)
             let decision = MovieAutoSelect.decide(
                 candidates: candidates,
                 discDurationSeconds: featureSeconds,
-                searchTerm: searched
+                searchTerm: searched,
+                trust: trust
             )
             FlowDiagnostics.note("""
-                autoselect ran: disc=\(featureSeconds)s                 candidates=\(candidates.map { "\($0.id):\($0.runtimeMinutes.map(String.init) ?? "nil")" }.joined(separator: ","))                 -> \(decision)
+                autoselect ran: disc=\(featureSeconds)s                 trust=\(trust)                 candidates=\(candidates.map { "\($0.id):\($0.runtimeMinutes.map(String.init) ?? "nil")" }.joined(separator: ","))                 -> \(decision)
                 """)
             // Order the list by the disc's own runtime before anything is
             // chosen. TMDB ranks by its popularity, which put a 2021 film of
@@ -1050,6 +1052,31 @@ final class RipFlowController {
                 occasion: "identified"
             )
         )
+    }
+
+    /// Whether anything outside the search term corroborates it.
+    ///
+    /// #0070 — the second half of the Walter Mitty failure. A term from the
+    /// disc's own label is corroborated by the disc. A model answer the label
+    /// agrees with is corroborated by the label. A term from the menus, or
+    /// from a model answer no label can judge, is not corroborated by
+    /// anything — however well a candidate then matches it, the match is only
+    /// agreement with an unchecked question.
+    func termTrust(jobs: JobController, term: String) -> MovieAutoSelect.TermTrust {
+        guard let disc = jobs.insertedDisc else { return .unverified }
+        let volumeName = disc.mountURL.lastPathComponent
+        switch resolvedBy {
+        case "label":
+            return .labelBacked
+        case "inference":
+            // The label vouches for the model's answer, or nothing does.
+            return DiscTitleInference.answerFitsLabel(term, volumeName: volumeName)
+                ? .labelBacked : .unverified
+        default:
+            // Menus, or an unresolved ladder. The Willis box set lives here:
+            // usually right, never corroborated.
+            return .unverified
+        }
     }
 
     /// Begin, continue or abandon the countdown, from whatever just changed.

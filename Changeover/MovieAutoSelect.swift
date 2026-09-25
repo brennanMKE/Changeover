@@ -38,6 +38,33 @@ nonisolated enum MovieAutoSelect {
         }
     }
 
+    /// How much the search term itself can be trusted, which is a different
+    /// question from how well a candidate matches it.
+    ///
+    /// #0070. The Secret Life of Walter Mitty, 2026-09-24, failed twice and
+    /// only the first failure was about matching. The disc's menus printed no
+    /// title, the model invented "The Caretaker" from OCR noise, and TMDB
+    /// really does list a 2026 film of that name running 114 minutes —
+    /// exactly the disc's runtime. So the matching worked perfectly: title
+    /// agreed, runtime agreed, one candidate, auto-selected, and with
+    /// automatic ripping on it would have filed Walter Mitty in Plex under
+    /// the wrong film.
+    ///
+    /// No amount of runtime tolerance catches that, because the runtimes
+    /// genuinely agree. The only thing wrong was the question being asked,
+    /// and the app had the evidence to know it: nothing corroborated "The
+    /// Caretaker" except the model that produced it.
+    nonisolated enum TermTrust: Equatable, Sendable {
+        /// The term came from the disc's own label, or from a model answer
+        /// the label corroborates. Something outside the guess agrees with
+        /// it, so a confident pre-selection is defensible.
+        case labelBacked
+        /// The term rests on the menus or on inference alone, with no label
+        /// able to judge it — `WILLIS`, `BLUSBRO`, `DVD_VIDEO`. Often right,
+        /// never corroborated. Rank and recommend; do not choose.
+        case unverified
+    }
+
     enum Decision: Equatable, Sendable {
         /// Pre-select this row. Still a pre-selection: the list stays open
         /// and every other result is one click away.
@@ -65,7 +92,35 @@ nonisolated enum MovieAutoSelect {
     ///     scan, not the disc's longest title — an extras-heavy disc would
     ///     otherwise be measured against a documentary.
     ///   - searchTerm: what was searched, for the exact-title rule.
+    /// - Parameter trust: whether anything outside the search term itself
+    ///   corroborates it. Defaulted to `.labelBacked` so every call site and
+    ///   test that predates #0070 behaves exactly as before.
     static func decide(
+        candidates: [Candidate],
+        discDurationSeconds: Int?,
+        searchTerm: String,
+        trust: TermTrust = .labelBacked
+    ) -> Decision {
+        let decision = rank(candidates: candidates,
+                            discDurationSeconds: discDurationSeconds,
+                            searchTerm: searchTerm)
+        // An uncorroborated term may still produce the best-ranked row — and
+        // that row is worth showing. It is not worth *choosing*, because the
+        // ranking can only measure agreement with a question nobody has
+        // checked. `recommendation` keeps the row highlighted; the user
+        // confirms it.
+        guard case .select(let id, let reason) = decision, trust == .unverified else {
+            return decision
+        }
+        return .abstain(reason: "nothing but the disc's menus points at \(id) — \(reason)")
+    }
+
+    /// What the app would pick if the search term were beyond doubt.
+    ///
+    /// Split out so the ranking stays exactly what it was and the trust gate
+    /// is one visible decision on top of it, rather than a condition threaded
+    /// through every branch.
+    static func rank(
         candidates: [Candidate],
         discDurationSeconds: Int?,
         searchTerm: String
