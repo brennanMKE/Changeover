@@ -182,6 +182,20 @@ nonisolated enum HandBrakeScanParser {
 
         let chapters = (json["ChapterList"] as? [[String: Any]])?.count ?? 0
 
+        // Display aspect, from the sample aspect HandBrake reports alongside
+        // the stored size: a 720×480 DVD frame is 1.78 or 1.33 depending
+        // entirely on PAR, so the stored width and height alone say nothing.
+        var displayAspect: Double?
+        if let geometry = json["Geometry"] as? [String: Any],
+           let width = number(geometry["Width"])?.doubleValue,
+           let height = number(geometry["Height"])?.doubleValue,
+           let par = geometry["PAR"] as? [String: Any],
+           let parNum = number(par["Num"])?.doubleValue,
+           let parDen = number(par["Den"])?.doubleValue,
+           height > 0, parDen > 0 {
+            displayAspect = (width * parNum) / (height * parDen)
+        }
+
         var frameRate: Double?
         if let rate = json["FrameRate"] as? [String: Any],
            let num = number(rate["Num"])?.doubleValue,
@@ -202,7 +216,8 @@ nonisolated enum HandBrakeScanParser {
             suggestedRole: .ignore, // #0025 decides
             frameRate: frameRate,
             interlaceDetected: number(json["InterlaceDetected"])?.boolValue,
-            angleCount: number(json["AngleCount"])?.intValue
+            angleCount: number(json["AngleCount"])?.intValue,
+            displayAspect: displayAspect
         )
     }
 

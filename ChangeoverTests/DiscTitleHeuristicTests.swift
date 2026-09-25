@@ -547,3 +547,81 @@ struct DiscTitleHeuristicTests {
         #expect(outcome == .single(index: 1, source: .length))
     }
 }
+
+// MARK: - #0066: flipper discs (widescreen beside 4:3)
+
+@Suite struct WidescreenPreferenceTests {
+
+    private static func title(_ index: Int, _ seconds: Int, aspect: Double?) -> DiscTitle {
+        DiscTitle(index: index, durationSeconds: seconds, chapterCount: 28,
+                  sizeBytes: 0, outputFileName: nil, displayAspect: aspect)
+    }
+
+    private static func disc(_ titles: [DiscTitle]) -> DiscInfo {
+        DiscInfo(volumeName: "IDENTITY", driveName: "disk4", titles: titles)
+    }
+
+    /// Identity, measured on joe 2026-09-24. Titles 1 and 3 are both
+    /// 1:29:57 with 28 chapters and identical audio; 1 is display aspect
+    /// 1.78 and 3 is 1.33, and the disc labels their subtitles "(Wide
+    /// Screen)" and "(4:3)". Before this, two titles cleared the floor so
+    /// the app had to ask.
+    @Test func aPanAndScanTwinIsDroppedInFavourOfWidescreen() {
+        let kept = DiscTitleHeuristic.widescreenPreferred([
+            Self.title(1, 5397, aspect: 1.78),
+            Self.title(3, 5397, aspect: 1.33),
+        ])
+        #expect(kept.map(\.index) == [1])
+    }
+
+    /// The whole point: what was ambiguous becomes answerable without a
+    /// person. Title 2 is 67 seconds longer — extra front-matter — so it is
+    /// not a twin and the disc still has two real candidates.
+    @Test func theRealDiscStillNeedsAPersonForTheOtherPair() {
+        let disc = Self.disc([
+            Self.title(1, 5397, aspect: 1.78),
+            Self.title(2, 5464, aspect: 1.78),
+            Self.title(3, 5397, aspect: 1.33),
+        ])
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: nil) == .none)
+    }
+
+    /// With the pan-and-scan twin gone and no second widescreen title, the
+    /// disc resolves on its own.
+    @Test func aPlainFlipperDiscNoLongerNeedsAsking() {
+        let disc = Self.disc([
+            Self.title(1, 5397, aspect: 1.78),
+            Self.title(3, 5397, aspect: 1.33),
+            Self.title(9, 146, aspect: 1.78),
+        ])
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: nil) == .single(index: 1, source: .length))
+    }
+
+    /// A 4:3 disc with no widescreen version keeps everything. Anything
+    /// pre-1953, and most television, is 4:3 throughout — dropping those
+    /// would lose the feature entirely.
+    @Test func aDiscThatIsFourThreeThroughoutKeepsEveryTitle() {
+        let titles = [Self.title(1, 5397, aspect: 1.33), Self.title(2, 900, aspect: 1.33)]
+        #expect(DiscTitleHeuristic.widescreenPreferred(titles).map(\.index) == [1, 2])
+    }
+
+    /// Same shape, end to end: the 4:3 feature is still promoted.
+    @Test func aFourThreeFeatureIsStillFound() {
+        let disc = Self.disc([Self.title(1, 5397, aspect: 1.33), Self.title(2, 146, aspect: 1.33)])
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: nil) == .single(index: 1, source: .length))
+    }
+
+    /// A 4:3 title of a *different* length is its own programme, not a twin
+    /// — a 4:3 documentary beside a widescreen feature must survive.
+    @Test func aFourThreeTitleOfADifferentLengthIsNotATwin() {
+        let titles = [Self.title(1, 5397, aspect: 1.78), Self.title(4, 3600, aspect: 1.33)]
+        #expect(DiscTitleHeuristic.widescreenPreferred(titles).map(\.index) == [1, 4])
+    }
+
+    /// A scan that reported no geometry changes nothing — the rule can only
+    /// ever remove a title it has positive evidence about.
+    @Test func titlesWithNoAspectReportedAreUntouched() {
+        let titles = [Self.title(1, 5397, aspect: nil), Self.title(3, 5397, aspect: nil)]
+        #expect(DiscTitleHeuristic.widescreenPreferred(titles).map(\.index) == [1, 3])
+    }
+}

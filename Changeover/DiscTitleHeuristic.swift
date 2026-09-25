@@ -163,11 +163,56 @@ nonisolated enum DiscTitleHeuristic {
     /// double features still need a person, exactly as the scanner-answer
     /// path already asks for a person on a scan problem.
     private static func classifyByLength(_ disc: DiscInfo) -> Outcome {
-        let candidates = disc.titles.filter { $0.durationSeconds >= featureMinimumSeconds }
+        let candidates = widescreenPreferred(
+            disc.titles.filter { $0.durationSeconds >= featureMinimumSeconds }
+        )
         guard candidates.count == 1, let candidate = candidates.first else {
             return .none
         }
         return outcome(for: candidate, source: .length, among: disc.titles)
+    }
+
+    /// Anything wider than this counts as widescreen; below it, 4:3.
+    /// 1.5 sits in the empty gap between DVD's only two real values, 1.33 and
+    /// 1.78, so nothing lands near the boundary.
+    static let widescreenThreshold = 1.5
+
+    /// How close two runtimes must be to be the same film twice.
+    ///
+    /// The two transfers on a flipper disc are cut identically and usually
+    /// agree to the second; a couple of seconds of slack costs nothing and
+    /// covers a frame-count rounding difference.
+    static let sameFeatureToleranceSeconds = 3
+
+    /// Drop a 4:3 transfer when a widescreen one of the same length is on the
+    /// same disc.
+    ///
+    /// Flipper discs carry the film twice — widescreen and 4:3 pan-and-scan —
+    /// identical in runtime, chapter count, audio and subtitle counts. Every
+    /// field the app records is the same, so two titles clear the floor, no
+    /// single one can be promoted, and a person is asked to choose between
+    /// two rows that look alike.
+    ///
+    /// The disc does say which is which: Identity, 2026-09-24, had titles 1
+    /// and 3 both at 1:29:57, one at display aspect 1.78 and the other at
+    /// 1.33, with subtitles labelled "(Wide Screen)" and "(4:3)". Pan-and-scan
+    /// is the cropped one, nobody ripping to Plex wants it, and preferring
+    /// widescreen turns an ambiguous disc into an answerable one.
+    ///
+    /// Deliberately narrow: it only ever *removes* a 4:3 title that has a
+    /// widescreen twin of the same length. A disc that is 4:3 throughout —
+    /// anything pre-1953, and most television — keeps every title it had,
+    /// because there is no widescreen version to prefer.
+    static func widescreenPreferred(_ titles: [DiscTitle]) -> [DiscTitle] {
+        titles.filter { title in
+            guard let aspect = title.displayAspect, aspect < widescreenThreshold else { return true }
+            let hasWidescreenTwin = titles.contains { other in
+                guard other.index != title.index, let otherAspect = other.displayAspect else { return false }
+                return otherAspect >= widescreenThreshold
+                    && abs(other.durationSeconds - title.durationSeconds) <= sameFeatureToleranceSeconds
+            }
+            return !hasWidescreenTwin
+        }
     }
 
     /// Shared tail of both paths: the Play All guard runs on the candidate

@@ -67,6 +67,17 @@ nonisolated struct DiscTitle: Codable, Hashable, Sendable, Identifiable {
     /// Angles on this title (HandBrake `AngleCount`). `nil` = not reported.
     var angleCount: Int?
 
+    /// Display aspect ratio — `(Width × PAR.Num) / (Height × PAR.Den)` from
+    /// HandBrake's `Geometry`. About 1.78 for widescreen, about 1.33 for a
+    /// 4:3 transfer. `nil` = not reported.
+    ///
+    /// The point of keeping it is flipper discs, which carry the same film
+    /// twice: a widescreen transfer and a 4:3 pan-and-scan one, identical in
+    /// runtime and in every other field the app records. Without this they
+    /// are indistinguishable, and the app has to ask a person which of two
+    /// identical-looking rows is the one they want.
+    var displayAspect: Double?
+
     /// #0016 consumes exactly these two fields for the deinterlace decision.
     /// `nil` means the scan did not report them — `DeinterlaceDecision.decide`
     /// treats that as "no filter", the same as an ambiguous scan.
@@ -78,7 +89,7 @@ nonisolated struct DiscTitle: Codable, Hashable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case index, durationSeconds, chapterCount, sizeBytes, outputFileName
         case sourceFileName, segmentCount, streams, suggestedRole
-        case frameRate, interlaceDetected, angleCount
+        case frameRate, interlaceDetected, angleCount, displayAspect
     }
 
     init(
@@ -93,7 +104,8 @@ nonisolated struct DiscTitle: Codable, Hashable, Sendable, Identifiable {
         suggestedRole: Role = .ignore,
         frameRate: Double? = nil,
         interlaceDetected: Bool? = nil,
-        angleCount: Int? = nil
+        angleCount: Int? = nil,
+        displayAspect: Double? = nil
     ) {
         self.index = index
         self.durationSeconds = durationSeconds
@@ -107,6 +119,7 @@ nonisolated struct DiscTitle: Codable, Hashable, Sendable, Identifiable {
         self.frameRate = frameRate
         self.interlaceDetected = interlaceDetected
         self.angleCount = angleCount
+        self.displayAspect = displayAspect
     }
 
     /// Lenient decode: a payload from an older host without the #0016 fields
@@ -125,6 +138,7 @@ nonisolated struct DiscTitle: Codable, Hashable, Sendable, Identifiable {
         frameRate = try container.decodeIfPresent(Double.self, forKey: .frameRate)
         interlaceDetected = try container.decodeIfPresent(Bool.self, forKey: .interlaceDetected)
         angleCount = try container.decodeIfPresent(Int.self, forKey: .angleCount)
+        displayAspect = try container.decodeIfPresent(Double.self, forKey: .displayAspect)
     }
 }
 
