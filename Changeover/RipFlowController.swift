@@ -139,6 +139,8 @@ final class RipFlowController {
     /// The search term whose results have already been offered to the
     /// auto-selector, so a new search is considered and a redraw is not.
     private var autoSelectTriedFor: String?
+    /// Last logged Start-gate verdict, so the log records changes not every tick.
+    private var lastStartDecision: String?
 
     /// The disc whose lookup has been started, so it runs once.
     private var resolutionStartedFor: DiscInsertion?
@@ -996,6 +998,15 @@ final class RipFlowController {
         )
         guard decision.startsCountdown else {
             if autoStartRemaining != nil { cancelAutoStart() }
+            // Log the Start gate's own verdict alongside the auto-start
+            // hold. They are not the same question — auto-start can decline
+            // while Start is perfectly available — and "it won't let me move
+            // forward" is unanswerable from the auto-start reason alone.
+            let gate = startDecision(jobs: jobs)
+            if String(describing: gate) != lastStartDecision {
+                lastStartDecision = String(describing: gate)
+                FlowDiagnostics.note("start gate: \(gate)")
+            }
             if case .hold(let reason) = decision, reason != lastAutoStartHold {
                 lastAutoStartHold = reason
                 FlowDiagnostics.note("autostart hold: " + reason)

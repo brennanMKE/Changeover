@@ -1,7 +1,6 @@
 import AppKit
 import Foundation
 
-#if DEBUG
 
 /// Changeover photographing its own windows, on request.
 ///
@@ -39,10 +38,35 @@ import Foundation
 @MainActor
 enum WindowCapture {
 
+    /// Off unless explicitly switched on:
+    ///
+    ///     defaults write co.sstools.Changeover EnableWindowCapture -bool true
+    ///
+    /// Shipped builds do nothing at all without it, so the poll below never
+    /// starts on a machine that did not ask for this.
+    static var isEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "EnableWindowCapture")
+    }
+
+    /// Application Support, not `/tmp`.
+    ///
+    /// `/tmp` is world-writable, which made the trigger an unauthenticated
+    /// local one — any process under any user could ask the app to photograph
+    /// itself — and made the output a symlink target, since `Data.write(to:)`
+    /// without `.atomic` follows them. This directory is the user's own, so
+    /// neither holds. Combined with the switch above, the capability exists
+    /// only on a machine that opted in, and only for that user.
+    static var directory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Changeover", isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+    }
+
     /// Touch this to ask for a capture.
-    static let requestPath = "/tmp/changeover-capture"
+    static var requestPath: String { directory.appendingPathComponent("capture-request").path }
     /// Where the images land, numbered by window.
-    static let outputPrefix = "/tmp/changeover-capture"
+    static var outputPrefix: String { directory.appendingPathComponent("capture").path }
 
     private static var timer: Timer?
 
@@ -50,7 +74,7 @@ enum WindowCapture {
     /// source because the file is created and deleted constantly and a
     /// one-second poll is both simpler and impossible to get wrong.
     static func startWatching() {
-        guard timer == nil else { return }
+        guard timer == nil, isEnabled else { return }
         let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             MainActor.assumeIsolated {
                 guard FileManager.default.fileExists(atPath: requestPath) else { return }
@@ -86,4 +110,3 @@ enum WindowCapture {
         return written
     }
 }
-#endif
