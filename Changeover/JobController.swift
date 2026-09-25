@@ -1256,7 +1256,7 @@ final class JobController {
     /// discarded by the guard below, must never clear the handle to the
     /// *newer* scan that `startScan` already stored there.
     private func applyScanOutcome(_ outcome: DiscScanner.Outcome, forDisc disc: DiscInsertion, generation: Int, settings: AppSettings) {
-        guard generation == scanGeneration, insertedDisc == disc else { return }
+        guard generation == scanGeneration, insertedDisc?.insertionID == disc.insertionID else { return }
         scanTask = nil
         switch outcome {
         case .success(let result):
@@ -1350,8 +1350,18 @@ final class JobController {
 
     /// Applies a finished menu read — but only for the disc and the scan
     /// generation it was started for, so a caption can never cross discs.
+    ///
+    /// #0073 — matched on `insertionID`, not on the whole value. An unmounted
+    /// disc learns its label from the scan *after* the read was started, and
+    /// filling that field changes the struct: a whole-value comparison then
+    /// discards the menu result as belonging to a different disc, `menuState`
+    /// never settles, and disc resolution — which waits for it — never runs.
+    /// Measured on joe 2026-09-25 with PUMP_UP_THE_VOLUME, which scanned
+    /// perfectly and then sat at "no movie is chosen" forever. The insertion
+    /// id is what actually identifies one physical insertion (#0034); every
+    /// other field is description that may be filled in later.
     private func applyMenuState(_ state: MenuState, forDisc disc: DiscInsertion, generation: Int) {
-        guard generation == scanGeneration, insertedDisc == disc else { return }
+        guard generation == scanGeneration, insertedDisc?.insertionID == disc.insertionID else { return }
         menuTask = nil
         menuState = state
         askTheModel(forDisc: disc, generation: generation)
@@ -1376,7 +1386,7 @@ final class JobController {
 
         menuTask = Task { [weak self] in
             let answer = await ask(question)
-            guard let self, generation == self.scanGeneration, self.insertedDisc == disc else { return }
+            guard let self, generation == self.scanGeneration, self.insertedDisc?.insertionID == disc.insertionID else { return }
             guard case .ready(var current) = self.menuState else { return }
             self.menuTask = nil
             current.judgeCaption = MenuJudge.caption(answer, question: question, scanTitles: scanTitles)
