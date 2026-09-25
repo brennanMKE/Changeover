@@ -62,7 +62,66 @@ nonisolated enum MenuArchive {
         var derivedMatchesChoice: Bool
         var chosenTitle: String
         var chosenYear: String
+        /// The TMDB id actually selected — the one fact that makes a record
+        /// checkable against TMDB later without re-searching by title, and
+        /// the thing a wrong identification gets wrong.
         var tmdbID: String
+
+        // MARK: - #0069: the rest of what a disc taught us
+        //
+        // The first version recorded only (label, chosen film). That answers
+        // "did the label work?" and nothing else — so when a disc failed it
+        // could not say *which* rung failed, what the menus had offered, or
+        // what the model replied. The Secret Life of Walter Mitty, 2026-09-24:
+        // label `THESECRETLIFEOFWALTERMITTY`, menus printing no title at all,
+        // model answering "The Caretaker". Not one of those three facts was
+        // recoverable from the record it wrote.
+
+        /// Which rung of the ladder produced the search term that was used:
+        /// `label`, `menuTitle`, `inference`, or `user` when it was typed or
+        /// corrected by hand. `nil` on records written before this existed.
+        var resolvedBy: String?
+        /// The title the disc printed on its own menus, when one was read.
+        /// `nil` means the menus named no film — the Walter Mitty case, and
+        /// the one where the label has to carry the whole answer.
+        var menuTitle: String?
+        /// What the on-device model replied, verbatim, whether or not it was
+        /// used. A wrong answer is the evidence that matters most, and it was
+        /// being discarded.
+        var inferredTitle: String?
+        /// The TMDB ids the auto-selector actually weighed, in the order it
+        /// ranked them. "The right film was never a candidate" and "the right
+        /// film lost" are different bugs with the same symptom.
+        var candidateIDs: [String]?
+        /// What the app would have chosen on its own, which can differ from
+        /// `tmdbID` when a person overrode it. That disagreement is the
+        /// cleanest possible training signal.
+        var recommendedTmdbID: String?
+        /// The disc title index encoded, and its length — so a wrong *title*
+        /// on the right film is distinguishable from a wrong film.
+        var selectedTitleIndex: Int?
+        var featureDurationSeconds: Int?
+        /// `{edition-…}`, when one was set.
+        var edition: String?
+        /// Why this record was written: `rip` when a rip started, or
+        /// `identified` when the disc was recognised but never ripped —
+        /// ejected as a duplicate, abandoned, or got the film wrong and was
+        /// taken out. Those are the discs the archive was missing entirely,
+        /// and they are disproportionately the interesting ones.
+        ///
+        /// **Optional, and that is not cosmetic.** Swift's synthesised
+        /// `Decodable` ignores a property's default value: a non-optional
+        /// `var occasion: String = "rip"` makes the key *required*, and every
+        /// one of the 21 records already written on joe would have thrown
+        /// `keyNotFound` and become unreadable. The archive exists to be read
+        /// later by definition, so a change that silently orphans it is the
+        /// worst kind. Read it through `occasionOrRip`.
+        var occasion: String?
+
+        /// Records written before `occasion` existed were, without exception,
+        /// written when a rip started — that was the only moment that wrote
+        /// one.
+        var occasionOrRip: String { occasion ?? "rip" }
     }
 
     /// Fold a title to the form the match check compares: lowercase, letters
@@ -91,6 +150,10 @@ nonisolated enum MenuArchive {
         return spaced.split(separator: " ").joined(separator: " ")
     }
 
+    /// Every new field is defaulted, so the ~25 existing call sites and
+    /// tests keep compiling and a record written by an older build still
+    /// decodes: `format` stays `changeover-disc-naming/1` because nothing
+    /// required was added, only optionals.
     static func naming(
         volumeName: String,
         discID: String?,
@@ -98,6 +161,15 @@ nonisolated enum MenuArchive {
         chosenTitle: String,
         chosenYear: String,
         tmdbID: String,
+        resolvedBy: String? = nil,
+        menuTitle: String? = nil,
+        inferredTitle: String? = nil,
+        candidateIDs: [String]? = nil,
+        recommendedTmdbID: String? = nil,
+        selectedTitleIndex: Int? = nil,
+        featureDurationSeconds: Int? = nil,
+        edition: String? = nil,
+        occasion: String? = "rip",
         recordedAt: Date = Date()
     ) -> DiscNaming {
         DiscNaming(
@@ -108,7 +180,16 @@ nonisolated enum MenuArchive {
             derivedMatchesChoice: derivedSearchTerm.map { fold($0) == fold(chosenTitle) } ?? false,
             chosenTitle: chosenTitle,
             chosenYear: chosenYear,
-            tmdbID: tmdbID
+            tmdbID: tmdbID,
+            resolvedBy: resolvedBy,
+            menuTitle: menuTitle,
+            inferredTitle: inferredTitle,
+            candidateIDs: candidateIDs,
+            recommendedTmdbID: recommendedTmdbID,
+            selectedTitleIndex: selectedTitleIndex,
+            featureDurationSeconds: featureDurationSeconds,
+            edition: edition,
+            occasion: occasion
         )
     }
 
@@ -152,6 +233,61 @@ nonisolated enum MenuArchive {
         // A name of nothing but separators, or one that walks up the tree,
         // is not a directory name this will create.
         return trimmed.isEmpty || trimmed == "." || trimmed == ".." ? "disc" : trimmed
+    }
+
+    // MARK: - #0069: the scan, which is half the fingerprint
+
+    /// Write the disc's structure — every title's duration, chapter count,
+    /// audio and subtitle streams — beside its menus.
+    ///
+    /// This was the hole. The archive kept the menus, the OCR, the stills and
+    /// the naming pair, and threw away the one thing that is *numeric*: how
+    /// long each title runs. So the collected evidence could answer "did the
+    /// label work?" but not "could the runtimes have told these two films
+    /// apart?", which is the question that separates The Secret Life of
+    /// Walter Mitty (114m) from The Caretaker (114m) — it cannot — and the
+    /// question that separates a feature from a trailer, which it can.
+    ///
+    /// `capture-disc.sh` has always written a `scan.json` for discs captured
+    /// by hand; nothing wrote one for the thirty-odd discs the app itself
+    /// read. Same file name on purpose, so the hand-captured corpus and the
+    /// app's own archive can be analysed by one piece of code.
+    ///
+    /// Best-effort, like every write here: a scan is never failed for the
+    /// archive's sake.
+    @discardableResult
+    static func writeScan(
+        root: String,
+        slug: String,
+        disc: DiscInfo,
+        mainFeatureIndex: Int?,
+        fileManager: FileManager = .default
+    ) -> String? {
+        guard !root.isEmpty else { return nil }
+        let directory = discDirectory(root: root, slug: slug)
+        guard (try? fileManager.createDirectory(atPath: directory, withIntermediateDirectories: true)) != nil,
+              let data = try? encoder().encode(ArchivedScan(disc: disc, mainFeatureIndex: mainFeatureIndex))
+        else { return nil }
+        let path = (directory as NSString).appendingPathComponent("scan.json")
+        guard (try? data.write(to: URL(fileURLWithPath: path))) != nil else { return nil }
+        return path
+    }
+
+    /// The scan as archived. `mainFeatureIndex` is kept beside the titles
+    /// because what HandBrake *claimed* is evidence in its own right — on
+    /// The Bourne Identity it claimed a 2:26 trailer, and a record that kept
+    /// only the titles could never show that.
+    nonisolated struct ArchivedScan: Codable, Equatable, Sendable {
+        var format: String = "changeover-disc-scan/1"
+        var recordedAt: String = ISO8601DateFormatter().string(from: Date())
+        var disc: DiscInfo
+        var mainFeatureIndex: Int?
+
+        init(disc: DiscInfo, mainFeatureIndex: Int?, recordedAt: Date = Date()) {
+            self.disc = disc
+            self.mainFeatureIndex = mainFeatureIndex
+            self.recordedAt = ISO8601DateFormatter().string(from: recordedAt)
+        }
     }
 
     static func discDirectory(root: String, slug: String) -> String {

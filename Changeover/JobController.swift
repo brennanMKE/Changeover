@@ -1216,6 +1216,20 @@ final class JobController {
             // `.playAll`/`.none` leave `selectedTitleIndex` nil so Start stays
             // disabled until the user picks explicitly — the whole point of
             // the guard is that nothing here defaults to "rip it".
+            // Archive the scan the moment it lands, for every disc, whether
+            // or not it is ever ripped. Ripping is the rare outcome — a disc
+            // that turns out to be a duplicate, or is misidentified and
+            // pulled out, never reaches the rip path at all, and those are
+            // exactly the discs worth studying.
+            if !settings.menuArchivePath.isEmpty {
+                MenuArchive.writeScan(
+                    root: settings.menuArchivePath,
+                    slug: MenuArchive.slug(discID: disc.discID,
+                                           volumeName: disc.mountURL.lastPathComponent),
+                    disc: result.disc,
+                    mainFeatureIndex: result.mainFeatureIndex
+                )
+            }
             if case .single(let index, _) = DiscTitleHeuristic.classify(result.disc, mainFeatureIndex: result.mainFeatureIndex) {
                 selectedTitleIndex = index
                 selectedAudioTrackNumbers = Self.preselectedAudioTracks(titleIndex: index, scanState: scanState, settings: settings)

@@ -139,6 +139,13 @@ final class RipFlowController {
     /// The search term whose results have already been offered to the
     /// auto-selector, so a new search is considered and a redraw is not.
     private var autoSelectTriedFor: String?
+    /// Which rung of the resolution ladder produced the search term in use —
+    /// "label", "menuTitle", "inference", or nil when nothing resolved.
+    private(set) var resolvedBy: String?
+    /// The title the disc printed on its menus, if any was read.
+    private(set) var menuTitleSeen: String?
+    /// What the on-device model replied, used or not.
+    private(set) var inferredTitleSeen: String?
     /// Last logged Start-gate verdict, so the log records changes not every tick.
     private var lastStartDecision: String?
 
@@ -601,6 +608,7 @@ final class RipFlowController {
             if let term = fromLabel {
                 let hits = await self?.search.probe(term, apiKey: apiKey) ?? []
                 if !hits.isEmpty {
+                    self?.resolvedBy = "label"
                     self?.finishResolution(term: term, results: hits, jobs: jobs, settings: settings, disc: disc)
                     return
                 }
@@ -608,8 +616,10 @@ final class RipFlowController {
 
             // 2. The title the disc prints on its own menus.
             if let printed = intelligence?.titleText?.text, !printed.isEmpty {
+                self?.menuTitleSeen = printed
                 let hits = await self?.search.probe(printed, apiKey: apiKey) ?? []
                 if !hits.isEmpty {
+                    self?.resolvedBy = "menuTitle"
                     self?.finishResolution(term: printed, results: hits, jobs: jobs, settings: settings, disc: disc)
                     return
                 }
@@ -620,9 +630,13 @@ final class RipFlowController {
             if mayInfer,
                let question = DiscTitleInference.question(volumeName: label, ocr: intelligence?.ocr) {
                 let answer = await DiscTitleInference.answer(for: question)
+                self?.inferredTitleSeen = answer.title
+                FlowDiagnostics.note("resolve: model answered \(answer.title.map { "\"\($0)\"" } ?? "nothing")"
+                                     + " for label \(label)")
                 if let inferred = answer.title {
                     let hits = await self?.search.probe(inferred, apiKey: apiKey) ?? []
                     if !hits.isEmpty {
+                        self?.resolvedBy = "inference"
                         self?.finishResolution(term: inferred, results: hits, jobs: jobs, settings: settings, disc: disc)
                         return
                     }
@@ -985,8 +999,62 @@ final class RipFlowController {
         Task { await jobs.ejectDisc() }
     }
 
+    /// Discs whose identification has already been written, keyed by disc
+    /// and chosen film, so a settled answer is recorded once rather than on
+    /// every re-evaluation.
+    private var identificationRecordedFor: Set<String> = []
+
+    /// Record what this disc was identified as, whether or not it is ripped.
+    ///
+    /// The archive only ever wrote a naming record when a rip *started*, so
+    /// the discs that went wrong left no trace at all. The Secret Life of
+    /// Walter Mitty, 2026-09-24, was identified as "The Caretaker", never
+    /// ripped, and taken out of the drive — the single most informative
+    /// event of the evening, and the archive recorded nothing about it.
+    ///
+    /// Written at the moment a film is settled on, with `occasion:
+    /// "identified"`. If a rip then starts, `JobController` overwrites the
+    /// same file with `occasion: "rip"`, so a ripped disc still reads exactly
+    /// as it did before and nothing downstream has to know this ran.
+    private func recordIdentification(jobs: JobController, settings: AppSettings) {
+        guard !settings.menuArchivePath.isEmpty,
+              let disc = jobs.insertedDisc,
+              let movie = search.selectedMovie
+        else { return }
+        let key = Self.discIdentity(disc) + "|" + String(movie.id)
+        guard identificationRecordedFor.insert(key).inserted else { return }
+
+        let volumeName = disc.mountURL.lastPathComponent
+        let metadata = MovieMetadata(from: movie, selectionDisc: selectionDisc, edition: edition)
+        MenuArchive.writeNaming(
+            root: settings.menuArchivePath,
+            slug: MenuArchive.slug(discID: disc.discID, volumeName: volumeName),
+            naming: MenuArchive.naming(
+                volumeName: volumeName,
+                discID: disc.discID,
+                derivedSearchTerm: DiscNameSearchTerm.derive(volumeName: volumeName),
+                chosenTitle: metadata.title,
+                chosenYear: metadata.year,
+                tmdbID: metadata.tmdbID,
+                // What the ladder actually used, and what each rung offered —
+                // without these a wrong identification cannot be attributed
+                // to a rung, which is what made tonight's failure take hours.
+                resolvedBy: resolvedBy,
+                menuTitle: menuTitleSeen,
+                inferredTitle: inferredTitleSeen,
+                candidateIDs: search.results.map { String($0.id) },
+                recommendedTmdbID: recommendedMovieID.map(String.init),
+                selectedTitleIndex: jobs.selectedTitleIndex,
+                featureDurationSeconds: jobs.featureDurationSeconds,
+                edition: MovieMetadata.normalizedEdition(edition),
+                occasion: "identified"
+            )
+        )
+    }
+
     /// Begin, continue or abandon the countdown, from whatever just changed.
     func evaluateAutoStart(jobs: JobController, settings: AppSettings) {
+        recordIdentification(jobs: jobs, settings: settings)
         evaluatePostJobEject(jobs: jobs)
         evaluateAutoEject(jobs: jobs, settings: settings)
         let decision = AutoStartPolicy.decide(
