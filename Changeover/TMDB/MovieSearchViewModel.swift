@@ -49,6 +49,35 @@ final class MovieSearchViewModel {
     /// outside — `select(movieID:apiKey:)` is the only way to change it.
     private(set) var runtimeLookup: RuntimeLookup = .idle
 
+    /// #0071 — the credits line under each result row, keyed by TMDB id.
+    ///
+    /// Filled in the background for the rows on screen, so a row gains its
+    /// cast a moment after it appears rather than the list waiting on twenty
+    /// requests before showing anything. A row with no entry here simply has
+    /// no second line, which is exactly how the list looked before.
+    private(set) var creditsByID: [Int: String] = [:]
+
+    /// How many rows get a credits lookup.
+    ///
+    /// One request each, and they are the rows a person actually reads before
+    /// deciding. Past a dozen the list is too vague to be settled by a cast
+    /// list anyway, and TMDB's rate limit is a shared resource.
+    static let maximumCreditsLookups = 12
+
+    /// Fetch cast and director for the first rows of the current results.
+    ///
+    /// Deliberately best-effort and unordered: each row updates as it lands,
+    /// a failure leaves that row as it was, and nothing waits.
+    func loadCredits(apiKey: String) async {
+        guard !apiKey.isEmpty else { return }
+        let wanted = results.prefix(Self.maximumCreditsLookups).map(\.id)
+        for id in wanted where creditsByID[id] == nil {
+            guard let details = try? await client.movieDetails(id: id, apiKey: apiKey) else { continue }
+            guard let line = CreditsLine.summary(details: details) else { continue }
+            creditsByID[id] = line
+        }
+    }
+
     private let client: TMDBClient
     private var runtimeTask: Task<Void, Never>?
 
@@ -92,6 +121,7 @@ final class MovieSearchViewModel {
         runtimeTask?.cancel()
         runtimeTask = nil
         runtimeLookup = .idle
+        creditsByID = [:]
         errorMessage  = nil
         selectedMovie = nil
         isLoading     = true

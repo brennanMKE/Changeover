@@ -71,7 +71,13 @@ final class TMDBClient {
         }
 
         var comps = URLComponents(string: "https://api.themoviedb.org/3/movie/\(id)")
-        comps?.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
+        comps?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            // #0071 — cast and director in the same request as the runtime.
+            // TMDB charges one round trip for both when they are appended,
+            // so the credits are free in the only currency that matters here.
+            URLQueryItem(name: "append_to_response", value: "credits"),
+        ]
         guard let url = comps?.url else { throw TMDBError.invalidURL }
         let request = URLRequest(url: url)
         let transport = transport

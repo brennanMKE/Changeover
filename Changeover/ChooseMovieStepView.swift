@@ -48,6 +48,7 @@ struct ChooseMovieStepView: View {
             List(search.results, selection: selection) { movie in
                 MovieRow(movie: movie, posterURL: search.posterURL(for: movie),
                          isRecommended: movie.id == flow.recommendedMovieID,
+                         credits: search.creditsByID[movie.id],
                          isChosen: movie.id == flow.selectedMovieID)
                     .tag(movie.id)
                     .contentShape(Rectangle())
@@ -82,6 +83,9 @@ struct ChooseMovieStepView: View {
         // #0030: debounced as-you-type search. The selection (and the
         // confirmation with it) is cleared by `queryChanged` — see its doc
         // comment for the stuck-re-pick bug that requires it.
+        .task(id: search.results.map(\.id)) {
+            await search.loadCredits(apiKey: settings.tmdbAPIKey)
+        }
         .onChange(of: search.query) { _, _ in flow.queryChanged(apiKey: settings.tmdbAPIKey) }
         // #0030 review: the debounced search clears `selectedMovie` only
         // when it fires, so follow the view model whenever it drops the
@@ -172,6 +176,12 @@ struct MovieRow: View {
     /// pre-selected, because a selection highlight alone reads as "this is
     /// where the cursor is" rather than "this is the one that matches".
     var isRecommended = false
+    /// "George Clooney, Violante Placido · dir. Anton Corbijn", or `nil`
+    /// while it is still being fetched or where TMDB knows nobody. A poster
+    /// thumbnail is often too small to recognise and two films of the same
+    /// name cannot be told apart by title — a cast list settles it at a
+    /// glance.
+    let credits: String?
     /// Whether this is the chosen row.
     ///
     /// Drawn by the row rather than left to the List, because an unfocused
@@ -210,6 +220,12 @@ struct MovieRow: View {
                      : movie.yearText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if let credits {
+                    Text(credits)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
         }
         .padding(.vertical, 4)

@@ -52,6 +52,48 @@ nonisolated struct TMDBMovieDetails: Decodable, Equatable, Sendable {
     /// `nil` unless TMDB reported a positive runtime — collapses `null`,
     /// `0`, and "key absent" to the one "unknown" case callers need.
     var runtimeMinutes: Int? { runtime.flatMap { $0 > 0 ? $0 : nil } }
+
+    /// #0071 — who is in it and who directed it, via
+    /// `append_to_response=credits`, which rides on the request the runtime
+    /// already costs rather than adding one.
+    ///
+    /// A poster thumbnail is often too small to read, and two films of the
+    /// same name and length are indistinguishable from title alone. "George
+    /// Clooney" is not. Optional throughout: a sparse TMDB entry has no
+    /// credits, and that is an answer rather than a failure.
+    let credits: TMDBCredits?
+
+    /// The billed leads, in TMDB's own order, which is billing order.
+    /// Capped at three — a row is a row, and the fourth name has never
+    /// settled anything.
+    var leadCast: [String] {
+        (credits?.cast ?? []).prefix(3).map(\.name)
+    }
+
+    /// The director, or the first of them for a film with several.
+    var director: String? {
+        (credits?.crew ?? []).first { $0.job == "Director" }?.name
+    }
+}
+
+/// `credits` as returned by `append_to_response`.
+nonisolated struct TMDBCredits: Decodable, Equatable, Sendable {
+    let cast: [TMDBCastMember]?
+    let crew: [TMDBCrewMember]?
+}
+
+nonisolated struct TMDBCastMember: Decodable, Equatable, Sendable {
+    let name: String
+    /// Billing order. TMDB returns cast pre-sorted by it, but it is decoded
+    /// so nothing depends on that staying true.
+    let order: Int?
+}
+
+nonisolated struct TMDBCrewMember: Decodable, Equatable, Sendable {
+    let name: String
+    /// "Director", "Screenplay", "Producer", … — matched exactly, because
+    /// "Co-Director" and "Second Unit Director" are not what is wanted.
+    let job: String?
 }
 
 // MARK: - Errors
