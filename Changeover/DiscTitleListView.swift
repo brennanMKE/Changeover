@@ -331,6 +331,17 @@ struct DiscTitleListView: View {
 
     private func titleRow(_ title: DiscTitle, badgeIndex: Int?) -> some View {
         HStack(spacing: 10) {
+            // Which row is the movie, stated rather than implied. The list's
+            // own highlight is nearly invisible when the window is not focused
+            // — which is every screenshot taken of this app — so the one thing
+            // the table is for was the one thing it did not show.
+            Image(systemName: TitleRowControls.selectionSymbol(
+                titleIndex: title.index, selectedIndex: jobs.selectedTitleIndex))
+                .foregroundStyle(TitleRowControls.isSelected(
+                    titleIndex: title.index, selectedIndex: jobs.selectedTitleIndex)
+                    ? Color.accentColor : Color.secondary)
+                .accessibilityLabel(TitleRowControls.selectionLabel(
+                    titleIndex: title.index, selectedIndex: jobs.selectedTitleIndex))
             // The index, the chapter count and the byte size are the
             // vocabulary of a disc, not of a film: detail columns.
             if showsDetails {
@@ -366,17 +377,22 @@ struct DiscTitleListView: View {
                     .background(Color.accentColor.opacity(0.15))
                     .clipShape(Capsule())
             }
-            // #0031 Step B: the extras opt-in, off by default. Disabled on
-            // the selected feature row (#0031 review): the feature can never
-            // be an extra, and `JobController.toggleExtra` refuses it too.
-            Toggle("Extra", isOn: Binding(
-                get: { jobs.selectedExtraTitleIndices.contains(title.index) },
-                set: { _ in jobs.toggleExtra(title.index) }
-            ))
-            .toggleStyle(.checkbox)
-            .labelsHidden()
-            .disabled(title.index == jobs.selectedTitleIndex)
-            .help("Rip this title as an extra, filed outside the Plex library")
+            // #0031 Step B: the extras opt-in — now labelled, and omitted
+            // rather than disabled where it cannot apply. See
+            // `TitleRowControls.showsExtraToggle` for why both changed.
+            if TitleRowControls.showsExtraToggle(
+                titleIndex: title.index,
+                selectedIndex: jobs.selectedTitleIndex,
+                showsDetails: showsDetails
+            ) {
+                Toggle("Extra", isOn: Binding(
+                    get: { jobs.selectedExtraTitleIndices.contains(title.index) },
+                    set: { _ in jobs.toggleExtra(title.index) }
+                ))
+                .toggleStyle(.checkbox)
+                .font(.caption)
+                .help("Rip this title as an extra, filed outside the Plex library")
+            }
         }
         .padding(.vertical, 2)
     }
