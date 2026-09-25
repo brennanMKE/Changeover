@@ -70,13 +70,38 @@ nonisolated enum DiscTitleInference {
         }
     }
 
+    /// The label leads. The previous wording opened with "the menus rarely
+    /// print the title plainly", and on `THESECRETLIFEOFWALTERMITTY` — a
+    /// label that *is* the title with the spaces knocked out — the model
+    /// took that as licence to ignore it, read the menu noise instead and
+    /// answered "The Caretaker". TMDB had a 2026 film of that name with the
+    /// same 114-minute runtime, so auto-select took it.
+    ///
+    /// The corpus says the label is right far more often than not: on 23
+    /// archived discs the label carries the film's title 18 times and names
+    /// something else only 5 (`WILLIS` twice — the actor, on two different
+    /// box-set discs — plus `BLUSBRO`, `DVD_VIDEO` and `DIE_HARD_3`, whose
+    /// label is the popular name rather than the TMDB one). The menus print
+    /// the title on only 11 of the 23.
     static let instructions = """
-    You identify films from the text printed on a DVD's menus.
+    You identify films from a DVD.
 
     Reply with the film's title and nothing else — no year, no quotes, no
-    explanation, no "The film is". The menus rarely print the title plainly:
-    it is more often implied by a bonus feature ("Inside Enemy at the Gates"
-    means the film is Enemy at the Gates), by scene names, or by cast names.
+    explanation, no "The film is".
+
+    Start with the disc label. It is usually the film's own title with the
+    spaces removed or replaced by underscores — THESECRETLIFEOFWALTERMITTY is
+    The Secret Life of Walter Mitty, ENEMYATTHEGATES is Enemy at the Gates,
+    THE_BREAKFAST_CLUB is The Breakfast Club. When the label reads as a title,
+    answer with that title, spaced and capitalised properly, and do not let
+    the menu text talk you out of it.
+
+    Use the menus only when the label is not a title: when it names the disc's
+    format (DVD_VIDEO, NO_NAME), an actor or a box set (WILLIS), or is an
+    abbreviation with no words in it (BLUSBRO). Then the film is whichever
+    film the menus name — sometimes printed plainly, sometimes only implied by
+    a bonus feature ("Inside Enemy at the Gates" means the film is Enemy at
+    the Gates).
 
     Ignore text about the disc rather than the film: caption houses, audio
     formats, region warnings, copyright notices, menu words like PLAY, SCENE
@@ -124,6 +149,124 @@ nonisolated enum DiscTitleInference {
         // A sentence is an explanation that slipped through, not a title.
         guard text.split(separator: " ").count <= 12 else { return nil }
         return text
+    }
+
+    // MARK: - The label rung
+
+    /// Letters and digits only, lowercased — the one comparison that can see
+    /// past a disc author's spacing.
+    ///
+    /// `THESECRETLIFEOFWALTERMITTY`, `The Secret Life of Walter Mitty` and
+    /// `the.secret.life.of.walter.mitty` all condense to the same string,
+    /// which is the whole point: the label's word boundaries are missing, not
+    /// its letters, so a comparison that ignores boundaries can still tell
+    /// the label and a proposed title apart.
+    static func condensed(_ text: String) -> String {
+        String(text.lowercased().unicodeScalars.filter {
+            CharacterSet.alphanumerics.contains($0)
+        }.map(Character.init))
+    }
+
+    /// Condensed labels that name the disc's *format*, not its film. The
+    /// menus are the only evidence on these, so nothing about the label may
+    /// be used to judge an answer.
+    ///
+    /// Deliberately small and literal. It cannot be extended to cover the
+    /// hard cases — `WILLIS` and `BLUSBRO` are just as uninformative but look
+    /// exactly like titles — so the length rule below, not this set, is what
+    /// keeps those discs working.
+    static let uninformativeLabels: Set<String> = [
+        "dvdvideo", "dvd", "dvdrom", "video", "videodvd", "noname", "nodisc",
+        "untitled", "unnamed", "movie", "film", "disc", "disc1", "disc2",
+        "default", "newvolume", "volume",
+    ]
+
+    /// The first rung: the volume label as a search term, or `nil` when the
+    /// label is not one.
+    ///
+    /// Thin on purpose — `DiscNameSearchTerm.derive` already strips
+    /// `_DISC_1`, `NTSC`, a trailing year and the generic names; this adds
+    /// the wider uninformative-label set and the one case `derive` refuses
+    /// on principle, so there is one place that answers "is the label worth
+    /// searching?".
+    static func labelAsSearchTerm(_ volumeName: String) -> String? {
+        if let derived = DiscNameSearchTerm.derive(volumeName: volumeName) {
+            guard !uninformativeLabels.contains(condensed(derived)) else { return nil }
+            return derived
+        }
+        return yearTitle(volumeName)
+    }
+
+    /// A label that is nothing but a year, when that year is the film's
+    /// whole title.
+    ///
+    /// `DiscNameSearchTerm.derive` refuses every letterless name, and is
+    /// right to: `1234` is a serial number, and it pins that. But the
+    /// archived disc `1917` is a film whose title is a bare year, and the
+    /// label is the only place it appears — its menus name Sam Mendes and
+    /// Roger Deakins and never the film. So this rung, and only this rung,
+    /// accepts a single four-digit token inside the narrow range these
+    /// titles actually occupy — `1900`, `1917`, `1941`, `1984`, `2012`,
+    /// `2046` are all films; nothing below 1800 is. `1234` still gets
+    /// nothing, and `DiscNameSearchTermTests` still pins that it never
+    /// reaches the search box either.
+    private static func yearTitle(_ volumeName: String) -> String? {
+        let token = volumeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard token.count == 4, token.allSatisfy(\.isNumber), let year = Int(token) else { return nil }
+        guard (1800...2100).contains(year) else { return nil }
+        return token
+    }
+
+    // MARK: - Checking the answer against the label
+
+    /// How many condensed characters a label needs before it is allowed to
+    /// veto the model.
+    ///
+    /// Measured, not guessed. Over the 23 archived discs
+    /// (`Fixtures/naming/corpus.json`) the labels whose correct film does
+    /// *not* fit them are `WILLIS` (6 — the actor, not a title, on two
+    /// different box-set discs), `BLUSBRO` (7) and `DIE_HARD_3_DISC1`
+    /// (`diehard3`, 8 — the popular name, where TMDB's is "Die Hard: With a
+    /// Vengeance"). So 9 is the lowest value with no false rejection
+    /// anywhere in the corpus, and `DiscNamingCorpusTests` pins that.
+    ///
+    /// The shipped value is 12, three characters of margin above the
+    /// measured floor, because the floor's nearest miss is one character
+    /// away and the veto buys nothing below it: a label of 9–11 characters
+    /// that really is the title (`LIMITLESS`, `THE_BIG_SHORT`) already
+    /// resolves on the label rung, so the model's answer is never needed
+    /// there. Every label the fix exists for is far above 12 —
+    /// `THESECRETLIFEOFWALTERMITTY` is 26, `ENEMYATTHEGATES` 15.
+    static let labelVetoMinimumLength = 12
+
+    /// Is this label long and specific enough to judge an answer by?
+    static func labelCanJudgeAnswer(_ volumeName: String) -> Bool {
+        guard let term = labelAsSearchTerm(volumeName) else { return false }
+        return condensed(term).count >= labelVetoMinimumLength
+    }
+
+    /// Does a proposed title agree with the disc label?
+    ///
+    /// `true` means "no objection" — which includes every case where the
+    /// label has no standing to object. A short label, an absent one, or one
+    /// of the format names is not evidence against anything, and treating it
+    /// as evidence is the failure that matters: `answerFitsLabel("The Whole
+    /// Nine Yards", volumeName: "WILLIS")` must be `true`, because that disc
+    /// is a Bruce Willis box-set disc whose menus — not its label — name the
+    /// film, and it is filed correctly in the library today.
+    ///
+    /// The agreement test is containment in *either* direction, because real
+    /// labels sit on both sides of their title: `SECRET_OF_MY_SUCCESS` drops
+    /// the leading "The" (label inside title) while
+    /// `LIVEFREE_OR_DIEHARD_BRANCH` carries an authoring suffix (title
+    /// inside label). A one-directional test breaks one group or the other.
+    static func answerFitsLabel(_ answer: String, volumeName: String) -> Bool {
+        guard labelCanJudgeAnswer(volumeName),
+              let term = labelAsSearchTerm(volumeName) else { return true }
+        let label = condensed(term)
+        let proposed = condensed(answer)
+        guard !proposed.isEmpty else { return false }
+        return label.contains(proposed) || proposed.contains(label)
     }
 
     // MARK: - Asking it
