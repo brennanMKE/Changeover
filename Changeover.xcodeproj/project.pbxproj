@@ -143,6 +143,7 @@
 				"Fixtures/discs/oppenheimer/scan.stderr.txt",
 				"Fixtures/menus/synthetic-movie/structure.json",
 				"Fixtures/menus/synthetic-movie/README.md",
+				"Fixtures/naming/corpus.json",
 			);
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
