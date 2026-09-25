@@ -43,6 +43,44 @@ nonisolated struct DiscInsertion: Codable, Equatable, Hashable, Sendable {
     /// actually assign the decoded value; nothing in this codebase mutates
     /// it after construction.
     var insertionID = UUID()
+
+    // MARK: - #0073: discs that never mounted
+
+    /// Whether this disc has a mounted volume.
+    ///
+    /// `false` for a disc inserted while the Mac's screen was locked:
+    /// `loginwindow` dissents its mount approval, so it is physically in the
+    /// drive and readable but has no `/Volumes` entry at all. `mountURL` then
+    /// holds the raw device (`/dev/rdisk4`) instead, which is what HandBrake
+    /// and libdvdread want anyway — so everything downstream that passes the
+    /// path to a tool keeps working untouched.
+    ///
+    /// Defaulted `true` so every existing construction site, and every
+    /// decoded `RipRequest` written before this existed, means what it has
+    /// always meant.
+    var isMounted = true
+
+    /// The disc's own label, when there is no volume to read one from.
+    ///
+    /// A mounted disc's label is the last path component of its mount URL.
+    /// An unmounted one has none, and libdvdnav reports it during the scan
+    /// (`RawDiscSource.label(fromScanOutput:)`) — which matters more than it
+    /// sounds, since the label carries the film's title on 18 of the 23 discs
+    /// in the naming corpus.
+    var volumeLabel: String?
+
+    /// What to call this disc: its recovered label, or its volume name.
+    ///
+    /// Every identification path wants this rather than
+    /// `mountURL.lastPathComponent`, which on an unmounted disc would be
+    /// "rdisk4" — a label that resolves to nothing and looks like evidence.
+    var label: String {
+        if let volumeLabel, !volumeLabel.isEmpty { return volumeLabel }
+        return mountURL.lastPathComponent
+    }
+
+    /// What to hand a command-line tool as `--input`.
+    var sourcePath: String { mountURL.path }
 }
 
 /// Outcome of classifying one DiskArbitration disk-appeared (or
@@ -151,19 +189,59 @@ enum OpticalDiscClassifier {
     /// `DVDMonitorGateOrderingTests`. `classify`'s own signature, and every
     /// test built on it, are untouched: this function only decides *when* to
     /// compute the values `classify` takes, not how it decides given them.
+    /// Media kinds that can carry a video DVD.
+    ///
+    /// #0073 — narrower than `opticalMediaKindPrefixes` on purpose, and used
+    /// only for a disc with no mounted volume. A mounted disc is admitted on
+    /// the evidence of an actual `VIDEO_TS` directory; an unmounted one has
+    /// no filesystem to inspect, so the media kind is all that is left. An
+    /// audio CD (`IOCDMedia`) would otherwise be admitted and handed to
+    /// HandBrake — a minute of pointless scanning and a confusing failure.
+    nonisolated static let videoCapableMediaKindPrefixes = ["IODVDMedia", "IOBDMedia"]
+
+    nonisolated static func isVideoCapableMediaKind(_ mediaKind: String?) -> Bool {
+        guard let mediaKind else { return false }
+        return videoCapableMediaKindPrefixes.contains { mediaKind.hasPrefix($0) }
+    }
+
+    /// - Parameter isMounted: whether the disc has a volume at all.
+    ///
+    ///   `false` is #0073's case: a disc inserted while the Mac's screen was
+    ///   locked is dissented at mount approval by `loginwindow`, so it sits
+    ///   in the drive readable but with no `/Volumes` entry. The `VIDEO_TS`
+    ///   check cannot run — there is no filesystem to look at — so the media
+    ///   kind carries the decision and the scan finds out the rest. Admitting
+    ///   it provisionally is the entire point: the alternative is that a disc
+    ///   nobody was there to insert stays invisible forever.
+    ///
+    ///   Defaulted `true`, so every existing caller and test keeps the
+    ///   behaviour it was written against — a mounted disc must still show a
+    ///   real `VIDEO_TS`.
     nonisolated static func evaluateAppearance(
         mediaKind: String?,
         protocolName: String?,
         previousDiscID: String?,
+        isMounted: Bool = true,
         resolveVideoTS: () -> Bool,
         resolveDiscID: () -> String?
     ) -> DiscMountDecision {
         guard isGenuineOpticalMedia(mediaKind: mediaKind, protocolName: protocolName) else {
             return .ignored(reason: "not optical media (kind: \(mediaKind ?? "nil"), protocol: \(protocolName ?? "nil"))")
         }
-        let hasVideoTS = resolveVideoTS()
-        guard hasVideoTS else {
-            return .ignored(reason: "no VIDEO_TS directory at the mount root")
+        let hasVideoTS: Bool
+        if isMounted {
+            hasVideoTS = resolveVideoTS()
+            guard hasVideoTS else {
+                return .ignored(reason: "no VIDEO_TS directory at the mount root")
+            }
+        } else {
+            guard isVideoCapableMediaKind(mediaKind) else {
+                return .ignored(reason: "unmounted \(mediaKind ?? "nil") cannot carry a video DVD")
+            }
+            // Taken on trust until the scan says otherwise. `resolveVideoTS`
+            // is deliberately not called: it would stat a path that does not
+            // exist and answer no.
+            hasVideoTS = true
         }
         return classify(
             mediaKind: mediaKind,

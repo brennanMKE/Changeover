@@ -56,6 +56,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// across a close/reopen instead of being rebuilt (#0048, following #0011).
     private(set) var historyWindow: NSWindow?
 
+    /// #0073 — never leave a drive held shut by a process that is going away.
+    ///
+    /// The eject veto dies with the process regardless, but a deliberate
+    /// release means the vote stops at the start of teardown rather than
+    /// whenever the session happens to be torn down. A disc trapped by a
+    /// quitting app is the failure this feature must never cause.
+    func applicationWillTerminate(_ notification: Notification) {
+        jobs.releaseDiscHold()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
         LaunchAttribution.note()

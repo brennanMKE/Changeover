@@ -523,7 +523,7 @@ final class RipFlowController {
         guard let disc = jobs.insertedDisc, editionSeededFor != disc else { return }
         editionSeededFor = disc
         guard edition.isEmpty else { return }
-        edition = DiscEdition.derive(volumeName: disc.mountURL.lastPathComponent) ?? ""
+        edition = DiscEdition.derive(volumeName: disc.label) ?? ""
     }
 
     /// Wipe everything shown for the previous disc when a different one goes
@@ -595,7 +595,7 @@ final class RipFlowController {
         resolutionStartedFor = disc
         isResolvingDisc = true
 
-        let label = disc.mountURL.lastPathComponent
+        let label = disc.label
         let apiKey = settings.tmdbAPIKey
         let intelligence = jobs.menuState.intelligence
         let mayInfer = settings.usesAppleIntelligence
@@ -844,7 +844,7 @@ final class RipFlowController {
     /// the disc was re-reported, the set no longer contained it, and it was
     /// ripped a second time ten seconds after the first finished.
     nonisolated static func discIdentity(_ disc: DiscInsertion) -> String {
-        disc.discID ?? disc.mountURL.lastPathComponent
+        disc.discID ?? disc.label
     }
 
     private var autoStartTask: Task<Void, Never>?
@@ -1044,7 +1044,7 @@ final class RipFlowController {
         let key = Self.discIdentity(disc) + "|" + String(movie.id)
         guard identificationRecordedFor.insert(key).inserted else { return }
 
-        let volumeName = disc.mountURL.lastPathComponent
+        let volumeName = disc.label
         let metadata = MovieMetadata(from: movie, selectionDisc: selectionDisc, edition: edition)
         MenuArchive.writeNaming(
             root: settings.menuArchivePath,
@@ -1092,7 +1092,7 @@ final class RipFlowController {
     /// agreement with an unchecked question.
     func termTrust(jobs: JobController, term: String) -> MovieAutoSelect.TermTrust {
         guard let disc = jobs.insertedDisc else { return .unverified }
-        let volumeName = disc.mountURL.lastPathComponent
+        let volumeName = disc.label
         switch resolvedBy {
         case "label":
             return .labelBacked

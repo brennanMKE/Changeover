@@ -186,7 +186,7 @@ struct RipFlowView: View {
         switch step {
         case .chooseMovie, .confirm:
             guard let disc = jobs.insertedDisc else { return nil }
-            return disc.mountURL.lastPathComponent
+            return disc.label
         case .insertDisc, .ripping, .done:
             return nil
         }

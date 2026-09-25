@@ -154,10 +154,19 @@ final class DVDMonitor {
         // (not just the `DiscMountDecision`) is available for `.newDisc`.
         var resolvedDiscID: String?
 
+        // #0073 — a disc inserted while the screen is locked never mounts, so
+        // there is no volume path and no VIDEO_TS to look for. It is still in
+        // the drive and still readable through its raw device, which is where
+        // the pipeline reads it from.
+        let source = mountURL ?? deviceNode.flatMap {
+            RawDiscSource.devicePath(bsdName: $0).map { URL(fileURLWithPath: $0) }
+        }
+
         let decision = OpticalDiscClassifier.evaluateAppearance(
             mediaKind: mediaKind,
             protocolName: protocolName,
             previousDiscID: currentDiscID,
+            isMounted: mountURL != nil,
             resolveVideoTS: {
                 mountURL.map(Self.videoTSExists) ?? false
             },
@@ -206,17 +215,22 @@ final class DVDMonitor {
             // it never reaches `onDVDInserted`. Report it separately;
             // `JobController.discRemounted` ignores it unless the disc was
             // marked unavailable.
-            guard let mountURL else { return }
-            let insertion = DiscInsertion(mountURL: mountURL, deviceNode: deviceNode, discID: resolvedDiscID)
+            guard let source else { return }
+            var insertion = DiscInsertion(mountURL: source, deviceNode: deviceNode, discID: resolvedDiscID)
+            insertion.isMounted = mountURL != nil
             Task { @MainActor [weak self] in
                 self?.onDVDRemounted?(insertion)
             }
 
         case .newDisc:
-            guard let mountURL else { return }
+            guard let source else { return }
             currentDiscID = resolvedDiscID
             currentDeviceNode = deviceNode
-            let insertion = DiscInsertion(mountURL: mountURL, deviceNode: deviceNode, discID: resolvedDiscID)
+            var insertion = DiscInsertion(mountURL: source, deviceNode: deviceNode, discID: resolvedDiscID)
+            // `mountURL` nil means the disc is in the drive with no volume —
+            // its label comes from the scan (`RawDiscSource.label`) rather
+            // than from a path component, since "rdisk4" is not a film.
+            insertion.isMounted = mountURL != nil
             Task { @MainActor [weak self] in
                 self?.onDVDInserted?(insertion)
             }

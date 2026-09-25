@@ -235,6 +235,15 @@ final class JobController {
     /// `DVDMonitor.onDVDRemoved` fires.
     var insertedDisc: DiscInsertion?
 
+    /// #0073 — the eject veto for an unmounted disc, when one is held.
+    ///
+    /// `nil` for every mounted disc, which is almost all of them. Held only
+    /// while there is a reason, and released by `releaseDiscHold()` from the
+    /// disc going away, a job finishing, an eject the user asked for, and app
+    /// termination. A drive that will not open is a worse bug than the one
+    /// this fixes.
+    private var discHold: DiscHold?
+
     /// #0048 — which job `JobHistoryView` should select, set by
     /// `AppDelegate.showHistory(selecting:)` (a notification click names a
     /// specific job; the status menu's plain "History…" row leaves it
@@ -679,7 +688,7 @@ final class JobController {
         // re-reads a disc whose movie was settled long ago and would only
         // restate a pairing the archive already has.
         if !request.isUpgrade, !settings.menuArchivePath.isEmpty {
-            let volumeName = currentDisc.mountURL.lastPathComponent
+            let volumeName = currentDisc.label
             MenuArchive.writeNaming(
                 root: settings.menuArchivePath,
                 slug: MenuArchive.slug(discID: currentDisc.discID, volumeName: volumeName),
@@ -849,6 +858,16 @@ final class JobController {
         // just how Swift extracts it, not a second decision.
         guard let disc = insertedDisc else { return false }
 
+        // #0073 — let go before asking the drive to let go.
+        //
+        // The app votes against ejects of a disc it is holding, and
+        // DiskArbitration does not exempt the holder: an eject attempted
+        // while still holding would be refused by this very process. Worse,
+        // the refusal would look exactly like the loginwindow dissents that
+        // cost a week to diagnose. Released unconditionally, because by this
+        // point somebody or something has decided the disc should come out.
+        releaseDiscHold()
+
         isEjecting = true
         switch await ejector(disc.mountURL) {
         case .ejected:
@@ -1003,7 +1022,33 @@ final class JobController {
         isEjecting = false
         discUnavailable = false
         insertedDisc = disc
+        holdIfUnmounted(disc)
         startScan(settings: settings)
+    }
+
+    /// #0073 — keep an unmounted disc in the drive long enough to work on it.
+    ///
+    /// Only for a disc with no volume, which means it was inserted while the
+    /// Mac's screen was locked: `loginwindow` dissented its mount approval
+    /// and will eject it within half a second unless somebody votes against
+    /// that. A mounted disc needs none of this and is never held — the app
+    /// must not make a drive harder to open than it has to be.
+    private func holdIfUnmounted(_ disc: DiscInsertion) {
+        discHold?.release()
+        discHold = nil
+        guard !disc.isMounted, let bsd = disc.deviceNode else { return }
+        let hold = DiscHold(bsdName: bsd)
+        hold.hold(reason: .awaitingWork)
+        discHold = hold
+    }
+
+    /// Stop holding, whatever the reason was. Safe to call when nothing is
+    /// held, and called from every path that ends the app's interest in the
+    /// disc: a finished job, a removal, an eject the user asked for, and
+    /// termination.
+    func releaseDiscHold() {
+        discHold?.release()
+        discHold = nil
     }
 
     /// Clears the disc along with every piece of scan/selection state tied
@@ -1050,6 +1095,10 @@ final class JobController {
     /// reliability record `decision: "discRemoved"` so it's never counted as
     /// a disc read failure, whatever the outcome.
     func removeDisc() {
+        // The disc is gone, so there is nothing to hold and the vote must
+        // stop immediately — a hold outliving its disc would refuse the
+        // *next* one's eject.
+        releaseDiscHold()
         scanTask?.cancel()
         scanTask = nil
         menuTask?.cancel()
@@ -1127,7 +1176,7 @@ final class JobController {
         let scan = scanRunner
         let discPath = disc.mountURL.path
         let handbrakePath = settings.handbrakePath
-        let volumeName = disc.mountURL.lastPathComponent
+        let volumeName = disc.label
         let driveName = disc.deviceNode ?? ""
 
         let newScanTask = Task { [weak self] in
@@ -1212,6 +1261,14 @@ final class JobController {
         switch outcome {
         case .success(let result):
             scanState = .scanned(result)
+            // #0073 — an unmounted disc has no volume name, so until the scan
+            // ran it had no usable name at all. libdvdnav reported one; adopt
+            // it, because every identification path downstream reads
+            // `disc.label` and "rdisk4" is not a film.
+            if !disc.isMounted, let label = result.discLabel, insertedDisc?.insertionID == disc.insertionID {
+                insertedDisc?.volumeLabel = label
+                FlowDiagnostics.note("unmounted disc: label recovered from the scan — \(label)")
+            }
             // #0025: preselect only on an unambiguous, non-Play-All answer.
             // `.playAll`/`.none` leave `selectedTitleIndex` nil so Start stays
             // disabled until the user picks explicitly — the whole point of
@@ -1225,7 +1282,7 @@ final class JobController {
                 MenuArchive.writeScan(
                     root: settings.menuArchivePath,
                     slug: MenuArchive.slug(discID: disc.discID,
-                                           volumeName: disc.mountURL.lastPathComponent),
+                                           volumeName: disc.label),
                     disc: result.disc,
                     mainFeatureIndex: result.mainFeatureIndex
                 )
@@ -1266,12 +1323,12 @@ final class JobController {
             menudumpPath: helperPath,
             ffmpegPath: settings.ffmpegPath,
             workDirectory: MenuReader.workDirectory(
-                discIdentity: disc.discID ?? disc.mountURL.lastPathComponent
+                discIdentity: disc.discID ?? disc.label
             ),
             archiveRoot: settings.menuArchivePath,
             archiveSlug: MenuArchive.slug(
                 discID: disc.discID,
-                volumeName: disc.mountURL.lastPathComponent
+                volumeName: disc.label
             )
         )
         let discPath = disc.mountURL.path
