@@ -480,3 +480,70 @@ struct DiscTitleHeuristicTests {
         #expect(!roles.titles.contains { $0.suggestedRole == .mainFeature })
     }
 }
+
+// MARK: - #0065: the scanner's answer is not taken on trust
+
+@Suite struct ScannerAnswerSanityTests {
+
+    private static func title(_ index: Int, _ seconds: Int) -> DiscTitle {
+        DiscTitle(index: index, durationSeconds: seconds, chapterCount: 1,
+                  sizeBytes: 0, outputFileName: nil)
+    }
+
+    private static func disc(_ titles: [DiscTitle]) -> DiscInfo {
+        DiscInfo(volumeName: "IDENTITY", driveName: "disk4", titles: titles)
+    }
+
+    /// The Bourne Identity, measured 2026-09-24: HandBrake reported
+    /// `+ title 13: + Main Feature` on a 00:02:26 trailer, while the feature
+    /// was one of three ~90-minute titles. Encoding it would have spent forty
+    /// minutes producing a trailer and filed it in Plex as the film.
+    @Test func aTrailerTheScannerCallsTheMainFeatureIsRefused() {
+        let disc = Self.disc([
+            Self.title(1, 5397),   // 1:29:57 widescreen
+            Self.title(2, 5464),   // 1:31:04 widescreen
+            Self.title(3, 5397),   // 1:29:57 4:3 pan-and-scan
+            Self.title(13, 146),   // 0:02:26 — what HandBrake named
+        ])
+        let outcome = DiscTitleHeuristic.classify(disc, mainFeatureIndex: 13)
+        // Three titles clear the floor, so no single one can be promoted:
+        // the right answer for a genuinely ambiguous disc is to ask.
+        #expect(outcome == .none, "a 2:26 title is not a feature, whoever says so")
+    }
+
+    /// The floor is the only thing added — a scanner answer that is plausible
+    /// is still believed, and still preferred over guessing by length.
+    @Test func aPlausibleScannerAnswerIsStillTrusted() {
+        let disc = Self.disc([Self.title(1, 5400), Self.title(2, 5460), Self.title(9, 200)])
+        let outcome = DiscTitleHeuristic.classify(disc, mainFeatureIndex: 2)
+        #expect(outcome == .single(index: 2, source: .scanner))
+    }
+
+    /// Exactly at the floor is long enough. The boundary is stated so a later
+    /// refactor cannot quietly turn `>=` into `>`.
+    @Test func exactlyTheMinimumCounts() {
+        let disc = Self.disc([
+            Self.title(1, DiscTitleHeuristic.featureMinimumSeconds),
+            Self.title(2, 120),
+        ])
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: 1) == .single(index: 1, source: .scanner))
+    }
+
+    /// One second under, and it falls through to the length fallback — which
+    /// here finds no candidate at all and asks a person.
+    @Test func oneSecondUnderTheFloorIsRefused() {
+        let disc = Self.disc([
+            Self.title(1, DiscTitleHeuristic.featureMinimumSeconds - 1),
+            Self.title(2, 120),
+        ])
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: 1) == .none)
+    }
+
+    /// A short scanner answer must not block a disc that has one obvious
+    /// feature: the fallback still runs and still promotes it.
+    @Test func aShortScannerAnswerStillLetsTheLengthFallbackWork() {
+        let disc = Self.disc([Self.title(1, 5400), Self.title(13, 146)])
+        let outcome = DiscTitleHeuristic.classify(disc, mainFeatureIndex: 13)
+        #expect(outcome == .single(index: 1, source: .length))
+    }
+}

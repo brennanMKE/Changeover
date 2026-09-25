@@ -126,8 +126,30 @@ nonisolated enum DiscTitleHeuristic {
         // the list doesn't contain: these are all "the scanner gave no
         // answer", one case, handled by the length fallback below rather
         // than three separate short-circuits to `.none`.
+        // The scanner's answer is checked against the same length floor the
+        // fallback uses, rather than taken on trust.
+        //
+        // The Bourne Identity, 2026-09-24: HandBrake reported
+        // `+ title 13: + Main Feature`, a **two minute twenty-six second**
+        // trailer, on a disc whose feature is one of three ~90-minute titles.
+        // Its heuristic follows the disc's title-set structure, and on a
+        // flipper disc — widescreen and 4:3 transfers side by side — that
+        // structure points somewhere else entirely.
+        //
+        // Taking it on trust meant a scan could nominate anything at all and
+        // the app would encode it: forty minutes of work producing a trailer,
+        // filed in Plex as the film. The floor already existed and was already
+        // agreed to be the right one; it was simply never applied to the one
+        // answer that arrives from outside.
+        //
+        // Below the floor, the scanner is treated exactly as if it had given
+        // no answer — fall through to the length fallback, which promotes a
+        // title only when exactly one clears the floor and otherwise asks a
+        // person. On this disc three titles clear it, so it asks, which is
+        // the correct outcome for a disc whose feature genuinely is ambiguous.
         if let mainFeatureIndex, mainFeatureIndex > 0,
-           let candidate = disc.titles.first(where: { $0.index == mainFeatureIndex }) {
+           let candidate = disc.titles.first(where: { $0.index == mainFeatureIndex }),
+           candidate.durationSeconds >= featureMinimumSeconds {
             return outcome(for: candidate, source: .scanner, among: disc.titles)
         }
 
