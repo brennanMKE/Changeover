@@ -426,21 +426,32 @@ struct DiscTitleListView: View {
                                     disc: DiscInfo) -> some View {
         let duration = DiscTitleFormatting.plainDuration(
             disc.titles.first { $0.index == suggestion.index }?.durationSeconds ?? 0)
-        HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: "sparkles")
                 .foregroundStyle(Color.accentColor)
             Text(suggestion.strength == .certain
                  ? "Picked the \(duration) part — \(suggestion.reason.lowercasedFirst)."
                  : "Suggested: the \(duration) part — \(suggestion.reason.lowercasedFirst).")
-                // Not `.secondary`. This is the one line on the picker that
-                // tells somebody which row to click, and a grey caption is
-                // the wrong weight for it — on the capture from joe it was
-                // indistinguishable from the background, next to a sparkle
-                // with apparently nothing beside it.
                 .font(.callout.weight(.medium))
-                .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
+        // Its own background, which is both the design and the fix.
+        //
+        // This is a callout — the one line telling somebody which row to
+        // click — and it was drawn as bare text on the window's material.
+        // That made it invisible in every capture: `cacheDisplay` does not
+        // render a window's background, so the image comes back white, and in
+        // dark mode both `.primary` and `.secondary` are light. Two rounds
+        // went into adjusting a colour that was never the problem.
+        //
+        // Painting its own surface means it reads the same on screen and in
+        // a capture, which for an app that is only ever looked at through
+        // screenshots of a headless Mac is not a small thing.
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.accentColor.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
+        .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: suggestion) {
             // Only a decisive suggestion selects. Anything else waits.
             guard suggestion.strength == .certain, jobs.selectedTitleIndex == nil else { return }
