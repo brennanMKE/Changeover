@@ -843,8 +843,32 @@ final class RipFlowController {
     /// "have we already ripped this disc": when Die Hard's eject was refused
     /// the disc was re-reported, the set no longer contained it, and it was
     /// ripped a second time ten seconds after the first finished.
+    /// #0073 — never the device node, which is the drive rather than the
+    /// disc and which the next disc inherits.
+    ///
+    /// `label` falls back to the mount URL's last path component, which for
+    /// an unmounted disc is **"rdisk4"** — shared by every disc that drive
+    /// ever holds. Keying "have we ripped this?" on that makes every
+    /// unmounted disc the same disc as the last one, which is the worst
+    /// possible direction for this to fail: it silently skips work. Measured
+    /// on joe, 2026-09-25, as "this disc has already been ripped" against a
+    /// film that was not in the library.
+    ///
+    /// **This value changes once**, when an unmounted disc's scan recovers
+    /// its label: insertion id, then the label. That is deliberate and safe
+    /// in a way the old behaviour was not. The window is the ~15 seconds
+    /// before the first scan completes, during which nothing has been ripped
+    /// or ejected, so nothing has been recorded under the earlier value; and
+    /// if anything ever were, the mismatch would fail *open* — offering to
+    /// rip again rather than silently refusing to.
+    ///
+    /// A mounted disc is unaffected: its label is its volume name from the
+    /// instant it appears and never changes.
     nonisolated static func discIdentity(_ disc: DiscInsertion) -> String {
-        disc.discID ?? disc.label
+        if let discID = disc.discID { return discID }
+        if let label = disc.volumeLabel, !label.isEmpty { return label }
+        if disc.isMounted { return disc.label }
+        return disc.insertionID.uuidString
     }
 
     private var autoStartTask: Task<Void, Never>?

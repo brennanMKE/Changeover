@@ -127,7 +127,13 @@ nonisolated enum AutoStartPolicy {
         outcome: JobOutcome?
     ) -> Bool {
         guard !isRunning, !isEjecting, !alreadyAsked else { return false }
-        guard let disc = currentDisc, ranJobForDisc == disc else { return false }
+        // #0073 — matched on the insertion, not the whole value. An unmounted
+        // disc learns its label from its own scan, so the disc a job ran for
+        // and the disc now in the drive are the same insertion with different
+        // contents. Comparing everything made them unequal and left a
+        // finished disc sitting in the drive.
+        guard let disc = currentDisc,
+              ranJobForDisc?.insertionID == disc.insertionID else { return false }
         // A failure deliberately keeps its disc in for a retry (#0005).
         guard let outcome, outcome.failure == nil else { return false }
         return true
