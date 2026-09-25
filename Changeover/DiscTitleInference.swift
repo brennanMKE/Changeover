@@ -245,6 +245,37 @@ nonisolated enum DiscTitleInference {
         return condensed(term).count >= labelVetoMinimumLength
     }
 
+    /// What the disc label has to say about a proposed title.
+    ///
+    /// #0072. `answerFitsLabel` collapses two different answers into `true`:
+    /// "the label agrees" and "the label has no standing to judge". That is
+    /// correct for a *veto* — neither is grounds to reject — but wrong for
+    /// deciding whether to act on the answer without asking anyone.
+    ///
+    /// `USUALLB`, 2026-09-25: the model answered "THE USUAL SUSPECTS" and the
+    /// app auto-selected it as label-backed. The label is seven characters
+    /// and cannot spell anything; it backed nothing. The answer was right,
+    /// and the reasoning was the same shape as the one that produced "The
+    /// Caretaker" — the model said so and nothing else was consulted.
+    nonisolated enum LabelVerdict: Equatable, Sendable {
+        /// The label spells this title. Real corroboration.
+        case agrees
+        /// The label spells a different title. Reject the answer.
+        case disagrees
+        /// Too short, absent, or a format name like `DVD_VIDEO`. No opinion —
+        /// which is not the same as approval.
+        case cannotJudge
+    }
+
+    static func labelVerdict(on answer: String, volumeName: String) -> LabelVerdict {
+        guard labelCanJudgeAnswer(volumeName),
+              let term = labelAsSearchTerm(volumeName) else { return .cannotJudge }
+        let label = condensed(term)
+        let proposed = condensed(answer)
+        guard !proposed.isEmpty else { return .disagrees }
+        return label.contains(proposed) || proposed.contains(label) ? .agrees : .disagrees
+    }
+
     /// Does a proposed title agree with the disc label?
     ///
     /// `true` means "no objection" — which includes every case where the
@@ -261,12 +292,7 @@ nonisolated enum DiscTitleInference {
     /// `LIVEFREE_OR_DIEHARD_BRANCH` carries an authoring suffix (title
     /// inside label). A one-directional test breaks one group or the other.
     static func answerFitsLabel(_ answer: String, volumeName: String) -> Bool {
-        guard labelCanJudgeAnswer(volumeName),
-              let term = labelAsSearchTerm(volumeName) else { return true }
-        let label = condensed(term)
-        let proposed = condensed(answer)
-        guard !proposed.isEmpty else { return false }
-        return label.contains(proposed) || proposed.contains(label)
+        labelVerdict(on: answer, volumeName: volumeName) != .disagrees
     }
 
     // MARK: - Asking it

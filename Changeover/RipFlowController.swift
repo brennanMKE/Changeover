@@ -1097,9 +1097,22 @@ final class RipFlowController {
         case "label":
             return .labelBacked
         case "inference":
-            // The label vouches for the model's answer, or nothing does.
-            return DiscTitleInference.answerFitsLabel(term, volumeName: volumeName)
-                ? .labelBacked : .unverified
+            // #0072 — three answers, not two. A label that *agrees* is
+            // corroboration. A label that *cannot judge* is silence, and
+            // silence is not agreement: USUALLB is seven characters and can
+            // spell nothing, yet it was reading as label-backed and
+            // auto-selecting on the model's word alone — the same reasoning
+            // that produced "The Caretaker".
+            //
+            // Silence falls through to `.unverified`, where the disc can
+            // still vouch for the answer by printing the cast on its menus.
+            // Same outcome on a disc that names its actors; a click on one
+            // that names nothing.
+            switch DiscTitleInference.labelVerdict(on: term, volumeName: volumeName) {
+            case .agrees:      return .labelBacked
+            case .disagrees:   return .unverified
+            case .cannotJudge: return .unverified
+            }
         default:
             // Menus, or an unresolved ladder. The Willis box set lives here:
             // usually right, never corroborated.
