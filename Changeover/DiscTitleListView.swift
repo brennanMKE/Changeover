@@ -432,8 +432,13 @@ struct DiscTitleListView: View {
             Text(suggestion.strength == .certain
                  ? "Picked the \(duration) part — \(suggestion.reason.lowercasedFirst)."
                  : "Suggested: the \(duration) part — \(suggestion.reason.lowercasedFirst).")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                // Not `.secondary`. This is the one line on the picker that
+                // tells somebody which row to click, and a grey caption is
+                // the wrong weight for it — on the capture from joe it was
+                // indistinguishable from the background, next to a sparkle
+                // with apparently nothing beside it.
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .task(id: suggestion) {
