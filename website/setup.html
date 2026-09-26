@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Setup — Changeover</title>
+    <meta name="description" content="The tools Changeover needs, how to install them with Homebrew, why they aren't bundled, and how Changeover uses Vision and Apple Intelligence on your Mac.">
+    <link rel="icon" href="favicon.ico" sizes="48x48">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
+    <link rel="manifest" href="site.webmanifest">
+    <meta name="theme-color" content="#2C2C2F">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header class="wrap top">
+        <a class="brand" href="./"><img src="assets/changeover-icon.png" alt="" width="36" height="36">Changeover</a>
+        <nav>
+            <a href="setup.html">Setup</a>
+            <a href="changelog.html">Changelog</a>
+            <a href="https://github.com/brennanMKE/Changeover">Source</a>
+        </nav>
+    </header>
+
+    <main class="wrap requires">
+        <h1>Setup</h1>
+        <p class="lede">
+            Changeover does the deciding — which disc, which film, which part of it, where the
+            file goes. The actual reading and encoding is done by tools you install yourself.
+            This page explains why, and gives you the commands.
+        </p>
+
+        <h2>Why the tools aren't included</h2>
+        <p>
+            Ripping a DVD means decrypting it, and the libraries that do that
+            (<code>libdvdcss</code> and friends) sit in a legal grey area that differs by
+            country. Distributing them inside a signed, notarized app would mean shipping
+            decryption software to everyone who downloads it, in every jurisdiction, and
+            taking responsibility for that. I'm not willing to do that, and you shouldn't
+            want an app that does it quietly.
+        </p>
+        <p>
+            HandBrake is also licensed under the GPL. Bundling it inside a closed application
+            raises licensing questions I'd rather not answer badly.
+        </p>
+        <p>
+            So Changeover ships with none of it. You install the tools, from their own
+            projects, under your own account — the same as if you used them from Terminal.
+            Changeover finds them and calls them. That keeps the decision, and the copy of the
+            software, with you.
+        </p>
+        <p class="fine">
+            None of this is legal advice. Whether you may rip a disc you own is a question for
+            where you live, not for this page.
+        </p>
+
+        <h2>Homebrew</h2>
+        <p>
+            <a href="https://brew.sh">Homebrew</a> is the package manager most Mac developers
+            use to install command-line software. If you haven't used it, its
+            <a href="https://brew.sh">home page</a> has a one-line installer and an
+            explanation of what it does.
+        </p>
+        <p>Install Homebrew first, if you don't already have it:</p>
+        <pre><code>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</code></pre>
+        <p class="fine">
+            That command comes from brew.sh — check it there rather than trusting this page.
+        </p>
+
+        <h2>What Changeover needs</h2>
+
+        <h3>Required</h3>
+        <p>Without this, nothing can be ripped:</p>
+        <pre><code>brew install handbrake</code></pre>
+        <p>
+            This installs <strong>HandBrakeCLI</strong>, which scans the disc and encodes the
+            movie. Changeover looks for it at
+            <code>/opt/homebrew/bin/HandBrakeCLI</code>; if yours is elsewhere, set the path
+            in Settings.
+        </p>
+
+        <h3>Recommended</h3>
+        <p>
+            Everything below is optional. Changeover works without each one — it just does
+            less. Settings ▸ Dependencies shows which are present and what each is for.
+        </p>
+        <pre><code>brew install lsdvd
+brew install ffmpeg
+brew install libdvdread
+brew install libdvdcss</code></pre>
+
+        <table class="deps">
+            <thead><tr><th>Tool</th><th>What it adds</th><th>Without it</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td><code>lsdvd</code></td>
+                    <td>Reads the disc's own identifier, so your choices survive taking a
+                        disc out and putting it back.</td>
+                    <td>Discs are identified by their label instead, which is nearly always
+                        fine.</td>
+                </tr>
+                <tr>
+                    <td><code>ffmpeg</code></td>
+                    <td>Renders one still per disc menu so the text on it can be read, and
+                        upgrades an existing import's metadata.</td>
+                    <td>No menu text, so no chapter names and fewer hints about the film.</td>
+                </tr>
+                <tr>
+                    <td><code>libdvdread</code><br><code>libdvdcss</code></td>
+                    <td>Decrypt menu video so the menus can be looked at.</td>
+                    <td>Menu buttons and their targets are still read; the pictures are
+                        not.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p>All four at once, if you'd rather:</p>
+        <pre><code>brew install handbrake lsdvd ffmpeg libdvdread libdvdcss</code></pre>
+
+        <h3>Optional fallback</h3>
+        <p>
+            For a disc HandBrake cannot read, Changeover can hand off to MakeMKV. It is not
+            used otherwise, and most discs never need it.
+        </p>
+        <pre><code>brew install --cask makemkv</code></pre>
+
+        <h2>On-device intelligence</h2>
+        <p>
+            Changeover uses two Apple frameworks to work out what a disc is. Both run
+            <strong>entirely on your Mac</strong>. Nothing about your discs is sent to Apple,
+            to me, or to anyone else.
+        </p>
+
+        <h3>Vision — reading the words on a disc's menus</h3>
+        <p>
+            After scanning, Changeover renders each of the disc's menu screens to an image and
+            uses <strong>Vision</strong>'s text recognition on it. That is how it finds chapter
+            names, which languages a disc offers, and sometimes the film's own title printed on
+            the main menu — information a DVD holds as pictures rather than as text, so there
+            is no other way to get at it.
+        </p>
+
+        <h3>Apple Intelligence — making sense of what was read</h3>
+        <p>
+            Most discs spell their title in the volume label with the spaces removed:
+            <code>THESECRETLIFEOFWALTERMITTY</code>. Changeover asks Apple's
+            <strong>on-device language model</strong> to put the spaces back, and — when the
+            label says nothing useful — to work out which film the menu text is describing.
+        </p>
+        <p>
+            It never decides what gets ripped. The title, the tracks and the file name come
+            from the disc scan and from you, and anything it fills in is shown before ripping
+            starts so you can change it.
+        </p>
+
+        <h3>Turning it off</h3>
+        <p>
+            In <strong>Settings ▸ Disc Recognition</strong>:
+        </p>
+        <ul>
+            <li><strong>Use Apple Intelligence to help identify discs</strong> — off means the
+                model is never asked. Changeover falls back to the disc label and the menu
+                text as they are. Takes effect on the next disc; no relaunch needed.</li>
+            <li><strong>Pick the matching movie automatically</strong> — off means you always
+                choose from the search results yourself.</li>
+            <li><strong>Start ripping on its own when the disc is recognised</strong> — off
+                means nothing starts without you pressing Start.</li>
+        </ul>
+        <p>
+            Vision's text recognition is part of reading the menus and is skipped entirely if
+            <code>ffmpeg</code> isn't installed — so not installing it is the way to opt out
+            of that half.
+        </p>
+        <p class="fine">
+            Apple Intelligence needs a Mac that supports it and has it enabled in System
+            Settings. Where it isn't available Changeover carries on without it.
+        </p>
+
+        <h2>Checking your setup</h2>
+        <p>
+            Open <strong>Settings ▸ Dependencies</strong>. Every tool is listed with whether
+            it was found, what it is for, and the exact command that installs it if it is
+            missing.
+        </p>
+    </main>
+
+    <footer class="wrap">
+        <p>
+            <a href="https://github.com/brennanMKE/Changeover">Source on GitHub</a> ·
+            <a href="setup.html">Setup</a> ·
+            <a href="changelog.html">Changelog</a> ·
+            <a href="privacy.html">Privacy</a> ·
+            <a href="./">Home</a>
+        </p>
+        <p class="fine">Made by Brennan Stehling.</p>
+    </footer>
+</body>
+</html>

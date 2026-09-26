@@ -163,3 +163,61 @@ footer p { margin: 0 0 .35rem; }
 .release .when { color: var(--muted); font-size: .9rem; margin: 0 0 .75rem; }
 .release ul { padding-left: 1.2rem; margin: 0; }
 .release li { margin-bottom: .4rem; }
+
+/* Setup page: command blocks and the dependency table */
+
+pre {
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: .9rem 1rem;
+    /* A long install line scrolls inside the block rather than widening the
+       page on a phone. */
+    overflow-x: auto;
+    margin: 0 0 1.25rem;
+}
+
+pre code {
+    background: none;
+    padding: 0;
+    font-size: .9rem;
+    line-height: 1.7;
+    white-space: pre;
+}
+
+table.deps {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 1.5rem;
+    font-size: .95rem;
+}
+
+table.deps th, table.deps td {
+    text-align: left;
+    vertical-align: top;
+    padding: .6rem .7rem;
+    border-bottom: 1px solid var(--rule);
+}
+
+table.deps th {
+    font: 600 .85rem/1.3 ui-sans-serif, -apple-system, system-ui, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+}
+
+table.deps td:first-child { white-space: nowrap; }
+table.deps td:not(:first-child) { color: var(--muted); }
+
+/* Three columns is too much for a phone: stack each row into a block. */
+@media (max-width: 34rem) {
+    table.deps, table.deps tbody, table.deps tr, table.deps td { display: block; width: 100%; }
+    table.deps thead { display: none; }
+    table.deps tr { padding: .75rem 0; border-bottom: 1px solid var(--rule); }
+    table.deps td { border: 0; padding: .15rem 0; }
+    table.deps td:first-child { font-weight: 600; }
+}
+
+.requires h3 {
+    margin-top: 1.5rem;
+}
