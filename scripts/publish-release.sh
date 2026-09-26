@@ -4,7 +4,7 @@
 #
 # Usage: scripts/publish-release.sh [--draft]
 #
-# Run after scripts/release.sh and scripts/tag-release.sh --push. The release is public
+# Run after ./release.sh and scripts/tag-release.sh --push. The release is public
 # unless --draft, so a person runs this.
 
 set -euo pipefail
@@ -17,13 +17,13 @@ DMG="dist/Changeover-$VERSION.dmg"
 
 fail() { print -u2 -r -- "error: $*"; exit 1; }
 
-[[ -f "$DMG" && -f "$DMG.sha256" ]] || fail "$DMG (and .sha256) not found; run scripts/release.sh"
+[[ -f "$DMG" && -f "$DMG.sha256" ]] || fail "$DMG (and .sha256) not found; run ./release.sh"
 (cd dist && shasum -a 256 -c "${DMG:t}.sha256" >/dev/null) || fail "$DMG doesn't match its .sha256"
 git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null || fail "$TAG isn't on origin; run scripts/tag-release.sh --push"
 gh release view "$TAG" >/dev/null 2>&1 && fail "release $TAG already exists"
 
 print "==> Re-verifying the DMG"
-scripts/verify-dmg.sh "$DMG" >/dev/null || fail "$DMG no longer verifies; run scripts/verify-dmg.sh $DMG"
+./verify-dmg.sh "$DMG" >/dev/null || fail "$DMG no longer verifies; run ./verify-dmg.sh $DMG"
 
 NOTES="$(mktemp)"
 trap 'rm -f "$NOTES"' EXIT

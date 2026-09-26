@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 # Adds a release to website/: prepends its signed Sparkle item to appcast.xml, rebuilds
 # changelog.html from CHANGELOG.md, and points the download button at the new DMG.
-# Run after scripts/release.sh, then commit website/.
+# Run after ./release.sh, then commit website/.
 #
 # The DMG itself isn't copied here. It's attached to the GitHub release, and whoever deploys
 # the site puts it in downloads/ from there (see website/README.md). The Sparkle signature is
@@ -17,7 +17,7 @@ VERSION="${1:-$(awk -F= '/^MARKETING_VERSION/ { gsub(/ /, "", $2); print $2 }' "
 DMG="$REPO_ROOT/dist/Changeover-$VERSION.dmg"
 
 fail() { print -u2 -r -- "error: $*"; exit 1; }
-[[ -f "$DMG" ]] || fail "$DMG not found; run scripts/release.sh"
+[[ -f "$DMG" ]] || fail "$DMG not found; run ./release.sh"
 xcrun stapler validate "$DMG" >/dev/null 2>&1 || fail "$DMG isn't notarized and stapled"
 grep -q "<sparkle:shortVersionString>$VERSION<" "$SITE_DIR/appcast.xml" && fail "appcast.xml already has $VERSION"
 

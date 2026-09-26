@@ -13,6 +13,5 @@ website/downloads/*.dmg
 .claude/
 .opencode/
 
-# Scratch: screenshots and disc menu captures taken while debugging
-Changeover-problem.png
+# Scratch: disc menu captures taken while debugging
 menu-pictures/

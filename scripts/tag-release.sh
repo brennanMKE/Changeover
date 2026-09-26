@@ -15,7 +15,7 @@ TAG="v$VERSION"
 cd "$REPO_ROOT"
 [[ -z "$(git status --porcelain)" ]] || { print -u2 "error: working tree isn't clean"; exit 1; }
 [[ "$(git branch --show-current)" == "main" ]] || { print -u2 "error: tag releases from main"; exit 1; }
-[[ -f "dist/Changeover-$VERSION.dmg" ]] || { print -u2 "error: dist/Changeover-$VERSION.dmg not found; run scripts/release.sh first"; exit 1; }
+[[ -f "dist/Changeover-$VERSION.dmg" ]] || { print -u2 "error: dist/Changeover-$VERSION.dmg not found; run ./release.sh first"; exit 1; }
 
 if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
     [[ "$(git rev-list -n1 "$TAG")" == "$(git rev-parse HEAD)" ]] \
