@@ -709,6 +709,27 @@ final class JobController {
         // `currentMetadata`/`logDisplayRows`/`lastOutcome` all reflect this job,
         // synchronously, before the `Task` below ever runs.
         let job = Job(id: jobID, metadata: request.metadata, disc: disc, log: JobLog(capacity: logCapacity), request: request)
+
+        // Carry the identification story into the job's own log.
+        //
+        // Reading the menus with Vision, interpreting the label, and matching
+        // against TMDB all happen *before* a job exists, so they are written
+        // to `controllerLog`. The Ripping step shows the *job's* log — so at
+        // the exact moment a rip started, the evidence for how the film was
+        // chosen vanished from the screen, and an encode runs for forty
+        // minutes with nothing to look at.
+        //
+        // That evidence is the most interesting thing the app does and the
+        // only way to check its reasoning, which matters most when it has
+        // chosen wrongly. Copied rather than moved: `controllerLog` is reset
+        // below either way, and a copy keeps the job's log self-contained for
+        // History long after the gap it came from is gone.
+        for line in identificationNarration {
+            job.log.append(line)
+        }
+        // …and kept addressable, so the Ripping step can show exactly these.
+        job.recordIdentification(identificationNarration)
+
         current = job
         // #0042 review: the between-job lines belong to the gap before this
         // job; once it ends, the idle view shows its log and then only what
@@ -1023,6 +1044,7 @@ final class JobController {
     /// starts a scan — before this ticket, `DiscTitleHeuristic.classify` and
     /// `applyingSuggestedRoles` existed but nothing ever called them.
     func insertDisc(_ disc: DiscInsertion, settings: AppSettings) {
+        identificationNarration = []
         isEjecting = false
         discUnavailable = false
         insertedDisc = disc
@@ -1510,8 +1532,22 @@ final class JobController {
     /// `RipFlowController` can show its work rather than confining it to
     /// `/tmp`-style diagnostics nobody sees.
     func note(_ line: String) {
+        // Kept separately from the between-job log as well as in it.
+        //
+        // #0042 deliberately drops the gap's lines when a job starts — "No
+        // disc is mounted" belongs to the wait, not to the rip that followed,
+        // and `JobControllerHistoryTests` pins that. But the identification
+        // story does belong to the rip: it is the reasoning that chose this
+        // film. Carrying the whole log would have taken the noise with it, so
+        // only what `note` produced is carried.
+        identificationNarration.append(line)
         append(line)
     }
+
+    /// The identification lines logged since the last disc was inserted.
+    /// Cleared with the disc, so one disc's reasoning never appears under
+    /// another's rip.
+    private(set) var identificationNarration: [String] = []
 
     private func append(_ line: String) {
         if let current {

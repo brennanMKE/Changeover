@@ -100,6 +100,22 @@ final class Job {
     /// there; this keeps it so the notification can be true.
     private(set) var discWasEjected: Bool?
 
+    /// How this film came to be chosen: the menu read, the label
+    /// interpretation, the TMDB candidates and the reason one won.
+    ///
+    /// Kept separately from `log` — which also has these lines — because the
+    /// Ripping step wants to show *these and nothing else*. An encode runs
+    /// for forty minutes; this is what there is to look at, and it is the
+    /// only way to check the app's reasoning, which matters most when the
+    /// reasoning was wrong.
+    private(set) var identification: [String] = []
+
+    /// Carried in at job start from the controller's log, since all of this
+    /// happens before a job exists.
+    func recordIdentification(_ lines: [String]) {
+        identification = lines
+    }
+
     init(id: JobID, metadata: MovieMetadata, disc: URL, log: JobLog, startDate: Date = Date(), request: RipRequest? = nil) {
         self.id = id
         self.metadata = metadata

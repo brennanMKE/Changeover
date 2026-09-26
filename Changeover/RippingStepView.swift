@@ -17,8 +17,11 @@ struct RippingStepView: View {
             if let job = jobs.job(id: jobID) {
                 // Re-evaluates once a second so "elapsed" actually ticks;
                 // everything else here is driven by observation.
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    progressBlock(job: job, now: context.date)
+                VStack(spacing: 0) {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        progressBlock(job: job, now: context.date)
+                    }
+                    identificationPanel(job: job)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else {
@@ -38,6 +41,53 @@ struct RippingStepView: View {
                 Spacer()
                 cancelButton
             }
+        }
+    }
+
+    /// How this film was identified, shown while the encode runs.
+    ///
+    /// The evidence — Vision reading the menus, the model interpreting the
+    /// label, the TMDB candidates and why one won — is produced before the
+    /// job exists and used to vanish from the screen the moment ripping
+    /// started. That is the wrong moment to hide it: the encode takes forty
+    /// minutes and there is nothing else to look at, and this is the only
+    /// way to notice the app has chosen the wrong film *before* it finishes
+    /// filing it under the wrong name.
+    ///
+    /// Not behind the Details toggle. `docs/plain-language-ui.md` keeps the
+    /// default screen to what a person must decide — but this screen asks
+    /// nothing, so the rule does not bite, and the whole point is to be seen
+    /// without being sought.
+    @ViewBuilder
+    private func identificationPanel(job: Job) -> some View {
+        if !job.identification.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Label("How this was identified", systemImage: "sparkles")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+
+                // Scrolls rather than clipping, and rather than pushing the
+                // progress block off the top — the History window's summary
+                // card was clipped for exactly the want of this.
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(job.identification.enumerated()), id: \.offset) { _, line in
+                            Text(line)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(line.hasPrefix("✓") ? Color.primary : .secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                .frame(maxHeight: 180)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal)
+            .padding(.bottom, 12)
         }
     }
 
