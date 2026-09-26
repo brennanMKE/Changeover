@@ -5,7 +5,7 @@ section under `## X.Y.Z` into the Sparkle release notes and into
 `website/changelog.html`, so the wording here is what users read in the update
 dialog.
 
-## 1.0.0
+## 0.1.0
 
 First release.
 

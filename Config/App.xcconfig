@@ -3,14 +3,15 @@
 // Don't set MARKETING_VERSION or CURRENT_PROJECT_VERSION in the project file:
 // the release scripts read MARKETING_VERSION from *this* file, and a second
 // copy in the pbxproj is how a DMG ends up named for one version while the
-// bundle inside it reports another. `scripts/preflight.sh` fails on that.
+// bundle inside it reports another. There is no preflight script yet;
+// release.sh checks it instead, comparing the built bundle to this file.
 //
 // MARKETING_VERSION is what people see (X.Y.Z). CURRENT_PROJECT_VERSION is
 // overridden at release time with the UTC build date and time (release.sh), so
 // every release build sorts newer than the last — which is the number Sparkle
 // actually compares.
 
-MARKETING_VERSION = 1.0.0
+MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 1
 
 // Sparkle updates.
@@ -22,14 +23,16 @@ HTTPS = https:/
 SU_FEED_URL =
 SU_FEED_URL[config=Release] = $(HTTPS)/changeover.sstools.co/appcast.xml
 
-// Public half of the EdDSA signing key. The private half lives in the login
-// keychain and is never in this repo — see docs/releasing.md for the one
-// command that creates it.
+// Public half of the EdDSA signing key, generated 2026-09-25 under the keychain
+// account "Changeover" — its own key rather than the one shared with Curator,
+// so either can be rotated without touching the other.
 //
-// Empty until that key exists. Sparkle refuses to apply an update it cannot
-// verify, so an empty key means updates simply never install, which is the
-// correct failure: an unsigned update channel is worse than no update channel.
-SU_PUBLIC_ED_KEY =
+// The private half lives in the login keychain, exported to
+// ~/.sparkle/Changeover.key for backup and for the release scripts. It is never
+// in this repo, and losing it ends the update channel: every installed copy
+// verifies against the public key below, so a new key means those copies will
+// never accept another update.
+SU_PUBLIC_ED_KEY = KsivEstSRurxys9airVivgbyW/RNV1H8xTSiBOTChSc=
 
 // Only Release builds carry a feed URL, so a Debug build never tries to update
 // itself out from under a developer.

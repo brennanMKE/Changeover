@@ -4,44 +4,89 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Privacy — Changeover</title>
+    <meta name="description" content="What Changeover sends, what it keeps, and what it never touches.">
     <link rel="icon" href="favicon.ico" sizes="48x48">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
     <link rel="manifest" href="site.webmanifest">
-    <meta name="theme-color" content="#1e1d1b">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+    <meta name="theme-color" content="#2C2C2F">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <header class="wrap top">
-        <a class="brand" href="./"><img src="assets/curator-icon.png" alt="" width="36" height="36">Changeover</a>
+        <a class="brand" href="./"><img src="assets/changeover-icon.png" alt="" width="36" height="36">Changeover</a>
         <nav>
             <a href="changelog.html">Changelog</a>
             <a href="https://github.com/brennanMKE/Changeover">Source</a>
         </nav>
     </header>
 
-    <main class="wrap prose">
+    <main class="wrap requires">
         <h1>Privacy</h1>
-        <p>Changeover collects nothing about you and has no analytics. It talks to three places:</p>
+
+        <p>
+            Changeover has no accounts, no analytics and no server of its own. It runs on
+            your Mac, reads discs you put in the drive, and writes files where you tell it.
+        </p>
+
+        <h2>What leaves your Mac</h2>
         <ul>
-            <li><strong>Your Plex Media Server</strong>, at the address you enter, to list and search your library.</li>
-            <li><strong>TMDB</strong>, only if you add a TMDB key, to fetch posters and backdrops for titles in your library.</li>
-            <li><strong>changeover.sstools.co</strong>, to check for updates. The request identifies only Changeover’s version; nothing about your library is sent.</li>
+            <li>
+                <strong>Film searches, to TMDB.</strong> To work out which film is on a disc,
+                Changeover sends a search term — usually the disc's label, sometimes a title
+                read from its menus — to
+                <a href="https://www.themoviedb.org">themoviedb.org</a>, using your own API
+                key. It then fetches runtime, cast and poster for the results shown. TMDB's
+                own privacy policy covers what they do with a request.
+            </li>
+            <li>
+                <strong>Update checks, to this website.</strong> Release builds ask
+                <code>changeover.sstools.co/appcast.xml</code> whether a newer version exists.
+                That is an ordinary web request: it carries no identifier and nothing about
+                your library. Sparkle asks your permission before the first automatic check,
+                and you can turn it off.
+            </li>
         </ul>
-        <p>Your server address, Plex token and TMDB key stay on your Mac, in a settings file only you can read.</p>
+        <p>
+            That is the complete list. Nothing else is sent anywhere.
+        </p>
+
+        <h2>What stays on your Mac</h2>
+        <ul>
+            <li>Your TMDB key, and the folders you chose, in the app's own settings.</li>
+            <li>The films themselves, wherever you pointed Changeover — a local disk or your
+                own server.</li>
+            <li>A record of each disc it read: the label, the film you picked, the disc's
+                structure, and text read off its menus. This stays in a folder you choose and
+                is never uploaded. It exists so the app can be tested against real discs, and
+                you can delete it at any time.</li>
+        </ul>
+
+        <h2>What it never does</h2>
+        <ul>
+            <li>No telemetry, crash reporting or usage statistics.</li>
+            <li>No account, no sign-in, no licence check.</li>
+            <li>It reads only the disc in the drive, and only when you put one in.</li>
+        </ul>
+
+        <h2>On-device intelligence</h2>
+        <p>
+            When a disc's label needs interpreting — <code>THESECRETLIFEOFWALTERMITTY</code>
+            into <em>The Secret Life of Walter Mitty</em> — Changeover uses Apple's on-device
+            model. That runs entirely on your Mac. Nothing about the disc is sent to Apple or
+            to anyone else.
+        </p>
     </main>
 
-    <footer>
-        <div class="wrap">
+    <footer class="wrap">
+        <p>
+            <a href="https://github.com/brennanMKE/Changeover">Source on GitHub</a> ·
+            <a href="changelog.html">Changelog</a> ·
             <a href="./">Home</a>
-            <a href="changelog.html">Changelog</a>
-            <a href="https://github.com/brennanMKE/Changeover">Source on GitHub</a>
-        </div>
+        </p>
+        <p class="fine">Made by Brennan Stehling.</p>
     </footer>
 </body>
 </html>

@@ -59,7 +59,7 @@ Unit tests in `ChangeoverTests/` use the **Swift Testing** framework (`import Te
 
 ### Setup required before building
 
-1. Copy `Changeover/Secrets.xcconfig.example` → `Changeover/Secrets.xcconfig` (gitignored) and set `TMDB_API_KEY`. The project's `baseConfigurationReference` is `Config/App.xcconfig`, which `#include?`s Secrets — so the version and Sparkle settings are tracked while the key is not. The key flows in via `INFOPLIST_KEY_TMDB_API_KEY = $(TMDB_API_KEY)`.
+1. Copy `Changeover/Secrets.xcconfig.example` → `Changeover/Secrets.xcconfig` (gitignored) and set `TMDB_API_KEY`. The project's `baseConfigurationReference` is `Config/App.xcconfig`, which `#include?`s Secrets — so the version and Sparkle settings are tracked while the key is not. The key itself is read at runtime from `UserDefaults` via `AppSettings`, not baked into the Info.plist — there is no `INFOPLIST_KEY_TMDB_API_KEY` setting, despite what this file used to say.
 
    `Config/App.xcconfig` is also the **only** place `MARKETING_VERSION` lives; setting it in the Xcode project as well is what makes a DMG's name disagree with the bundle inside it. See [`docs/releasing.md`](docs/releasing.md).
 2. Install the CLI tool the app shells out to: `brew install handbrake` (default path `/opt/homebrew/bin/HandBrakeCLI` on Apple Silicon, user-editable in Settings). `makemkvcon` (`brew install --cask makemkv`) is optional and not currently invoked; its Settings path is kept for the #0015 fallback. `lsdvd` (`brew install lsdvd`) is optional and only strengthens disc identity.

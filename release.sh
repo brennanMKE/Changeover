@@ -138,6 +138,21 @@ if [[ "$ACTUAL_BUILD" != "$BUILD_NUMBER" ]]; then
     print -u2 "       The archive did not honor CURRENT_PROJECT_VERSION=$BUILD_NUMBER."
     exit 1
 fi
+
+# And confirm the marketing version agrees with the file we are about to name.
+#
+# This was missing while a comment above claimed it existed. The DMG is named
+# from Config/App.xcconfig; the bundle reports whatever the build resolved. If
+# MARKETING_VERSION is ever set in the pbxproj as well, or the xcconfig stops
+# being the base configuration, those two diverge silently and you ship
+# Changeover-0.1.0.dmg containing an app that calls itself something else —
+# which is the Sparkle failure the xcconfig header warns about, since the
+# update dialog shows the marketing version.
+if [[ "$ACTUAL_SHORT" != "$MARKETING_VERSION" ]]; then
+    print -u2 "error: built CFBundleShortVersionString ($ACTUAL_SHORT) != MARKETING_VERSION ($MARKETING_VERSION)"
+    print -u2 "       Config/App.xcconfig must be the only place the version is set."
+    exit 1
+fi
 print "==> Version: $ACTUAL_SHORT (build $ACTUAL_BUILD)"
 
 # AppIcon.icns (generated from Assets.xcassets/AppIcon.appiconset during the

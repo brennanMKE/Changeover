@@ -17,11 +17,28 @@ Sparkle signs each update with an EdDSA key. The public half goes in
 `Config/App.xcconfig`; the private half never leaves this machine and is never
 in the repo.
 
+`generate_keys` stores the private key in the **login keychain**, not in a file.
+Give it its own account name so Changeover has a key of its own — without
+`--account` it reuses (or creates) one shared key for every Sparkle app on this
+Mac, and Curator already has one there:
+
 ```sh
-"$(scripts/sparkle-tool.sh generate_keys)" -f ~/.sparkle/Changeover.key
+GK="$(scripts/sparkle-tool.sh generate_keys)"
+
+# 1. Create the key in the keychain and print the public half.
+"$GK" --account Changeover
+
+# 2. Export the private half to a file, for backup and for the release scripts.
+mkdir -p ~/.sparkle
+"$GK" --account Changeover -x ~/.sparkle/Changeover.key
 ```
 
-That prints the **public** key. Put it in `Config/App.xcconfig`:
+The keychain will ask permission; you have to allow it.
+
+`-f` is the *import* direction (file → keychain), which is what you want on a
+second machine, not here.
+
+Step 1 prints the **public** key. Put it in `Config/App.xcconfig`:
 
 ```
 SU_PUBLIC_ED_KEY = <the printed key>
