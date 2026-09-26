@@ -57,14 +57,25 @@
             <p class="eyebrow">Smart import</p>
             <h2 id="smart">It works out what the disc is, and shows you how</h2>
             <p>
-                A DVD barely tells you what it holds. The label is often the title with the
-                spaces taken out — sometimes with letters missing. The menus are pictures, not
-                text. There are a dozen titles on the disc and only one is the film.
+                A DVD was designed to be read by a person sitting in front of a television.
+                Put one in and you see a menu: the film's title, <em>Play Movie</em>, a grid of
+                scenes, a list of languages. You know instantly what the disc is and what to
+                press.
             </p>
             <p>
-                Doing this by hand means reading the label, guessing, searching, comparing
-                runtimes, and picking a title number — for every disc. Changeover does it in
-                about fifteen seconds, and <strong>shows its work while it happens</strong>:
+                <strong>A computer sees none of that.</strong> A DVD menu is not a screen of
+                text — it is a little loop of video with the words painted into the picture.
+                There is nothing to read. What a computer gets instead is a volume label like
+                <code>BASKBALL</code> and a list of two dozen numbered titles, one of which is
+                the film and the rest of which are trailers, logos, menu loops and sometimes
+                the same film again in a cropped transfer.
+            </p>
+            <p>
+                That gap is why ripping a shelf of discs has always been manual work: read the
+                label, guess, search, compare runtimes, pick a title number, start the encode —
+                for every disc. <strong>Smart Import closes it.</strong> Changeover looks at
+                the menu the way you would, works out which film it is, and starts the import
+                on its own — in about fifteen seconds, showing its work as it goes:
             </p>
 
             <pre class="transcript"><code>▶ Reading the disc's menus — 21 pages to look at
@@ -80,11 +91,41 @@
 ✓ Chose BASEketball — its title matches and its runtime fits the disc</code></pre>
 
             <p>
-                <strong>Vision</strong> reads the words off each menu screen, because a DVD
-                stores its menus as pictures. Apple's <strong>on-device model</strong> turns a
-                mangled label into a real title. Then runtime and billed cast decide between
-                films of the same name — and when the evidence is thin, it says so and lets you
-                choose rather than guessing on your behalf.
+                Four steps, and each one is doing a job a person would otherwise do by hand.
+            </p>
+            <ol class="steps">
+                <li>
+                    <strong>It renders the menus and reads them.</strong> Each menu screen is
+                    turned into a still image, and <strong>Vision</strong> — the same text
+                    recognition that reads a receipt in Photos — reads the words off it. This
+                    is the step that gives a computer eyes: chapter names, languages, and
+                    often the film's own title, recovered from pixels.
+                </li>
+                <li>
+                    <strong>It works out what that means.</strong> Apple's
+                    <strong>on-device model</strong> turns <code>BASKBALL</code> — a label
+                    missing two letters — into <em>BASEketball</em>, and reads menu text to
+                    name a film whose label says nothing useful at all.
+                </li>
+                <li>
+                    <strong>It confirms against TMDB.</strong> A guess is not enough, so the
+                    title is checked against two facts the disc supplies by itself: how long
+                    the feature actually runs, and whether the billed cast appears anywhere on
+                    the menus. Two films of the same name are separated by runtime; a label
+                    that is an actor's name is settled by the cast.
+                </li>
+                <li>
+                    <strong>Then it runs the import.</strong> The right title is selected — not
+                    the trailer the disc claims is the main feature, not the cropped transfer —
+                    encoded, filed as
+                    <code>Movies/Title (Year) {tmdb-ID}/Title (Year).mp4</code>, and the disc
+                    is ejected so you can load the next one.
+                </li>
+            </ol>
+            <p>
+                When the evidence is thin it says so and lets you choose, rather than guessing
+                on your behalf. That is the difference between automation you can leave running
+                and automation you have to check.
             </p>
             <p class="fine">
                 All of it runs on your Mac. <a href="setup.html">How it works, and how to turn
