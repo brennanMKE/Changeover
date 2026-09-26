@@ -57,13 +57,29 @@ struct JobNotifierTests {
 
     // MARK: - message(for:outcome:) — success
 
-    @Test func successMessageNamesTheMovieAndConfirmsTheEject() throws {
+    /// Rewritten: this used to assert that the body always mentions the disc
+    /// being ejected, which pinned the bug in place. The message had no eject
+    /// information and said it anyway, and this test agreed with it.
+    ///
+    /// What the success message owes the reader unconditionally is that the
+    /// film reached Plex. What happened to the disc is now only claimed when
+    /// it is known — see `NotificationTruthTests`.
+    @Test func successMessageNamesTheMovieAndConfirmsTheFiling() throws {
         let (title, body) = JobNotifier.message(
             for: try Self.metadata(),
             outcome: .succeeded(destination: URL(fileURLWithPath: "/tmp/Blade Runner (1982).mp4"))
         )
         #expect(title == "Blade Runner (1982) is ready")
         #expect(body.contains("Plex"))
+        #expect(!body.contains("ejected"), "with no eject result to hand, say nothing")
+    }
+
+    @Test func successMessageConfirmsTheEjectWhenItIsKnown() throws {
+        let (_, body) = JobNotifier.message(
+            for: try Self.metadata(),
+            outcome: .succeeded(destination: URL(fileURLWithPath: "/tmp/Blade Runner (1982).mp4")),
+            discWasEjected: true
+        )
         #expect(body.contains("ejected"))
     }
 

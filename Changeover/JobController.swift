@@ -745,6 +745,9 @@ final class JobController {
                 // eject causes is never mistaken for the disc being pulled.
                 job.beginAutomaticEject()
                 let outcome = await ejectVolume(url)
+                // Kept, not just acted on: the notification has to say
+                // whether the disc came out, and only this knows.
+                job.recordEject(succeeded: outcome == .ejected)
                 self?.applyAutomaticEject(outcome, volumeURL: url)
                 return outcome
             },
@@ -767,7 +770,8 @@ final class JobController {
                 metadata: request.metadata,
                 outcome: outcome,
                 jobID: jobID.rawValue,
-                discRemovedDuringJob: job.discRemovedDuringJob
+                discRemovedDuringJob: job.discRemovedDuringJob,
+                discWasEjected: job.discWasEjected
             )
         }
         return true

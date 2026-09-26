@@ -96,10 +96,13 @@ enum JobNotifier {
         outcome: JobOutcome,
         jobID: String,
         discRemovedDuringJob: Bool = false,
+        discWasEjected: Bool? = nil,
         poster: JobNotificationPoster = UNNotificationCenterPoster()
     ) async {
         guard !isRunningUnderXCTest else { return }
-        await post(metadata: metadata, outcome: outcome, jobID: jobID, discRemovedDuringJob: discRemovedDuringJob, poster: poster)
+        await post(metadata: metadata, outcome: outcome, jobID: jobID,
+                   discRemovedDuringJob: discRemovedDuringJob,
+                   discWasEjected: discWasEjected, poster: poster)
     }
 
     /// The un-gated post, split out for the same reason `authorize` is: a
@@ -110,9 +113,12 @@ enum JobNotifier {
         outcome: JobOutcome,
         jobID: String,
         discRemovedDuringJob: Bool = false,
+        discWasEjected: Bool? = nil,
         poster: JobNotificationPoster
     ) async {
-        let (title, body) = message(for: metadata, outcome: outcome, discRemovedDuringJob: discRemovedDuringJob)
+        let (title, body) = message(for: metadata, outcome: outcome,
+                                    discRemovedDuringJob: discRemovedDuringJob,
+                                    discWasEjected: discWasEjected)
         await poster.post(title: title, body: body, identifier: jobID)
     }
 
@@ -130,12 +136,36 @@ enum JobNotifier {
     ///   cancel: the whole point of this ticket is that the notification
     ///   must say the disc was removed, not that it was unreadable or that
     ///   HandBrake timed out.
-    nonisolated static func message(for metadata: MovieMetadata, outcome: JobOutcome, discRemovedDuringJob: Bool = false) -> (title: String, body: String) {
+    /// - Parameter discWasEjected: what the end-of-job eject actually did, or
+    ///   `nil` when it was never attempted or its result is unknown.
+    ///
+    ///   This used to be assumed. The success body read "Encoded and moved
+    ///   into Plex. The disc has been ejected." for every successful job,
+    ///   whatever happened to the disc — and through most of 2026-09 that
+    ///   eject was being refused by loginwindow on a locked screen, so the
+    ///   banner asserted the opposite of the truth on exactly the nights
+    ///   somebody was watching for it. A notification is the one surface seen
+    ///   without opening a window, which is precisely why it must not guess.
+    nonisolated static func message(
+        for metadata: MovieMetadata,
+        outcome: JobOutcome,
+        discRemovedDuringJob: Bool = false,
+        discWasEjected: Bool? = nil
+    ) -> (title: String, body: String) {
         switch outcome {
         case .succeeded:
+            // Three states, and silence is the right answer for the third:
+            // a person who is told nothing about the disc goes and looks,
+            // which is a far better outcome than being told wrongly.
+            let disc: String
+            switch discWasEjected {
+            case true?:  disc = " The disc has been ejected."
+            case false?: disc = " The disc is still in the drive."
+            case nil:    disc = ""
+            }
             return (
                 "\(metadata.title) (\(metadata.year)) is ready",
-                "Encoded and moved into Plex. The disc has been ejected."
+                "Encoded and moved into Plex." + disc
             )
         case .failed(let failure) where failure.reason == .cancelled && discRemovedDuringJob:
             // #0052: distinct from the plain-cancel case below — the job

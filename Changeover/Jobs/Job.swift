@@ -85,6 +85,21 @@ final class Job {
     /// the job's `Task` has finished.
     private(set) var automaticEjectStarted = false
 
+    /// Whether the end-of-job eject actually got the disc out.
+    ///
+    /// `nil` until the eject has been attempted, which is also the honest
+    /// answer for a job that never reached one — a failure keeps its disc in
+    /// the drive deliberately (#0005) and no eject is tried.
+    ///
+    /// Recorded because the success notification said "The disc has been
+    /// ejected" for *every* successful job, whether or not it had. Through
+    /// most of 2026-09 that eject was being refused by loginwindow on a
+    /// locked screen, so on exactly the nights the user was watching for it,
+    /// the banner asserted the opposite of what had happened. The eject
+    /// outcome already reached `applyAutomaticEject` and was thrown away
+    /// there; this keeps it so the notification can be true.
+    private(set) var discWasEjected: Bool?
+
     init(id: JobID, metadata: MovieMetadata, disc: URL, log: JobLog, startDate: Date = Date(), request: RipRequest? = nil) {
         self.id = id
         self.metadata = metadata
@@ -152,6 +167,11 @@ final class Job {
     /// #0052 review — see `automaticEjectStarted`.
     func beginAutomaticEject() {
         automaticEjectStarted = true
+    }
+
+    /// Record what the end-of-job eject actually did.
+    func recordEject(succeeded: Bool) {
+        discWasEjected = succeeded
     }
 
     func markDiscRemoved() {
