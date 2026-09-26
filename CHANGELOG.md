@@ -5,6 +5,13 @@ section under `## X.Y.Z` into the Sparkle release notes and into
 `website/changelog.html`, so the wording here is what users read in the update
 dialog.
 
+## 0.1.1
+
+Smart import shows its work.
+
+- **You can watch it think.** Reading a disc's menus, interpreting its label and matching it against TMDB used to happen in silence — a film simply appeared in the list, already chosen. Each step now writes to the log as it happens: how many menu pages Vision is reading and a sample of what it found on each, which rung of the identification ladder is in play, what the on-device model replied, and the candidate films with their runtimes and billed cast. When it declines to choose it says so, and why.
+- **Fixed:** the History window's summary card could be clipped at the top and bottom with no way to scroll to either, on a job whose summary carried a long warning. The card now scrolls.
+
 ## 0.1.0
 
 First release.

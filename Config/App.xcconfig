@@ -11,7 +11,7 @@
 // every release build sorts newer than the last — which is the number Sparkle
 // actually compares.
 
-MARKETING_VERSION = 0.1.0
+MARKETING_VERSION = 0.1.1
 CURRENT_PROJECT_VERSION = 1
 
 // Sparkle updates.
