@@ -7,6 +7,16 @@
     <language>en</language>
     <!-- ITEMS: scripts/update-website.sh adds each release here, newest first. Don't edit by hand. -->
     <item>
+      <title>0.1.1</title>
+      <pubDate>Sat, 26 Sep 2026 04:52:42 +0000</pubDate>
+      <sparkle:version>20260926045105</sparkle:version>
+      <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.2</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://changeover.sstools.co/changelog.html#v0-1-1</sparkle:releaseNotesLink>
+      <description><![CDATA[<p>Smart import shows its work.</p><ul><li><b>You can watch it think.</b> Reading a disc's menus, interpreting its label and matching it against TMDB used to happen in silence — a film simply appeared in the list, already chosen. Each step now writes to the log as it happens: how many menu pages Vision is reading and a sample of what it found on each, which rung of the identification ladder is in play, what the on-device model replied, and the candidate films with their runtimes and billed cast. When it declines to choose it says so, and why.</li><li><b>Fixed:</b> the History window's summary card could be clipped at the top and bottom with no way to scroll to either, on a job whose summary carried a long warning. The card now scrolls.</li></ul>]]></description>
+      <enclosure url="https://changeover.sstools.co/downloads/Changeover-0.1.1.dmg" length="3819664" type="application/octet-stream" sparkle:edSignature="YZwuxNDoE+Px754saQ4H/c5XCNrtIcELa539syYEaXOycHRr/2rwPS9AIzHkX2h0R8xHB3Xy55QP17Y/pjvTAg=="/>
+    </item>
+    <item>
       <title>0.1.0</title>
       <pubDate>Sat, 26 Sep 2026 03:47:54 +0000</pubDate>
       <sparkle:version>20260926034234</sparkle:version>
