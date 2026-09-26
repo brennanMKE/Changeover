@@ -5,6 +5,13 @@ section under `## X.Y.Z` into the Sparkle release notes and into
 `website/changelog.html`, so the wording here is what users read in the update
 dialog.
 
+## 0.1.2
+
+The evidence stays on screen, and the notification stops guessing.
+
+- **How a film was identified now stays visible while it rips.** Reading the menus, interpreting the disc's label and matching against TMDB all happen before the encode starts, and used to leave the screen the moment it did. The Ripping step now shows that story the whole way through — which is the only way to notice a wrong film before forty minutes of encoding files it under the wrong name.
+- **Fixed:** the success notification said "The disc has been ejected" after every finished rip, whether or not it had. It had no way to know. It now says what actually happened, and says nothing about the disc when the answer is not known.
+
 ## 0.1.1
 
 Smart import shows its work.
