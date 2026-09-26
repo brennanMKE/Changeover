@@ -47,7 +47,10 @@ for line in text:
     if on: out.append(line)
 def inline(s):
     s = html.escape(s, quote=False)
-    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
+    s = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
+    # Backticks are markdown, not text: without this the update dialog shows
+    # a literal `Movies/Title (Year) {tmdb-ID}/...` with the backticks in it.
+    return re.sub(r"`(.+?)`", r"<code>\1</code>", s)
 paras, items, buf = [], [], []
 for line in out + [""]:
     if line.startswith("- "):

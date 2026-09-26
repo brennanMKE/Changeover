@@ -6,5 +6,15 @@
     <description>Updates for Changeover, a Mac app that rips DVDs into a Plex library.</description>
     <language>en</language>
     <!-- ITEMS: scripts/update-website.sh adds each release here, newest first. Don't edit by hand. -->
+    <item>
+      <title>0.1.0</title>
+      <pubDate>Sat, 26 Sep 2026 03:47:54 +0000</pubDate>
+      <sparkle:version>20260926034234</sparkle:version>
+      <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.2</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://changeover.sstools.co/changelog.html#v0-1-0</sparkle:releaseNotesLink>
+      <description><![CDATA[<p>First release.</p><ul><li><b>Put a disc in.</b> Changeover finds the feature, works out which film it is, rips it, files it where Plex expects, and ejects the disc so you can load the next one.</li><li><b>Identification</b> reads the disc's label — most spell the title with the spaces removed — and checks it against TMDB by runtime and billed cast. When the evidence is thin it suggests rather than deciding.</li><li><b>The right part of the disc:</b> it prefers the widescreen transfer over a cropped one, and will not encode a two-minute trailer because the disc called it the main title.</li><li><b>Plex naming</b>, always: <code>Movies/Title (Year) {tmdb-ID}/Title (Year).mp4</code>, with editions for different cuts of the same film.</li><li><b>Keeps going on a locked Mac</b>, including discs inserted after the screen locks, which macOS would otherwise eject unread.</li></ul>]]></description>
+      <enclosure url="https://changeover.sstools.co/downloads/Changeover-0.1.0.dmg" length="3785882" type="application/octet-stream" sparkle:edSignature="Vt406jyRwmZYtjg8vV/ybyKpZtHFaDfkYKpIr6DHp6v0lwlQoefhMj/3FGbkiNrNt5B1Muxstjf9g6d5S/mzBQ=="/>
+    </item>
   </channel>
 </rss>
