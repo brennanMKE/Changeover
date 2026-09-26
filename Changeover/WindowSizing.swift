@@ -28,10 +28,14 @@ import Foundation
 /// it by reading one struct.
 nonisolated enum WindowSizing {
 
-    /// The two sizes the window has. Choose and Confirm share one on purpose:
-    /// Continue → Confirm → "Change movie" → Choose is the loop the user runs
-    /// most, and a window that hopped on every hop would be worse than one
-    /// that never moved.
+    /// The two sizes the window has. Choose, Confirm and Ripping share one on
+    /// purpose: Continue → Confirm → "Change movie" → Choose is the loop the
+    /// user runs most, and a window that hopped on every hop would be worse
+    /// than one that never moved.
+    ///
+    /// Ripping joining them has the same benefit at the other end — pressing
+    /// Start no longer resizes the window, which is the worst moment for it
+    /// to move, since that is when the user settles in to watch.
     nonisolated enum HeightClass: String, Equatable, Hashable, Sendable, Codable, CaseIterable {
         case compact
         case full
@@ -57,9 +61,9 @@ nonisolated enum WindowSizing {
     /// rather than inheriting whatever the window happened to be.
     static func heightClass(for step: FlowStep) -> HeightClass {
         switch step {
-        case .insertDisc, .ripping, .done:
+        case .insertDisc, .done:
             return .compact
-        case .chooseMovie, .confirm:
+        case .chooseMovie, .confirm, .ripping:
             return .full
         }
     }
@@ -67,10 +71,16 @@ nonisolated enum WindowSizing {
     /// The content height for a class, before any override.
     ///
     /// - 340 is the smallest height at which every compact step's worst
-    ///   variant fits with a margin — Ripping with a two-line path and an
-    ///   extras line is ~300. The margin matters: a compact body that outgrew
-    ///   the window would raise the hosting view's published minimum and
-    ///   nudge the window taller, which is a small #0140.
+    ///   variant fits with a margin. The margin matters: a compact body that
+    ///   outgrew the window would raise the hosting view's published minimum
+    ///   and nudge the window taller, which is a small #0140.
+    ///
+    ///   Ripping used to be compact on the strength of "a two-line path and
+    ///   an extras line is ~300". It is not compact any more: it carries the
+    ///   "How this was identified" panel, roughly 220 points of menu reads,
+    ///   model answers and TMDB candidates, and at 340 that content was
+    ///   off-screen unless the window was dragged taller by hand. Reported
+    ///   2026-09-26.
     /// - 640 fits Confirm on the disc that filed #0140 (7 audio, 21 subtitle
     ///   tracks) with the subtitles collapsed, as they are by default, and
     ///   without the full title table. The table adds 160–260 points and

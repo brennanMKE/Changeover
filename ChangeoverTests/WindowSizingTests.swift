@@ -70,7 +70,8 @@ struct WindowSizingTests {
         #expect(WindowSizing.heightClass(for: .insertDisc(.noDisc)) == .compact)
         #expect(WindowSizing.heightClass(for: .insertDisc(.ejecting)) == .compact)
         #expect(WindowSizing.heightClass(for: .insertDisc(.discUnavailable)) == .compact)
-        #expect(WindowSizing.heightClass(for: .ripping(JobID.make())) == .compact)
+        // Ripping moved to `.full` when it gained the identification panel.
+        #expect(WindowSizing.heightClass(for: .ripping(JobID.make())) == .full)
         #expect(WindowSizing.heightClass(for: .done(JobID.make())) == .compact)
         #expect(WindowSizing.heightClass(for: .chooseMovie) == .full)
         #expect(WindowSizing.heightClass(for: .confirm) == .full)
@@ -133,19 +134,27 @@ struct WindowSizingTests {
         #expect(WindowSizing.decide(Self.situation(.confirm), state: state) == .keep)
     }
 
-    /// A Retry (`.done(a)` → `.ripping(b)`) and a finished job
-    /// (`.ripping(a)` → `.done(a)`) are both compact→compact with a *new*
-    /// payload. Comparing heights rather than steps is what makes them no
-    /// motion.
+    /// Two finished jobs (`.done(a)` → `.done(b)`) are compact→compact with a
+    /// *new* payload. Comparing heights rather than steps is what makes that
+    /// no motion.
+    ///
+    /// Ripping used to be the example here, and is not compact any more.
     @Test func aNewJobIDWithinTheCompactClassIsNoMotion() {
         let state = WindowSizing.State(appliedHeight: 340)
         let a = JobID.make()
         let b = JobID.make()
         #expect(a != b)
-        #expect(WindowSizing.decide(Self.situation(.ripping(a)), state: state) == .keep)
         #expect(WindowSizing.decide(Self.situation(.done(a)), state: state) == .keep)
-        #expect(WindowSizing.decide(Self.situation(.ripping(b)), state: state) == .keep)
+        #expect(WindowSizing.decide(Self.situation(.done(b)), state: state) == .keep)
         #expect(WindowSizing.decide(Self.situation(.insertDisc(.noDisc)), state: state) == .keep)
+    }
+
+    /// And Start no longer moves the window at all: Confirm and Ripping are
+    /// the same class, which is the point of putting them together.
+    @Test func pressingStartDoesNotResizeTheWindow() {
+        let state = WindowSizing.State(appliedHeight: 640)
+        #expect(WindowSizing.decide(Self.situation(.confirm), state: state) == .keep)
+        #expect(WindowSizing.decide(Self.situation(.ripping(JobID.make())), state: state) == .keep)
     }
 
     /// Never fight the system.
@@ -231,9 +240,9 @@ struct WindowSizingTests {
         #expect(WindowSizing.height(for: .full, state: dragged) == 800)
         // Both full steps follow, the compact ones do not.
         #expect(WindowSizing.height(for: WindowSizing.heightClass(for: .chooseMovie), state: dragged) == 800)
-        #expect(WindowSizing.height(for: WindowSizing.heightClass(for: .ripping(JobID.make())), state: dragged) == 340)
+        #expect(WindowSizing.height(for: WindowSizing.heightClass(for: .done(JobID.make())), state: dragged) == 340)
 
-        let both = WindowSizing.userResized(to: 420, on: .ripping(JobID.make()), state: dragged)
+        let both = WindowSizing.userResized(to: 420, on: .done(JobID.make()), state: dragged)
         #expect(both.overrides[.compact] == 420)
         #expect(both.overrides[.full] == 800)
     }
@@ -259,11 +268,11 @@ struct WindowSizingTests {
     /// default — this is the whole point of §4's "remember per class".
     @Test func theSizerHonoursTheUsersHeightOnTheNextVisitToThatClass() throws {
         var state = WindowSizing.userResized(to: 800, on: .confirm, state: .init())
-        // Off to Ripping: compact, so it does resize.
-        let toRipping = WindowSizing.decide(Self.situation(.ripping(JobID.make())), state: state)
-        let (rippingFrame, _) = try #require(Self.resize(toRipping))
-        #expect(rippingFrame.height == Self.compactFrameHeight)
-        state = WindowSizing.applied(toRipping, chromeHeight: Self.chromeHeight, state: state)
+        // Off to Done: compact, so it does resize.
+        let toDone = WindowSizing.decide(Self.situation(.done(JobID.make())), state: state)
+        let (doneFrame, _) = try #require(Self.resize(toDone))
+        #expect(doneFrame.height == Self.compactFrameHeight)
+        state = WindowSizing.applied(toDone, chromeHeight: Self.chromeHeight, state: state)
         // Back to Confirm on the next disc: the user's 800, not 640.
         let back = WindowSizing.decide(Self.situation(.confirm), state: state)
         let (confirmFrame, _) = try #require(Self.resize(back))
