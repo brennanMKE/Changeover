@@ -42,14 +42,19 @@
             want an app that does it quietly.
         </p>
         <p>
-            HandBrake is also licensed under the GPL. Bundling it inside a closed application
-            raises licensing questions I'd rather not answer badly.
+            There is a licensing reason too. Changeover is
+            <a href="https://github.com/brennanMKE/Changeover/blob/main/LICENSE">MIT
+            licensed</a>; HandBrake is GPL, and <code>libdvdcss</code> and
+            <code>libdvdread</code> are GPL and LGPL. Linking GPL code into an MIT-licensed
+            binary and shipping it would put the whole thing under the GPL, which is not what
+            this project is. Calling a separate program you installed yourself is a different
+            thing entirely, and is exactly how the GPL expects tools to be used.
         </p>
         <p>
-            So Changeover ships with none of it. You install the tools, from their own
-            projects, under your own account — the same as if you used them from Terminal.
-            Changeover finds them and calls them. That keeps the decision, and the copy of the
-            software, with you.
+            So Changeover ships with none of it. It launches <code>HandBrakeCLI</code> as its
+            own process, the way you would from Terminal, and reads what it prints. You install
+            the tools from their own projects, under your own account. That keeps the copy of
+            the software — and the decision to have it — with you.
         </p>
         <p class="fine">
             None of this is legal advice. Whether you may rip a disc you own is a question for
@@ -194,7 +199,7 @@ brew install libdvdcss</code></pre>
             <a href="privacy.html">Privacy</a> ·
             <a href="./">Home</a>
         </p>
-        <p class="fine">Made by Brennan Stehling.</p>
+        <p class="fine">Made by Brennan Stehling · <a href="https://github.com/brennanMKE/Changeover/blob/main/LICENSE">MIT licensed</a></p>
     </footer>
 </body>
 </html>
