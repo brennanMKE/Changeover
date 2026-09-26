@@ -11,7 +11,7 @@
     <meta property="og:image" content="https://changeover.sstools.co/assets/icon-512.png">
     <meta property="og:url" content="https://changeover.sstools.co/">
     <meta property="og:type" content="website">
-    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:card" content="summary">
     <meta name="twitter:image" content="https://changeover.sstools.co/assets/icon-512.png">
 
     <link rel="icon" href="favicon.ico" sizes="48x48">
@@ -20,13 +20,16 @@
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
     <link rel="manifest" href="site.webmanifest">
-    <meta name="theme-color" content="#2C2C2F">
     <link rel="alternate" type="application/rss+xml" title="Changeover updates" href="appcast.xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+
     <header class="wrap top">
-        <a class="brand" href="./"><img src="assets/changeover-icon.png" alt="" width="36" height="36">Changeover</a>
+        <a class="brand" href="./"><img src="assets/changeover-icon.png" alt="" width="34" height="34">Changeover</a>
         <nav>
             <a href="setup.html">Setup</a>
             <a href="changelog.html">Changelog</a>
@@ -36,6 +39,9 @@
 
     <main>
         <section class="wrap hero" aria-labelledby="headline">
+            <div class="frame" aria-hidden="true"><span class="cue"></span></div>
+
+            <p class="eyebrow">A Mac app for your Plex library</p>
             <h1 id="headline">Put a DVD in.<br>Get it in Plex.</h1>
             <p class="lede">
                 Changeover turns a shelf of discs into a Plex library. Put one in and it
@@ -43,13 +49,15 @@
                 ejects the disc so you can load the next one.
             </p>
             <p class="cta">
-                <a class="button" id="download" href="downloads/Changeover-0.1.0.dmg">
-                    Download for macOS
-                </a>
-                <span class="meta" id="download-meta">Version 0.1.0 · Apple silicon · macOS 26.2 or later</span>
+                <a class="button" id="download" href="downloads/Changeover-0.1.0.dmg">Download for macOS</a>
+                <span class="meta" id="download-meta">Version 0.1.0 &middot; Apple silicon &middot; macOS 26.2 or later</span>
             </p>
-            <p class="fine">
-                Signed with Developer ID and notarized by Apple. Free and open source.
+            <p class="fine">Signed with Developer ID and notarized by Apple. Free and open source.</p>
+
+            <p class="gloss">
+                <b>Changeover</b> <i>n.</i> &mdash; the switch from one projector to the next,
+                mid&#8209;film, cued by the small circle burned into the top&#8209;right corner
+                of the last few feet of the reel. The dot above is one.
             </p>
         </section>
 
@@ -139,27 +147,26 @@
                 <article>
                     <h3>Picks the right part</h3>
                     <p>
-                        A DVD holds trailers, menus, and sometimes the same film twice — once
-                        widescreen, once cropped for an old television. Changeover finds the
-                        feature, prefers the widescreen transfer, and refuses to encode a
+                        A DVD holds trailers, menus, and sometimes the same film twice &mdash;
+                        once widescreen, once cropped for an old television. Changeover finds
+                        the feature, prefers the widescreen transfer, and refuses to encode a
                         two-minute trailer just because the disc called it the main title.
                     </p>
                 </article>
                 <article>
                     <h3>Files it the way Plex wants</h3>
                     <p>
-                        <code>Movies/Title (Year) {tmdb-ID}/Title (Year).mp4</code>, every time,
-                        with the database id that lets Plex tell two films of the same name
-                        apart. Different cuts of one film sit side by side as editions.
+                        <code>Movies/Title (Year) {tmdb-ID}/Title (Year).mp4</code>, every
+                        time, with the database id that lets Plex tell two films of the same
+                        name apart. Different cuts sit side by side as editions.
                     </p>
                 </article>
                 <article>
                     <h3>Runs without you</h3>
                     <p>
                         It ejects each disc when it's done, so the open tray is the signal to
-                        load the next one. It keeps working on a Mac whose screen has locked —
-                        including discs put in after the lock, which macOS would otherwise spit
-                        straight back out.
+                        load the next one. It keeps working on a Mac whose screen has locked
+                        &mdash; including discs put in after the lock.
                     </p>
                 </article>
             </div>
@@ -167,24 +174,20 @@
 
         <section class="wrap requires" aria-labelledby="needs">
             <h2 id="needs">What you need</h2>
-            <ul>
+            <ul class="cues">
                 <li>A Mac running macOS 26.2 or later, with a USB DVD drive.</li>
-                <li><a href="https://handbrake.fr">HandBrake</a>'s command-line tool:
-                    <code>brew install handbrake</code></li>
-                <li>A free <a href="https://www.themoviedb.org">TMDB</a> API key, for looking
-                    films up.</li>
-                <li>Somewhere to put the files — a Plex library folder, local or on a NAS.</li>
+                <li><a href="https://handbrake.fr">HandBrake</a>'s command-line tool: <code>brew install handbrake</code></li>
+                <li>A free <a href="https://www.themoviedb.org">TMDB</a> API key, for looking films up.</li>
+                <li>Somewhere to put the files &mdash; a Plex library folder, local or on a NAS.</li>
             </ul>
-            <p class="fine">
-                Changeover only reads discs you own, and only the ones you put in the drive.
-            </p>
+            <p class="fine">Changeover only reads discs you own, and only the ones you put in the drive.</p>
         </section>
     </main>
 
     <footer class="wrap">
-        <p><a href="setup.html">Setup</a> ·
-            <a href="changelog.html">Changelog</a> ·
-            <a href="privacy.html">Privacy</a> ·
+        <p><a href="setup.html">Setup</a> &middot;
+            <a href="changelog.html">Changelog</a> &middot;
+            <a href="privacy.html">Privacy</a> &middot;
             <a href="https://github.com/brennanMKE/Changeover">Source on GitHub</a></p>
         <p class="fine">MIT license. Not affiliated with Plex.</p>
     </footer>
