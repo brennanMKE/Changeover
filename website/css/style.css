@@ -221,3 +221,43 @@ table.deps td:not(:first-child) { color: var(--muted); }
 .requires h3 {
     margin-top: 1.5rem;
 }
+
+/* Smart import — the feature that separates this from doing it by hand */
+
+.smart {
+    padding: 2.5rem 0;
+    border-bottom: 1px solid var(--rule);
+}
+
+.eyebrow {
+    font: 600 .8rem/1 ui-sans-serif, -apple-system, system-ui, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--amber);
+    margin: 0 0 .5rem;
+}
+
+.smart h2 { font-size: 1.7rem; margin-bottom: 1rem; }
+.smart p { max-width: 36rem; }
+
+/* The transcript is the point of the section: show it as the app shows it,
+   dark and monospaced, so it reads as a real log rather than prose. */
+.transcript {
+    background: #2C2C2F;
+    border: 0;
+    color: #e8e6e3;
+    padding: 1.1rem 1.2rem;
+    margin: 1.5rem 0;
+    line-height: 1.65;
+}
+
+.transcript code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: .84rem;
+    /* Wrap rather than scroll: on a phone a horizontal scrollbar inside a
+       showcase block reads as broken. */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}

@@ -1496,6 +1496,19 @@ final class JobController {
         current = nil
     }
 
+    /// Narrate a step the user should be able to watch, before any job
+    /// exists.
+    ///
+    /// The identification work — reading menus with Vision, asking the
+    /// on-device model, matching against TMDB — all happens *before* Start is
+    /// pressed, so it has no job log to write to. `append` already falls back
+    /// to the controller's own log for exactly this case; this exposes it so
+    /// `RipFlowController` can show its work rather than confining it to
+    /// `/tmp`-style diagnostics nobody sees.
+    func note(_ line: String) {
+        append(line)
+    }
+
     private func append(_ line: String) {
         if let current {
             current.log.append(line)

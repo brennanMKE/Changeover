@@ -53,19 +53,48 @@
             </p>
         </section>
 
+        <section class="wrap smart" aria-labelledby="smart">
+            <p class="eyebrow">Smart import</p>
+            <h2 id="smart">It works out what the disc is, and shows you how</h2>
+            <p>
+                A DVD barely tells you what it holds. The label is often the title with the
+                spaces taken out — sometimes with letters missing. The menus are pictures, not
+                text. There are a dozen titles on the disc and only one is the film.
+            </p>
+            <p>
+                Doing this by hand means reading the label, guessing, searching, comparing
+                runtimes, and picking a title number — for every disc. Changeover does it in
+                about fifteen seconds, and <strong>shows its work while it happens</strong>:
+            </p>
+
+            <pre class="transcript"><code>▶ Reading the disc's menus — 21 pages to look at
+  · vtsm-01-lu1-pgc1: PLAY MOVIE · SCENE SELECTION · SPECIAL FEATURES
+  · vtsm-01-lu1-pgc28: SCENES · 1-4 5-8 9-12 · MAIN MENU
+▶ Identifying the disc — its label reads "BASKBALL"
+  · "Baskball" found nothing on TMDB — looking at the disc's menus
+  · asking this Mac's on-device model to read 34 lines of menu text
+  · the model reads it as "BASEketball"
+▶ Matching against TMDB — the disc's feature runs 103 min
+  · BASEketball — 103 min · Trey Parker, Matt Stone
+  · Baseketball Legends — 48 min
+✓ Chose BASEketball — its title matches and its runtime fits the disc</code></pre>
+
+            <p>
+                <strong>Vision</strong> reads the words off each menu screen, because a DVD
+                stores its menus as pictures. Apple's <strong>on-device model</strong> turns a
+                mangled label into a real title. Then runtime and billed cast decide between
+                films of the same name — and when the evidence is thin, it says so and lets you
+                choose rather than guessing on your behalf.
+            </p>
+            <p class="fine">
+                All of it runs on your Mac. <a href="setup.html">How it works, and how to turn
+                it off →</a>
+            </p>
+        </section>
+
         <section class="wrap features" aria-labelledby="what">
-            <h2 id="what">What it does</h2>
+            <h2 id="what">And the rest of it</h2>
             <div class="grid">
-                <article>
-                    <h3>Knows what the disc is</h3>
-                    <p>
-                        Most discs spell their title in the label — <code>ENEMYATTHEGATES</code>,
-                        <code>THESECRETLIFEOFWALTERMITTY</code>. Changeover reads it, puts the
-                        spaces back using an on-device model, and matches it against TMDB by
-                        runtime and cast. When it isn't sure, it says so and suggests rather
-                        than deciding.
-                    </p>
-                </article>
                 <article>
                     <h3>Picks the right part</h3>
                     <p>

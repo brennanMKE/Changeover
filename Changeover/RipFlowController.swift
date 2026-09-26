@@ -606,7 +606,13 @@ final class RipFlowController {
             // 1. The volume label, which is right on most discs.
             let fromLabel = DiscNameSearchTerm.derive(volumeName: label)
             if let term = fromLabel {
+                await MainActor.run { jobs.note("▶ Identifying the disc — its label reads “\(label)”") }
                 let hits = await self?.search.probe(term, apiKey: apiKey) ?? []
+                await MainActor.run {
+                    jobs.note(hits.isEmpty
+                        ? "  · “\(term)” found nothing on TMDB — looking at the disc's menus"
+                        : "  · “\(term)” matched \(hits.count) film\(hits.count == 1 ? "" : "s")")
+                }
                 if !hits.isEmpty {
                     self?.resolvedBy = "label"
                     self?.finishResolution(term: term, results: hits, jobs: jobs, settings: settings, disc: disc)
@@ -617,6 +623,7 @@ final class RipFlowController {
             // 2. The title the disc prints on its own menus.
             if let printed = intelligence?.titleText?.text, !printed.isEmpty {
                 self?.menuTitleSeen = printed
+                await MainActor.run { jobs.note("  · the menus print “\(printed)” — searching for that") }
                 let hits = await self?.search.probe(printed, apiKey: apiKey) ?? []
                 if !hits.isEmpty {
                     self?.resolvedBy = "menuTitle"
@@ -629,8 +636,17 @@ final class RipFlowController {
             //    printed. Last, because it is the only step that guesses.
             if mayInfer,
                let question = DiscTitleInference.question(volumeName: label, ocr: intelligence?.ocr) {
+                await MainActor.run {
+                    jobs.note("  · asking this Mac's on-device model to read \(question.lines.count) line\(question.lines.count == 1 ? "" : "s") of menu text")
+                }
                 let answer = await DiscTitleInference.answer(for: question)
                 self?.inferredTitleSeen = answer.title
+                await MainActor.run {
+                    switch answer {
+                    case .title(let t):        jobs.note("  · the model reads it as “\(t)”")
+                    case .unavailable(let why): jobs.note("  · the model had no answer — \(why)")
+                    }
+                }
                 FlowDiagnostics.note("resolve: model answered \(answer.title.map { "\"\($0)\"" } ?? "nothing")"
                                      + " for label \(label)")
                 if let inferred = answer.title {
@@ -733,6 +749,25 @@ final class RipFlowController {
                 searchTerm: searched,
                 trust: trust
             )
+            // Show the working. This is the step that separates the app from
+            // doing it by hand, and it was invisible — a film simply appeared
+            // in the list already chosen, with no way to see that the runtime
+            // and the cast had agreed, or that the app had declined to choose.
+            let discMinutes = featureSeconds / 60
+            jobs.note("▶ Matching against TMDB — the disc's feature runs \(discMinutes) min")
+            for c in candidates.prefix(6) {
+                let runtime = c.runtimeMinutes.map { "\($0) min" } ?? "no runtime listed"
+                let cast = self.search.castByID[c.id]?.prefix(2).joined(separator: ", ")
+                jobs.note("  · \(c.title) — \(runtime)" + (cast.map { " · \($0)" } ?? ""))
+            }
+            switch decision {
+            case .select(let id, let reason):
+                let title = candidates.first { $0.id == id }?.title ?? "#\(id)"
+                jobs.note("✓ Chose \(title) — \(reason)")
+            case .abstain(let reason):
+                jobs.note("• Not choosing for you — \(reason). Pick one below.")
+            }
+
             FlowDiagnostics.note("""
                 autoselect ran: disc=\(featureSeconds)s                 trust=\(trust)                 candidates=\(candidates.map { "\($0.id):\($0.runtimeMinutes.map(String.init) ?? "nil")" }.joined(separator: ","))                 -> \(decision)
                 """)

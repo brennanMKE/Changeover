@@ -179,7 +179,14 @@ nonisolated enum MenuReader {
         // chapters — which `ChapterNames.markers` then discarded for naming
         // fewer than half the film's, so the disc looked like one that prints
         // no names at all.
-        for still in structure.menus.flatMap(\.stillIDs) {
+        let pages = structure.menus.flatMap(\.stillIDs)
+        if !pages.isEmpty {
+            Task { @MainActor in
+                log("▶ Reading the disc's menus — \(pages.count) page\(pages.count == 1 ? "" : "s") to look at")
+            }
+        }
+
+        for still in pages {
             let cell = cellPath(for: still, in: tools.workDirectory)
             guard FileManager.default.fileExists(atPath: cell) else { continue }
             guard let image = await self.still(
@@ -193,6 +200,26 @@ nonisolated enum MenuReader {
                 frameHeight: frame.height,
                 settings: settings
             ) else { continue }
+            // Narrate each page as it is read.
+            //
+            // A DVD stores its menus as pictures, so this is the only way the
+            // words on them can be got at — and it is worth watching. Showing
+            // a sample of what Vision actually found turns "reading menus…"
+            // into something a person can see working, and makes a disc whose
+            // menus are unreadable obvious rather than mysterious.
+            let sample = observations
+                .map(\.text)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { $0.count > 2 && $0.contains(where: \.isLetter) }
+                .prefix(4)
+                .joined(separator: " · ")
+            Task { @MainActor in
+                if sample.isEmpty {
+                    log("  · \(still): no readable text")
+                } else {
+                    log("  · \(still): \(sample)")
+                }
+            }
             stills.append(MenuOCRDocument.Still(
                 id: still,
                 frame: frame,
