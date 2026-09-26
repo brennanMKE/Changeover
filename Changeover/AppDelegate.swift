@@ -11,7 +11,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// The one job that can be in flight. Owned here so it outlives every
     /// window — see #0002.
     let jobs: JobController
-    /// #0061 — the rip window's own state (the picked movie, the disc it was
+    /// #0142 — the rip window's own state (the picked movie, the disc it was
     /// picked for, whether Continue was pressed). Owned here for the same
     /// reason `jobs` is: closing the window must not throw the selection
     /// away mid-job, and Phase 4 drives this with no window at all.
@@ -56,7 +56,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// across a close/reopen instead of being rebuilt (#0048, following #0011).
     private(set) var historyWindow: NSWindow?
 
-    /// #0073 — never leave a drive held shut by a process that is going away.
+    /// #0152 — never leave a drive held shut by a process that is going away.
     ///
     /// The eject veto dies with the process regardless, but a deliberate
     /// release means the vote stops at the start of teardown rather than
@@ -179,7 +179,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // audio/21 subtitle tracks pushed Start off-screen with no way to
         // reach it).
         //
-        // The one fixed height (760 before #0061, then 680) is gone: the
+        // The one fixed height (760 before #0142, then 680) is gone: the
         // window now opens at the height of the step it is opening on and
         // changes with the step — 340 for Insert a disc/Ripping/Done, 640
         // for Choose the movie/Confirm (`docs/window-sizing.md`). The floor
@@ -246,7 +246,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             defer: false
         )
         window.title = "History"
-        // #0062: 560 is what squeezed the sidebar until "Encoding Air (2023)"
+        // #0143: 560 is what squeezed the sidebar until "Encoding Air (2023)"
         // truncated to "Encoding Air (202…". The sidebar needs ~200 points to
         // show a title and a status on two lines, and the summary card wants
         // ~480.

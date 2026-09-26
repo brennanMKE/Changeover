@@ -44,7 +44,7 @@ nonisolated struct DiscInsertion: Codable, Equatable, Hashable, Sendable {
     /// it after construction.
     var insertionID = UUID()
 
-    // MARK: - #0073: discs that never mounted
+    // MARK: - #0152: discs that never mounted
 
     /// Whether this disc has a mounted volume.
     ///
@@ -191,7 +191,7 @@ enum OpticalDiscClassifier {
     /// compute the values `classify` takes, not how it decides given them.
     /// Media kinds that can carry a video DVD.
     ///
-    /// #0073 — narrower than `opticalMediaKindPrefixes` on purpose, and used
+    /// #0152 — narrower than `opticalMediaKindPrefixes` on purpose, and used
     /// only for a disc with no mounted volume. A mounted disc is admitted on
     /// the evidence of an actual `VIDEO_TS` directory; an unmounted one has
     /// no filesystem to inspect, so the media kind is all that is left. An
@@ -206,7 +206,7 @@ enum OpticalDiscClassifier {
 
     /// - Parameter isMounted: whether the disc has a volume at all.
     ///
-    ///   `false` is #0073's case: a disc inserted while the Mac's screen was
+    ///   `false` is #0152's case: a disc inserted while the Mac's screen was
     ///   locked is dissented at mount approval by `loginwindow`, so it sits
     ///   in the drive readable but with no `/Volumes` entry. The `VIDEO_TS`
     ///   check cannot run — there is no filesystem to look at — so the media

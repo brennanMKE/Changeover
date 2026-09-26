@@ -77,7 +77,7 @@ nonisolated struct JobPresentation: Equatable, Sendable {
                 detail: []
             )
         case .fallback:
-            // #0061: MakeMKV's own `PRGV:` lines are not parsed, so the rip
+            // #0142: MakeMKV's own `PRGV:` lines are not parsed, so the rip
             // half of the fallback stays indeterminate; the second HandBrake
             // pass over the `.mkv` does report.
             return JobPresentation(
@@ -109,7 +109,7 @@ nonisolated struct JobPresentation: Equatable, Sendable {
     /// in wording.
     static let discRemovedDetail = "The disc was removed while the job was running."
 
-    /// #0061 — the live HandBrake fraction (`JobSnapshot.progress`, parsed
+    /// #0142 — the live HandBrake fraction (`JobSnapshot.progress`, parsed
     /// from the encode's own output) first, then `JobState.progress`, which
     /// is still always `nil` and still wire-compatible. One place decides,
     /// so the history window's percentage and the Ripping step's bar can

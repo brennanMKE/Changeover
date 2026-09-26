@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0061 — job-level progress (`docs/ux-step-flow.md` §3.2): the parsed
+/// #0142 — job-level progress (`docs/ux-step-flow.md` §3.2): the parsed
 /// HandBrake line, tagged with which encode of the job it belongs to, and the
 /// rules that keep a stale report off a finished job or a later phase.
 @MainActor
@@ -87,7 +87,7 @@ struct JobProgressTests {
         #expect(decoded.progress?.encode.etaSeconds == 2729)
     }
 
-    /// Additive, as #0061 requires: a payload encoded before this field
+    /// Additive, as #0142 requires: a payload encoded before this field
     /// existed decodes with `progress == nil` rather than failing.
     @Test func aSnapshotEncodedWithoutProgressDecodesAsNil() throws {
         let job = try Self.makeJob()

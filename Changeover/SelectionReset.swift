@@ -9,7 +9,7 @@ import Foundation
 // `SelectionReset` is the pure "what happens to the selection?" decision,
 // free of `MovieSearchViewModel`/SwiftUI so it's unit-testable with plain
 // `DiscInsertion` values and no window. `RipFlowController.reconcile` is the
-// only caller that actually performs it (#0061 — it owns the selection state
+// only caller that actually performs it (#0142 — it owns the selection state
 // that needs clearing; before that it was `MetadataEntryView`'s `@State`);
 // `JobController.start` reuses `sameDisc` as a second, independent check at
 // the point of harm.

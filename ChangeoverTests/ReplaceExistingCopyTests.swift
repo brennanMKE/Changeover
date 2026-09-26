@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0062 — a replacement is never invisible.
+/// #0143 — a replacement is never invisible.
 ///
 /// `PlexOrganizer.move` overwrites an existing library copy on purpose
 /// (#0012's staged `replaceItemAt`), which is what the Confirm step's

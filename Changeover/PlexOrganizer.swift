@@ -137,7 +137,7 @@ enum PlexOrganizer {
                              reason: .destinationUnwritable(path: folderPath))
         }
 
-        // #0062 — a replacement is never invisible in the log. `replaceItemAt`
+        // #0143 — a replacement is never invisible in the log. `replaceItemAt`
         // below overwrites an existing library copy on purpose (#0012), which
         // is exactly what the Confirm step's duplicate check warns about
         // *before* a 40-minute encode; this is the same fact stated at the
@@ -275,7 +275,7 @@ enum PlexOrganizer {
         return .success(())
     }
 
-    /// #0062 — the warning logged when the move is about to replace a file
+    /// #0143 — the warning logged when the move is about to replace a file
     /// that is already in the library. Pure, so the wording and the "only
     /// when something is actually there" rule are unit-tested without a
     /// filesystem. `⚠︎` (U+FE0E), so `LogClassifier` files it as `.warning`

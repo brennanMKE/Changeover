@@ -36,7 +36,7 @@ nonisolated struct HandBrakeProgress: Codable, Sendable, Equatable {
     var etaSeconds: Int?
 }
 
-/// The parser behind #0061's progress bar and ETA.
+/// The parser behind #0142's progress bar and ETA.
 ///
 /// Guards with `EncodeController.isProgressOnly(_:)` first, so the log
 /// buffer (`JobLog`), the failure classifier's tail and the progress bar can

@@ -205,7 +205,7 @@ struct StartGateTests {
     /// `.ready` is the only case with no `.reason`; every other case has one,
     /// non-empty, so the button's caption/tooltip is never blank.
     ///
-    /// #0062 made `StartDecision` `CaseIterable`, so this is now exhaustive by
+    /// #0143 made `StartDecision` `CaseIterable`, so this is now exhaustive by
     /// construction — a case added without a reason fails here rather than
     /// showing a blank caption beside a greyed-out Start.
     @Test func readyHasNoReasonAndEveryOtherCaseDoes() {
@@ -213,11 +213,11 @@ struct StartGateTests {
         for decision in StartDecision.allCases where decision != .ready {
             #expect(decision.reason?.isEmpty == false, "\(decision) has no reason")
         }
-        // 14 through #0062, plus §7.4's three upgrade cases.
+        // 14 through #0143, plus §7.4's three upgrade cases.
         #expect(StartDecision.allCases.count == 17)
     }
 
-    // MARK: - #0062: the "already in Plex" check
+    // MARK: - #0143: the "already in Plex" check
 
     private static let entry = LibraryEntry(
         folderName: "Fargo (1996) {tmdb-275}",
@@ -297,7 +297,7 @@ struct StartGateTests {
         ) == .scanInProgress)
     }
 
-    /// The defaults keep every pre-#0062 call site and test unchanged.
+    /// The defaults keep every pre-#0143 call site and test unchanged.
     @Test func theNewParametersDefaultToNoOpinion() {
         #expect(canStart(
             scanState: scanned([title(1)]), selectedTitleIndex: 1,

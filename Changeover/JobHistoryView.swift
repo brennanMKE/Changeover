@@ -5,10 +5,10 @@ import SwiftUI
 /// plus every job that finished this session, oldest first, matching
 /// `JobController.snapshots`' ordering.
 ///
-/// #0062 reworked the detail pane: a fixed summary card (`HistoryDetail`)
+/// #0143 reworked the detail pane: a fixed summary card (`HistoryDetail`)
 /// instead of a header that the Cancel button overlapped, Cancel and Retry in
 /// the window **toolbar** where AppKit lays them out outside the content, and
-/// the log as filtered, folded rows (`LogPane`). Since #0061 moved the log out
+/// the log as filtered, folded rows (`LogPane`). Since #0142 moved the log out
 /// of the rip window, this is the only place it lives, so it has to answer
 /// "what happened to my rip?" on its own.
 ///
@@ -37,7 +37,7 @@ struct JobHistoryView: View {
             }
             .listStyle(.sidebar)
             .navigationTitle("History")
-            // #0062: the sidebar's share of a 560-point window is what
+            // #0143: the sidebar's share of a 560-point window is what
             // truncated "Encoding Air (202…". A real minimum, and a maximum
             // so it can never eat the summary card's ~480 points.
             .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
@@ -162,7 +162,7 @@ private struct JobDetailView: View {
     let onCancel: () -> Void
     let onRetry: () -> Void
 
-    /// #0062 — the optional "Size" fact. Fails soft: no probe, no fact, and
+    /// #0143 — the optional "Size" fact. Fails soft: no probe, no fact, and
     /// never a spinner (`docs/log-ui-and-duplicate-check.md` §9).
     @State private var fileFacts: LibraryFile?
 
@@ -209,7 +209,7 @@ private struct JobDetailView: View {
             )
         }
         .toolbar {
-            // #0062: the fix for the screenshot's overlap. Toolbar items are
+            // #0143: the fix for the screenshot's overlap. Toolbar items are
             // laid out by AppKit *outside* the content, so they can never
             // clip the title or sit on top of the progress line, and nothing
             // can push them off-screen (#0140).
@@ -267,7 +267,7 @@ private struct JobDetailView: View {
     }
 }
 
-/// #0062 — the summary card: outcome, timings, disc, title/tracks, and where
+/// #0143 — the summary card: outcome, timings, disc, title/tracks, and where
 /// the file landed. Renders `HistoryDetail` and decides nothing.
 private struct JobSummaryCard: View {
     let detail: JobPresentation.HistoryDetail

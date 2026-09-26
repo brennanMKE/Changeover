@@ -44,7 +44,7 @@ nonisolated enum DiscScanner {
         /// unchanged, matching `ProcessRunner.Termination.cancelled`'s
         /// precedent.
         var lastLine: String? = nil
-        /// #0073 — the disc's own label, as libdvdnav reported it during the
+        /// #0152 — the disc's own label, as libdvdnav reported it during the
         /// scan (`libdvdnav: DVD Title: …`).
         ///
         /// Only interesting for a disc with no mounted volume, which has no
@@ -207,7 +207,7 @@ nonisolated enum DiscScanner {
                 mainFeatureIndex: output.mainFeatureIndex,
                 warnings: classify(lines: lines).warnings,
                 lastLine: lines.last,
-                // #0073 — libdvdnav prints the disc's label during the scan.
+                // #0152 — libdvdnav prints the disc's label during the scan.
                 // For a mounted disc this just restates the volume name; for
                 // an unmounted one it is the only place the label exists.
                 discLabel: RawDiscSource.label(fromScanOutput: lines.joined(separator: "\n"))

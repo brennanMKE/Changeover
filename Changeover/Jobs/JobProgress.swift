@@ -1,6 +1,6 @@
 import Foundation
 
-/// #0061 — one HandBrake progress report, tagged with *which* encode of the
+/// #0142 — one HandBrake progress report, tagged with *which* encode of the
 /// job it belongs to (`docs/ux-step-flow.md` §3.2).
 ///
 /// `HandBrakeProgress`'s `task n of m` is per HandBrakeCLI invocation, and

@@ -17,7 +17,7 @@ action off-screen (#0140).
 > space. At each step it could resize to fit content.
 
 `AppDelegate.showMetadataEntry()` creates the window once at 620×680 content
-points (760 before #0061) with a 560×560 minimum, and never touches its size
+points (760 before #0142) with a 560×560 minimum, and never touches its size
 again. Every step gets that one box. *Insert a disc* is a glyph and one
 sentence in it, four-fifths empty. *Ripping* is a title, a bar and three
 numbers. *Confirm* on *The Girl in the Spider's Web* (7 audio tracks, 21

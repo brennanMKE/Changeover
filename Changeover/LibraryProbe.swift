@@ -1,6 +1,6 @@
 import Foundation
 
-/// #0062 — the one place that touches the Plex library's filesystem to answer
+/// #0143 — the one place that touches the Plex library's filesystem to answer
 /// "is this film already there?".
 ///
 /// Cost, deliberately: **one** `contentsOfDirectory` of `Movies/` (names
@@ -14,7 +14,7 @@ import Foundation
 /// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` a plain `nonisolated async`
 /// function would still run it on the caller's actor — freezing the Confirm
 /// step for as long as the NAS takes to answer.
-/// #0062 — the probe as an injectable seam, the `JobController.ScanRunner`
+/// #0143 — the probe as an injectable seam, the `JobController.ScanRunner`
 /// pattern: `RipFlowControllerTests` drives the whole flow with a fake, so a
 /// test never lists a real directory.
 typealias LibraryProbeRunner = @Sendable (_ moviesPath: String, _ tmdbID: String) async -> LibraryLookup

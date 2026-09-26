@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0062 — `LogCategory`/`LogClassifier`: the decision that lets the History
+/// #0143 — `LogCategory`/`LogClassifier`: the decision that lets the History
 /// window tell a milestone from an error from encoder chatter.
 ///
 /// Every line asserted here is a real one, taken from the captured

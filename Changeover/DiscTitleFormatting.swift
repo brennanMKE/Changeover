@@ -89,7 +89,7 @@ nonisolated enum DiscTitleFormatting {
     }
 
     /// The sentence for a scan failure. Moved here from
-    /// `DiscTitleListView.message(for:)` by #0061 so the Choose-movie step's
+    /// `DiscTitleListView.message(for:)` by #0142 so the Choose-movie step's
     /// one-line status strip (`ScanStatusLine`) and the Confirm step's disc
     /// panel say exactly the same thing, and so it gains tests.
     static func scanFailureMessage(_ failure: DiscScanner.Failure) -> String {
@@ -113,7 +113,7 @@ nonisolated enum DiscTitleFormatting {
     }
 
     /// #0032's one-line status for the runtime cross-check, moved here from
-    /// `MetadataEntryView` by #0061 (the view it lived on is gone) so it is
+    /// `MetadataEntryView` by #0142 (the view it lived on is gone) so it is
     /// unit-tested rather than merely compiled.
     ///
     /// Must never read like a pass when the check did not run —

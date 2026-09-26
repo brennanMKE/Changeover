@@ -286,7 +286,7 @@ enum EncodeController {
         hangTimeout:      TimeInterval = 30 * 60,
         readerDelay:      @escaping () -> Void = {},
         hardCeilingGrace: TimeInterval = 10,
-        /// #0061 — every parsed HandBrake progress line, hopped to MainActor
+        /// #0142 — every parsed HandBrake progress line, hopped to MainActor
         /// exactly like `log`. Defaulted to a no-op so every existing call
         /// site (and test) is unaffected; `DVDPipeline` passes a closure that
         /// tags the report with which encode it is (`JobProgress.Unit`).
@@ -333,7 +333,7 @@ enum EncodeController {
                 tail.append(line)
             }
             Task { @MainActor in log(line) }
-            // #0061: the same line, parsed, for the Ripping step's bar and
+            // #0142: the same line, parsed, for the Ripping step's bar and
             // ETA. Hops to MainActor the same way `log` does; a line that
             // isn't whole progress parses to `nil` and reports nothing.
             if let parsed = HandBrakeProgressParser.parse(line) {
@@ -439,7 +439,7 @@ enum EncodeController {
     /// `JobLog` — the seam #0041's `JobState.progress` can call once a
     /// progress source exists.
     ///
-    /// #0061: now one line of delegation to `HandBrakeProgressParser`, which
+    /// #0142: now one line of delegation to `HandBrakeProgressParser`, which
     /// parses the same shapes plus the task numbers, fps and ETA. Kept with
     /// its original signature and `.encoding`-only behaviour so every
     /// existing call site and test is unaffected — there is exactly one

@@ -42,10 +42,10 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
     case noAudioTrackSelected
     case runtimeLookupLoading
     case runtimeMismatchUnconfirmed
-    /// #0062 — the "already in Plex" probe hasn't answered yet. Bounded by
+    /// #0143 — the "already in Plex" probe hasn't answered yet. Bounded by
     /// `LibraryProbe.defaultTimeout`, so this state always clears on its own.
     case libraryCheckInProgress
-    /// #0062 — the movie is already in the library and the user hasn't said
+    /// #0143 — the movie is already in the library and the user hasn't said
     /// to replace it. `PlexOrganizer.move` replaces on purpose (#0012's
     /// staged `replaceItemAt`), so without this a re-rip silently overwrites
     /// a good library copy *after* a 40-minute encode.
@@ -286,14 +286,14 @@ nonisolated enum StartGate {
                 return .runtimeMismatchUnconfirmed
             }
 
-            // #0062, checked **last**, after every other check passes: the
+            // #0143, checked **last**, after every other check passes: the
             // caption must name the first thing to do, and a duplicate must
             // never be reported before the disc has even been scanned.
             return libraryDecision(libraryCheck, replaceAcknowledgement: replaceAcknowledgement)
         }
     }
 
-    /// The #0062 half of `decide`, split out so its ordering-independent
+    /// The #0143 half of `decide`, split out so its ordering-independent
     /// truth table is readable on its own.
     ///
     /// `.unreachable` is deliberately **fail-soft**: an unmounted NAS must not

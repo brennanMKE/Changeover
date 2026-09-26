@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// #0062 — the "already in Plex" panel on the Confirm step.
+/// #0143 — the "already in Plex" panel on the Confirm step.
 ///
 /// `PlexOrganizer.move` replaces an existing library file on purpose (#0012's
 /// staged `replaceItemAt`), so before this a re-rip of a film that is already

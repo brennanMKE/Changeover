@@ -1,6 +1,6 @@
 import Foundation
 
-/// #0062 — which log rows the History window shows.
+/// #0143 — which log rows the History window shows.
 nonisolated enum LogFilter: String, Codable, Sendable, CaseIterable {
     /// The default: the pipeline's own milestones, warnings, errors and their
     /// detail lines, with every run of chatter folded into one clickable row.
@@ -49,7 +49,7 @@ nonisolated enum LogRow: Identifiable, Equatable, Sendable {
     }
 }
 
-/// #0062 — the pure function behind the log pane. Takes the lines, the
+/// #0143 — the pure function behind the log pane. Takes the lines, the
 /// filter and the set of folds the user has opened; returns the rows. No
 /// SwiftUI, no `JobLog` instance, no state of its own — which is the only
 /// coverage this window can have, since UI tests are forbidden here

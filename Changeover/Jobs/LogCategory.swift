@@ -1,6 +1,6 @@
 import Foundation
 
-/// #0062 — what one log line *is*, decided once at append time.
+/// #0143 — what one log line *is*, decided once at append time.
 ///
 /// Before this, `LogLine` carried a single `Bool` (`isMilestone`), so the
 /// History window could only ever paint two tones: the pipeline's own lines in
@@ -68,7 +68,7 @@ nonisolated enum LogCategory: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// #0062 — the pure classifier behind `LogCategory`.
+/// #0143 — the pure classifier behind `LogCategory`.
 ///
 /// Prefix and whole-line checks only, in a fixed order, and deliberately
 /// **not** a general parser of HandBrake's output: the one place that reads

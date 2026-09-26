@@ -1,6 +1,6 @@
 import Foundation
 
-/// #0062 — what the History window shows: a fixed summary card per job, and a
+/// #0143 — what the History window shows: a fixed summary card per job, and a
 /// two-line sidebar row.
 ///
 /// Both are pure functions of a `JobSnapshot` plus the handful of host-only

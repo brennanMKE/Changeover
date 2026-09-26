@@ -411,7 +411,7 @@ struct DiscTitleListView: View {
         .padding(.vertical, 2)
     }
 
-    // MARK: - Recommendation (#0068)
+    // MARK: - Recommendation (#0147)
 
     /// Says which row the app would choose and why, and — only when the
     /// evidence is decisive — chooses it.

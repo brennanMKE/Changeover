@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// #0061 — step 5: what happened, and the one obvious way on. The card and
+/// #0142 — step 5: what happened, and the one obvious way on. The card and
 /// its buttons are `JobPresentation.outcomeCard`, a pure function of the
 /// job's snapshot plus the two host-only facts (#0052's disc removal,
 /// #0049's partial eject); this view only performs the actions.

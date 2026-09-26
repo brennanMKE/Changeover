@@ -49,7 +49,7 @@ final class MovieSearchViewModel {
     /// outside — `select(movieID:apiKey:)` is the only way to change it.
     private(set) var runtimeLookup: RuntimeLookup = .idle
 
-    /// #0071 — the credits line under each result row, keyed by TMDB id.
+    /// #0150 — the credits line under each result row, keyed by TMDB id.
     ///
     /// Filled in the background for the rows on screen, so a row gains its
     /// cast a moment after it appears rather than the list waiting on twenty
@@ -58,7 +58,7 @@ final class MovieSearchViewModel {
     private(set) var creditsByID: [Int: String] = [:]
 
     /// The billed leads per TMDB id, as names rather than a rendered line.
-    /// #0071's trust upgrade compares these against the disc's menu text.
+    /// #0150's trust upgrade compares these against the disc's menu text.
     private(set) var castByID: [Int: [String]] = [:]
 
     /// How many rows get a credits lookup.

@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0073 — working a disc that was inserted into a locked Mac and therefore
+/// #0152 — working a disc that was inserted into a locked Mac and therefore
 /// never mounted.
 ///
 /// Proven on joe, 2026-09-25: a process registering an eject-approval

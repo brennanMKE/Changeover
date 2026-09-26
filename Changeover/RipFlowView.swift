@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// #0061 — the rip window. One step at a time, derived (never stored) by
+/// #0142 — the rip window. One step at a time, derived (never stored) by
 /// `FlowStep.derive` from what the app is actually doing
 /// (`docs/ux-step-flow.md`).
 ///
@@ -40,7 +40,7 @@ struct RipFlowView: View {
     @Environment(JobController.self) private var jobs
     /// The flow's own state (the picked movie, the disc it was picked for,
     /// whether Continue was pressed), owned by `AppDelegate` for the same
-    /// reason (#0061).
+    /// reason (#0142).
     @Environment(RipFlowController.self) private var flow
 
     var body: some View {
@@ -144,7 +144,7 @@ struct RipFlowView: View {
     }
 
     /// Icon-only, bordered, always enabled — including mid-job: History is
-    /// the only place the log lives (#0061), and Settings is safe during a
+    /// the only place the log lives (#0142), and Settings is safe during a
     /// job because `DVDPipeline` captured its paths when the job started.
     private func chromeButton(_ destination: WindowChrome.Destination) -> some View {
         let symbolName = WindowChrome.resolvedSymbolName(for: destination) {

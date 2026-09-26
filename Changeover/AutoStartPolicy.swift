@@ -127,7 +127,7 @@ nonisolated enum AutoStartPolicy {
         outcome: JobOutcome?
     ) -> Bool {
         guard !isRunning, !isEjecting, !alreadyAsked else { return false }
-        // #0073 — matched on the insertion, not the whole value. An unmounted
+        // #0152 — matched on the insertion, not the whole value. An unmounted
         // disc learns its label from its own scan, so the disc a job ran for
         // and the disc now in the drive are the same insertion with different
         // contents. Comparing everything made them unequal and left a

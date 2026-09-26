@@ -40,7 +40,7 @@ nonisolated struct ChapterSummary: Equatable, Sendable, Codable {
     var title: String
 }
 
-/// #0062/§7.2 — what is actually *inside* a file already in the Plex library.
+/// #0143/§7.2 — what is actually *inside* a file already in the Plex library.
 ///
 /// The duplicate check (`LibraryProbe`) already says a film is there; this
 /// says what it has. Filled by `ffprobe -v error -print_format json

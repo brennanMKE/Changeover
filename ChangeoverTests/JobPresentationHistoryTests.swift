@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0062 — the History window's summary card, sidebar row and Copy Log text.
+/// #0143 — the History window's summary card, sidebar row and Copy Log text.
 /// Pure functions of a `JobSnapshot`, which is the only coverage this window
 /// can have.
 struct JobPresentationHistoryTests {

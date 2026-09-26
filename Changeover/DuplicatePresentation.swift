@@ -1,6 +1,6 @@
 import Foundation
 
-/// #0062 — where the "already in Plex" check stands for the movie currently
+/// #0143 — where the "already in Plex" check stands for the movie currently
 /// selected. File-scope and `nonisolated` for the reason `ScanState` and
 /// `StartDecision` are: `StartGate.decide` is a pure function that must take
 /// this as a plain value with no actor-isolation crossing.
@@ -10,7 +10,7 @@ nonisolated enum LibraryCheck: Equatable, Sendable {
     case done(tmdbID: String, LibraryLookup)
 }
 
-/// #0062 — the user's explicit "yes, replace the copy that is already there",
+/// #0143 — the user's explicit "yes, replace the copy that is already there",
 /// recorded against the one movie *and* the one folder it was shown for.
 ///
 /// Exactly #0032's `MismatchAcknowledgement` shape, and for exactly its
@@ -28,7 +28,7 @@ nonisolated struct ReplaceAcknowledgement: Equatable, Sendable {
     let folderPath: String
 }
 
-/// #0062 — what re-runs the probe. A `Hashable` pair, so `ConfirmStepView`'s
+/// #0143 — what re-runs the probe. A `Hashable` pair, so `ConfirmStepView`'s
 /// `.task(id:)` re-fires exactly when the movie or the library root changes,
 /// and never on an unrelated redraw.
 nonisolated struct LibraryCheckKey: Hashable, Sendable {
@@ -46,7 +46,7 @@ nonisolated struct LibraryCheckKey: Hashable, Sendable {
     var epoch: Int = 0
 }
 
-/// #0062 — the notice on the Confirm step, as plain values.
+/// #0143 — the notice on the Confirm step, as plain values.
 nonisolated struct DuplicateNotice: Equatable, Sendable {
     nonisolated enum Kind: Equatable, Sendable {
         case checking
@@ -74,7 +74,7 @@ nonisolated struct DuplicateNotice: Equatable, Sendable {
     let revealPath: String?
 }
 
-/// #0062 — the pure function behind `DuplicateNoticeView`. No filesystem, no
+/// #0143 — the pure function behind `DuplicateNoticeView`. No filesystem, no
 /// SwiftUI: this is the only coverage the Confirm step's new panel can have.
 nonisolated enum DuplicatePresentation {
 

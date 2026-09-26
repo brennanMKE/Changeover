@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0062 — `LibraryMatch`: "is this film already in Plex?" as a pure tag match
+/// #0143 — `LibraryMatch`: "is this film already in Plex?" as a pure tag match
 /// over one directory listing. No filesystem.
 struct LibraryMatchTests {
 

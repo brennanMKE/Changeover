@@ -1,7 +1,7 @@
 import Testing
 @testable import Changeover
 
-/// #0070 — the half of the Walter Mitty failure that matching could never
+/// #0149 — the half of the Walter Mitty failure that matching could never
 /// have caught.
 @Suite struct AutoSelectTrustTests {
 

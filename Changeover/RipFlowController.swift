@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// #0061 — the rip window's own state: which movie is picked, whether the
+/// #0142 — the rip window's own state: which movie is picked, whether the
 /// user has confirmed it, and which finished job's outcome card they have
 /// dismissed. Everything else the flow needs already lives on
 /// `JobController` (`docs/ux-step-flow.md` §4.2).
@@ -45,7 +45,7 @@ final class RipFlowController {
     /// its own card shows without anything resetting this.
     private(set) var dismissedJobID: JobID?
 
-    /// #0062 — where the "already in Plex" check stands for the selected
+    /// #0143 — where the "already in Plex" check stands for the selected
     /// movie. Never stored across selections: every event that changes what
     /// was checked resets it (see `clearLibraryCheck`).
     private(set) var libraryCheck: LibraryCheck = .idle
@@ -76,7 +76,7 @@ final class RipFlowController {
             : .done(tmdbID: tmdbID, .absent)
     }
 
-    /// #0062 — the user's "Replace the Existing File", keyed on the movie
+    /// #0143 — the user's "Replace the Existing File", keyed on the movie
     /// *and* the folder it was shown for (#0032's `MismatchAcknowledgement`
     /// pattern). A confirmation for one film must never enable Start for
     /// another.
@@ -205,7 +205,7 @@ final class RipFlowController {
     func select(movieID: Int?, jobs: JobController, apiKey: String) {
         if movieID != selectedMovieID {
             movieConfirmed = false
-            // #0062: a different film is a different library question. The
+            // #0143: a different film is a different library question. The
             // #0026 lesson, keyed the same way.
             clearLibraryCheck()
         } else {
@@ -233,7 +233,7 @@ final class RipFlowController {
     /// query, the results and the same row still selected.
     func changeMovie() {
         movieConfirmed = false
-        // #0062: the library answer still applies (same movie, same root, so
+        // #0143: the library answer still applies (same movie, same root, so
         // the view's `.task(id:)` key is unchanged and nothing re-lists), but
         // the confirmation is given on the Confirm step and does not survive
         // leaving it.
@@ -295,7 +295,7 @@ final class RipFlowController {
         clearLibraryCheck()
     }
 
-    // MARK: - "Already in Plex" (#0062)
+    // MARK: - "Already in Plex" (#0143)
 
     /// What `ConfirmStepView.task(id:)` keys on: the probe re-runs only when
     /// the movie or the library root changes. `nil` with no movie selected —
@@ -495,7 +495,7 @@ final class RipFlowController {
             selectedMovieID = nil
             selectionDisc = nil
             movieConfirmed = false
-            // #0062: "per disc" comes from living here — a disc swap wipes
+            // #0143: "per disc" comes from living here — a disc swap wipes
             // the library answer and its confirmation exactly as it wipes
             // `selectionDisc`.
             clearLibraryCheck()
@@ -725,7 +725,7 @@ final class RipFlowController {
             else { return }
 
             var trust = self.termTrust(jobs: jobs, term: searched)
-            // #0071 — a disc whose label says nothing can still vouch for an
+            // #0150 — a disc whose label says nothing can still vouch for an
             // answer, by printing the cast on its own menus. That is evidence
             // from the disc rather than from the guess, which is precisely
             // what the gate wants and what `WILLIS` and `BLUSBRO` could never
@@ -878,7 +878,7 @@ final class RipFlowController {
     /// "have we already ripped this disc": when Die Hard's eject was refused
     /// the disc was re-reported, the set no longer contained it, and it was
     /// ripped a second time ten seconds after the first finished.
-    /// #0073 — never the device node, which is the drive rather than the
+    /// #0152 — never the device node, which is the drive rather than the
     /// disc and which the next disc inherits.
     ///
     /// `label` falls back to the mount URL's last path component, which for
@@ -1143,7 +1143,7 @@ final class RipFlowController {
 
     /// Whether anything outside the search term corroborates it.
     ///
-    /// #0070 — the second half of the Walter Mitty failure. A term from the
+    /// #0149 — the second half of the Walter Mitty failure. A term from the
     /// disc's own label is corroborated by the disc. A model answer the label
     /// agrees with is corroborated by the label. A term from the menus, or
     /// from a model answer no label can judge, is not corroborated by
@@ -1156,7 +1156,7 @@ final class RipFlowController {
         case "label":
             return .labelBacked
         case "inference":
-            // #0072 — three answers, not two. A label that *agrees* is
+            // #0151 — three answers, not two. A label that *agrees* is
             // corroboration. A label that *cannot judge* is silence, and
             // silence is not agreement: USUALLB is seven characters and can
             // spell nothing, yet it was reading as label-backed and

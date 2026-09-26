@@ -154,7 +154,7 @@ final class DVDMonitor {
         // (not just the `DiscMountDecision`) is available for `.newDisc`.
         var resolvedDiscID: String?
 
-        // #0073 — a disc inserted while the screen is locked never mounts, so
+        // #0152 — a disc inserted while the screen is locked never mounts, so
         // there is no volume path and no VIDEO_TS to look for. It is still in
         // the drive and still readable through its raw device, which is where
         // the pipeline reads it from.

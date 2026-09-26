@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// #0061 — step 3: everything that is still a decision for *this* disc, with
+/// #0142 — step 3: everything that is still a decision for *this* disc, with
 /// the movie already chosen and carried forward as a compact card.
 ///
 /// The disc section is `DiscTitleListView` and `TrackSelectionView`
@@ -45,7 +45,7 @@ struct ConfirmStepView: View {
             Divider()
             actionBar
         }
-        // #0062 — the check starts the moment this step appears for a movie,
+        // #0143 — the check starts the moment this step appears for a movie,
         // and re-fires only when the movie or the library root changes.
         // `continueToConfirm`, `adjustAndRetry` and a new movie after "Change
         // movie" all arrive here, so the answer is on screen seconds after
@@ -110,7 +110,7 @@ struct ConfirmStepView: View {
         .padding(.bottom, card == nil ? 0 : 10)
     }
 
-    // MARK: - Already in Plex (#0062)
+    // MARK: - Already in Plex (#0143)
 
     @ViewBuilder
     private var duplicateNotice: some View {
@@ -304,7 +304,7 @@ struct ConfirmStepView: View {
             selectedAudioTrackNumbers: jobs.selectedAudioTrackNumbers,
             runtimeLookup:       flow.search.runtimeLookup,
             mismatchAcknowledgement: jobs.mismatchAcknowledgement,
-            // #0062: checked last, so the caption still names the first thing
+            // #0143: checked last, so the caption still names the first thing
             // to do and a duplicate is never reported before the disc has
             // even been scanned.
             libraryCheck:            flow.libraryCheckForThisEdition,

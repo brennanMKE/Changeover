@@ -1,7 +1,7 @@
 import Testing
 @testable import Changeover
 
-/// #0068 — "on this disc there are 3 titles which are about 90 minutes… When
+/// #0147 — "on this disc there are 3 titles which are about 90 minutes… When
 /// we have 3 options like this one we can offer a recommendation instead of
 /// an automatic selection."
 @Suite struct TitleRecommendationTests {

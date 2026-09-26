@@ -23,7 +23,7 @@ line is half behind it; and below that, HandBrakeCLI's stdout verbatim —
 `libdvdread: Couldn't find device name.`, `libdvdnav: Can't read name block`,
 23 lines of `x265 [info]: …` build settings, `[21:07:05] sync: expecting 2901
 video frames` — with nothing separating a milestone from an error from
-encoder chatter. Since #0061 moved the log out of the rip window, this is
+encoder chatter. Since #0142 moved the log out of the rip window, this is
 the only place the log lives, so it has to answer "what happened to my rip?"
 on its own.
 

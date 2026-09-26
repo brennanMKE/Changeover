@@ -344,7 +344,7 @@ struct JobLogTests {
         #expect(decoded.category == .success)
     }
 
-    // MARK: - #0062: categories, and the raw export
+    // MARK: - #0143: categories, and the raw export
 
     @Test func appendStoresTheCategoryAndKeepsIsMilestoneInAgreementWithIt() {
         let log = JobLog(capacity: 2000)

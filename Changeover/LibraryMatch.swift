@@ -1,6 +1,6 @@
 import Foundation
 
-/// #0062 — what one file already in the Plex library looks like to us.
+/// #0143 — what one file already in the Plex library looks like to us.
 /// `durationSeconds` is `nil` today and exists so adding it later is not a
 /// wire change: HandBrake writes the `moov` atom at the *end* of the file, so
 /// measuring a 1–2 GB library copy over SMB is a seek to its tail for a number
@@ -29,7 +29,7 @@ nonisolated struct LibraryEntry: Equatable, Sendable, Codable {
     let files: [LibraryFile]
 }
 
-/// #0062 — the answer to "is this film already in Plex?".
+/// #0143 — the answer to "is this film already in Plex?".
 ///
 /// `.unreachable` is a distinct case on purpose and is **never** collapsed
 /// into `.absent`: "not there" may only ever be said after a successful
@@ -42,7 +42,7 @@ nonisolated enum LibraryLookup: Equatable, Sendable, Codable {
     case unreachable(reason: String)
 }
 
-/// #0062 — the pure half of the library check: no filesystem at all.
+/// #0143 — the pure half of the library check: no filesystem at all.
 ///
 /// Plex naming here is strict and the `{tmdb-ID}` tag is unique per film
 /// (`MovieMetadata.folderName`, `LibraryPaths.resolve`), so "is this film in

@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0061 — the rip window's own state (`RipFlowController`), driven with a
+/// #0142 — the rip window's own state (`RipFlowController`), driven with a
 /// `JobController` whose runner is a fake: no disc, no HandBrakeCLI, no view.
 /// Everything asserted here is a step the user would otherwise have to click
 /// through by hand, which UI tests are forbidden to do in this project.
@@ -274,7 +274,7 @@ struct RipFlowControllerTests {
         #expect(flow.step(jobs: jobs) == .insertDisc(.noDisc))
     }
 
-    // MARK: - "Already in Plex" (#0062)
+    // MARK: - "Already in Plex" (#0143)
 
     private static let entry = LibraryEntry(
         folderName: "Fargo (1996) {tmdb-275}",

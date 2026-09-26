@@ -15,7 +15,7 @@ nonisolated struct LogLine: Codable, Sendable, Hashable, Identifiable {
     let timestamp: Date
     let text: String
     let isMilestone: Bool
-    /// #0062 — the richer classification `isMilestone` is derived from. The
+    /// #0143 — the richer classification `isMilestone` is derived from. The
     /// `Bool` stays a stored field, always equal to `category.isMilestone`, so
     /// every reader and test written against it is untouched.
     let category: LogCategory
@@ -43,7 +43,7 @@ nonisolated struct LogLine: Codable, Sendable, Hashable, Identifiable {
         )
     }
 
-    /// #0062 — a payload encoded before `category` existed (a Phase 4 host on
+    /// #0143 — a payload encoded before `category` existed (a Phase 4 host on
     /// an older build) still decodes: the field is optional on the wire and
     /// falls back to the classifier's answer for the line's own text.
     init(from decoder: any Decoder) throws {
@@ -138,7 +138,7 @@ final class JobLog {
     /// chatter), never something `DVDPipeline` interleaves between a
     /// milestone headline and its detail lines.
     private var previousLineWasMilestone = false
-    /// #0062 — the same one bit of state, widened: `LogClassifier` needs the
+    /// #0143 — the same one bit of state, widened: `LogClassifier` needs the
     /// previous line's `LogCategory` (not just its milestone-ness) to apply
     /// the continuation rule. Progress lines never touch it, as before.
     private var previousCategory: LogCategory?
@@ -168,7 +168,7 @@ final class JobLog {
         let id = nextID
         nextID += 1
 
-        // #0062: one classification, made here, carried on the line — the
+        // #0143: one classification, made here, carried on the line — the
         // window never re-derives it while scrolling.
         let category = LogClassifier.category(for: text, previousCategory: previousCategory)
 
@@ -206,7 +206,7 @@ final class JobLog {
         return lines.suffix(limit).map(\.text)
     }
 
-    /// #0062 — every retained line in id order, unfiltered and unfolded:
+    /// #0143 — every retained line in id order, unfiltered and unfolded:
     /// `displayLines` minus the coalesced progress line, with a
     /// "… N earlier lines dropped" header when the ring has evicted any.
     ///

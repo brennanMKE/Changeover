@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0062 — `LibraryProbe` against a real temp directory (the
+/// #0143 — `LibraryProbe` against a real temp directory (the
 /// `WorkingFilesTests` style): no network, no Plex, no SMB.
 ///
 /// The invariant these exist for: a library that cannot be reached is

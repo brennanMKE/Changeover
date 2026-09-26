@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// #0061 — step 4: the movie, the percentage and the ETA. No log: the user
+/// #0142 — step 4: the movie, the percentage and the ETA. No log: the user
 /// asked for exactly this, and #0043's log is still one click away in the
 /// History window, per job.
 ///

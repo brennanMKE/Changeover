@@ -13,7 +13,7 @@ nonisolated struct AudioTag: Codable, Hashable, Sendable {
     var title: String?
 }
 
-/// #0062/§7.4 — everything an upgrade job needs, as one plain value.
+/// #0143/§7.4 — everything an upgrade job needs, as one plain value.
 ///
 /// Deliberately self-contained: the file to rewrite, the chapter rows already
 /// checked against *that file's* chapter count, and the audio tags. Nothing in

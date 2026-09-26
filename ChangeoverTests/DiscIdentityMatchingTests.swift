@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0073 — one physical insertion stays the same insertion while the app
+/// #0152 — one physical insertion stays the same insertion while the app
 /// learns things about it.
 ///
 /// An unmounted disc arrives with no label and acquires one from the scan.

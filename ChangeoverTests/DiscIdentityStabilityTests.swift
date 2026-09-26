@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0073 — what counts as "the same disc" for the guards that stop work
+/// #0152 — what counts as "the same disc" for the guards that stop work
 /// happening twice.
 @Suite struct DiscIdentityStabilityTests {
 

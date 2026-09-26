@@ -1,6 +1,6 @@
 import Foundation
 
-/// #0061 — what the Ripping and Done steps show (`docs/ux-step-flow.md`
+/// #0142 — what the Ripping and Done steps show (`docs/ux-step-flow.md`
 /// §3.3). Both are pure functions of a `JobSnapshot` plus the handful of
 /// host-only facts that deliberately aren't on the wire shape
 /// (`Job.discRemovedDuringJob`, `JobController.discUnavailable`), exactly as

@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0061 — the rip window's step, row by row of the priority table in
+/// #0142 — the rip window's step, row by row of the priority table in
 /// `docs/ux-step-flow.md` §1. Pure, `nonisolated`, no view, no disc, no job:
 /// since UI tests are forbidden in this project
 /// (`docs/ui-test-crash-prevention.md`), this function *is* the coverage for

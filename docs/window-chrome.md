@@ -120,7 +120,7 @@ Tooltips carry the shortcut, "History (⌘Y)" and "Settings (⌘,)", because a
   returns both, in order `[history, settings]`, for every `FlowStep` — a
   function that always answers the same is the point: the test pins that
   no step is allowed to drop one.
-- **Never disabled.** History is the only place the log lives now (#0061),
+- **Never disabled.** History is the only place the log lives now (#0142),
   and #0048's rule from the popover holds: never gated on `isConfigured`,
   because a user whose settings broke mid-session needs to see why their
   job failed. Settings is safe during a job: `DVDPipeline` captured its

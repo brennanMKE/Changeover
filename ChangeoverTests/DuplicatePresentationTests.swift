@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0062 — `DuplicatePresentation.notice`: everything the Confirm step's
+/// #0143 — `DuplicatePresentation.notice`: everything the Confirm step's
 /// "already in Plex" panel says. Pure, which is the only coverage it can have
 /// (UI tests are forbidden here, `docs/ui-test-crash-prevention.md`).
 struct DuplicatePresentationTests {

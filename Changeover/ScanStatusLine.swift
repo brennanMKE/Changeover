@@ -1,6 +1,6 @@
 import Foundation
 
-/// #0061 — the disc scan as one line (`docs/ux-step-flow.md` §2, step 2).
+/// #0142 — the disc scan as one line (`docs/ux-step-flow.md` §2, step 2).
 ///
 /// The scan is deliberately *not* a step of its own: it overlaps with the
 /// user searching TMDB, and blocking the window on it for tens of seconds

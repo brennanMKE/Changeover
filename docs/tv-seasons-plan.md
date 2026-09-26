@@ -5,7 +5,7 @@ now.** The user's direction was "we won't get into TV shows just yet, but we
 should plan for it", so this is the design to build against when the first
 TV disc goes into the drive, written while the movie-side decisions it
 depends on (#0025's Play All guard, #0031's destinations, #0034's disc
-identity, #0062's duplicate check, the step flow) are fresh.
+identity, #0143's duplicate check, the step flow) are fresh.
 
 Same rules as `docs/ux-step-flow.md` §5 and `docs/log-ui-and-duplicate-check.md`:
 `@Observable`, never `ObservableObject`; MainActor-by-default with
@@ -116,7 +116,7 @@ consequences the movie code never had to face:
   a wrong episode number does not overwrite *this* film — it overwrites
   *someone else's episode* (e09 filed as e08 replaces the real e08). That
   is why §4 refuses to guess when the count does not line up.
-- "Is it already in Plex?" (#0062) has a per-file answer, not a per-folder
+- "Is it already in Plex?" (#0143) has a per-file answer, not a per-folder
   one (§8).
 
 ### 1.2 The naming layer
@@ -368,7 +368,7 @@ the cluster from the first unused number after any assigned outlier.
   disc except the last, and the last disc of a 22-episode season at 8 per
   disc *is* 6.
 - **Season count unknown** (TMDB down): proposed with a warning, no upper
-  bound checked. Fail-soft, like #0062's unreachable library.
+  bound checked. Fail-soft, like #0143's unreachable library.
 - **Runtime mismatch on a row** (a 22-minute title proposed as an episode
   TMDB says is 44): a warning on that row, never a reorder. The warning is
   the one place TMDB runtimes are used.
@@ -502,7 +502,7 @@ Rule 2 outranks rule 5 on purpose.
 | The show and season, when continuing | The show and season, when not continuing (a search) |
 | The cluster, the outliers, the proposal, the warnings | Every episode number on the table; every outlier's fate |
 | The next episode number | — it is derived, but the table shows it and the user can change the start |
-| The per-episode library check | Replacing an episode that is already there (#0062's click, per disc) |
+| The per-episode library check | Replacing an episode that is already there (#0143's click, per disc) |
 | Recording what was filed | Nothing — the record follows the job's real result |
 | — | **Start.** Never automatic. Phase 3's unattended loop is a separate decision for a later day. |
 
@@ -752,7 +752,7 @@ still be in, exactly `retryDecision`'s rule.
 
 ## 7. Duplicate checking for episodes
 
-#0062 answers "is this film in Plex?" with a tag match over `Movies/`. The
+#0143 answers "is this film in Plex?" with a tag match over `Movies/`. The
 episode question is two listings deep and per file:
 
 ```swift
@@ -790,7 +790,7 @@ What it feeds:
   `ReplaceAcknowledgement` rule, widened).
 - **`StartGate`**: `.episodesAlreadyInPlex` until acknowledged; `.checking`
   → `.libraryCheckInProgress`; `.unreachable` → ready, with the neutral
-  notice and "Check again", as #0062 decided.
+  notice and "Check again", as #0143 decided.
 - **The next-episode seed when the record is missing** (fresh install, a
   season started with another tool): `nextEpisode = max(present) + 1`. The
   record and the library normally agree; when they do not, the Confirm
@@ -798,9 +798,9 @@ What it feeds:
   and the *library* wins the proposal — the files are the truth, the
   record is the hint. Decision for the user (§12).
 - **The pipeline's point-of-harm line**: `⚠︎ Replacing the existing copy at
-  …` per episode, unchanged from #0062.
+  …` per episode, unchanged from #0143.
 
-`Clips/` is not checked for skipped outliers, for the reason #0062 gave.
+`Clips/` is not checked for skipped outliers, for the reason #0143 gave.
 
 ---
 

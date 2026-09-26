@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0061 — the HandBrake progress parser behind the Ripping step's bar and
+/// #0142 — the HandBrake progress parser behind the Ripping step's bar and
 /// ETA (`docs/ux-step-flow.md` §3.1). Pure, `nonisolated`, driven off plain
 /// strings: no process, no disc, no view. Every line asserted here is a shape
 /// HandBrakeCLI actually prints — the live sample the orchestrator captured,

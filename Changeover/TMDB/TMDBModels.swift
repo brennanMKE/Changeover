@@ -53,7 +53,7 @@ nonisolated struct TMDBMovieDetails: Decodable, Equatable, Sendable {
     /// `0`, and "key absent" to the one "unknown" case callers need.
     var runtimeMinutes: Int? { runtime.flatMap { $0 > 0 ? $0 : nil } }
 
-    /// #0071 — who is in it and who directed it, via
+    /// #0150 — who is in it and who directed it, via
     /// `append_to_response=credits`, which rides on the request the runtime
     /// already costs rather than adding one.
     ///

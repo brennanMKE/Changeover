@@ -67,7 +67,7 @@ nonisolated enum MenuArchive {
         /// the thing a wrong identification gets wrong.
         var tmdbID: String
 
-        // MARK: - #0069: the rest of what a disc taught us
+        // MARK: - #0148: the rest of what a disc taught us
         //
         // The first version recorded only (label, chosen film). That answers
         // "did the label work?" and nothing else — so when a disc failed it
@@ -235,7 +235,7 @@ nonisolated enum MenuArchive {
         return trimmed.isEmpty || trimmed == "." || trimmed == ".." ? "disc" : trimmed
     }
 
-    // MARK: - #0069: the scan, which is half the fingerprint
+    // MARK: - #0148: the scan, which is half the fingerprint
 
     /// Write the disc's structure — every title's duration, chapter count,
     /// audio and subtitle streams — beside its menus.

@@ -24,7 +24,7 @@ struct WindowChromeTests {
     // MARK: - Which destinations, on which steps
 
     /// Both, in order, on every step — including mid-job, because History is
-    /// the only place the log lives (#0061). A step is never allowed to drop
+    /// the only place the log lives (#0142). A step is never allowed to drop
     /// one, which is exactly what this pins for a step added later.
     @Test func everyStepOffersHistoryThenSettings() {
         for step in Self.everyStep {

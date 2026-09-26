@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0061 — the Choose-movie step's one-line scan strip. Pure: one case per
+/// #0142 — the Choose-movie step's one-line scan strip. Pure: one case per
 /// `ScanState`, with no view and no disc.
 struct ScanStatusLineTests {
 

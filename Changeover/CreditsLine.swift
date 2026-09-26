@@ -2,7 +2,7 @@ import Foundation
 
 /// The one-line "who is in it" under a search result.
 ///
-/// #0071. The results list showed a poster and a title, and a poster
+/// #0150. The results list showed a poster and a title, and a poster
 /// thumbnail is frequently too small to recognise. Two films of the same name
 /// and nearly the same length cannot be told apart from a title at all — but
 /// "George Clooney" tells you instantly which *The American* is the one in

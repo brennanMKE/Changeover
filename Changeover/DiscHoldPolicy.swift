@@ -2,7 +2,7 @@ import Foundation
 
 /// When Changeover may refuse to let go of a disc, and when it must stop.
 ///
-/// #0073 — headless loading. A disc inserted while the Mac's screen is locked
+/// #0152 — headless loading. A disc inserted while the Mac's screen is locked
 /// is dissented at mount approval by `loginwindow` and ejected within half a
 /// second, so it never mounts and the app never sees it. Proven on joe
 /// 2026-09-25: a plain process registering `DADiskEjectApprovalCallback` and

@@ -1,6 +1,6 @@
 import Foundation
 
-/// #0061 — the one screen the rip window shows (`docs/ux-step-flow.md` §1).
+/// #0142 — the one screen the rip window shows (`docs/ux-step-flow.md` §1).
 ///
 /// **Derived, never stored.** `derive(_:)` is a pure function of state the
 /// app already holds (`JobController` + `RipFlowController`), so the step can

@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0061 — what the Ripping and Done steps show
+/// #0142 — what the Ripping and Done steps show
 /// (`docs/ux-step-flow.md` §3.3). Pure, driven off `JobSnapshot` with no view
 /// and no job: since UI tests are forbidden here, this is the coverage for
 /// two of the five screens.

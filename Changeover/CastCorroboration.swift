@@ -3,7 +3,7 @@ import Foundation
 /// Whether the names a disc printed on its menus appear in a candidate's
 /// billed cast.
 ///
-/// #0071. The trust gate (#0070) asks whether anything outside the search
+/// #0150. The trust gate (#0149) asks whether anything outside the search
 /// term agrees with it. For a disc whose label is useless — `WILLIS`,
 /// `BLUSBRO`, `DVD_VIDEO` — the answer was always "no", so those discs could
 /// never be auto-selected however obvious they were.

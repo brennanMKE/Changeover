@@ -4,7 +4,7 @@ import Foundation
 /// Refuses ejects of one disc, so a disc inserted into a locked Mac stays in
 /// the drive long enough to be worked on.
 ///
-/// #0073. Ejecting is a vote, not a command: `diskarbitrationd` polls every
+/// #0152. Ejecting is a vote, not a command: `diskarbitrationd` polls every
 /// process that registered `DADiskEjectApprovalCallback`, and one dissenter
 /// is enough to abandon it. That is the mechanism that has been refusing
 /// *this app's* ejects all along — `loginwindow` votes no while the screen is

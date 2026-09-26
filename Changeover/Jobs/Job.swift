@@ -51,7 +51,7 @@ final class Job {
     let request: RipRequest?
 
     private(set) var state: JobState = .initial
-    /// #0061 — the most recent HandBrake progress line for this job, tagged
+    /// #0142 — the most recent HandBrake progress line for this job, tagged
     /// with which encode it belongs to (`JobProgress`). Cleared by every
     /// successful `advance(to:)` below, so the `organizing` bar never shows
     /// the feature encode's last 100 %.
@@ -142,7 +142,7 @@ final class Job {
         return true
     }
 
-    /// #0061 — records one parsed HandBrake progress line. Dropped once the
+    /// #0142 — records one parsed HandBrake progress line. Dropped once the
     /// job is terminal, mirroring `advance(to:)`'s stance: a report that
     /// arrives after the job settled (HandBrake's pipe drains
     /// asynchronously) must not repaint a finished job as if it were still
@@ -219,7 +219,7 @@ nonisolated struct JobSnapshot: Codable, Sendable, Equatable {
     let outcome: JobOutcome?
     let startDate: Date
     let endDate: Date?
-    /// #0061 — the job's latest HandBrake progress report, or `nil` when
+    /// #0142 — the job's latest HandBrake progress report, or `nil` when
     /// none has arrived (or the phase edge since cleared it). Additive and
     /// optional on purpose: a payload encoded before this field decodes to
     /// `nil` rather than failing, and the memberwise initializer's default

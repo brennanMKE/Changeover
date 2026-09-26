@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0071 — "the poster is too small to see detail… listing the lead actors
+/// #0150 — "the poster is too small to see detail… listing the lead actors
 /// and director would make The American with George Clooney the obvious
 /// choice."
 @Suite struct CreditsLineTests {

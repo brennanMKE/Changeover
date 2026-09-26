@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Changeover
 
-/// #0062 — `LogRows.build`: which rows the History window draws, and what the
+/// #0143 — `LogRows.build`: which rows the History window draws, and what the
 /// folds say. Pure: no `JobLog` instance, no SwiftUI.
 struct LogRowsTests {
 

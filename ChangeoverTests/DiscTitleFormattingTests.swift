@@ -256,7 +256,7 @@ struct DiscTitleFormattingTests {
         #expect(DiscTitleFormatting.subtitleSummary(count: 0) == "0 subtitle tracks, none carried into the output")
     }
 
-    // MARK: - runtimeCaption (#0061 — moved off the retired MetadataEntryView)
+    // MARK: - runtimeCaption (#0142 — moved off the retired MetadataEntryView)
 
     @Test func noRuntimeCaptionBeforeAMovieIsChosen() {
         #expect(DiscTitleFormatting.runtimeCaption(.idle) == nil)
@@ -289,7 +289,7 @@ struct DiscTitleFormattingTests {
         )
     }
 
-    // MARK: - scanFailureMessage (#0061 — moved off DiscTitleListView)
+    // MARK: - scanFailureMessage (#0142 — moved off DiscTitleListView)
 
     @Test func everyScanFailureHasItsOwnSentence() {
         let failures: [DiscScanner.Failure] = [

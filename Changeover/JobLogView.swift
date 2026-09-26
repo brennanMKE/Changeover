@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// #0062 — one job's log, filtered and folded.
+/// #0143 — one job's log, filtered and folded.
 ///
 /// The old view painted every row of `JobLog.displayLines` in one of two
 /// tones, so 23 lines of `x265 [info]:` build settings and

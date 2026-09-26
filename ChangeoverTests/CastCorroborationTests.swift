@@ -1,9 +1,9 @@
 import Testing
 @testable import Changeover
 
-/// #0071 — the signal that rescues a disc whose label says nothing.
+/// #0150 — the signal that rescues a disc whose label says nothing.
 ///
-/// The trust gate (#0070) asks whether anything outside the search term
+/// The trust gate (#0149) asks whether anything outside the search term
 /// agrees with it. For `WILLIS`, `BLUSBRO` and `DVD_VIDEO` the answer was
 /// always no, so those discs could never be auto-selected however obvious
 /// they were. But menus print cast, and a billed name appearing there is the

@@ -481,7 +481,7 @@ struct DiscTitleHeuristicTests {
     }
 }
 
-// MARK: - #0065: the scanner's answer is not taken on trust
+// MARK: - #0144: the scanner's answer is not taken on trust
 
 @Suite struct ScannerAnswerSanityTests {
 
@@ -548,7 +548,7 @@ struct DiscTitleHeuristicTests {
     }
 }
 
-// MARK: - #0066: flipper discs (widescreen beside 4:3)
+// MARK: - #0145: flipper discs (widescreen beside 4:3)
 
 @Suite struct WidescreenPreferenceTests {
 

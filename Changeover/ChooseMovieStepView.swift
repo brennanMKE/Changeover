@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// #0061 — step 2: which movie is this disc? Search and results, plus the
+/// #0142 — step 2: which movie is this disc? Search and results, plus the
 /// scan's status as a single line.
 ///
 /// The scan is not a step of its own on purpose: it overlaps with searching,

@@ -79,7 +79,7 @@ final class JobController {
         /// `.organizing`/`.extras` — validated by `Job.advance(to:)` before
         /// ever touching this job's `state`.
         let phase: @MainActor (JobPhase) -> Void
-        /// #0061 — one parsed HandBrake progress line, tagged by
+        /// #0142 — one parsed HandBrake progress line, tagged by
         /// `DVDPipeline` with which encode of this job it belongs to. Bound
         /// by `start` to this job's own `Job.reportProgress(_:)`, the same
         /// job-bound shape as `log`/`phase`, so a late report can never land
@@ -235,7 +235,7 @@ final class JobController {
     /// `DVDMonitor.onDVDRemoved` fires.
     var insertedDisc: DiscInsertion?
 
-    /// #0073 — the eject veto for an unmounted disc, when one is held.
+    /// #0152 — the eject veto for an unmounted disc, when one is held.
     ///
     /// `nil` for every mounted disc, which is almost all of them. Held only
     /// while there is a reason, and released by `releaseDiscHold()` from the
@@ -753,7 +753,7 @@ final class JobController {
             upgrade: request.upgrade,
             log: { [job] line in job.log.append(line) },
             phase: { [job] phase in job.advance(to: phase) },
-            // #0061: bound to this job the same way, so a progress line that
+            // #0142: bound to this job the same way, so a progress line that
             // drains out of HandBrake's pipe after the job settled lands on
             // the job it belongs to, which drops it (`Job.reportProgress`).
             progress: { [job] progress in job.reportProgress(progress) },
@@ -883,7 +883,7 @@ final class JobController {
         // just how Swift extracts it, not a second decision.
         guard let disc = insertedDisc else { return false }
 
-        // #0073 — let go before asking the drive to let go.
+        // #0152 — let go before asking the drive to let go.
         //
         // The app votes against ejects of a disc it is holding, and
         // DiskArbitration does not exempt the holder: an eject attempted
@@ -1052,7 +1052,7 @@ final class JobController {
         startScan(settings: settings)
     }
 
-    /// #0073 — keep an unmounted disc in the drive long enough to work on it.
+    /// #0152 — keep an unmounted disc in the drive long enough to work on it.
     ///
     /// Only for a disc with no volume, which means it was inserted while the
     /// Mac's screen was locked: `loginwindow` dissented its mount approval
@@ -1287,7 +1287,7 @@ final class JobController {
         switch outcome {
         case .success(let result):
             scanState = .scanned(result)
-            // #0073 — an unmounted disc has no volume name, so until the scan
+            // #0152 — an unmounted disc has no volume name, so until the scan
             // ran it had no usable name at all. libdvdnav reported one; adopt
             // it, because every identification path downstream reads
             // `disc.label` and "rdisk4" is not a film.
@@ -1377,7 +1377,7 @@ final class JobController {
     /// Applies a finished menu read — but only for the disc and the scan
     /// generation it was started for, so a caption can never cross discs.
     ///
-    /// #0073 — matched on `insertionID`, not on the whole value. An unmounted
+    /// #0152 — matched on `insertionID`, not on the whole value. An unmounted
     /// disc learns its label from the scan *after* the read was started, and
     /// filling that field changes the struct: a whole-value comparison then
     /// discards the menu result as belonging to a different disc, `menuState`

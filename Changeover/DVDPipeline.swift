@@ -102,7 +102,7 @@ struct DVDPipeline {
     /// `JobOutcome` this method returns, through `JobState.finishing(with:)`.
     var reportPhase: @MainActor (JobPhase) -> Void = { _ in }
 
-    /// #0061 — reports one parsed HandBrake progress line, tagged with which
+    /// #0142 — reports one parsed HandBrake progress line, tagged with which
     /// encode of this job it belongs to. This type is the only thing that
     /// knows whether a given `HandBrakeCLI` is the feature, the fallback's
     /// second pass, or extra *i* of *n* — `task 1 of 1` says nothing about
@@ -136,7 +136,7 @@ struct DVDPipeline {
     /// counted as a disc read failure.
     var discRemoved: @MainActor () -> Bool = { false }
 
-    /// #0061 — the closure handed to one `EncodeController.encode` call,
+    /// #0142 — the closure handed to one `EncodeController.encode` call,
     /// tagging everything it parses as `unit`. Reads `reportProgress` into a
     /// local first so the returned closure captures the closure value rather
     /// than `self` (a struct that also carries `AppSettings`).

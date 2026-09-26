@@ -18,7 +18,7 @@ nonisolated enum WindowChrome {
 
     /// A window the rip window can send the user to. Neither is modal and
     /// neither is ever disabled — History is the only place the log lives
-    /// (#0061), and #0048's rule holds: a user whose settings broke
+    /// (#0142), and #0048's rule holds: a user whose settings broke
     /// mid-session still needs to see why their job failed.
     nonisolated enum Destination: String, CaseIterable, Equatable, Sendable, Codable {
         case history

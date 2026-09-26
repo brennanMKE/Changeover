@@ -1,7 +1,7 @@
 import Testing
 @testable import Changeover
 
-/// #0067 — reported 2026-09-24: "There are checkboxes on the right but those
+/// #0146 — reported 2026-09-24: "There are checkboxes on the right but those
 /// seem to do nothing. But I can tap to select the row."
 @Suite struct TitleRowControlsTests {
 

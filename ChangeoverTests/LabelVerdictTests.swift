@@ -1,7 +1,7 @@
 import Testing
 @testable import Changeover
 
-/// #0072 — "silence is not agreement".
+/// #0151 — "silence is not agreement".
 ///
 /// `answerFitsLabel` answers a veto question: is there grounds to reject?
 /// Both "the label agrees" and "the label cannot judge" answer no, and

@@ -41,7 +41,7 @@ nonisolated enum MovieAutoSelect {
     /// How much the search term itself can be trusted, which is a different
     /// question from how well a candidate matches it.
     ///
-    /// #0070. The Secret Life of Walter Mitty, 2026-09-24, failed twice and
+    /// #0149. The Secret Life of Walter Mitty, 2026-09-24, failed twice and
     /// only the first failure was about matching. The disc's menus printed no
     /// title, the model invented "The Caretaker" from OCR noise, and TMDB
     /// really does list a 2026 film of that name running 114 minutes —
@@ -94,7 +94,7 @@ nonisolated enum MovieAutoSelect {
     ///   - searchTerm: what was searched, for the exact-title rule.
     /// - Parameter trust: whether anything outside the search term itself
     ///   corroborates it. Defaulted to `.labelBacked` so every call site and
-    ///   test that predates #0070 behaves exactly as before.
+    ///   test that predates #0149 behaves exactly as before.
     static func decide(
         candidates: [Candidate],
         discDurationSeconds: Int?,

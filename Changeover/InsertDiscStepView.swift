@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// #0061 — step 1. Nothing to decide yet: say what to do, and (only when the
+/// #0142 — step 1. Nothing to decide yet: say what to do, and (only when the
 /// drive is in a state the user has to clear) offer the one action that
 /// clears it.
 ///

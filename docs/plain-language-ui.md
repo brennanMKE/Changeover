@@ -56,7 +56,7 @@ This disc does not tag its audio languages, so only the first track starts selec
 
 Every one of those sentences is precise, honest and was written to answer a
 specific past failure (#0025, #0032, #0038, #0039, #0053, #0056, #0059,
-#0062, menu-intelligence §7.3). Not one of them is badly written. The
+#0143, menu-intelligence §7.3). Not one of them is badly written. The
 problem is that **precision is the default** when it should be **available
 on request**.
 

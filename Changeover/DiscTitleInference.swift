@@ -247,7 +247,7 @@ nonisolated enum DiscTitleInference {
 
     /// What the disc label has to say about a proposed title.
     ///
-    /// #0072. `answerFitsLabel` collapses two different answers into `true`:
+    /// #0151. `answerFitsLabel` collapses two different answers into `true`:
     /// "the label agrees" and "the label has no standing to judge". That is
     /// correct for a *veto* — neither is grounds to reject — but wrong for
     /// deciding whether to act on the answer without asking anyone.
