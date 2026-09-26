@@ -7,6 +7,16 @@
     <language>en</language>
     <!-- ITEMS: scripts/update-website.sh adds each release here, newest first. Don't edit by hand. -->
     <item>
+      <title>0.1.2</title>
+      <pubDate>Sat, 26 Sep 2026 05:38:36 +0000</pubDate>
+      <sparkle:version>20260926053711</sparkle:version>
+      <sparkle:shortVersionString>0.1.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>26.2</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://changeover.sstools.co/changelog.html#v0-1-2</sparkle:releaseNotesLink>
+      <description><![CDATA[<p>The evidence stays on screen, and the notification stops guessing.</p><ul><li><b>How a film was identified now stays visible while it rips.</b> Reading the menus, interpreting the disc's label and matching against TMDB all happen before the encode starts, and used to leave the screen the moment it did. The Ripping step now shows that story the whole way through — which is the only way to notice a wrong film before forty minutes of encoding files it under the wrong name.</li><li><b>Fixed:</b> the success notification said "The disc has been ejected" after every finished rip, whether or not it had. It had no way to know. It now says what actually happened, and says nothing about the disc when the answer is not known.</li></ul>]]></description>
+      <enclosure url="https://changeover.sstools.co/downloads/Changeover-0.1.2.dmg" length="3811114" type="application/octet-stream" sparkle:edSignature="iP9V3lLxLv8yoZz9hJd5UTUWQIrGKIvJoooBs3ypIy52OQYVmw2qjoKRFpO8h+O7vWNIvo4NRAjaRphfBehnBw=="/>
+    </item>
+    <item>
       <title>0.1.1</title>
       <pubDate>Sat, 26 Sep 2026 04:52:42 +0000</pubDate>
       <sparkle:version>20260926045105</sparkle:version>
