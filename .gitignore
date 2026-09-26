@@ -7,3 +7,12 @@ dist/
 
 # Release DMGs live on GitHub releases and, once deployed, on the web host; never in git.
 website/downloads/*.dmg
+
+# Local environment and agent state
+.env
+.claude/
+.opencode/
+
+# Scratch: screenshots and disc menu captures taken while debugging
+Changeover-problem.png
+menu-pictures/
