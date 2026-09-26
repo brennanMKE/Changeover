@@ -168,15 +168,37 @@ private struct JobDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // A running job's elapsed time and ETA have to tick; a finished
-            // one is re-rendered once and never again.
-            if job.state.phase.isTerminal {
-                card(now: Date())
-            } else {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    card(now: context.date)
+            // The card scrolls, and that is the whole fix.
+            //
+            // It used to sit directly in this VStack. A summary card is not a
+            // fixed height — a job carrying a long warning ("Kept from an
+            // earlier job: …") is several lines taller than one that succeeded
+            // quietly — so on a short window the stack overflowed, SwiftUI
+            // centred it, and the card was clipped at *both* ends with no way
+            // to reach either. Reported from joe 2026-09-25: the top of the
+            // History window cut off and unscrollable.
+            //
+            // `maxHeight` keeps it from eating the log pane on a tall window;
+            // the ScrollView means anything past that is reachable rather
+            // than lost. A card shorter than the cap simply does not scroll.
+            ScrollView(.vertical) {
+                // A running job's elapsed time and ETA have to tick; a
+                // finished one is re-rendered once and never again.
+                if job.state.phase.isTerminal {
+                    card(now: Date())
+                } else {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        card(now: context.date)
+                    }
                 }
             }
+            // A ScrollView takes every point it is offered, so the cap is
+            // what stops it from squeezing the log pane on a tall window. A
+            // card shorter than 340 leaves some space inside its own scroll
+            // area rather than shrinking to fit — worth it, because the
+            // alternative is measuring the content to size the container,
+            // and that reintroduces exactly the fragility that clipped it.
+            .frame(maxHeight: 340)
 
             Divider()
 
