@@ -128,6 +128,17 @@ fi
 print "==> Verifying app signature"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
+# The marketing version, read before anything needs it — the consistency check
+# below uses it, and it used to be read thirty lines further down, in the DMG
+# section. That ordering made the check I added unrunnable: "MARKETING_VERSION:
+# parameter not set", after a full archive and notarization had already been
+# paid for.
+MARKETING_VERSION="$(awk -F= '/^MARKETING_VERSION/ { gsub(/ /, "", $2); print $2 }' "$REPO_ROOT/Config/App.xcconfig")"
+if [[ -z "$MARKETING_VERSION" ]]; then
+    print -u2 "error: no MARKETING_VERSION in Config/App.xcconfig"
+    exit 1
+fi
+
 # Confirm the archive honored the injected build number before packaging.
 # If CURRENT_PROJECT_VERSION didn't take, every DMG would carry the same
 # CFBundleVersion and you'd have no way to tell two images apart.
@@ -175,12 +186,6 @@ GIT_SHA="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || print unkno
 #
 # Read from Config/App.xcconfig, which is the single source of truth — the
 # version consistency check below then proves the built bundle agrees with it.
-MARKETING_VERSION="$(awk -F= '/^MARKETING_VERSION/ { gsub(/ /, "", $2); print $2 }' "$REPO_ROOT/Config/App.xcconfig")"
-if [[ -z "$MARKETING_VERSION" ]]; then
-    print -u2 "error: no MARKETING_VERSION in Config/App.xcconfig"
-    exit 1
-fi
-
 # Build/sign/notarize/staple against a fixed-name DMG that matches the volume
 # name, then rename to the version-tagged name once stapling completes. When the
 # DMG filename and volume name differ, macOS can silently rename the file during
