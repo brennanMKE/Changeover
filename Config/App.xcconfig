@@ -1,0 +1,37 @@
+// The single source of truth for Changeover's version and its Sparkle settings.
+//
+// Don't set MARKETING_VERSION or CURRENT_PROJECT_VERSION in the project file:
+// the release scripts read MARKETING_VERSION from *this* file, and a second
+// copy in the pbxproj is how a DMG ends up named for one version while the
+// bundle inside it reports another. `scripts/preflight.sh` fails on that.
+//
+// MARKETING_VERSION is what people see (X.Y.Z). CURRENT_PROJECT_VERSION is
+// overridden at release time with the UTC build date and time (release.sh), so
+// every release build sorts newer than the last — which is the number Sparkle
+// actually compares.
+
+MARKETING_VERSION = 1.0.0
+CURRENT_PROJECT_VERSION = 1
+
+// Sparkle updates.
+//
+// `//` starts a comment in an xcconfig file, so a bare https:// URL would be
+// truncated at the first slash pair. Hence the HTTPS variable — this is not
+// decoration, and removing it silently empties the feed URL.
+HTTPS = https:/
+SU_FEED_URL =
+SU_FEED_URL[config=Release] = $(HTTPS)/changeover.sstools.co/appcast.xml
+
+// Public half of the EdDSA signing key. The private half lives in the login
+// keychain and is never in this repo — see docs/releasing.md for the one
+// command that creates it.
+//
+// Empty until that key exists. Sparkle refuses to apply an update it cannot
+// verify, so an empty key means updates simply never install, which is the
+// correct failure: an unsigned update channel is worse than no update channel.
+SU_PUBLIC_ED_KEY =
+
+// Only Release builds carry a feed URL, so a Debug build never tries to update
+// itself out from under a developer.
+
+#include? "../Changeover/Secrets.xcconfig"

@@ -104,6 +104,17 @@ struct StatusMenuView: View {
             Divider()
                 .padding(.vertical, 4)
 
+            // Hidden rather than disabled when this build has no update feed
+            // — a Debug build, or a Release one whose signing key has not been
+            // generated yet. A menu item that does nothing is worse than no
+            // menu item (see TitleRowControls for the same rule applied to the
+            // title table's dead checkbox).
+            if UpdateController.shared.isConfigured {
+                MenuRow("Check for Updates…", systemImage: "arrow.down.circle") {
+                    UpdateController.shared.checkForUpdates()
+                }
+            }
+
             MenuRow("Quit Changeover", systemImage: "power") {
                 NSApp.terminate(nil)
             }

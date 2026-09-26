@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>SUFeedURL</key>
+	<string>$(SU_FEED_URL)</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SU_PUBLIC_ED_KEY)</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>Changeover needs to use the DVD drive so it can eject a disc for you when it has finished copying it.</string>
 	<key>NSLocalNetworkUsageDescription</key>

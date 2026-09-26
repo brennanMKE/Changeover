@@ -17,7 +17,6 @@ struct DependencyPanelView: View {
     let makemkvconState: ToolState?
     let lsdvdInstalled: Bool
 
-    @State private var screenLockPolicy: ScreenLockDiskPolicy.State?
     @State private var menudumpState: ToolState?
     @State private var ffmpegState: ToolState?
     @State private var dependencies: MenuDependencies?
@@ -30,8 +29,7 @@ struct DependencyPanelView: View {
             menudump: menudumpState,
             ffmpeg: ffmpegState,
             lsdvdInstalled: lsdvdInstalled,
-            dependencies: dependencies,
-            screenLockPolicy: screenLockPolicy
+            dependencies: dependencies
         )
     }
 
@@ -76,12 +74,6 @@ struct DependencyPanelView: View {
             let path = settings.resolvedMenudumpPath
             menudumpState = Preflight.optionalToolState(path: path)
             dependencies = await MenuHelper.check(path: path)
-        }
-        // A file read, not a process, and the answer can change while the
-        // panel is open — somebody reading this row is quite likely to go and
-        // run the command it shows.
-        .task {
-            screenLockPolicy = ScreenLockDiskPolicy.read()
         }
         .task(id: settings.ffmpegPath) {
             try? await Task.sleep(nanoseconds: 400_000_000)

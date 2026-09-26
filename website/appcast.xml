@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Changeover</title>
+    <link>https://changeover.sstools.co/</link>
+    <description>Updates for Changeover, a Mac app that rips DVDs into a Plex library.</description>
+    <language>en</language>
+    <!-- ITEMS: scripts/update-website.sh adds each release here, newest first. Don't edit by hand. -->
+  </channel>
+</rss>

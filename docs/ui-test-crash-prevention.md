@@ -123,8 +123,15 @@ verification value.
 
 ## Batty side
 
+The system log shows how Batty was pulled in. The `ChangeoverUITests` runner set
+itself up as an Accessibility client, then asked for an XCTAutomationSupport
+endpoint in Batty's process. Batty had just become the frontmost app. Less than
+two seconds later, Batty logged a `com.apple.dt.xctest` run-loop-idle request,
+and it crashed two seconds after that. About 38 terminal sessions were live at
+the time.
+
 Batty should also survive an external automation session, since no app should
-die because another project's tests started. That fix is tracked as an issue in
-the Batty repo (`/Users/brennan/Developer/brennanMKE/Batty/issues/`). The rules
+die because another project's tests started. That fix is tracked as Batty issue
+**#0409** (`/Users/brennan/Developer/brennanMKE/Batty/issues/0409.md`). The rules
 above don't depend on it. Until Batty is fixed, and after, Changeover must not
 start UI tests on the user's working Mac without asking.

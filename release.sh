@@ -148,12 +148,30 @@ APP_ICON="$APP_PATH/Contents/Resources/AppIcon.icns"
 
 GIT_SHA="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || print unknown)"
 
+# Named for the marketing version, not the git sha.
+#
+# The sha was fine while the only consumer was "copy it to the Plex host", but
+# a published release is referenced by a URL that has to stay put:
+# scripts/appcast-item.sh writes
+# https://changeover.sstools.co/downloads/Changeover-X.Y.Z.dmg into the Sparkle
+# enclosure, publish-release.sh attaches the same filename to the GitHub
+# release, and whoever deploys the site copies it between the two. A name that
+# changes with every commit cannot be any of those.
+#
+# Read from Config/App.xcconfig, which is the single source of truth — the
+# version consistency check below then proves the built bundle agrees with it.
+MARKETING_VERSION="$(awk -F= '/^MARKETING_VERSION/ { gsub(/ /, "", $2); print $2 }' "$REPO_ROOT/Config/App.xcconfig")"
+if [[ -z "$MARKETING_VERSION" ]]; then
+    print -u2 "error: no MARKETING_VERSION in Config/App.xcconfig"
+    exit 1
+fi
+
 # Build/sign/notarize/staple against a fixed-name DMG that matches the volume
-# name, then rename to the sha-tagged name once stapling completes. When the
+# name, then rename to the version-tagged name once stapling completes. When the
 # DMG filename and volume name differ, macOS can silently rename the file during
 # the notarytool roundtrip, breaking the next step.
 WORK_DMG="$DIST_DIR/$APP_NAME.dmg"
-DMG_PATH="$DIST_DIR/$APP_NAME-$GIT_SHA.dmg"
+DMG_PATH="$DIST_DIR/$APP_NAME-$MARKETING_VERSION.dmg"
 
 # Stage the app next to an /Applications symlink so the mounted DMG shows a
 # drag target. hdiutil (built in — no Homebrew dependency) packs the folder
@@ -198,8 +216,15 @@ else
     print "==> Skipping notarization (signed-only DMG)"
 fi
 
-print "==> Tagging final artifact with git sha"
+print "==> Naming the final artifact $APP_NAME-$MARKETING_VERSION.dmg"
 mv "$WORK_DMG" "$DMG_PATH"
+
+# A checksum beside it, so a download can be verified and so
+# scripts/publish-release.sh can re-check the file it is about to attach is the
+# one that was notarized. Written with a bare filename so `shasum -c` works from
+# inside dist/ without a path.
+print "==> Writing the SHA-256"
+(cd "$DIST_DIR" && shasum -a 256 "${DMG_PATH:t}" > "${DMG_PATH:t}.sha256")
 
 # Optionally set the DMG file's Finder icon to the app icon. fileicon writes
 # only to extended attributes, leaving the data fork (and thus the codesign +

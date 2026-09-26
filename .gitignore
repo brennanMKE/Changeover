@@ -4,3 +4,6 @@ xcuserdata/
 Secrets.xcconfig
 build/
 dist/
+
+# Release DMGs live on GitHub releases and, once deployed, on the web host; never in git.
+website/downloads/*.dmg
