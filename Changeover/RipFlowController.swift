@@ -68,6 +68,13 @@ final class RipFlowController {
         libraryCheck = value
     }
 
+    /// Set the eject explanation directly. Tests and the screenshot harness
+    /// only — the production path is `evaluateAutoEject`, which needs the whole
+    /// autoselect chain to have run first.
+    func setUnexplainedEjectionForTesting(_ value: EjectExplanation?) {
+        unexplainedEjection = value
+    }
+
     var libraryCheckForThisEdition: LibraryCheck {
         guard case .done(let tmdbID, .present(let entries)) = libraryCheck else { return libraryCheck }
         let wanted = MovieMetadata.normalizedEdition(edition)
