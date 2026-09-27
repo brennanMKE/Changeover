@@ -62,7 +62,11 @@ struct RippingStepView: View {
     private func identificationPanel(job: Job) -> some View {
         if !job.identification.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Label("How this was identified", systemImage: "sparkles")
+                // #0154 — the heading depends on who actually chose the film.
+                // "How this was identified" is a false claim when the user
+                // overrode a failed automatic attempt.
+                Label(IdentificationSummary.heading(for: job.identification),
+                      systemImage: "sparkles")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.accentColor)
 

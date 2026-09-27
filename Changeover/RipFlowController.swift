@@ -203,7 +203,20 @@ final class RipFlowController {
     /// Picking a *different* movie drops a previous confirmation: the
     /// Confirm step is about one movie, and the disc title, tracks and
     /// runtime acknowledgement on it were all judged against that one.
-    func select(movieID: Int?, jobs: JobController, apiKey: String) {
+    /// #0154 — who picked the film. The evidence panel is a record of the
+    /// app's reasoning, and it must not present the app's guess as the reason
+    /// when the user overrode it.
+    ///
+    /// Defaults to `.user` because that is what a bare `select` means
+    /// everywhere except the one automatic caller below: a test driving this
+    /// directly is standing in for a person clicking a row.
+    nonisolated enum SelectionOrigin: Equatable, Sendable {
+        case user
+        case automatic
+    }
+
+    func select(movieID: Int?, jobs: JobController, apiKey: String,
+                origin: SelectionOrigin = .user) {
         if movieID != selectedMovieID {
             movieConfirmed = false
             // #0143: a different film is a different library question. The
@@ -220,6 +233,22 @@ final class RipFlowController {
         selectedMovieID = movieID
         search.select(movieID: movieID, apiKey: apiKey)
         selectionDisc = movieID != nil ? jobs.insertedDisc : nil
+
+        // #0154: say who decided. `search.select` has just resolved
+        // `selectedMovie` from the results, so the title is available here.
+        switch origin {
+        case .automatic:
+            // The app decided after all, so there is no user choice to show.
+            jobs.noteManualSelection(nil)
+        case .user:
+            guard let movie = search.selectedMovie else {
+                jobs.noteManualSelection(nil)
+                return
+            }
+            jobs.noteManualSelection(IdentificationSummary.userChoiceLine(
+                movie: "\(movie.title) (\(movie.yearText))",
+                query: search.query))
+        }
     }
 
     /// The Continue button (and Return) on the Choose-movie step. A no-op
@@ -792,7 +821,7 @@ final class RipFlowController {
             FlowDiagnostics.note("autoselect order: wanted=" + order.map(String.init).joined(separator: ",") + " got=" + self.search.results.map { String($0.id) }.joined(separator: ","))
 
             guard let id = decision.selectedID else { return }
-            self.select(movieID: id, jobs: jobs, apiKey: apiKey)
+            self.select(movieID: id, jobs: jobs, apiKey: apiKey, origin: .automatic)
             // Choosing the film is the event automatic ripping waits for, and
             // nothing else re-evaluates on it — the view's onChange handlers
             // watch the disc, the job, the menus and the title, all of which

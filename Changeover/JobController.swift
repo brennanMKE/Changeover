@@ -724,11 +724,20 @@ final class JobController {
         // chosen wrongly. Copied rather than moved: `controllerLog` is reset
         // below either way, and a copy keeps the job's log self-contained for
         // History long after the gap it came from is gone.
-        for line in identificationNarration {
+        //
+        // #0154: the user's own choice goes last, if they made one. Without it
+        // the panel showed only the machine's attempt — typically ending on
+        // "Not choosing for you — …. Pick one below." — under a heading
+        // claiming to explain the film that was actually being ripped.
+        var story = identificationNarration
+        if let manualSelectionNote {
+            story.append(manualSelectionNote)
+        }
+        for line in story {
             job.log.append(line)
         }
         // …and kept addressable, so the Ripping step can show exactly these.
-        job.recordIdentification(identificationNarration)
+        job.recordIdentification(story)
 
         current = job
         // #0042 review: the between-job lines belong to the gap before this
@@ -1045,6 +1054,7 @@ final class JobController {
     /// `applyingSuggestedRoles` existed but nothing ever called them.
     func insertDisc(_ disc: DiscInsertion, settings: AppSettings) {
         identificationNarration = []
+        manualSelectionNote = nil
         isEjecting = false
         discUnavailable = false
         insertedDisc = disc
@@ -1551,6 +1561,21 @@ final class JobController {
     /// film was chosen. This writes to the log only.
     func logEvent(_ line: String) {
         append(line)
+    }
+
+    /// #0154 — the user's own choice of film, if they made one, as a single
+    /// line appended to the identification story at job start.
+    ///
+    /// Held here rather than pushed through `note` for each click: a user
+    /// trying three rows before settling would otherwise leave three
+    /// contradictory lines in the panel. One slot, overwritten, always last.
+    private(set) var manualSelectionNote: String?
+
+    /// Records (or with `nil` clears) the user's own choice. Cleared by an
+    /// automatic selection too — if the app went on to decide for itself, the
+    /// user did not choose.
+    func noteManualSelection(_ line: String?) {
+        manualSelectionNote = line
     }
 
     /// The identification lines logged since the last disc was inserted.
