@@ -81,6 +81,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // that keeps its glyph in sync with `jobs.isRunning`.
         observeRunningState()
 
+        // #0110: Sparkle must not replace the app bundle while a rip is
+        // running — the relaunch would kill HandBrake and abandon the encode.
+        // Wired here rather than inside UpdateController so the dependency
+        // runs one way: AppDelegate owns `jobs`, the updater only asks.
+        UpdateController.shared.setJobActivityCheck { [weak self] in
+            self?.jobs.isRunning ?? false
+        }
+
         // #0006: so a finished job is announced even when the window is
         // closed. Requested at launch, not lazily at job completion — see
         // `JobNotifier.requestAuthorizationIfNeeded`'s header for why.
