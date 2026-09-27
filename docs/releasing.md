@@ -94,6 +94,77 @@ git add website && git commit -m "Release X.Y.Z"
 Then whoever owns deployment publishes `website/` and copies the DMG from the
 GitHub release into `website/downloads/`. See `website/README.md`.
 
+## Why the app is notarized separately from the DMG
+
+`release.sh` makes **two** notarization round trips: the app first, then the DMG
+built from it. That roughly doubles the wall-clock time of a release, so it is
+worth recording why.
+
+### How it worked through 0.1.2
+
+One round trip, on the finished DMG only:
+
+```
+codesign app → build DMG → codesign DMG → notarytool submit DMG → stapler staple DMG
+```
+
+That is enough for the *download* to be clean. The image carries a stapled
+ticket, and on the artifact a stranger actually gets:
+
+```
+$ xcrun stapler validate Changeover-0.1.2.dmg
+The validate action worked!
+$ spctl -a -t open --context context:primary-signature -vv Changeover-0.1.2.dmg
+accepted
+source=Notarized Developer ID
+```
+
+But the app *inside* it had no ticket of its own:
+
+```
+$ xcrun stapler validate /Volumes/Changeover/Changeover.app
+Changeover.app does not have a ticket stapled to it.
+```
+
+The app was genuinely notarized — Apple's records cover the contents of a
+notarized DMG, which is why `spctl` accepts the app too — but "notarized" and
+"able to prove it without a network" are not the same thing. With no stapled
+ticket, the first launch out of `/Applications` has to reach Apple. On a Mac that
+is offline, behind a captive portal, or firewalled outbound, that lookup can fail
+and the user is told the app is damaged or from an unidentified developer. A
+headless Plex host is a plausible example of all three, which is exactly the
+machine this app is built for.
+
+### What it does now
+
+```
+codesign app → notarytool submit app.zip → stapler staple app
+             → build DMG → codesign DMG → notarytool submit DMG → stapler staple DMG
+```
+
+Three things make this work, and the script checks the third rather than
+assuming it:
+
+- **The app's staple has to come before the DMG is built.** The copy inside a
+  read-only UDZO image cannot be modified afterwards.
+- **notarytool will not accept a bundle**, so the app is submitted inside a zip
+  made with `ditto -c -k --keepParent`. Plain `zip` flattens the symlinks inside
+  `Sparkle.framework`.
+- **Stapling does not invalidate the signature.** The ticket is written to
+  `Contents/CodeResources`, which is *not* part of the sealed resources — the
+  signature's own manifest is `Contents/_CodeSignature/CodeResources`, a
+  different file. So `codesign --verify --deep --strict` still passes and the
+  Designated Requirement is still satisfied. `release.sh` re-runs that
+  verification after stapling, because this is the one assumption the whole
+  reordering rests on.
+
+### What is still owed
+
+`stapler validate` proves a ticket is *present*. It does not prove the launch,
+and `spctl` has no flag that forbids the network, so nothing in the script can
+demonstrate the offline case. The end-to-end check — install on a clean Mac, pull
+the network, launch — is [#0103](../issues/0103.md), still unrun.
+
 ## Why the version lives in one file
 
 `Config/App.xcconfig` is the single source. Nothing sets `MARKETING_VERSION` in

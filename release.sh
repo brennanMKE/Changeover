@@ -2,13 +2,17 @@
 # Build, sign, (optionally notarize,) and package Changeover.app into a DMG you
 # copy to another Mac to install.
 #
-# Produces dist/Changeover-<sha>.dmg with a drag-to-Applications layout, signed
-# with Developer ID. If a notarytool credential is configured it also notarizes
-# + staples (Gatekeeper-clean, no xattr needed); otherwise it ships a signed-only
-# DMG that runs after one `xattr -cr` on the target Mac.
+# Produces dist/Changeover-<version>.dmg with a drag-to-Applications layout,
+# signed with Developer ID. If a notarytool credential is configured it notarizes
+# and staples **both the app and the DMG** (Gatekeeper-clean offline, no xattr
+# needed); otherwise it ships a signed-only DMG that runs after one `xattr -cr`
+# on the target Mac. See the "Notarize and staple the app itself" section for why
+# the app gets its own round trip.
 #
-# Adapted from ../Batty/scripts/release.sh. No Sparkle / appcast / website:
-# this app is hand-copied to another Mac, not auto-updated.
+# Adapted from ../Batty/scripts/release.sh. Changeover is published to a website
+# and updates itself through Sparkle, so the DMG name is the marketing version
+# rather than a git sha: scripts/appcast-item.sh and publish-release.sh both
+# reference that exact filename.
 #
 # Usage:
 #   ./release.sh                 # auto: notarize if a profile exists, else sign-only
@@ -170,6 +174,61 @@ print "==> Version: $ACTUAL_SHORT (build $ACTUAL_BUILD)"
 # build) is used later to set the DMG *file's* Finder icon. Optional.
 APP_ICON="$APP_PATH/Contents/Resources/AppIcon.icns"
 
+# --- Notarize and staple the app itself --------------------------------------
+
+# Two notarization round trips, not one, and the app's comes first.
+#
+# Through 0.1.2 this script submitted only the finished DMG. That is enough for
+# Gatekeeper to accept the *download*: the image carries a stapled ticket and
+# `spctl -a -t open` reports "Notarized Developer ID". But the app dragged out
+# of it carried no ticket of its own —
+#
+#     $ xcrun stapler validate /Volumes/Changeover/Changeover.app
+#     Changeover.app does not have a ticket stapled to it.
+#
+# so its first launch from /Applications had to ask Apple over the network. The
+# app is genuinely notarized either way — Apple's records cover the contents of
+# a notarized DMG — but "notarized" and "able to prove it without a network"
+# are different things, and only the second one helps a user who is offline,
+# behind a captive portal, or firewalled from Apple. A headless Plex host is a
+# plausible example of all three.
+#
+# Stapling the app fixes it, and it has to happen *before* the DMG is built,
+# because the copy inside a read-only UDZO image cannot be modified afterwards.
+# Stapling a signed bundle is safe: the ticket is written to
+# Contents/CodeResources, which is outside the sealed resources (the signature's
+# own manifest is Contents/_CodeSignature/CodeResources — a different file), so
+# the signature survives. Verified below rather than asserted.
+#
+# notarytool will not take a bundle directly, so the app goes up inside a zip
+# built with ditto. --keepParent preserves the .app wrapper, and ditto keeps the
+# symlinks inside Sparkle.framework that plain `zip` would flatten.
+if [[ "$WILL_NOTARIZE" == "1" ]]; then
+    APP_ZIP="$BUILD_DIR/$APP_NAME-app.zip"
+    print "==> Submitting the app for notarization (this can take several minutes)"
+    rm -f "$APP_ZIP"
+    ditto -c -k --keepParent "$APP_PATH" "$APP_ZIP"
+    xcrun notarytool submit "$APP_ZIP" \
+        --keychain-profile "$NOTARY_PROFILE" \
+        --wait
+    rm -f "$APP_ZIP"
+
+    print "==> Stapling the app"
+    xcrun stapler staple "$APP_PATH"
+    xcrun stapler validate "$APP_PATH"
+
+    # The one claim this whole reordering rests on: the ticket did not disturb
+    # the signature. Checked, not assumed — if it ever stops being true the DMG
+    # built from this bundle would ship a broken signature.
+    print "==> Re-verifying the app signature after stapling"
+    codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+    # Note: this proves a ticket is present locally, which is what the offline
+    # launch needs. It does not prove the launch itself — spctl has no flag that
+    # forbids the network, so a genuinely offline first launch on a clean Mac is
+    # still the manual check owed by issue #0103.
+fi
+
 # --- DMG ---------------------------------------------------------------------
 
 GIT_SHA="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || print unknown)"
@@ -221,7 +280,7 @@ codesign --force --sign "$SIGN_IDENTITY" --timestamp "$WORK_DMG"
 # --- Notarize (optional) -----------------------------------------------------
 
 if [[ "$WILL_NOTARIZE" == "1" ]]; then
-    print "==> Submitting for notarization (this can take several minutes)"
+    print "==> Submitting the DMG for notarization (this can take several minutes)"
     xcrun notarytool submit "$WORK_DMG" \
         --keychain-profile "$NOTARY_PROFILE" \
         --wait
