@@ -14,6 +14,24 @@ import Foundation
 /// failure arriving on a timer instead of from a script, which is worse: no
 /// one is watching.
 ///
+/// The shape of the policy is: **check once a day, and never while a disc is
+/// being ripped.** The once-a-day half is `SUScheduledCheckInterval` in
+/// `Info.plist`; this file is the never-while-ripping half.
+///
+/// The two interact in a way worth writing down, because it is not obvious from
+/// either side. Sparkle treats a refusal from `mayPerform` as a *completed*
+/// check: `abortUpdateDriver` stamps `lastUpdateCheckDate` and then reschedules
+/// with `usingCurrentDate: NO`, which means a full interval measured from now.
+/// So a check that lands mid-rip is not retried moments later — it waits
+/// another day. That is the intended behaviour and it is also what makes the
+/// refusal safe: Sparkle's scheduler has an "overdue, run one now" branch, and
+/// a refusal that left the clock untouched would bounce off it in a tight loop.
+///
+/// The cost is that a machine ripping at every daily boundary could defer
+/// checking for a long time. `mayRelaunchNow` is the backstop: an update that
+/// was already downloaded still installs once the disc is done, rather than
+/// waiting for a fresh check.
+///
 /// Pure and `nonisolated` so the decision can be pinned in tests without
 /// Sparkle, a feed, or a disc. `UpdateController.Gate` is the only caller.
 nonisolated enum UpdateGate {

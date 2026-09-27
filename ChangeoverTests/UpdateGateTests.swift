@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Changeover
 
@@ -85,5 +86,34 @@ import Testing
         #expect(UpdateGate.refusalReason.count < 200)
         #expect(!UpdateGate.refusalReason.contains("nil"))
         #expect(!UpdateGate.refusalReason.contains("Sparkle"))
+    }
+
+    // MARK: - How often Sparkle is allowed to look
+
+    /// Once a day, declared rather than inherited.
+    ///
+    /// 86400 is Sparkle's own default, so this key changes no behaviour today.
+    /// It is pinned because the interval became load-bearing: Sparkle treats a
+    /// refused check as a *completed* one — it stamps `lastUpdateCheckDate` and
+    /// reschedules a full interval from then — so this number decides how long
+    /// a check that landed during a rip waits before trying again. A silent
+    /// change to Sparkle's default would change that with it, and this test is
+    /// what would notice.
+    ///
+    /// `ChangeoverTests` is app-hosted, so `Bundle.main` is the built app
+    /// bundle — the same Info.plist that ships.
+    @Test func theScheduledCheckIntervalIsOneDay() throws {
+        let interval = Bundle.main.object(forInfoDictionaryKey: "SUScheduledCheckInterval")
+        let seconds = try #require(
+            (interval as? NSNumber)?.doubleValue,
+            "Info.plist must declare SUScheduledCheckInterval")
+        #expect(seconds == 86_400)
+    }
+
+    /// Automatic checks stay on. The gate is what makes them safe; switching
+    /// them off instead would leave the app never updating, which for something
+    /// that runs unattended on a Plex host is the worse failure.
+    @Test func automaticChecksAreStillEnabled() {
+        #expect(Bundle.main.object(forInfoDictionaryKey: "SUEnableAutomaticChecks") as? Bool == true)
     }
 }

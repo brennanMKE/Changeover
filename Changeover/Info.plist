@@ -8,6 +8,16 @@
 	<string>$(SU_PUBLIC_ED_KEY)</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<!-- #0110 — once a day, and only while no disc is being ripped.
+	     86400 is also Sparkle's own default, so this key changes nothing
+	     today; it is here because the interval is now load-bearing rather
+	     than incidental. UpdateGate refuses a check that lands during a
+	     rip, and Sparkle treats a refusal as a completed check: it stamps
+	     lastUpdateCheckDate and reschedules a full interval from then. So
+	     the interval decides how long an interrupted check waits, and a
+	     silent change to Sparkle's default would change that with it. -->
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>Changeover needs to use the DVD drive so it can eject a disc for you when it has finished copying it.</string>
 	<key>NSLocalNetworkUsageDescription</key>
