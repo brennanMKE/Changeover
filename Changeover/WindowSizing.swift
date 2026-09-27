@@ -61,7 +61,7 @@ nonisolated enum WindowSizing {
     /// rather than inheriting whatever the window happened to be.
     static func heightClass(for step: FlowStep) -> HeightClass {
         switch step {
-        case .insertDisc, .done:
+        case .insertDisc, .ejected, .done:
             return .compact
         case .chooseMovie, .confirm, .ripping:
             return .full

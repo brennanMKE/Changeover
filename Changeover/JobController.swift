@@ -1544,6 +1544,15 @@ final class JobController {
         append(line)
     }
 
+    /// #0153 — a line for the visible log that is **not** part of the
+    /// identification story. `note` also appends to `identificationNarration`,
+    /// which is carried into the next job's "How this was identified" panel —
+    /// an eject notice would show up there as if it were evidence about how a
+    /// film was chosen. This writes to the log only.
+    func logEvent(_ line: String) {
+        append(line)
+    }
+
     /// The identification lines logged since the last disc was inserted.
     /// Cleared with the disc, so one disc's reasoning never appears under
     /// another's rip.

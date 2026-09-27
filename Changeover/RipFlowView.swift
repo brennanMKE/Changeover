@@ -187,7 +187,7 @@ struct RipFlowView: View {
         case .chooseMovie, .confirm:
             guard let disc = jobs.insertedDisc else { return nil }
             return disc.label
-        case .insertDisc, .ripping, .done:
+        case .insertDisc, .ejected, .ripping, .done:
             return nil
         }
     }
@@ -199,6 +199,8 @@ struct RipFlowView: View {
         switch step {
         case .insertDisc(let reason):
             InsertDiscStepView(reason: reason)
+        case .ejected(let explanation):
+            EjectedStepView(explanation: explanation)
         case .chooseMovie:
             ChooseMovieStepView()
         case .confirm:
@@ -218,6 +220,7 @@ extension FlowStep {
     var title: String {
         switch self {
         case .insertDisc:  return "Insert a disc"
+        case .ejected:     return "Disc ejected"
         case .chooseMovie: return "Choose the movie"
         case .confirm:     return "Confirm the rip"
         case .ripping:     return "Ripping"

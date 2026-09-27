@@ -185,7 +185,8 @@ final class RipFlowController {
             discUnavailable: jobs.discUnavailable,
             insertedDisc: jobs.insertedDisc,
             hasMovieSelected: search.selectedMovie != nil,
-            movieConfirmed: movieConfirmed
+            movieConfirmed: movieConfirmed,
+            unexplainedEjection: unexplainedEjection
         )
     }
 
@@ -546,6 +547,13 @@ final class RipFlowController {
         // previous disc's edition was written into the next disc's filename.
         defer { lastSeenDisc = current }
         guard let previous = lastSeenDisc, previous != current else { return }
+
+        // #0153: only another *disc* clears the explanation. The eject itself
+        // is a disc change (to nil), and clearing there would wipe the reason
+        // in the same instant the screen needs it.
+        if current != nil {
+            unexplainedEjection = nil
+        }
 
         resolutionStartedFor = nil
         editionSeededFor = nil
@@ -937,6 +945,15 @@ final class RipFlowController {
     /// eject is attempted once per disc.
     private var autoEjectedDiscs: Set<String> = []
 
+    /// #0153 — the last automatic eject the app has not yet accounted for, and
+    /// the whole input to the `.ejected` screen.
+    ///
+    /// Stored, unlike almost everything the flow shows, because "why is the
+    /// drive empty" is a fact about the past and cannot be derived from a
+    /// present state that no longer contains the disc. Cleared as soon as
+    /// another disc goes in — see `clearWhatBelongedToTheLastDisc`.
+    private(set) var unexplainedEjection: EjectExplanation?
+
     /// Discs a finished job has already been asked to eject, so the sweep
     /// asks once.
     private var postJobEjectedDiscs: Set<String> = []
@@ -1074,8 +1091,35 @@ final class RipFlowController {
 
         autoEjectedDiscs.insert(Self.discIdentity(disc))
         cancelAutoStart()
+
+        // #0153: the reason, kept rather than discarded.
+        //
+        // This used to be one `FlowDiagnostics` line and nothing else, so two
+        // discs on 2026-09-26 were ejected in total silence. The decision was
+        // right both times and still cost the user an evening, because a
+        // correct automatic action with no stated reason is indistinguishable
+        // from a fault. Name the film and the file it was matched against, so
+        // the claim can be checked instead of trusted.
+        let existing = Self.firstLibraryFile(in: libraryCheckForThisEdition)
+        let explanation = EjectExplanation(
+            cause: .alreadyInPlex,
+            movie: search.selectedMovie.map { "\($0.title) (\($0.yearText))" },
+            existingFile: existing?.name,
+            existingSize: EjectExplanation.formatSize(existing?.sizeBytes)
+        )
+        unexplainedEjection = explanation
+        jobs.logEvent(explanation.logLine)
+
         FlowDiagnostics.note("autoeject: already in the library — " + (search.selectedMovie?.title ?? "?"))
         Task { await jobs.ejectDisc() }
+    }
+
+    /// #0153 — the library file the duplicate decision was actually made
+    /// against, so the screen can name it. First entry, first file: the check
+    /// already refuses to fire unless a matched folder holds a video file.
+    private static func firstLibraryFile(in check: LibraryCheck) -> LibraryFile? {
+        guard case .done(_, .present(let entries)) = check else { return nil }
+        return entries.first(where: { !$0.files.isEmpty })?.files.first
     }
 
     /// Discs whose identification has already been written, keyed by disc

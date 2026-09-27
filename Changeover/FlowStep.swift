@@ -28,6 +28,11 @@ nonisolated enum FlowStep: Equatable, Sendable, Codable {
     }
 
     case insertDisc(InsertReason)
+    /// #0153 — the drive is empty because *the app* emptied it, for a reason
+    /// the user did not ask for and would otherwise never learn. Carries the
+    /// explanation rather than a flag, so the screen cannot render a reason
+    /// the decision did not actually have.
+    case ejected(EjectExplanation)
     case chooseMovie
     case confirm
     case ripping(JobID)
@@ -65,6 +70,11 @@ nonisolated enum FlowStep: Equatable, Sendable, Codable {
         /// only this advances, so a mis-click on a 40-row TMDB list can
         /// never skip a step.
         var movieConfirmed: Bool
+        /// #0153 — the last automatic eject the app has not yet explained,
+        /// cleared the moment another disc goes in. `nil` on every ordinary
+        /// path, including a rip that finished (the Done card explains that
+        /// one) and an eject the user asked for themselves.
+        var unexplainedEjection: EjectExplanation?
 
         init(
             currentJobID: JobID? = nil,
@@ -74,7 +84,8 @@ nonisolated enum FlowStep: Equatable, Sendable, Codable {
             discUnavailable: Bool = false,
             insertedDisc: DiscInsertion? = nil,
             hasMovieSelected: Bool = false,
-            movieConfirmed: Bool = false
+            movieConfirmed: Bool = false,
+            unexplainedEjection: EjectExplanation? = nil
         ) {
             self.currentJobID = currentJobID
             self.lastJob = lastJob
@@ -84,6 +95,7 @@ nonisolated enum FlowStep: Equatable, Sendable, Codable {
             self.insertedDisc = insertedDisc
             self.hasMovieSelected = hasMovieSelected
             self.movieConfirmed = movieConfirmed
+            self.unexplainedEjection = unexplainedEjection
         }
     }
 
@@ -104,6 +116,9 @@ nonisolated enum FlowStep: Equatable, Sendable, Codable {
     ///    didn't eject (#0049), then no disc at all. They outrank content
     ///    choices because none of the content choices can be acted on
     ///    until they clear.
+    /// 5a. #0153 — no disc, *and* the app ejected the last one for a reason
+    ///    it has not explained ⇒ `.ejected`. Ranks with row 5 because it is
+    ///    the same empty drive, told truthfully.
     /// 6. A chosen movie the user confirmed with Continue ⇒ `.confirm`.
     /// 7. Otherwise ⇒ `.chooseMovie`, which is also where the scan shows
     ///    its one-line status: the scan runs *while* the user searches,
@@ -122,6 +137,13 @@ nonisolated enum FlowStep: Equatable, Sendable, Codable {
             return .insertDisc(.discUnavailable)
         }
         guard inputs.insertedDisc != nil else {
+            // #0153: an empty drive the app emptied is not the same screen as
+            // an empty drive that was always empty. Below the transient
+            // eject/unavailable rows, because while either of those is true
+            // the eject is still resolving and its outcome is not yet a fact.
+            if let ejection = inputs.unexplainedEjection {
+                return .ejected(ejection)
+            }
             return .insertDisc(.noDisc)
         }
         if inputs.hasMovieSelected, inputs.movieConfirmed {

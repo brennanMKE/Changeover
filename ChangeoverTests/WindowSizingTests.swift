@@ -17,6 +17,8 @@ struct WindowSizingTests {
         .insertDisc(.noDisc),
         .insertDisc(.ejecting),
         .insertDisc(.discUnavailable),
+        // #0153 — the app explained why it emptied the drive.
+        .ejected(EjectExplanation(cause: .alreadyInPlex, movie: "Knowing (2009)")),
         .chooseMovie,
         .confirm,
         .ripping(JobID.make()),
@@ -73,6 +75,8 @@ struct WindowSizingTests {
         // Ripping moved to `.full` when it gained the identification panel.
         #expect(WindowSizing.heightClass(for: .ripping(JobID.make())) == .full)
         #expect(WindowSizing.heightClass(for: .done(JobID.make())) == .compact)
+        #expect(WindowSizing.heightClass(
+            for: .ejected(EjectExplanation(cause: .alreadyInPlex))) == .compact)
         #expect(WindowSizing.heightClass(for: .chooseMovie) == .full)
         #expect(WindowSizing.heightClass(for: .confirm) == .full)
     }
@@ -82,7 +86,7 @@ struct WindowSizingTests {
     @Test func everyStepHasAClassAndTheListCoversEveryCase() {
         for step in Self.everyStep {
             switch step {
-            case .insertDisc, .chooseMovie, .confirm, .ripping, .done:
+            case .insertDisc, .ejected, .chooseMovie, .confirm, .ripping, .done:
                 #expect(WindowSizing.HeightClass.allCases.contains(WindowSizing.heightClass(for: step)), "\(step)")
             }
         }

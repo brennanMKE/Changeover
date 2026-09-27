@@ -15,6 +15,8 @@ struct WindowChromeTests {
         .insertDisc(.noDisc),
         .insertDisc(.ejecting),
         .insertDisc(.discUnavailable),
+        // #0153 — the app explained why it emptied the drive.
+        .ejected(EjectExplanation(cause: .alreadyInPlex, movie: "Knowing (2009)")),
         .chooseMovie,
         .confirm,
         .ripping(JobID.make()),
@@ -32,16 +34,16 @@ struct WindowChromeTests {
         }
     }
 
-    /// The five `FlowStep` cases are all covered above — a sixth case added
+    /// The six `FlowStep` cases are all covered above — a seventh case added
     /// later fails to compile here rather than silently escaping the test.
     @Test func theStepListCoversEveryCase() {
         for step in Self.everyStep {
             switch step {
-            case .insertDisc, .chooseMovie, .confirm, .ripping, .done:
+            case .insertDisc, .ejected, .chooseMovie, .confirm, .ripping, .done:
                 continue
             }
         }
-        #expect(Set(Self.everyStep.map(\.title)).count == 5)
+        #expect(Set(Self.everyStep.map(\.title)).count == 6)
     }
 
     // MARK: - Names, tooltips, keys
