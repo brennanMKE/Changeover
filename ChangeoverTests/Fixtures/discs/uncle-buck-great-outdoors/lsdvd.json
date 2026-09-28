@@ -1,0 +1,709 @@
+{
+  "device" : "/Volumes/UNCLE_BUCK_GREAT_OUTDOORS",
+  "title" : "unknown",
+  "vmg_id" : "DVDVIDEO-VMG",
+  "provider_id" : "",
+  "track" : [
+    {
+      "ix" : 1,
+      "length" : 5425.500,
+      "vts_id" : "DVDVIDEO-VTS",
+      "vts" : 1,
+      "ttn" : 1,
+      "fps" : 29.97,
+      "format" : "NTSC",
+      "aspect" : "16/9",
+      "width" : 720,
+      "height" : 480,
+      "df" : "Letterbox",
+      "palette" : [
+        "286df0",
+        "51f05a",
+        "108080",
+        "ea8080",
+        "b02fa1",
+        "6addca",
+        "d29210",
+        "5b4992",
+        "7b8080",
+        "d18080",
+        "30b66d",
+        "4f515b",
+        "902235",
+        "ea8080",
+        "b28c44",
+        "68c16c"
+      ],
+      "angles" : 1,
+      "audio" : [
+        {
+          "ix" : 1,
+          "langcode" : "en",
+          "language" : "English",
+          "format" : "ac3",
+          "frequency" : 48000,
+          "quantization" : "drc",
+          "channels" : 2,
+          "ap_mode" : 0,
+          "content" : "Undefined",
+          "streamid" : "0x80"        },
+        {
+          "ix" : 2,
+          "langcode" : "fr",
+          "language" : "Francais",
+          "format" : "ac3",
+          "frequency" : 48000,
+          "quantization" : "drc",
+          "channels" : 2,
+          "ap_mode" : 0,
+          "content" : "Undefined",
+          "streamid" : "0x81"        }      ],
+      "chapter" : [
+        {
+          "ix" : 1,
+          "length" : 172.200,
+          "startcell" : 1        },
+        {
+          "ix" : 2,
+          "length" : 339.000,
+          "startcell" : 2        },
+        {
+          "ix" : 3,
+          "length" : 327.333,
+          "startcell" : 3        },
+        {
+          "ix" : 4,
+          "length" : 509.133,
+          "startcell" : 4        },
+        {
+          "ix" : 5,
+          "length" : 547.533,
+          "startcell" : 5        },
+        {
+          "ix" : 6,
+          "length" : 469.800,
+          "startcell" : 6        },
+        {
+          "ix" : 7,
+          "length" : 395.533,
+          "startcell" : 7        },
+        {
+          "ix" : 8,
+          "length" : 250.300,
+          "startcell" : 8        },
+        {
+          "ix" : 9,
+          "length" : 288.166,
+          "startcell" : 9        },
+        {
+          "ix" : 10,
+          "length" : 270.700,
+          "startcell" : 10        },
+        {
+          "ix" : 11,
+          "length" : 337.133,
+          "startcell" : 11        },
+        {
+          "ix" : 12,
+          "length" : 229.000,
+          "startcell" : 12        },
+        {
+          "ix" : 13,
+          "length" : 171.533,
+          "startcell" : 13        },
+        {
+          "ix" : 14,
+          "length" : 373.500,
+          "startcell" : 14        },
+        {
+          "ix" : 15,
+          "length" : 367.166,
+          "startcell" : 15        },
+        {
+          "ix" : 16,
+          "length" : 376.467,
+          "startcell" : 16        },
+        {
+          "ix" : 17,
+          "length" : 1.000,
+          "startcell" : 17        }      ],
+      "cell" : [
+        {
+          "ix" : 1,
+          "length" : 172.200,
+          "first_sector" : 0,
+          "last_sector" : 60445        },
+        {
+          "ix" : 2,
+          "length" : 339.000,
+          "first_sector" : 60446,
+          "last_sector" : 179666        },
+        {
+          "ix" : 3,
+          "length" : 327.333,
+          "first_sector" : 179667,
+          "last_sector" : 295670        },
+        {
+          "ix" : 4,
+          "length" : 509.133,
+          "first_sector" : 295671,
+          "last_sector" : 475723        },
+        {
+          "ix" : 5,
+          "length" : 547.533,
+          "first_sector" : 475724,
+          "last_sector" : 670238        },
+        {
+          "ix" : 6,
+          "length" : 469.800,
+          "first_sector" : 670239,
+          "last_sector" : 834612        },
+        {
+          "ix" : 7,
+          "length" : 395.533,
+          "first_sector" : 834613,
+          "last_sector" : 977254        },
+        {
+          "ix" : 8,
+          "length" : 250.300,
+          "first_sector" : 977255,
+          "last_sector" : 1065948        },
+        {
+          "ix" : 9,
+          "length" : 288.166,
+          "first_sector" : 1065949,
+          "last_sector" : 1168774        },
+        {
+          "ix" : 10,
+          "length" : 270.700,
+          "first_sector" : 1168775,
+          "last_sector" : 1265215        },
+        {
+          "ix" : 11,
+          "length" : 337.133,
+          "first_sector" : 1265216,
+          "last_sector" : 1383096        },
+        {
+          "ix" : 12,
+          "length" : 229.000,
+          "first_sector" : 1383097,
+          "last_sector" : 1463031        },
+        {
+          "ix" : 13,
+          "length" : 171.533,
+          "first_sector" : 1463032,
+          "last_sector" : 1523566        },
+        {
+          "ix" : 14,
+          "length" : 373.500,
+          "first_sector" : 1523567,
+          "last_sector" : 1655713        },
+        {
+          "ix" : 15,
+          "length" : 367.166,
+          "first_sector" : 1655714,
+          "last_sector" : 1784526        },
+        {
+          "ix" : 16,
+          "length" : 376.467,
+          "first_sector" : 1784527,
+          "last_sector" : 1918220        },
+        {
+          "ix" : 17,
+          "length" : 1.000,
+          "first_sector" : 1918221,
+          "last_sector" : 1918225        }      ],
+      "subp" : [
+        {
+          "ix" : 1,
+          "langcode" : "en",
+          "language" : "English",
+          "content" : "Undefined",
+          "streamid" : "0x20"        },
+        {
+          "ix" : 2,
+          "langcode" : "fr",
+          "language" : "Francais",
+          "content" : "Undefined",
+          "streamid" : "0x21"        }      ]
+    },
+    {
+      "ix" : 2,
+      "length" : 5978.133,
+      "vts_id" : "DVDVIDEO-VTS",
+      "vts" : 2,
+      "ttn" : 1,
+      "fps" : 29.97,
+      "format" : "NTSC",
+      "aspect" : "16/9",
+      "width" : 720,
+      "height" : 480,
+      "df" : "Letterbox",
+      "palette" : [
+        "286df0",
+        "51f05a",
+        "108080",
+        "ea8080",
+        "b02fa1",
+        "6addca",
+        "d29210",
+        "5b4992",
+        "7b8080",
+        "d18080",
+        "30b66d",
+        "4f515b",
+        "902235",
+        "ea8080",
+        "b28c44",
+        "68c16c"
+      ],
+      "angles" : 1,
+      "audio" : [
+        {
+          "ix" : 1,
+          "langcode" : "en",
+          "language" : "English",
+          "format" : "ac3",
+          "frequency" : 48000,
+          "quantization" : "drc",
+          "channels" : 2,
+          "ap_mode" : 0,
+          "content" : "Undefined",
+          "streamid" : "0x80"        },
+        {
+          "ix" : 2,
+          "langcode" : "fr",
+          "language" : "Francais",
+          "format" : "ac3",
+          "frequency" : 48000,
+          "quantization" : "drc",
+          "channels" : 2,
+          "ap_mode" : 0,
+          "content" : "Undefined",
+          "streamid" : "0x81"        }      ],
+      "chapter" : [
+        {
+          "ix" : 1,
+          "length" : 372.500,
+          "startcell" : 1        },
+        {
+          "ix" : 2,
+          "length" : 401.200,
+          "startcell" : 2        },
+        {
+          "ix" : 3,
+          "length" : 342.867,
+          "startcell" : 3        },
+        {
+          "ix" : 4,
+          "length" : 265.133,
+          "startcell" : 4        },
+        {
+          "ix" : 5,
+          "length" : 457.500,
+          "startcell" : 5        },
+        {
+          "ix" : 6,
+          "length" : 364.333,
+          "startcell" : 6        },
+        {
+          "ix" : 7,
+          "length" : 177.000,
+          "startcell" : 7        },
+        {
+          "ix" : 8,
+          "length" : 358.667,
+          "startcell" : 8        },
+        {
+          "ix" : 9,
+          "length" : 469.834,
+          "startcell" : 9        },
+        {
+          "ix" : 10,
+          "length" : 340.333,
+          "startcell" : 10        },
+        {
+          "ix" : 11,
+          "length" : 664.333,
+          "startcell" : 11        },
+        {
+          "ix" : 12,
+          "length" : 317.500,
+          "startcell" : 12        },
+        {
+          "ix" : 13,
+          "length" : 347.834,
+          "startcell" : 13        },
+        {
+          "ix" : 14,
+          "length" : 402.967,
+          "startcell" : 14        },
+        {
+          "ix" : 15,
+          "length" : 193.000,
+          "startcell" : 15        },
+        {
+          "ix" : 16,
+          "length" : 502.133,
+          "startcell" : 16        },
+        {
+          "ix" : 17,
+          "length" : 1.000,
+          "startcell" : 17        }      ],
+      "cell" : [
+        {
+          "ix" : 1,
+          "length" : 372.500,
+          "first_sector" : 0,
+          "last_sector" : 123305        },
+        {
+          "ix" : 2,
+          "length" : 401.200,
+          "first_sector" : 123306,
+          "last_sector" : 255924        },
+        {
+          "ix" : 3,
+          "length" : 342.867,
+          "first_sector" : 255925,
+          "last_sector" : 370662        },
+        {
+          "ix" : 4,
+          "length" : 265.133,
+          "first_sector" : 370663,
+          "last_sector" : 458880        },
+        {
+          "ix" : 5,
+          "length" : 457.500,
+          "first_sector" : 458881,
+          "last_sector" : 609666        },
+        {
+          "ix" : 6,
+          "length" : 364.333,
+          "first_sector" : 609667,
+          "last_sector" : 730230        },
+        {
+          "ix" : 7,
+          "length" : 177.000,
+          "first_sector" : 730231,
+          "last_sector" : 788777        },
+        {
+          "ix" : 8,
+          "length" : 358.667,
+          "first_sector" : 788778,
+          "last_sector" : 907243        },
+        {
+          "ix" : 9,
+          "length" : 469.834,
+          "first_sector" : 907244,
+          "last_sector" : 1061786        },
+        {
+          "ix" : 10,
+          "length" : 340.333,
+          "first_sector" : 1061787,
+          "last_sector" : 1176806        },
+        {
+          "ix" : 11,
+          "length" : 664.333,
+          "first_sector" : 1176807,
+          "last_sector" : 1396645        },
+        {
+          "ix" : 12,
+          "length" : 317.500,
+          "first_sector" : 1396646,
+          "last_sector" : 1501669        },
+        {
+          "ix" : 13,
+          "length" : 347.834,
+          "first_sector" : 1501670,
+          "last_sector" : 1616713        },
+        {
+          "ix" : 14,
+          "length" : 402.967,
+          "first_sector" : 1616714,
+          "last_sector" : 1752985        },
+        {
+          "ix" : 15,
+          "length" : 193.000,
+          "first_sector" : 1752986,
+          "last_sector" : 1817078        },
+        {
+          "ix" : 16,
+          "length" : 502.133,
+          "first_sector" : 1817079,
+          "last_sector" : 1967010        },
+        {
+          "ix" : 17,
+          "length" : 1.000,
+          "first_sector" : 1967011,
+          "last_sector" : 1967015        }      ],
+      "subp" : [
+        {
+          "ix" : 1,
+          "langcode" : "en",
+          "language" : "English",
+          "content" : "Undefined",
+          "streamid" : "0x20"        }      ]
+    },
+    {
+      "ix" : 3,
+      "length" : 169.133,
+      "vts_id" : "DVDVIDEO-VTS",
+      "vts" : 3,
+      "ttn" : 1,
+      "fps" : 29.97,
+      "format" : "NTSC",
+      "aspect" : "4/3",
+      "width" : 720,
+      "height" : 480,
+      "df" : "?",
+      "palette" : [
+        "286df0",
+        "51f05a",
+        "108080",
+        "ea8080",
+        "b02fa1",
+        "6addca",
+        "d29210",
+        "5b4992",
+        "7b8080",
+        "d18080",
+        "30b66d",
+        "4f515b",
+        "902235",
+        "ea8080",
+        "b28c44",
+        "68c16c"
+      ],
+      "angles" : 1,
+      "audio" : [
+        {
+          "ix" : 1,
+          "langcode" : "en",
+          "language" : "English",
+          "format" : "ac3",
+          "frequency" : 48000,
+          "quantization" : "drc",
+          "channels" : 2,
+          "ap_mode" : 0,
+          "content" : "Undefined",
+          "streamid" : "0x80"        }      ],
+      "chapter" : [
+        {
+          "ix" : 1,
+          "length" : 97.767,
+          "startcell" : 1        },
+        {
+          "ix" : 2,
+          "length" : 70.367,
+          "startcell" : 2        },
+        {
+          "ix" : 3,
+          "length" : 1.000,
+          "startcell" : 3        }      ],
+      "cell" : [
+        {
+          "ix" : 1,
+          "length" : 97.767,
+          "first_sector" : 0,
+          "last_sector" : 31736        },
+        {
+          "ix" : 2,
+          "length" : 70.367,
+          "first_sector" : 31737,
+          "last_sector" : 54572        },
+        {
+          "ix" : 3,
+          "length" : 1.000,
+          "first_sector" : 54573,
+          "last_sector" : 54577        }      ],
+      "subp" : [
+        {
+          "ix" : 1,
+          "langcode" : "en",
+          "language" : "English",
+          "content" : "Undefined",
+          "streamid" : "0x20"        }      ]
+    },
+    {
+      "ix" : 4,
+      "length" : 1.000,
+      "vts_id" : "DVDVIDEO-VTS",
+      "vts" : 3,
+      "ttn" : 2,
+      "fps" : 29.97,
+      "format" : "NTSC",
+      "aspect" : "4/3",
+      "width" : 720,
+      "height" : 480,
+      "df" : "?",
+      "palette" : [
+        "286df0",
+        "51f05a",
+        "108080",
+        "ea8080",
+        "b02fa1",
+        "6addca",
+        "d29210",
+        "5b4992",
+        "7b8080",
+        "d18080",
+        "30b66d",
+        "4f515b",
+        "902235",
+        "ea8080",
+        "b28c44",
+        "68c16c"
+      ],
+      "angles" : 1,
+      "audio" : [
+      ],
+      "chapter" : [
+        {
+          "ix" : 1,
+          "length" : 1.000,
+          "startcell" : 1        }      ],
+      "cell" : [
+        {
+          "ix" : 1,
+          "length" : 1.000,
+          "first_sector" : 54573,
+          "last_sector" : 54577        }      ],
+      "subp" : [
+      ]
+    },
+    {
+      "ix" : 5,
+      "length" : 25.000,
+      "vts_id" : "DVDVIDEO-VTS",
+      "vts" : 4,
+      "ttn" : 1,
+      "fps" : 29.97,
+      "format" : "NTSC",
+      "aspect" : "16/9",
+      "width" : 720,
+      "height" : 480,
+      "df" : "Letterbox",
+      "palette" : [
+        "286df0",
+        "51f05a",
+        "108080",
+        "ea8080",
+        "b02fa1",
+        "6addca",
+        "d29210",
+        "5b4992",
+        "7b8080",
+        "d18080",
+        "30b66d",
+        "4f515b",
+        "902235",
+        "ea8080",
+        "b28c44",
+        "68c16c"
+      ],
+      "angles" : 1,
+      "audio" : [
+        {
+          "ix" : 1,
+          "langcode" : "en",
+          "language" : "English",
+          "format" : "ac3",
+          "frequency" : 48000,
+          "quantization" : "drc",
+          "channels" : 6,
+          "ap_mode" : 0,
+          "content" : "Undefined",
+          "streamid" : "0x80"        }      ],
+      "chapter" : [
+        {
+          "ix" : 1,
+          "length" : 24.000,
+          "startcell" : 1        },
+        {
+          "ix" : 2,
+          "length" : 1.000,
+          "startcell" : 2        }      ],
+      "cell" : [
+        {
+          "ix" : 1,
+          "length" : 24.000,
+          "first_sector" : 0,
+          "last_sector" : 9543        },
+        {
+          "ix" : 2,
+          "length" : 1.000,
+          "first_sector" : 9544,
+          "last_sector" : 9548        }      ],
+      "subp" : [
+      ]
+    },
+    {
+      "ix" : 6,
+      "length" : 14.667,
+      "vts_id" : "DVDVIDEO-VTS",
+      "vts" : 5,
+      "ttn" : 1,
+      "fps" : 29.97,
+      "format" : "NTSC",
+      "aspect" : "16/9",
+      "width" : 720,
+      "height" : 480,
+      "df" : "Letterbox",
+      "palette" : [
+        "286df0",
+        "51f05a",
+        "108080",
+        "ea8080",
+        "b02fa1",
+        "6addca",
+        "d29210",
+        "5b4992",
+        "7b8080",
+        "d18080",
+        "30b66d",
+        "4f515b",
+        "902235",
+        "ea8080",
+        "b28c44",
+        "68c16c"
+      ],
+      "angles" : 1,
+      "audio" : [
+        {
+          "ix" : 1,
+          "langcode" : "en",
+          "language" : "English",
+          "format" : "ac3",
+          "frequency" : 48000,
+          "quantization" : "drc",
+          "channels" : 6,
+          "ap_mode" : 0,
+          "content" : "Undefined",
+          "streamid" : "0x80"        }      ],
+      "chapter" : [
+        {
+          "ix" : 1,
+          "length" : 13.667,
+          "startcell" : 1        },
+        {
+          "ix" : 2,
+          "length" : 1.000,
+          "startcell" : 2        }      ],
+      "cell" : [
+        {
+          "ix" : 1,
+          "length" : 13.667,
+          "first_sector" : 0,
+          "last_sector" : 5977        },
+        {
+          "ix" : 2,
+          "length" : 1.000,
+          "first_sector" : 5978,
+          "last_sector" : 5982        }      ],
+      "subp" : [
+      ]
+    }
+  ],
+  "dvddiscid" : "1cf14f7df91b5e2df0ead3c820d87a47",
+  "longest_track" : 2
+}

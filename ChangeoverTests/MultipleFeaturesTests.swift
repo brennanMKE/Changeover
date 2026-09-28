@@ -93,33 +93,44 @@ import Testing
     // MARK: - The false positive this rule was measured against
 
     /// Adventureland, archived 2026-09-26: 65 titles, of which **eight** clear
-    /// the 45-minute floor at 98–115 minutes. It is one film stored as
-    /// seamless-branching variants, and it gives itself away by every variant
-    /// having the **same chapter count**.
+    /// the 45-minute floor at 98–115 minutes. One film in eight
+    /// seamless-branching variants, and the only disc in 26 captures that
+    /// clears the floor more than four times.
     ///
-    /// This is the load-bearing half of the rule. Without it, a disc that rips
-    /// correctly today would be interrupted every time, for nothing.
+    /// The real eight, not a shortened stand-in. Each variant is within five
+    /// minutes of the next, so single-linkage grouping chains all eight into
+    /// one film before the count is ever taken.
     @Test func branchingVariantsOfOneFilmAreNotSeveralFeatures() {
         let adventureland = Self.disc([
             Self.title(1, seconds: 5_898, chapters: 29),
             Self.title(2, seconds: 6_524, chapters: 29),
             Self.title(3, seconds: 6_253, chapters: 29),
             Self.title(4, seconds: 6_089, chapters: 29),
+            Self.title(7, seconds: 6_685, chapters: 29),
+            Self.title(8, seconds: 6_416, chapters: 29),
+            Self.title(9, seconds: 6_936, chapters: 29),
+            Self.title(11, seconds: 6_827, chapters: 29),
         ])
-        guard case .multipleFeatures = DiscTitleHeuristic.classify(adventureland, mainFeatureIndex: 1) else {
-            return  // correct
-        }
-        Issue.record("titles sharing a chapter count are one film, not several")
+        #expect(DiscTitleHeuristic.severalFeatures(adventureland) == nil)
     }
 
-    /// The discriminator is the chapter count, not the runtime spread: these
-    /// variants differ by ten minutes and are still one film.
-    @Test func aWideRuntimeSpreadDoesNotMakeThemSeparateFilms() {
-        let spread = Self.disc([
-            Self.title(1, seconds: 5_400, chapters: 20),
-            Self.title(2, seconds: 6_000, chapters: 20),
+    /// Two films may share a chapter count, and the first version of this rule
+    /// rejected them for it.
+    ///
+    /// Uncle Buck / The Great Outdoors, captured 2026-09-27: 90m25s and
+    /// 99m38s, **both 17 chapters**, named on the volume label and on the menu
+    /// ("PLEASE SELECT FEATURE TO VIEW"), and already in the library under two
+    /// different TMDB ids. The first shipped rule called it one film. An
+    /// authoring house uses a house style; agreeing on a chapter count means
+    /// nothing.
+    @Test func twoFilmsSharingAChapterCountAreStillTwoFilms() {
+        let uncleBuck = Self.disc([
+            Self.title(1, seconds: 5_425, chapters: 17),   // The Great Outdoors
+            Self.title(2, seconds: 5_978, chapters: 17),   // Uncle Buck
+            Self.title(3, seconds: 169, chapters: 3, aspect: 1.33),
         ])
-        #expect(DiscTitleHeuristic.severalFeatures(spread) == nil)
+        #expect(DiscTitleHeuristic.classify(uncleBuck, mainFeatureIndex: 1)
+                == .multipleFeatures(indices: [1, 2]))
     }
 
     // MARK: - The cases that must not change
@@ -157,6 +168,36 @@ import Testing
         ])
         #expect(DiscTitleHeuristic.classify(withDoc, mainFeatureIndex: 1)
                 == .multipleFeatures(indices: [1, 2]))
+    }
+
+    /// A theatrical/extended pair is one film in two cuts, not two films.
+    ///
+    /// Identity, 2026-09-24: 1:29:57 and 1:31:04 — 67 seconds apart, extra
+    /// front-matter on one. No disc in the corpus has this shape; the existing
+    /// `DiscTitleHeuristicTests` did, and they caught the rule getting it
+    /// wrong before it shipped.
+    @Test func twoCutsOfOneFilmAreNotTwoFilms() {
+        let cuts = Self.disc([
+            Self.title(1, seconds: 5_397, chapters: 28),
+            Self.title(2, seconds: 5_464, chapters: 28),
+        ])
+        #expect(DiscTitleHeuristic.severalFeatures(cuts) == nil)
+    }
+
+    /// The boundary, stated: five minutes apart is one film, comfortably more
+    /// is two. Uncle Buck's real gap is 9m13s and Get Hard's 14m50s.
+    @Test func theSeparationBoundaryIsFiveMinutes() {
+        let near = Self.disc([
+            Self.title(1, seconds: 5_400, chapters: 20),
+            Self.title(2, seconds: 5_400 + 4 * 60, chapters: 20),
+        ])
+        #expect(DiscTitleHeuristic.severalFeatures(near) == nil, "4 minutes apart is one film")
+
+        let far = Self.disc([
+            Self.title(1, seconds: 5_400, chapters: 20),
+            Self.title(2, seconds: 5_400 + 9 * 60, chapters: 20),
+        ])
+        #expect(DiscTitleHeuristic.severalFeatures(far)?.count == 2, "9 minutes apart is two films")
     }
 
     /// Below the floor nothing counts, however many there are.

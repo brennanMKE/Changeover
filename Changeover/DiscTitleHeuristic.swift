@@ -194,40 +194,95 @@ nonisolated enum DiscTitleHeuristic {
     }
 
     /// At most this many titles can plausibly be separate feature films on one
-    /// disc. A genuine triple feature exists; nine does not, and a disc that
-    /// produces nine has been misread.
+    /// disc. A genuine triple feature exists; eight does not, and a disc that
+    /// produces eight has been misread — that is Adventureland's branching
+    /// structure, the one disc in 26 that clears the floor more than four
+    /// times.
     ///
-    /// Belt-and-braces only: on every disc measured, `sameChapterCount` below
-    /// already rejected the over-large cases on its own.
+    /// This is the whole discriminator, not a safety net: measured over every
+    /// capture, single-feature discs yield exactly one candidate and the two
+    /// real double features yield two.
     static let maximumFeaturesPerDisc = 4
 
     /// #0157 — the feature titles, when a disc holds more than one film.
     /// `nil` means "not a multi-feature disc", which is almost every disc.
     ///
-    /// Measured against 19 discs (6 corpus fixtures, 13 archived on the rip
-    /// host). It fires on exactly one: the Get Hard / The Campaign disc.
+    /// Measured over 26 captures (7 corpus fixtures, 19 archived on the rip
+    /// host): no misses and no false positives. It fires on the two known
+    /// double features — Get Hard / The Campaign and Uncle Buck / The Great
+    /// Outdoors — and on nothing else.
     nonisolated static func severalFeatures(_ disc: DiscInfo) -> [DiscTitle]? {
         let candidates = widescreenPreferred(
             disc.titles.filter { $0.durationSeconds >= featureMinimumSeconds }
         )
         guard candidates.count >= 2 else { return nil }
 
-        // A film stored as seamless-branching variants looks exactly like a
-        // multi-feature disc by runtime, and is not one.
+        // Two *different* films are minutes apart. Two versions of the SAME
+        // film are not.
         //
-        // Adventureland, archived 2026-09-26: 65 titles, of which **eight**
-        // clear the 45-minute floor at 98–115 minutes. They are one film —
-        // and they give themselves away by all having **29 chapters**. Two
-        // different films agreeing on runtime is ordinary; eight of them
-        // agreeing on a chapter count is one film cut eight ways.
+        // Identity, 2026-09-24: titles at 1:29:57 and 1:31:04 — 67 seconds,
+        // extra front-matter on one. A theatrical/extended pair is the same
+        // shape. Grouping by proximity before counting keeps those as one
+        // film, and it also collapses Adventureland's eight branching variants
+        // on its own: each is within five minutes of the next, so single
+        // linkage chains all eight into one group.
         //
-        // The Get Hard disc, by contrast, has 11 and 14 chapters. This is the
-        // load-bearing half of the rule: without it that disc would have been
-        // interrupted every time, for nothing.
-        guard Set(candidates.map(\.chapterCount)).count > 1 else { return nil }
-        guard candidates.count <= maximumFeaturesPerDisc else { return nil }
+        // Get Hard / The Campaign are 14m50s apart and Uncle Buck / The Great
+        // Outdoors 9m13s, so real double features are untouched.
+        let groups = featureGroups(candidates)
+        guard groups.count >= 2 else { return nil }
 
-        return candidates.sorted { $0.index < $1.index }
+        // A film stored as seamless-branching variants looks exactly like a
+        // multi-feature disc by runtime, and is not one. Adventureland,
+        // archived 2026-09-26: 65 titles, of which **eight** clear the
+        // 45-minute floor at 98–115 minutes, all one film.
+        //
+        // The count is what separates them, and only the count.
+        //
+        // This first shipped comparing *chapter counts* — Adventureland's
+        // eight variants all have 29 — and that was wrong. Uncle Buck / The
+        // Great Outdoors, captured 2026-09-27, is a genuine double feature
+        // whose two films **both have 17 chapters**: 90m25s and 99m38s, named
+        // on the label and on the menu ("PLEASE SELECT FEATURE TO VIEW"), both
+        // already in the library under different TMDB ids. An authoring house
+        // uses a house style; two films agreeing on a chapter count is
+        // ordinary, and rejecting on it missed every disc of this shape.
+        //
+        // Re-derived over all 26 captures (7 corpus fixtures, 19 archived).
+        // Every single-feature disc yields exactly **one** candidate; the only
+        // disc yielding more than four is Adventureland. So the cap alone is
+        // both necessary and sufficient, and the chapter-count test earned its
+        // removal: it scored three misses to the cap's none.
+        guard groups.count <= maximumFeaturesPerDisc else { return nil }
+
+        // One title per film: the longest in each group, which for a
+        // theatrical/extended pair is the fuller cut.
+        return groups
+            .compactMap { $0.max { $0.durationSeconds < $1.durationSeconds } }
+            .sorted { $0.index < $1.index }
+    }
+
+    /// How far apart two runtimes must be to be different films rather than
+    /// two cuts of one. Five minutes: longer than the front-matter and
+    /// credits differences that separate cuts of one film, far shorter than
+    /// the gap between two features sold together.
+    static let distinctFeatureSeparationSeconds = 5 * 60
+
+    /// Groups candidates by runtime proximity, single linkage — a title joins
+    /// a group when it is within `distinctFeatureSeparationSeconds` of any
+    /// member, so a chain of near-neighbours stays one film.
+    nonisolated static func featureGroups(_ candidates: [DiscTitle]) -> [[DiscTitle]] {
+        let sorted = candidates.sorted { $0.durationSeconds < $1.durationSeconds }
+        var groups: [[DiscTitle]] = []
+        for title in sorted {
+            if let last = groups.last, let previous = last.last,
+               title.durationSeconds - previous.durationSeconds <= distinctFeatureSeparationSeconds {
+                groups[groups.count - 1].append(title)
+            } else {
+                groups.append([title])
+            }
+        }
+        return groups
     }
 
     /// Anything wider than this counts as widescreen; below it, 4:3.

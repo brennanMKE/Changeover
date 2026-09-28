@@ -156,11 +156,16 @@ struct DiscTitleHeuristicTests {
 
     /// The Plan's explicit "zero or two-or-more stays `.none`" guard on the
     /// fallback: two titles both clear 45 minutes and the scanner gave no
-    /// answer — a theatrical/extended pair or a double feature, not a
-    /// decision the threshold may make alone.
-    @Test func twoTitlesAtOrAboveTheThresholdWithNoScannerAnswerStayNone() {
+    /// answer — not a decision the threshold may make alone.
+    ///
+    /// #0157 kept the guarantee and sharpened the answer. Ten minutes apart is
+    /// too far to be two cuts of one film, so the disc is now reported as two
+    /// features rather than as an unexplained refusal. Both outcomes ask a
+    /// person; this one says what it found.
+    @Test func twoTitlesAtOrAboveTheThresholdWithNoScannerAnswerAreReportedAsTwoFeatures() {
         let disc = Self.disc([Self.title(1, 50 * 60), Self.title(2, 60 * 60)])
-        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: nil) == .none)
+        #expect(DiscTitleHeuristic.classify(disc, mainFeatureIndex: nil)
+                == .multipleFeatures(indices: [1, 2]))
     }
 
     /// A TV-shaped disc — several episode-length titles, none individually

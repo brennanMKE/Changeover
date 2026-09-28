@@ -1,0 +1,139 @@
+{
+  "formatVersion": 2,
+  "slug": "uncle-buck-great-outdoors",
+  "volumeName": "UNCLE_BUCK_GREAT_OUTDOORS",
+  "driveName": "joe",
+  "discId": "1cf14f7df91b5e2df0ead3c820d87a47",
+  "driveModel": "PLDS DVD+-RW DS-8A8SH",
+  "handbrakeVersion": "HandBrake 1.11.2",
+  "capturedDate": "2026-09-27",
+  "reviewed": true,
+  "capture": {
+    "tool": "Tools/capture-disc.sh",
+    "toolVersion": 2,
+    "ifoFiles": 6,
+    "rawArchive": "joe:~/changeover-fixtures/uncle-buck-great-outdoors"
+  },
+  "menus": {
+    "captured": true,
+    "css": "available",
+    "menuCount": 55,
+    "stillCount": 29,
+    "ocrRun": true,
+    "judgeRun": false,
+    "missing": []
+  },
+  "notes": "Reviewed 2026-09-27. THE DISC THAT FALSIFIED THE FIRST VERSION OF #0157. Uncle Buck (title 2, 99m38s) and The Great Outdoors (title 1, 90m25s), a John Candy double feature -- and BOTH HAVE 17 CHAPTERS. The rule as first shipped rejected any multi-feature disc whose candidates shared a chapter count, on the strength of Adventureland's eight 29-chapter branching variants, and so called this disc one film. Re-derived over all 26 captures: the candidate COUNT is the discriminator and the chapter count is noise. Unlike the Get Hard disc, the volume label names both films (UNCLE_BUCK_GREAT_OUTDOORS) -- splitting it at separator boundaries and scoring the halves by runtime agreement identifies both exactly (0.9 min total error, tmdb 2616 and 2617, both already in the library). The menu says so too: 'PLEASE SELECT FEATURE TO VIEW:' above OCR'd titles 'GAT OUDOORS' and 'Unde Buck'. audioTrackCount/subtitleGroupCount are per-feature here, so a single number would be a false expectation.",
+  "expect": {
+    "titleCount": 5,
+    "mainFeatureIndex": 1,
+    "outcome": "multipleFeatures",
+    "outcomeIndex": null,
+    "outcomeEpisodes": null,
+    "featureDurationSeconds": 5425,
+    "featureChapterCount": 17,
+    "audioTrackCount": null,
+    "subtitleGroupCount": null,
+    "menu": {
+      "playButtonTitle": null,
+      "playButtonLabel": "PLAY",
+      "playButtonResolvedBy": null,
+      "chapterMenuButtons": 0,
+      "chapterNamesEmitted": 0,
+      "chapterPages": [],
+      "spokenLanguages": [],
+      "subtitleLanguages": [],
+      "tvSignal": false,
+      "unresolvedMnemonics": [
+        "LinkTailPGC",
+        "Set"
+      ]
+    },
+    "agreement": {
+      "heuristicRoute": "severalFeatures",
+      "menuRoute": "unresolved",
+      "scannerRaw": 1,
+      "scannerTitle": 1,
+      "signals": {
+        "buttonCount": 35,
+        "chapterButtons": 0,
+        "chapterNamesEmitted": 0,
+        "chapterNamesRead": 0,
+        "chapterPages": 0,
+        "labels": [
+          {
+            "target": "unresolved:Set",
+            "text": "GÄT OUDOORS"
+          },
+          {
+            "role": "nonFeature",
+            "target": "menu:1.pgc3",
+            "text": "LANGUAGES"
+          },
+          {
+            "role": "nonFeature",
+            "target": "menu:2.pgc2",
+            "text": "Languages"
+          },
+          {
+            "target": "menu:VMGM.pgc1",
+            "text": "MENU"
+          },
+          {
+            "role": "play",
+            "target": "menu:1.pgc10",
+            "text": "PLAY"
+          },
+          {
+            "role": "play",
+            "target": "menu:2.pgc8",
+            "text": "Play"
+          },
+          {
+            "role": "nonFeature",
+            "target": "menu:1.pgc5",
+            "text": "TRAILERS"
+          },
+          {
+            "target": "menu:pgc17",
+            "text": "alto"
+          },
+          {
+            "target": "menu:pgc15",
+            "text": "arrêt"
+          },
+          {
+            "target": "unresolved:LinkTailPGC",
+            "text": "oui"
+          },
+          {
+            "target": "menu:pgc4",
+            "text": "stop"
+          },
+          {
+            "target": "unresolved:LinkTailPGC",
+            "text": "yes"
+          }
+        ],
+        "largestMenuButtons": 5,
+        "menuCount": 55,
+        "menusWithButtons": 10,
+        "spokenLanguages": [
+          "ENGLISH",
+          "FRANÇAIS®"
+        ],
+        "subtitleLanguages": [],
+        "titleJumpingButtons": 0,
+        "titlesJumpedTo": [],
+        "tvSignal": false,
+        "tvSignalReason": "no menu with ≥3 title-jumping buttons"
+      },
+      "slug": "uncle-buck-great-outdoors",
+      "verdict": "bothAbstained"
+    },
+    "outcomeFeatureIndices": [
+      1,
+      2
+    ]
+  }
+}

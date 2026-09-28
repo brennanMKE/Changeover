@@ -9,17 +9,18 @@ The heuristic decides what is encoded. Nothing below does, today or in
 this pass: it is the evidence for whether the disc's own answer could
 ever be trusted to preselect a title (menu-intelligence.md §11.4).
 
-6 discs: agree 1 · disagree 0 · menu abstained 1 · heuristic abstained 0 · both abstained 1 · not captured 3
+7 discs: agree 1 · disagree 0 · menu abstained 1 · heuristic abstained 0 · both abstained 2 · not captured 3
 
 Verdicts
 --------
-disc               scanner       heuristic                 disc menu                           verdict
-bloodsport         title 1       title 1 (scanner)         title 1 (pgcCommands, "Play Movie")  agree
-dragon-tattoo      title 1       title 1 (scanner)         — (notCaptured)                     notCaptured
-get-hard-campaign  title 5       — (severalFeatures)       — (unresolved)                      bothAbstained
-hornets-nest       none (-1)     title 11 (length)         — (notCaptured)                     notCaptured
-oppenheimer        title 7       title 7 (scanner)         — (unresolved)                      menuAbstained
-tv-season-playall  title 14      title 14 (playAllGuard)   — (notCaptured)                     notCaptured
+disc                       scanner       heuristic                 disc menu                           verdict
+bloodsport                 title 1       title 1 (scanner)         title 1 (pgcCommands, "Play Movie")  agree
+dragon-tattoo              title 1       title 1 (scanner)         — (notCaptured)                     notCaptured
+get-hard-campaign          title 5       — (severalFeatures)       — (unresolved)                      bothAbstained
+hornets-nest               none (-1)     title 11 (length)         — (notCaptured)                     notCaptured
+oppenheimer                title 7       title 7 (scanner)         — (unresolved)                      menuAbstained
+tv-season-playall          title 14      title 14 (playAllGuard)   — (notCaptured)                     notCaptured
+uncle-buck-great-outdoors  title 1       — (severalFeatures)       — (unresolved)                      bothAbstained
 
 Signals
 -------
@@ -44,20 +45,30 @@ oppenheimer:
   tv signal no — no menu with ≥3 title-jumping buttons
   languages: spoken [] subtitles [ESPAÑOL, 한국어, OFF]
   button captions 21, unknown to the lexicon 19
+uncle-buck-great-outdoors:
+  menus 55 (10 with buttons), buttons 35, busiest menu 5
+  title-jumping buttons 0 → titles 
+  chapter buttons 0 on 0 page(s); names read 0, written 0
+  tv signal no — no menu with ≥3 title-jumping buttons
+  languages: spoken [ENGLISH, FRANÇAIS®] subtitles []
+  button captions 12, unknown to the lexicon 7
 
 Button caption vocabulary (OCR'd off real discs)
 ------------------------------------------------
 "Back"                         nonFeature    bloodsport
 "Cast & Crew"                  nonFeature    bloodsport
 "Continue"                     nonFeature    bloodsport
-"Languages"                    nonFeature    bloodsport
+"LANGUAGES"                    nonFeature    uncle-buck-great-outdoors
+"Languages"                    nonFeature    bloodsport, uncle-buck-great-outdoors
 "Main Menu"                    nonFeature    bloodsport
 "SETUP"                        nonFeature    oppenheimer
 "SUBTITLES"                    nonFeature    oppenheimer
 "Scene Selections®"            nonFeature    bloodsport
 "Special Features"             nonFeature    bloodsport
+"TRAILERS"                     nonFeature    uncle-buck-great-outdoors
 "Theatrical Trailer"           nonFeature    bloodsport
-"PLAY"                         play          get-hard-campaign
+"PLAY"                         play          get-hard-campaign, uncle-buck-great-outdoors
+"Play"                         play          uncle-buck-great-outdoors
 "Play Movie"                   play          bloodsport
 "(DESCRIPTIVE VIDEO SERVICE)"  unknown       oppenheimer
 "(also co-story, dir.)"        unknown       bloodsport
@@ -73,8 +84,9 @@ Button caption vocabulary (OCR'd off real discs)
 "ESPAÑOL 5.1"                  unknown       oppenheimer
 "Features"                     unknown       bloodsport
 "ForestWhitaken."              unknown       bloodsport
+"GÄT OUDOORS"                  unknown       uncle-buck-great-outdoors
 "Leah Ayres.."                 unknown       bloodsport
-"MENU"                         unknown       oppenheimer
+"MENU"                         unknown       oppenheimer, uncle-buck-great-outdoors
 "MENU 11."                     unknown       oppenheimer
 "Main Menu, Continue"          unknown       bloodsport
 "OFF"                          unknown       oppenheimer
@@ -84,11 +96,11 @@ Button caption vocabulary (OCR'd off real discs)
 "SÍ"                           unknown       oppenheimer
 "WITH ENGLISH SUBTITLES"       unknown       get-hard-campaign
 "WITH SPANISH SUBTITLES"       unknown       get-hard-campaign
-"alto"                         unknown       oppenheimer
-"arrêt"                        unknown       oppenheimer
-"oui"                          unknown       oppenheimer
-"stop"                         unknown       oppenheimer
-"yes"                          unknown       oppenheimer
+"alto"                         unknown       oppenheimer, uncle-buck-great-outdoors
+"arrêt"                        unknown       oppenheimer, uncle-buck-great-outdoors
+"oui"                          unknown       oppenheimer, uncle-buck-great-outdoors
+"stop"                         unknown       oppenheimer, uncle-buck-great-outdoors
+"yes"                          unknown       oppenheimer, uncle-buck-great-outdoors
 "粤語"                           unknown       oppenheimer
 "繁體中文"                         unknown       oppenheimer
 "한국어"                          unknown       oppenheimer
@@ -109,8 +121,9 @@ what it does and the disc it was read off:
   "ESPAÑOL 5.1"  (oppenheimer)
   "Features"  (bloodsport)
   "ForestWhitaken."  (bloodsport)
+  "GÄT OUDOORS"  (uncle-buck-great-outdoors)
   "Leah Ayres.."  (bloodsport)
-  "MENU"  (oppenheimer)
+  "MENU"  (oppenheimer, uncle-buck-great-outdoors)
   "MENU 11."  (oppenheimer)
   "Main Menu, Continue"  (bloodsport)
   "OFF"  (oppenheimer)
@@ -120,11 +133,11 @@ what it does and the disc it was read off:
   "SÍ"  (oppenheimer)
   "WITH ENGLISH SUBTITLES"  (get-hard-campaign)
   "WITH SPANISH SUBTITLES"  (get-hard-campaign)
-  "alto"  (oppenheimer)
-  "arrêt"  (oppenheimer)
-  "oui"  (oppenheimer)
-  "stop"  (oppenheimer)
-  "yes"  (oppenheimer)
+  "alto"  (oppenheimer, uncle-buck-great-outdoors)
+  "arrêt"  (oppenheimer, uncle-buck-great-outdoors)
+  "oui"  (oppenheimer, uncle-buck-great-outdoors)
+  "stop"  (oppenheimer, uncle-buck-great-outdoors)
+  "yes"  (oppenheimer, uncle-buck-great-outdoors)
   "粤語"  (oppenheimer)
   "繁體中文"  (oppenheimer)
   "한국어"  (oppenheimer)

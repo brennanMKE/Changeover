@@ -1,0 +1,1597 @@
+{
+  "engine" : {
+    "api" : "VNRecognizeTextRequest",
+    "customWords" : 99,
+    "framework" : "Vision",
+    "languageCorrection" : false,
+    "languages" : [
+      "en",
+      "fr",
+      "es",
+      "de",
+      "it",
+      "pt",
+      "nl",
+      "ja"
+    ],
+    "level" : "accurate",
+    "minimumTextHeightFraction" : 0.02,
+    "os" : "Version 27.0 (Build 26A428)",
+    "upscale" : 1
+  },
+  "format" : "changeover-menu-ocr/1",
+  "stills" : [
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc1",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            178,
+            126,
+            550,
+            158
+          ],
+          "text" : "PLEASE SELECT FEATURE TO VIEW:"
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            140,
+            166,
+            416,
+            278
+          ],
+          "text" : "GÄT OUDOORS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            354,
+            241,
+            583,
+            349
+          ],
+          "text" : "Unde ßuck"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc11",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc12",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            228,
+            136,
+            490,
+            158
+          ],
+          "text" : "THIS MOTION PICTURE HAS BEEN RATED"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            242,
+            164,
+            472,
+            186
+          ],
+          "text" : "PG PARENTAL GUIDANCE SUGGESTED (8"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            244,
+            183,
+            492,
+            208
+          ],
+          "text" : "SOME MATERIAL MAY NOT BE SUITABLE FOR CHILOREN ®"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            338,
+            236,
+            382,
+            252
+          ],
+          "text" : "BY THE"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            230,
+            250,
+            490,
+            268
+          ],
+          "text" : "CLASSIFICATION AND RATING ADMINISTRATION"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            184,
+            325,
+            300,
+            347
+          ],
+          "text" : "www.filmratings.com"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc12-cell2",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc14",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            118,
+            302,
+            142
+          ],
+          "text" : "UNIVERSAL"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            178,
+            245,
+            560,
+            281
+          ],
+          "text" : "Le niveau parental autorisé"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            177,
+            277,
+            299,
+            315
+          ],
+          "text" : "a etabli."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            180,
+            319,
+            540,
+            360
+          ],
+          "text" : "Pressez \"oui\" á continuer."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            246,
+            388,
+            294,
+            414
+          ],
+          "text" : "oui"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            427,
+            384,
+            492,
+            414
+          ],
+          "text" : "arrêt"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc15",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            118,
+            304,
+            142
+          ],
+          "text" : "UNIVERSAL"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            244,
+            548,
+            278
+          ],
+          "text" : "Ce film ne peut pas être visionné"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            280,
+            502,
+            314
+          ],
+          "text" : "parce que le niveau parental"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            311,
+            421,
+            350
+          ],
+          "text" : "autorisé de l'appareil."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            150,
+            368,
+            540,
+            404
+          ],
+          "text" : "Veuillez sortir le disque, sil vous"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            404,
+            216,
+            434
+          ],
+          "text" : "plaît."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc16",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            118,
+            302,
+            142
+          ],
+          "text" : "UNIVERSAL"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            168,
+            248,
+            514,
+            278
+          ],
+          "text" : "El nivel de calificación de los"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            170,
+            284,
+            454,
+            316
+          ],
+          "text" : "padres ha establecido."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            167,
+            323,
+            463,
+            367
+          ],
+          "text" : "Elija \"sí\" para continuar."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            434,
+            386,
+            484,
+            414
+          ],
+          "text" : "alto"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc17",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            118,
+            302,
+            142
+          ],
+          "text" : "UNIVERSAL"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            253,
+            574,
+            293
+          ],
+          "text" : "Esta pélicula no se exhibira debido"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            289,
+            552,
+            327
+          ],
+          "text" : "al nivel calificación de los padres"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            324,
+            578,
+            364
+          ],
+          "text" : "que ha establecido de la máquina."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            386,
+            430,
+            422
+          ],
+          "text" : "Por favor, quite el disc."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc2",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            284,
+            77,
+            436,
+            113
+          ],
+          "text" : "FBLAKNINACY"
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            298,
+            127,
+            390,
+            188
+          ],
+          "text" : "SAL BUREANG OY E"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            178,
+            206,
+            544,
+            234
+          ],
+          "text" : "The unauthorized reproduction or"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            162,
+            234,
+            560,
+            264
+          ],
+          "text" : "distribution of this copyrighted work"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            129,
+            264,
+            588,
+            297
+          ],
+          "text" : "is illegal. Criminal copyright infringement,"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            189,
+            294,
+            528,
+            324
+          ],
+          "text" : "including infringement without"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            140,
+            320,
+            584,
+            352
+          ],
+          "text" : "monetary gain, is investigated by the FBI"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            160,
+            350,
+            562,
+            382
+          ],
+          "text" : "and is punishable by up to 5 years in"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            212,
+            377,
+            510,
+            409
+          ],
+          "text" : "federal prison and a fine of"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            308,
+            408,
+            416,
+            440
+          ],
+          "text" : "$250,000."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc2-cell2",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc20",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc21",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            344,
+            80,
+            380,
+            92
+          ],
+          "text" : "AVIS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            300,
+            96,
+            422,
+            112
+          ],
+          "text" : "ANTIPIRATAGE"
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            292,
+            116,
+            398,
+            190
+          ],
+          "text" : "EAAE DAMANT DNA"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            166,
+            210,
+            554,
+            234
+          ],
+          "text" : "Il est strictement interdit de reproduire ou de"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            166,
+            236,
+            554,
+            265
+          ],
+          "text" : "distribuer le présent matériel protégé par des"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            166,
+            268,
+            554,
+            292
+          ],
+          "text" : "droits d'auteur. Le FBI fera enquête sur toute"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            150,
+            294,
+            567,
+            325
+          ],
+          "text" : "atteinte criminelle aux droits d'auteur y compris"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            326,
+            562,
+            348
+          ],
+          "text" : "les infractions sans but lucratif. Toute violation"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            172,
+            354,
+            548,
+            380
+          ],
+          "text" : "peut entraîner une peine d'emprisonnement"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            148,
+            382,
+            574,
+            408
+          ],
+          "text" : "maximale de cinq ans dans un pénitencier fédéral"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            162,
+            410,
+            558,
+            438
+          ],
+          "text" : "et une amende de 250 000 dollars américains."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc21-cell2",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc22",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            312,
+            80,
+            408,
+            92
+          ],
+          "text" : "ADVERTENCIA"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            286,
+            94,
+            434,
+            110
+          ],
+          "text" : "ANTIPIRATERIA del FBI"
+        },
+        {
+          "confidence" : 0.3,
+          "rect" : [
+            300,
+            128,
+            400,
+            185
+          ],
+          "text" : "CEA PEREND OF TA"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            148,
+            238,
+            572,
+            264
+          ],
+          "text" : "La reproducción o distribución no autorizada de"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            126,
+            270,
+            591,
+            297
+          ],
+          "text" : "esta obra protegida por derechos de autor es ilegal."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            148,
+            293,
+            574,
+            326
+          ],
+          "text" : "La infracción criminal de los derechos de autor,"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            148,
+            326,
+            572,
+            354
+          ],
+          "text" : "incluyendo la infracción sin lucro monetario, es"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            138,
+            355,
+            582,
+            384
+          ],
+          "text" : "investigada por el FBI y es castigable con pena de"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            138,
+            383,
+            582,
+            413
+          ],
+          "text" : "hasta 5 años en prisión federal y multa de $250,000."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc22-cell2",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc23",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc24",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc3",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            118,
+            302,
+            142
+          ],
+          "text" : "UNIVERSAL"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            172,
+            246,
+            560,
+            287
+          ],
+          "text" : "The parental level of the player"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            172,
+            286,
+            346,
+            317
+          ],
+          "text" : "has been set."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            172,
+            325,
+            466,
+            364
+          ],
+          "text" : "Press \"yes\" to continue."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            246,
+            388,
+            292,
+            416
+          ],
+          "text" : "yes"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            428,
+            383,
+            488,
+            418
+          ],
+          "text" : "stop"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc4",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            156,
+            118,
+            302,
+            142
+          ],
+          "text" : "UNIVERSAL"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            188,
+            252,
+            522,
+            288
+          ],
+          "text" : "This movie will not play due"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            186,
+            288,
+            522,
+            320
+          ],
+          "text" : "to the current parental level"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            188,
+            322,
+            438,
+            356
+          ],
+          "text" : "setting of the player."
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            190,
+            378,
+            446,
+            410
+          ],
+          "text" : "Please eject the disc."
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vmgm-lu1-pgc9",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-01-lu1-pgc1",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            220,
+            41,
+            338,
+            96
+          ],
+          "text" : "Greetings From"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            311,
+            54,
+            383,
+            102
+          ],
+          "text" : "THE"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            279,
+            57,
+            568,
+            154
+          ],
+          "text" : "GREAT OUIDOORS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            434,
+            234,
+            573,
+            297
+          ],
+          "text" : "LANGUAGES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            445,
+            278,
+            562,
+            336
+          ],
+          "text" : "TRAILERS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            466,
+            323,
+            538,
+            371
+          ],
+          "text" : "PLAY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            495,
+            384,
+            575,
+            428
+          ],
+          "text" : "MENU"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-01-lu1-pgc2",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            366,
+            39,
+            581,
+            122
+          ],
+          "text" : "LANCUACES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            381,
+            107,
+            563,
+            173
+          ],
+          "text" : "SPOREN LANGUAGE"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            382,
+            162,
+            462,
+            203
+          ],
+          "text" : "ENGLISH"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            381,
+            189,
+            474,
+            238
+          ],
+          "text" : "FRANÇAIS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            382,
+            222,
+            489,
+            270
+          ],
+          "text" : "SUBTITLES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            387,
+            249,
+            512,
+            304
+          ],
+          "text" : "ENGLISH SDH®"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            390,
+            304,
+            426,
+            330
+          ],
+          "text" : "OFF"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            386,
+            313,
+            573,
+            374
+          ],
+          "text" : "\"SUBTITLED FOR THE DEAF"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            384,
+            339,
+            540,
+            394
+          ],
+          "text" : "& HARD-OF-HEARING"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            220,
+            414,
+            472,
+            430
+          ],
+          "text" : "RSALSTUDIOSHOMEENTERTAINMENT.COM"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            497,
+            384,
+            574,
+            427
+          ],
+          "text" : "MENU"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-01-lu1-pgc3",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            366,
+            39,
+            581,
+            122
+          ],
+          "text" : "LANCUACES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            381,
+            107,
+            563,
+            173
+          ],
+          "text" : "SPOREN LANGUAGE"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            382,
+            162,
+            462,
+            203
+          ],
+          "text" : "ENGLISH"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            381,
+            189,
+            474,
+            238
+          ],
+          "text" : "FRANÇAIS"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            382,
+            222,
+            489,
+            270
+          ],
+          "text" : "SUBTITLES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            387,
+            249,
+            512,
+            304
+          ],
+          "text" : "ENGLISH SDH®"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            390,
+            304,
+            426,
+            330
+          ],
+          "text" : "OFF"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            386,
+            313,
+            573,
+            374
+          ],
+          "text" : "\"SUBTITLED FOR THE DEAF"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            384,
+            339,
+            540,
+            394
+          ],
+          "text" : "& HARD-OF-HEARING"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            220,
+            414,
+            472,
+            430
+          ],
+          "text" : "RSALSTUDIOSHOMEENTERTAINMENT.COM"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            497,
+            384,
+            574,
+            427
+          ],
+          "text" : "MENU"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-02-lu1-pgc1",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            343,
+            40,
+            586,
+            150
+          ],
+          "text" : "Unce fuck"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            453,
+            199,
+            558,
+            227
+          ],
+          "text" : "Languages"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            482,
+            246,
+            530,
+            274
+          ],
+          "text" : "Play"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            518,
+            410,
+            566,
+            430
+          ],
+          "text" : "MENU"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-02-lu1-pgc2",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            381,
+            48,
+            579,
+            125
+          ],
+          "text" : "Languages"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            402,
+            150,
+            560,
+            170
+          ],
+          "text" : "SPOKEN LANGUAGE"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            412,
+            179,
+            482,
+            201
+          ],
+          "text" : "ENGLISH"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            412,
+            206,
+            492,
+            228
+          ],
+          "text" : "FRANÇAIS®"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            398,
+            244,
+            488,
+            267
+          ],
+          "text" : "SUBTITLES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            410,
+            274,
+            520,
+            296
+          ],
+          "text" : "ENGLISH SDH®"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            410,
+            306,
+            444,
+            326
+          ],
+          "text" : "OFF-"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            394,
+            350,
+            560,
+            370
+          ],
+          "text" : "*SUBTITLED FOR THE DEAF"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            402,
+            370,
+            532,
+            390
+          ],
+          "text" : "& HARD-OF-HEARING"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            410,
+            420,
+            428
+          ],
+          "text" : "www.universalstudioshomeentertainment.com"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            520,
+            410,
+            566,
+            428
+          ],
+          "text" : "MENU"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-02-lu1-pgc3",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            381,
+            48,
+            579,
+            125
+          ],
+          "text" : "Languages"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            402,
+            150,
+            560,
+            170
+          ],
+          "text" : "SPOKEN LANGUAGE"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            412,
+            179,
+            482,
+            201
+          ],
+          "text" : "ENGLISH"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            412,
+            206,
+            492,
+            228
+          ],
+          "text" : "FRANÇAIS®"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            398,
+            244,
+            488,
+            267
+          ],
+          "text" : "SUBTITLES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            410,
+            274,
+            520,
+            296
+          ],
+          "text" : "ENGLISH SDH®"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            410,
+            306,
+            444,
+            326
+          ],
+          "text" : "OFF-"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            394,
+            350,
+            560,
+            370
+          ],
+          "text" : "*SUBTITLED FOR THE DEAF"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            402,
+            370,
+            532,
+            390
+          ],
+          "text" : "& HARD-OF-HEARING"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            152,
+            410,
+            420,
+            428
+          ],
+          "text" : "www.universalstudioshomeentertainment.com"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            520,
+            410,
+            566,
+            428
+          ],
+          "text" : "MENU"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc1",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-04-lu1-pgc1",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-05-lu1-pgc1",
+      "observations" : [
+
+      ]
+    }
+  ]
+}
