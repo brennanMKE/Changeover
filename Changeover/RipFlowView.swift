@@ -234,9 +234,15 @@ struct RipFlowView: View {
         case .confirm:
             ConfirmStepView()
         case .ripping(let jobID):
-            RippingStepView(jobID: jobID)
+            // #0163/#0164 — the disc's plan, so the Ripping step can say which
+            // film of how many this is and what follows it. `nil` on an
+            // ordinary disc, which is every sentence's "say nothing new" case.
+            RippingStepView(jobID: jobID, plan: flow.ripPlan)
         case .done(let jobID):
-            DoneStepView(jobID: jobID)
+            // #0164 — the per-disc report: one row per film, imported or
+            // skipped. On a one-film disc the plan holds one entry and every
+            // added sentence returns nil, so the card is unchanged.
+            DoneStepView(jobID: jobID, plan: flow.ripPlan)
         }
     }
 }

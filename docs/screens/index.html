@@ -72,10 +72,10 @@
      <code>./run-remote-tests.sh gordon ScreenshotHarnessTests/everyScreenRendersToAPNG</code>,
      then <code>Tools/build-screen-review.py</code>.</p>
   <ul class="counts">
-    <div><b>12</b><span>screens</span></div>
-    <div><b>5</b><span>paths</span></div>
-    <div><b>4</b><span>open questions</span></div>
-    <div><b>2026-09-26</b><span>generated</span></div>
+    <div><b>14</b><span>screens</span></div>
+    <div><b>6</b><span>paths</span></div>
+    <div><b>5</b><span>open questions</span></div>
+    <div><b>2026-09-28</b><span>generated</span></div>
   </ul>
   <h2 class="path">Path 1 — automatic import</h2><section class="card" id="1a-insert-disc">
   <a class="shot" href="1a-insert-disc.png"><img src="1a-insert-disc.png" alt="Waiting for a disc" width="620" height="340" loading="lazy"></a>
@@ -107,7 +107,7 @@
 </section><section class="card" id="1d-ripping">
   <a class="shot" href="1d-ripping.png"><img src="1d-ripping.png" alt="Ripping, with the identification evidence carried forward" width="620" height="640" loading="lazy"></a>
   <div class="notes">
-    <p class="meta"><span class="sid">1d-ripping</span><code>ripping(job-20260926-221741-7CA1)</code></p>
+    <p class="meta"><span class="sid">1d-ripping</span><code>ripping(job-20260928-003416-DC0D)</code></p>
     <h3>Ripping, with the identification evidence carried forward</h3>
     <p class="purpose">The encode is running. The evidence panel exists so the reasoning stays on screen for the forty minutes the encode takes.</p>
     <p class="field"><span class="k">Look at</span>Whether the evidence panel is big enough to be read, and whether the progress block and the panel are fighting for the same space.</p>
@@ -143,7 +143,7 @@
 </section><section class="card" id="2d-ripping-after-manual">
   <a class="shot" href="2d-ripping-after-manual.png"><img src="2d-ripping-after-manual.png" alt="Ripping a film the user chose by hand" width="620" height="640" loading="lazy"></a>
   <div class="notes">
-    <p class="meta"><span class="sid">2d-ripping-after-manual</span><code>ripping(job-20260926-221743-95A4)</code></p>
+    <p class="meta"><span class="sid">2d-ripping-after-manual</span><code>ripping(job-20260928-003417-F632)</code></p>
     <h3>Ripping a film the user chose by hand</h3>
     <p class="purpose">The evidence panel now records both halves: what the app guessed, and what the user chose. Before #0154 the heading claimed the app had identified it.</p>
     <p class="field"><span class="k">Look at</span>The heading change, and whether “✎ You chose …” is distinguishable enough from the app&#x27;s own lines.</p>
@@ -170,7 +170,7 @@
 </section><h2 class="path">Path 4 — endings</h2><section class="card flagged" id="4a-done-success">
   <a class="shot" href="4a-done-success.png"><img src="4a-done-success.png" alt="Finished, filed into Plex" width="620" height="340" loading="lazy"></a>
   <div class="notes">
-    <p class="meta"><span class="sid">4a-done-success</span><code>done(job-20260926-221744-9A9B)</code></p>
+    <p class="meta"><span class="sid">4a-done-success</span><code>done(job-20260928-003418-E7B5)</code></p>
     <h3>Finished, filed into Plex</h3>
     <p class="purpose">The successful ending. The disc has been ejected and the file is in the library.</p>
     <p class="field"><span class="k">Look at</span><em class="callout">THE USER&#x27;S OTHER COMPLAINT:</em> this screen loses most of the useful detail the Ripping screen had. Should the evidence panel survive into Done?</p>
@@ -184,6 +184,24 @@
     <p class="purpose">The eject ladder is running. On joe&#x27;s USB drive this can take minutes and six attempts, because loginwindow dissents while the screen is locked.</p>
     <p class="field"><span class="k">Look at</span>Whether a multi-minute eject needs more than “Ejecting…” — on joe it really does take that long.</p>
     <p class="field"><span class="k">On screen for</span>Seconds to several minutes.</p>
+  </div>
+</section><h2 class="path">Path 6 — two films on one disc</h2><section class="card flagged" id="6a-two-features-unnamed">
+  <a class="shot" href="6a-two-features-unnamed.png"><img src="6a-two-features-unnamed.png" alt="Two features, neither named yet" width="620" height="640" loading="lazy"></a>
+  <div class="notes">
+    <p class="meta"><span class="sid">6a-two-features-unnamed</span><code>chooseMovie</code></p>
+    <h3>Two features, neither named yet</h3>
+    <p class="purpose">The disc holds two films. Both search boxes are deliberately blank: the volume label is UNCLE_BUCK_GREAT_OUTDOORS, and prefilling that whole string returns 0 results and looks broken.</p>
+    <p class="field"><span class="k">Look at</span><em class="callout">THE KEY SCREEN:</em> is it obvious there are two films and that each needs naming? Are the blocks distinguishable by runtime alone, with no poster and no title?</p>
+    <p class="field"><span class="k">On screen for</span>Until the user names at least one film.</p>
+  </div>
+</section><section class="card" id="6b-two-features-one-named">
+  <a class="shot" href="6b-two-features-one-named.png"><img src="6b-two-features-one-named.png" alt="One film named, one still to go" width="620" height="640" loading="lazy"></a>
+  <div class="notes">
+    <p class="meta"><span class="sid">6b-two-features-one-named</span><code>chooseMovie</code></p>
+    <h3>One film named, one still to go</h3>
+    <p class="purpose">The user has searched for and picked Uncle Buck for the 1h 40m feature. The other block is still waiting.</p>
+    <p class="field"><span class="k">Look at</span>Does the named block read as settled, and the unnamed one as outstanding? Is it clear which film this pass will actually rip?</p>
+    <p class="field"><span class="k">On screen for</span>Until the second film is named, or Start is pressed.</p>
   </div>
 </section>
   <footer>Every scenario asserts the <code>FlowStep</code> it derived, so a screenshot cannot drift

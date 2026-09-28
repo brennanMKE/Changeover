@@ -43,7 +43,7 @@
     "lookAt" : "Whether the evidence panel is big enough to be read, and whether the progress block and the panel are fighting for the same space.",
     "path" : "Path 1 — automatic import",
     "purpose" : "The encode is running. The evidence panel exists so the reasoning stays on screen for the forty minutes the encode takes.",
-    "step" : "ripping(job-20260927-233255-5CA0)",
+    "step" : "ripping(job-20260928-003416-DC0D)",
     "title" : "Ripping, with the identification evidence carried forward",
     "width" : "620"
   },
@@ -91,7 +91,7 @@
     "lookAt" : "The heading change, and whether “✎ You chose …” is distinguishable enough from the app's own lines.",
     "path" : "Path 2 — the user identifies it",
     "purpose" : "The evidence panel now records both halves: what the app guessed, and what the user chose. Before #0154 the heading claimed the app had identified it.",
-    "step" : "ripping(job-20260927-233257-2873)",
+    "step" : "ripping(job-20260928-003417-F632)",
     "title" : "Ripping a film the user chose by hand",
     "width" : "620"
   },
@@ -127,7 +127,7 @@
     "lookAt" : "THE USER'S OTHER COMPLAINT: this screen loses most of the useful detail the Ripping screen had. Should the evidence panel survive into Done?",
     "path" : "Path 4 — endings",
     "purpose" : "The successful ending. The disc has been ejected and the file is in the library.",
-    "step" : "done(job-20260927-233258-ECA0)",
+    "step" : "done(job-20260928-003418-E7B5)",
     "title" : "Finished, filed into Plex",
     "width" : "620"
   },
