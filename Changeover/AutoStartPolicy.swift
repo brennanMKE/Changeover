@@ -118,15 +118,27 @@ nonisolated enum AutoStartPolicy {
     ///     `lastOutcome` outlives the disc it belongs to, so without this a
     ///     fresh disc inserted after a successful rip is thrown straight back
     ///     out.
+    ///   - planIncomplete: #0163 — this disc's `DiscRipPlan` still has a film
+    ///     on it. One job finishing is not the disc finishing when the disc
+    ///     holds two films: on Uncle Buck / The Great Outdoors, 2026-09-27,
+    ///     the user named both films, one was ripped, and the disc was
+    ///     ejected with the second still on it. Defaulted to `false` so the
+    ///     single-film disc — a plan of one, finished the moment its job
+    ///     settles — asks exactly the question it always did.
     static func shouldEjectAfterJob(
         isRunning: Bool,
         isEjecting: Bool,
         currentDisc: DiscInsertion?,
         ranJobForDisc: DiscInsertion?,
         alreadyAsked: Bool,
-        outcome: JobOutcome?
+        outcome: JobOutcome?,
+        planIncomplete: Bool = false
     ) -> Bool {
         guard !isRunning, !isEjecting, !alreadyAsked else { return false }
+        // #0163: the disc is not finished with. Checked before the outcome,
+        // because a *successful* job is exactly the case that would otherwise
+        // take the disc out from under the film still waiting on it.
+        guard !planIncomplete else { return false }
         // #0152 — matched on the insertion, not the whole value. An unmounted
         // disc learns its label from its own scan, so the disc a job ran for
         // and the disc now in the drive are the same insertion with different

@@ -124,6 +124,20 @@ struct DVDPipeline {
         await DiscEjector.defaultEject(volumeURL: volumeURL)
     }
 
+    /// #0163 — whether the disc this job read still holds another film that
+    /// is going to be imported, in which case step 3 must not take it out.
+    ///
+    /// This type stays singular: it encodes one title into one file and, when
+    /// it is done with the disc, ejects it. The only thing that knows a
+    /// *second* film is coming is the `DiscRipPlan` the flow holds, so this
+    /// is a fact handed in, not one derived here. Read at the moment the
+    /// eject would run rather than at construction, because the plan can be
+    /// settled — every film skipped, say — while the encode is in flight.
+    ///
+    /// Defaulted to `{ false }` so every existing construction site compiles
+    /// unchanged and the 24-in-26 single-film disc ejects exactly as it did.
+    var keepDisc: @MainActor () -> Bool = { false }
+
     /// #0052 — whether the disc this job reads from was pulled from the
     /// drive while this job was running. Defaulted to `{ false }` so every
     /// existing construction site compiles unchanged; production passes
@@ -897,26 +911,35 @@ struct DVDPipeline {
         // reported but never turns this successful job into a failed one:
         // the movie is already in Plex, so `outcome` stays `.succeeded`
         // regardless of what `DiscEjector` reports.
-        let ejectOutcome = await eject(disc)
-        // Recorded outside the job log as well: the job log lives in the
-        // History window, and an eject that quietly fails is exactly the
-        // thing nobody is watching for. Limitless finished at 02:04 and its
-        // disc was still in the drive forty minutes later.
-        FlowDiagnostics.note("pipeline eject: \(ejectOutcome)")
-        switch ejectOutcome {
-        case .ejected:
-            log("✓ Disc ejected — safe to insert the next one")
-        case .busy(let message):
-            log("⚠︎ \(message)")
-        case .failed(let message):
-            log("⚠︎ \(message)")
-        case .unmountedButNotEjected(let message):
-            // #0049: the disc unmounted but the tray didn't open — it's
-            // still physically in the drive on a path that no longer
-            // resolves. In production `eject` is `JobContext.eject`, which
-            // has already marked the disc unavailable on the controller;
-            // the job itself still succeeds.
-            log("⚠︎ \(message)")
+        // #0163: a disc with another film still to import stays in the drive.
+        // The one thing this job must not do is take the source of the next
+        // import out of the machine — which is precisely what happened on the
+        // Uncle Buck / The Great Outdoors disc on 2026-09-27.
+        if keepDisc() {
+            FlowDiagnostics.note("pipeline eject: held — this disc still has a film to import")
+            log("✓ Keeping the disc in — another film on it is still to be imported")
+        } else {
+            let ejectOutcome = await eject(disc)
+            // Recorded outside the job log as well: the job log lives in the
+            // History window, and an eject that quietly fails is exactly the
+            // thing nobody is watching for. Limitless finished at 02:04 and its
+            // disc was still in the drive forty minutes later.
+            FlowDiagnostics.note("pipeline eject: \(ejectOutcome)")
+            switch ejectOutcome {
+            case .ejected:
+                log("✓ Disc ejected — safe to insert the next one")
+            case .busy(let message):
+                log("⚠︎ \(message)")
+            case .failed(let message):
+                log("⚠︎ \(message)")
+            case .unmountedButNotEjected(let message):
+                // #0049: the disc unmounted but the tray didn't open — it's
+                // still physically in the drive on a path that no longer
+                // resolves. In production `eject` is `JobContext.eject`, which
+                // has already marked the disc unavailable on the controller;
+                // the job itself still succeeds.
+                log("⚠︎ \(message)")
+            }
         }
 
         log("── Done. Scan your Plex Movies library to pick up the new title.")

@@ -849,6 +849,11 @@ final class RipFlowController {
         }
 
         resolutionStartedFor = nil
+        // #0163: the plan was for the disc that just left. A plan outliving
+        // its disc would hold the next one in the drive for a film that is no
+        // longer in the machine.
+        ripPlan = nil
+        jobs.discHasMoreWork = false
         // #0160: the features, the films named for them and their search
         // boxes all belonged to the disc that just left.
         featureSelection = FeatureSelection()
@@ -1148,7 +1153,9 @@ final class RipFlowController {
     /// title, which is exactly when `StartGate` already disables Start.
     func ripRequest(jobs: JobController) -> RipRequest? {
         guard let movie = search.selectedMovie, let featureTitleIndex = jobs.selectedTitleIndex else { return nil }
-        return RipRequest(
+        return ripRequest(
+            jobs: jobs,
+            feature: featureTitleIndex,
             metadata: MovieMetadata(
                 from: movie,
                 selectionDisc: selectionDisc,
@@ -1158,8 +1165,28 @@ final class RipFlowController {
                 // The field, not the label: it was seeded from the label
                 // and may since have been corrected.
                 edition: edition
-            ),
-            featureTitleIndex: featureTitleIndex,
+            )
+        )
+    }
+
+    /// #0163 — the same request for a film named **explicitly**, rather than
+    /// for whatever the mirrored singular selection happens to hold.
+    ///
+    /// The second film on a disc is never the active one: #0160 mirrors only
+    /// the active feature into `search`/`selectedMovieID`, so building the
+    /// second job out of those fields would file it under the first film's
+    /// name — the #0034 data-loss shape, one disc rather than two. Each
+    /// `DiscRipPlan.Entry` already carries its own feature index and its own
+    /// `MovieMetadata` (bound to the disc it was chosen for), so the request
+    /// is built from the entry and nothing else.
+    ///
+    /// The extras, the audio tracks and the chapter markers still come off
+    /// `JobController`, because they are facts about the **title** and the
+    /// caller settles the title (`jobs.selectTitle`) before asking for this.
+    func ripRequest(jobs: JobController, feature: Int, metadata: MovieMetadata) -> RipRequest {
+        RipRequest(
+            metadata: metadata,
+            featureTitleIndex: feature,
             extraTitleIndices: jobs.selectedExtraTitleIndices.sorted(),
             audioTrackNumbers: jobs.selectedAudioTrackNumbers,
             // Menu intelligence: the disc's own chapter names, only when the
@@ -1319,7 +1346,7 @@ final class RipFlowController {
     ///
     /// This is a retry, not a second mechanism: same `ejectDisc`, asked again
     /// once the job is over and nothing holds the disc.
-    private func evaluatePostJobEject(jobs: JobController) {
+    private func evaluatePostJobEject(jobs: JobController, settings: AppSettings) {
         // Remember whose job this is while it runs. `lastOutcome` outlives
         // the disc it belongs to, so testing it alone would eject the *next*
         // disc the moment it was inserted after a successful rip.
@@ -1327,6 +1354,12 @@ final class RipFlowController {
             ranJobForDisc = jobs.insertedDisc
             return
         }
+        // #0163 — "a job finished with this disc still in the drive" is also
+        // the moment the next film on it may begin. Settling and starting run
+        // before anything considers an eject, so a plan with a film left on it
+        // has already put the drive back to work by the time the question is
+        // asked (and `isRunning` below answers it a second time).
+        advanceRipPlan(jobs: jobs, settings: settings)
         guard let disc = jobs.insertedDisc,
               AutoStartPolicy.shouldEjectAfterJob(
                   isRunning: jobs.isRunning,
@@ -1334,7 +1367,10 @@ final class RipFlowController {
                   currentDisc: disc,
                   ranJobForDisc: ranJobForDisc,
                   alreadyAsked: postJobEjectedDiscs.contains(Self.discIdentity(disc)),
-                  outcome: jobs.lastOutcome
+                  outcome: jobs.lastOutcome,
+                  // A plan with every film settled — ripped, failed or skipped
+                  // — is a disc that is finished with, whatever that plan held.
+                  planIncomplete: ripPlan.map { !$0.isFinished } ?? false
               )
         else { return }
 
@@ -1552,7 +1588,7 @@ final class RipFlowController {
     /// Begin, continue or abandon the countdown, from whatever just changed.
     func evaluateAutoStart(jobs: JobController, settings: AppSettings) {
         recordIdentification(jobs: jobs, settings: settings)
-        evaluatePostJobEject(jobs: jobs)
+        evaluatePostJobEject(jobs: jobs, settings: settings)
         evaluateAutoEject(jobs: jobs, settings: settings)
         let decision = AutoStartPolicy.decide(
             enabled: settings.autoStartRipping,
@@ -1638,9 +1674,172 @@ final class RipFlowController {
 
     /// Starts the job, if there is one to start. Returns whatever
     /// `JobController.start` decided, so a refusal is still logged there.
+    ///
+    /// #0163 — Start now settles the **whole disc**: every film the user has
+    /// named becomes an entry in a `DiscRipPlan`, and the first of them is
+    /// started. A single-feature disc builds a plan of one and takes the same
+    /// path, so the 24-in-26 case has no branch of its own to regress.
     @discardableResult
     func startRipping(jobs: JobController, settings: AppSettings) -> Bool {
+        if let disc = jobs.insertedDisc,
+           var plan = DiscRipPlan.make(disc: disc, films: plannedFilms(jobs: jobs)) {
+            skipFilmsAlreadyInPlex(&plan, jobs: jobs)
+            ripPlan = plan
+            if plan.isFinished {
+                // Every film on the disc is one the user already has. Nothing
+                // to run, and — as `plan.isFinished` — nothing holding the
+                // disc either, so the ordinary release path applies.
+                jobs.note("▶ Nothing to import from this disc — every film on it is already in Plex")
+                return false
+            }
+            return startNextFilm(jobs: jobs, settings: settings)
+        }
+        // No disc in the drive, or no film named: exactly the state this was
+        // in before a plan existed. `ripRequest` refuses, or
+        // `JobController.start` logs why it will not run.
+        ripPlan = nil
         guard let request = ripRequest(jobs: jobs) else { return false }
         return jobs.start(request: request, settings: settings)
+    }
+
+    // MARK: - One disc, several imports (#0163)
+
+    /// What this disc is going to produce, from the moment Start is pressed.
+    ///
+    /// `nil` until then, and again as soon as another disc goes in. The plan
+    /// is the only thing that knows a disc is not finished with, which is why
+    /// `shouldEjectAfterJob` has to be told: on Uncle Buck / The Great
+    /// Outdoors, 2026-09-27, the user named both films, one was ripped, and
+    /// the disc came out with the second still on it.
+    private(set) var ripPlan: DiscRipPlan?
+
+    /// Every film the user has named on the disc now in the drive, in disc
+    /// order.
+    ///
+    /// On a single-feature disc this is the one mirrored selection, which is
+    /// what `ripRequest` has always built from. On a multi-feature disc it is
+    /// **every** feature with a film against it — read from that feature's own
+    /// search context, never from the mirrored singular selection, which only
+    /// ever holds the active one.
+    private func plannedFilms(jobs: JobController) -> [(feature: Int, metadata: MovieMetadata)] {
+        guard featureSelection.isMultiFeature else {
+            guard let movie = search.selectedMovie, let feature = jobs.selectedTitleIndex else { return [] }
+            return [(feature, metadata(for: movie))]
+        }
+        return featureSelection.features.compactMap { feature in
+            guard let model = featureSearchModels[feature],
+                  let movie = model.selectedMovie,
+                  // The block's own pick, not a stale `selectedMovie` the view
+                  // model has not caught up with — the two are set together by
+                  // `selectFeature` and the pick is the statement of intent.
+                  featureSelection.movieID(for: feature) == movie.id else { return nil }
+            return (feature, metadata(for: movie))
+        }
+    }
+
+    /// One film, bound to the disc it was chosen for (#0034) and carrying the
+    /// edition the disc holds. The edition is a fact about the *disc*, so both
+    /// films on a double feature share it.
+    private func metadata(for movie: TMDBMovie) -> MovieMetadata {
+        MovieMetadata(from: movie, selectionDisc: selectionDisc, edition: edition)
+    }
+
+    /// Take out of the plan the films Plex already has.
+    ///
+    /// A skip, never a failure (`DiscRipPlan.State`): a film the user already
+    /// owns and has not asked to replace is not an error, and treating it as
+    /// one would keep the disc in the drive waiting for a retry nobody wants.
+    /// The answers come from #0161's per-feature checks, which is why this is
+    /// inert on a single-feature disc — there `StartGate.duplicateUnacknowledged`
+    /// has already refused Start, so nothing reaches here to skip.
+    private func skipFilmsAlreadyInPlex(_ plan: inout DiscRipPlan, jobs: JobController) {
+        for entry in plan.waiting {
+            guard case .present = libraryStatus(for: entry.feature) else { continue }
+            // "Replace the Existing File" is a statement about one film. It
+            // excuses that film and no other on the same disc.
+            if let ack = replaceAcknowledgement,
+               ack.movieID == featureSelection.movieID(for: entry.feature) { continue }
+            plan.skip(entry.feature, reason: "already in Plex")
+            jobs.note("▶ Skipping \(entry.metadata.title) — it is already in Plex")
+        }
+    }
+
+    /// Start the plan's next film, settling the title it is on first.
+    ///
+    /// The one place a job is started from a plan, so the bookkeeping that
+    /// makes the sequence work — the title, the eject hold, `markRunning` —
+    /// happens once rather than at each caller.
+    @discardableResult
+    private func startNextFilm(jobs: JobController, settings: AppSettings) -> Bool {
+        guard var plan = ripPlan, let entry = plan.next else { return false }
+
+        // The audio tracks and the extras belong to the title being ripped,
+        // and `selectTitle` recomputes the preselection for it. Only when it
+        // is actually a different title: `selectTitle` also clears
+        // `mismatchAcknowledgement` (#0032), and re-settling the title the
+        // user already confirmed would throw that confirmation away on the
+        // ordinary single-film disc, where Start settled it long ago.
+        if jobs.selectedTitleIndex != entry.feature {
+            jobs.selectTitle(entry.feature, settings: settings)
+        }
+
+        // #0163's reported bug, at the point of harm: `DVDPipeline` ejects on
+        // success (step 3), so without this the first film's own job takes the
+        // second film's disc out of the drive. `waiting` still contains the
+        // entry about to start, so "more than one" is "there is another after
+        // this".
+        jobs.discHasMoreWork = plan.waiting.count > 1
+
+        let request = ripRequest(jobs: jobs, feature: entry.feature, metadata: entry.metadata)
+        guard jobs.start(request: request, settings: settings), let jobID = jobs.current?.id else {
+            // Refused — and a disc held for work that is not going to happen
+            // is a drive that will not open.
+            jobs.discHasMoreWork = false
+            // Taken out of the plan rather than left `.waiting`. `JobController`
+            // refuses for reasons that do not clear on their own (a request
+            // that will not resolve against the held scan), and the flow
+            // re-evaluates on every observed change — so an entry left waiting
+            // would be retried, and its refusal logged, forever, while the
+            // disc it is on was never released. `JobController.start` has
+            // already said why in the job log.
+            plan.skip(entry.feature, reason: "the job could not be started")
+            ripPlan = plan
+            return false
+        }
+        plan.markRunning(entry.feature, jobID: jobID)
+        ripPlan = plan
+        return true
+    }
+
+    /// A job has ended with this disc still in the drive: settle its entry
+    /// and, if the plan still has a film on it, start that one.
+    ///
+    /// Settling is keyed on the job id, and `DiscRipPlan.settle` only touches
+    /// an entry that is `.running` under it — so this is a no-op the second
+    /// and the hundredth time the flow re-evaluates for the same finished
+    /// job, and needs no "already seen" set of its own.
+    private func advanceRipPlan(jobs: JobController, settings: AppSettings) {
+        guard var plan = ripPlan else { return }
+
+        if let job = jobs.history.last {
+            plan.settle(jobID: job.id, succeeded: job.outcome?.failure == nil)
+        }
+        // An "already in Plex" answer that only landed while the last film was
+        // encoding still counts: the point of the skip is not to rip over a
+        // copy the user has, and when the answer arrived does not change that.
+        skipFilmsAlreadyInPlex(&plan, jobs: jobs)
+        ripPlan = plan
+
+        guard plan.next != nil,
+              let disc = jobs.insertedDisc,
+              // The plan is about one disc. A different one in the drive
+              // invalidates all of it, the #0034 rule applied to the queue.
+              SelectionReset.sameDisc(plan.disc, disc),
+              !jobs.isEjecting,
+              !jobs.discUnavailable
+        else { return }
+
+        FlowDiagnostics.note("rip plan: starting the next film on this disc")
+        startNextFilm(jobs: jobs, settings: settings)
     }
 }
