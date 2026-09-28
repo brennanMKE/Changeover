@@ -199,6 +199,23 @@ nonisolated enum DiscTitleFormatting {
         )
     }
 
+    /// #0160 — the heading over one feature's search block on the Choose
+    /// step, e.g. "Movie 1 of 2 · 1h 40m".
+    ///
+    /// The runtime is in the heading rather than buried in the block because
+    /// it is the only thing that tells one film from the other before either
+    /// is named: the two rows on the Uncle Buck disc differ by 9m13s and by
+    /// nothing else a person can see.
+    nonisolated static func featureBlockWording(position: Int, of count: Int, title: DiscTitle?) -> Wording {
+        let runtime = title.map { plainDuration($0.durationSeconds) }
+        let plain = "Movie \(position) of \(count)" + (runtime.map { " · \($0)" } ?? "")
+        guard let title else { return Wording(plain: plain) }
+        return Wording(
+            plain: plain,
+            detail: "Feature \(position) of \(count) — \(confirmationDetail(index: title.index, title: title))"
+        )
+    }
+
     /// #0140 — the collapsed disclosure's one-line summary for the
     /// (purely informational, #0036) subtitle list, e.g. "21 subtitle
     /// tracks, none carried into the output". `count` is the number of
