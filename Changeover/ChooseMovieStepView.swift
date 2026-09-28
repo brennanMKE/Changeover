@@ -128,6 +128,24 @@ struct ChooseMovieStepView: View {
                 Divider()
             }
 
+            // #0161 — said once, and only when it is true of every film on the
+            // disc. At that point the useful thing is to take the disc out,
+            // but the app says so rather than doing it: the duplicate
+            // auto-eject stays suppressed here, because ejecting a disc whose
+            // *other* film the user does not have is the worse mistake.
+            if let notice = FeatureLibraryStatus.everyFeatureNotice(flow.featureLibraryStates) {
+                WordingText(
+                    wording: Wording(
+                        plain: FeatureLibraryStatus.plainEveryFeatureNotice(flow.featureLibraryStates) ?? notice,
+                        detail: notice),
+                    font: .subheadline,
+                    tint: .orange
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                Divider()
+            }
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     let features = flow.featureSelection.features
@@ -251,6 +269,11 @@ private struct FeatureSearchBlock: View {
             results
         }
         .padding()
+        // #0161 — ask the library as soon as this block has a film, so the
+        // answer lands beside the name instead of two steps later on Confirm.
+        .task(id: libraryTaskKey) {
+            await flow.checkLibraryForFeature(feature, settings: settings)
+        }
         .task(id: search.results.map(\.id)) {
             await search.loadCredits(apiKey: settings.tmdbAPIKey)
         }
@@ -260,6 +283,13 @@ private struct FeatureSearchBlock: View {
         .onChange(of: search.selectedMovie?.id) { _, _ in
             flow.followFeatureSelectionDrop(feature, jobs: jobs, settings: settings)
         }
+    }
+
+    /// Re-keyed on the chosen film, so naming one runs the probe and
+    /// re-picking runs it again — the `.task(id:)` shape the Confirm step
+    /// already uses for the singular check.
+    private var libraryTaskKey: String {
+        "\(feature)-\(flow.featureSelection.movieID(for: feature).map(String.init) ?? "none")"
     }
 
     private var isChosen: Bool { flow.featureSelection.movieID(for: feature) != nil }
@@ -273,6 +303,17 @@ private struct FeatureSearchBlock: View {
                 font: .headline
             )
             Spacer(minLength: 8)
+            // #0161 — this film's own library answer, beside this film's own
+            // name. Before this the check ran only on the Confirm step and
+            // only for the active film, so a disc whose *both* films were
+            // already in Plex said nothing at all.
+            if let badge = FeatureLibraryStatus.badge(for: flow.libraryStatus(for: feature)) {
+                Text(badge)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
             if isChosen {
                 if isActive {
                     Text("Ripping this one")

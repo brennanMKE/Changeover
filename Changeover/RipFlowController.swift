@@ -349,6 +349,8 @@ final class RipFlowController {
         guard indices != featureSelection.features else { return }
 
         featureSelection.setFeatures(indices)
+        featureLibraryChecks = featureLibraryChecks.filter { indices.contains($0.key) }
+        featureLibraryGenerations = featureLibraryGenerations.filter { indices.contains($0.key) }
         featureSearchModels = featureSearchModels.filter { indices.contains($0.key) }
         for index in indices where featureSearchModels[index] == nil {
             featureSearchModels[index] = MovieSearchViewModel()
@@ -387,6 +389,8 @@ final class RipFlowController {
         guard let model = featureSearchModels[feature] else { return }
         model.select(movieID: movieID, apiKey: settings.tmdbAPIKey)
         featureSelection.choose(movieID: movieID, for: feature)
+        // #0161: last film's answer must not sit under this film's name.
+        featureLibraryChecks[feature] = nil
         applyActiveFeature(jobs: jobs, settings: settings)
     }
 
@@ -531,6 +535,62 @@ final class RipFlowController {
     /// Bumped when a rip finishes, so the library answer is asked again
     /// rather than reused from before the encode.
     private var libraryEpoch = 0
+
+    // MARK: - Is each film on a multi-feature disc already in Plex? (#0161)
+
+    /// One library answer per feature, keyed by disc title index.
+    ///
+    /// The singular `libraryCheck` above answers for whichever film is active,
+    /// and only once the Confirm step is reached. On a disc holding several
+    /// films that is too late and too narrow — the user is naming two films by
+    /// hand and cannot see that they already own both. Reported on the Uncle
+    /// Buck / The Great Outdoors disc, 2026-09-27, with both already filed as
+    /// {tmdb-2616} and {tmdb-2617}.
+    private(set) var featureLibraryChecks: [Int: LibraryCheck] = [:]
+
+    /// This feature's answer, as something the block can render.
+    func libraryStatus(for feature: Int) -> FeatureLibraryStatus.State {
+        FeatureLibraryStatus.state(
+            from: featureLibraryChecks[feature] ?? .idle,
+            hasFilm: featureSelection.movieID(for: feature) != nil)
+    }
+
+    /// Every feature's answer, in disc order — what the all-features notice
+    /// is computed from.
+    var featureLibraryStates: [FeatureLibraryStatus.State] {
+        featureSelection.features.map { libraryStatus(for: $0) }
+    }
+
+    /// Generation guard per feature, the same shape `checkLibrary` uses: an
+    /// answer that arrives after the user re-picked that block's film is
+    /// dropped rather than shown against the wrong movie.
+    private var featureLibraryGenerations: [Int: Int] = [:]
+
+    /// Ask the library about one feature's film. Called when a film is named
+    /// in a block, so the answer appears beside it rather than two steps later.
+    func checkLibraryForFeature(
+        _ feature: Int,
+        settings: AppSettings,
+        probe: @escaping LibraryProbeRunner = LibraryProbe.defaultRunner
+    ) async {
+        guard let movieID = featureSelection.movieID(for: feature) else {
+            featureLibraryChecks[feature] = nil
+            return
+        }
+        let tmdbID = String(movieID)
+        let moviesPath = settings.plexMoviesPath
+
+        let generation = (featureLibraryGenerations[feature] ?? 0) + 1
+        featureLibraryGenerations[feature] = generation
+        featureLibraryChecks[feature] = .checking(tmdbID: tmdbID)
+
+        let lookup = await probe(moviesPath, tmdbID)
+
+        // Still the same film in the same block, and still the newest ask.
+        guard featureLibraryGenerations[feature] == generation,
+              featureSelection.movieID(for: feature) == movieID else { return }
+        featureLibraryChecks[feature] = .done(tmdbID: tmdbID, lookup)
+    }
 
     /// Runs the probe for the movie currently selected, and stores the answer
     /// — unless the selection moved on while it was in flight, in which case
