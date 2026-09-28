@@ -44,6 +44,9 @@ struct DiscCorpusTests {
             var outcomeIndex: Int?
             /// The `.playAll` episode cluster, in ascending order. `nil` otherwise.
             var outcomeEpisodes: [Int]?
+            /// #0157 — the feature titles on a multi-feature disc, in disc
+            /// order. Optional so every existing manifest still decodes.
+            var outcomeFeatureIndices: [Int]?
             var featureDurationSeconds: Int?
             var featureChapterCount: Int?
             /// `AudioTrackOptions.options(for:).count` on the feature title.
@@ -852,6 +855,11 @@ struct DiscCorpusTests {
         case ("playAll", .playAll(let index, let episodes)):
             #expect(index == expect.outcomeIndex, "\(slug): .playAll index")
             #expect(episodes == (expect.outcomeEpisodes ?? []), "\(slug): .playAll episode cluster")
+        case ("multipleFeatures", .multipleFeatures(let indices)):
+            // #0157 — the indices are the assertion. A disc that holds two
+            // films and reports one is the bug this fixture exists for.
+            #expect(indices == (expect.outcomeFeatureIndices ?? []),
+                    "\(slug): .multipleFeatures indices")
         case ("none", .none):
             break
         case ("noTitles", .noTitles):

@@ -91,6 +91,11 @@ nonisolated enum DiscTitleHeuristic {
         /// matches. The user can still override via the picker (#0026); the
         /// default must not be "rip it as a movie".
         case playAll(index: Int, episodes: [Int])
+        /// #0157 — the disc holds more than one feature film, so there is no
+        /// single answer to give. `indices` are the feature titles in disc
+        /// order, always two or more. The user names each one; the app must
+        /// not pick.
+        case multipleFeatures(indices: [Int])
         /// #0039 — the scan genuinely read zero titles: a successful
         /// process exit, valid JSON, an empty `TitleList`. Distinct from
         /// `.none` on purpose — this is a statement about what the scan
@@ -147,6 +152,22 @@ nonisolated enum DiscTitleHeuristic {
         // title only when exactly one clears the floor and otherwise asks a
         // person. On this disc three titles clear it, so it asks, which is
         // the correct outcome for a disc whose feature genuinely is ambiguous.
+        // #0157 — asked before the scanner's answer is accepted, because the
+        // scanner's answer is what hid this.
+        //
+        // Get Hard / The Campaign, 2026-09-27: two features, 85m22s and
+        // 100m12s. HandBrake reported `MainFeature: 5`, the branch below took
+        // it, and the second film was never mentioned again — the app searched
+        // for one film, matched a wrong one at a near-identical runtime, and
+        // with a better label would have filed it. `classifyByLength` already
+        // refuses to answer when two titles clear the floor; it simply never
+        // ran, because a single answer from outside short-circuited it.
+        //
+        // Naming one title is not evidence that the others are not features.
+        if let several = severalFeatures(disc) {
+            return .multipleFeatures(indices: several.map(\.index))
+        }
+
         if let mainFeatureIndex, mainFeatureIndex > 0,
            let candidate = disc.titles.first(where: { $0.index == mainFeatureIndex }),
            candidate.durationSeconds >= featureMinimumSeconds {
@@ -170,6 +191,43 @@ nonisolated enum DiscTitleHeuristic {
             return .none
         }
         return outcome(for: candidate, source: .length, among: disc.titles)
+    }
+
+    /// At most this many titles can plausibly be separate feature films on one
+    /// disc. A genuine triple feature exists; nine does not, and a disc that
+    /// produces nine has been misread.
+    ///
+    /// Belt-and-braces only: on every disc measured, `sameChapterCount` below
+    /// already rejected the over-large cases on its own.
+    static let maximumFeaturesPerDisc = 4
+
+    /// #0157 — the feature titles, when a disc holds more than one film.
+    /// `nil` means "not a multi-feature disc", which is almost every disc.
+    ///
+    /// Measured against 19 discs (6 corpus fixtures, 13 archived on the rip
+    /// host). It fires on exactly one: the Get Hard / The Campaign disc.
+    nonisolated static func severalFeatures(_ disc: DiscInfo) -> [DiscTitle]? {
+        let candidates = widescreenPreferred(
+            disc.titles.filter { $0.durationSeconds >= featureMinimumSeconds }
+        )
+        guard candidates.count >= 2 else { return nil }
+
+        // A film stored as seamless-branching variants looks exactly like a
+        // multi-feature disc by runtime, and is not one.
+        //
+        // Adventureland, archived 2026-09-26: 65 titles, of which **eight**
+        // clear the 45-minute floor at 98–115 minutes. They are one film —
+        // and they give themselves away by all having **29 chapters**. Two
+        // different films agreeing on runtime is ordinary; eight of them
+        // agreeing on a chapter count is one film cut eight ways.
+        //
+        // The Get Hard disc, by contrast, has 11 and 14 chapters. This is the
+        // load-bearing half of the rule: without it that disc would have been
+        // interrupted every time, for nothing.
+        guard Set(candidates.map(\.chapterCount)).count > 1 else { return nil }
+        guard candidates.count <= maximumFeaturesPerDisc else { return nil }
+
+        return candidates.sorted { $0.index < $1.index }
     }
 
     /// Anything wider than this counts as widescreen; below it, 4:3.

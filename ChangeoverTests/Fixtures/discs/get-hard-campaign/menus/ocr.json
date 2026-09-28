@@ -1,0 +1,191 @@
+{
+  "engine" : {
+    "api" : "VNRecognizeTextRequest",
+    "customWords" : 99,
+    "framework" : "Vision",
+    "languageCorrection" : false,
+    "languages" : [
+      "en",
+      "fr",
+      "es",
+      "de",
+      "it",
+      "pt",
+      "nl",
+      "ja"
+    ],
+    "level" : "accurate",
+    "minimumTextHeightFraction" : 0.02,
+    "os" : "Version 27.0 (Build 26A428)",
+    "upscale" : 1
+  },
+  "format" : "changeover-menu-ocr/1",
+  "stills" : [
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-01-lu1-pgc7",
+      "observations" : [
+        {
+          "confidence" : 1,
+          "rect" : [
+            220,
+            68,
+            264,
+            80
+          ],
+          "text" : "KEVN MART"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            172,
+            82,
+            256,
+            104
+          ],
+          "text" : "• GET HARD"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            176,
+            381,
+            258,
+            417
+          ],
+          "text" : "DECAMPAIGNI"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            346,
+            88,
+            400,
+            114
+          ],
+          "text" : "PLAY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            344,
+            122,
+            568,
+            146
+          ],
+          "text" : "WITH ENGLISH SUBTITLES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            344,
+            144,
+            568,
+            172
+          ],
+          "text" : "WITH SPANISH SUBTITLES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            344,
+            332,
+            400,
+            358
+          ],
+          "text" : "PLAY"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            344,
+            366,
+            568,
+            390
+          ],
+          "text" : "WITH ENGLISH SUBTITLES"
+        },
+        {
+          "confidence" : 1,
+          "rect" : [
+            344,
+            390,
+            568,
+            416
+          ],
+          "text" : "WITH SPANISH SUBTITLES"
+        }
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-02-lu1-pgc1",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-03-lu1-pgc1",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-04-lu1-pgc1",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-05-lu1-pgc1",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-06-lu1-pgc1",
+      "observations" : [
+
+      ]
+    },
+    {
+      "frame" : {
+        "height" : 480,
+        "standard" : "NTSC",
+        "width" : 720
+      },
+      "id" : "vtsm-07-lu1-pgc1",
+      "observations" : [
+
+      ]
+    }
+  ]
+}

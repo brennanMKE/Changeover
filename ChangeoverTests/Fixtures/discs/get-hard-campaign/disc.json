@@ -1,0 +1,95 @@
+{
+  "formatVersion": 2,
+  "slug": "get-hard-campaign",
+  "volumeName": "7000078778_1",
+  "driveName": "joe",
+  "discId": "c421ff57e8dbb7685ad7b38fd3923429",
+  "driveModel": "PLDS DVD+-RW DS-8A8SH",
+  "handbrakeVersion": "HandBrake 1.11.2",
+  "capturedDate": "2026-09-27",
+  "reviewed": true,
+  "capture": {
+    "tool": "Tools/capture-disc.sh",
+    "toolVersion": 2,
+    "ifoFiles": 8,
+    "rawArchive": "joe:~/changeover-fixtures/get-hard-campaign"
+  },
+  "menus": {
+    "captured": true,
+    "css": "available",
+    "menuCount": 56,
+    "stillCount": 7,
+    "ocrRun": true,
+    "judgeRun": false,
+    "missing": []
+  },
+  "notes": "Reviewed 2026-09-27. THE FIRST DOUBLE-FEATURE DISC IN THE CORPUS: Get Hard (title 5, 100m12s, 14 chapters) and The Campaign (title 4, 85m22s, 11 chapters), both Will Ferrell, sold as one disc. HandBrake reports MainFeature: 5, which is why the app saw only Get Hard and never mentioned the second film -- the scanner's single answer short-circuited the ambiguity check that already existed (#0157). The volume name is a catalogue number and TMDB returns 0 results for it. Menu OCR reads GET HARD cleanly, mangles THE CAMPAIGN as DECAMPAIGNI, and repeats the PLAY / WITH ENGLISH SUBTITLES block once per film -- a structural signal of the double feature needing no text recognition. audioTrackCount/subtitleGroupCount are left null: they are per-feature on this disc, so a single number would be a false expectation.",
+  "expect": {
+    "titleCount": 7,
+    "mainFeatureIndex": 5,
+    "outcome": "multipleFeatures",
+    "outcomeIndex": null,
+    "outcomeEpisodes": null,
+    "featureDurationSeconds": 6012,
+    "featureChapterCount": 14,
+    "audioTrackCount": null,
+    "subtitleGroupCount": null,
+    "menu": {
+      "playButtonTitle": null,
+      "playButtonLabel": "PLAY",
+      "playButtonResolvedBy": null,
+      "chapterMenuButtons": 0,
+      "chapterNamesEmitted": 0,
+      "chapterPages": [],
+      "spokenLanguages": [],
+      "subtitleLanguages": [],
+      "tvSignal": false,
+      "unresolvedMnemonics": [
+        "LinkTailPGC"
+      ]
+    },
+    "agreement": {
+      "heuristicRoute": "severalFeatures",
+      "menuRoute": "unresolved",
+      "scannerRaw": 5,
+      "scannerTitle": 5,
+      "signals": {
+        "buttonCount": 6,
+        "chapterButtons": 0,
+        "chapterNamesEmitted": 0,
+        "chapterNamesRead": 0,
+        "chapterPages": 0,
+        "labels": [
+          {
+            "role": "play",
+            "target": "unresolved:LinkTailPGC",
+            "text": "PLAY"
+          },
+          {
+            "target": "unresolved:LinkTailPGC",
+            "text": "WITH ENGLISH SUBTITLES"
+          },
+          {
+            "target": "unresolved:LinkTailPGC",
+            "text": "WITH SPANISH SUBTITLES"
+          }
+        ],
+        "largestMenuButtons": 6,
+        "menuCount": 56,
+        "menusWithButtons": 1,
+        "spokenLanguages": [],
+        "subtitleLanguages": [],
+        "titleJumpingButtons": 0,
+        "titlesJumpedTo": [],
+        "tvSignal": false,
+        "tvSignalReason": "no menu with ≥3 title-jumping buttons"
+      },
+      "slug": "get-hard-campaign",
+      "verdict": "bothAbstained"
+    },
+    "outcomeFeatureIndices": [
+      4,
+      5
+    ]
+  }
+}

@@ -32,6 +32,9 @@ nonisolated struct MenuAgreement: Codable, Equatable, Sendable {
         /// Titles, but no feature: no scanner answer and zero or two-plus
         /// titles over the threshold. The picker, and a reason.
         case noCandidate
+        /// #0157 — several feature films on one disc. Names no single title,
+        /// deliberately: the whole point is that there isn't one.
+        case severalFeatures
 
         /// Routes that name a title the app would actually rip. `playAllGuard`
         /// names a title and then refuses it, which is exactly why it is not
@@ -271,6 +274,9 @@ nonisolated struct MenuAgreement: Codable, Equatable, Sendable {
         case .playAll(let index, _): return (.playAllGuard, index)
         case .noTitles: return (.noTitles, nil)
         case .none: return (.noCandidate, nil)
+        // #0157: no title, for the same reason `noTitles` gives none — the
+        // disc has no single feature for the menu to agree or disagree with.
+        case .multipleFeatures: return (.severalFeatures, nil)
         }
     }
 

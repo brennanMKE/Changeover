@@ -65,8 +65,22 @@ struct DiscNameSearchTermTests {
             "oppenheimer":         "Oppenheimer",
             "tv-season-playall":   "Tv Season",
         ]
+        // #0157 — one committed disc genuinely has no usable term, and that is
+        // a fact about the disc rather than a gap in the corpus. The Get Hard /
+        // The Campaign double feature is labelled `7000078778_1`, a catalogue
+        // number: TMDB returns 0 results for it, so deriving `nil` is the
+        // correct answer and the resolution ladder has to fall through to the
+        // menus. Listed by name so a disc that *should* derive a term cannot
+        // join it silently.
+        let noUsableTerm: Set<String> = ["get-hard-campaign"]
+
         for (slug, volumeName) in Self.corpusVolumeNames() {
             let derived = DiscNameSearchTerm.derive(volumeName: volumeName)
+            if noUsableTerm.contains(slug) {
+                #expect(derived == nil,
+                        "\(slug) (\(volumeName)) is a catalogue number and must derive nothing")
+                continue
+            }
             #expect(derived != nil, "\(slug) (\(volumeName)) should derive a usable search term")
             if let expected = expected[slug] {
                 #expect(derived == expected, "\(slug) (\(volumeName))")

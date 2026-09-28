@@ -181,6 +181,24 @@ nonisolated enum DiscTitleFormatting {
         }
     }
 
+    /// #0157 — the sentence for a disc holding several feature films.
+    ///
+    /// Leads with the count, because that is the fact the user does not have
+    /// and cannot get anywhere else. The runtimes follow, since they are how
+    /// a person tells which row is which film.
+    nonisolated static func multipleFeaturesWording(indices: [Int], disc: DiscInfo) -> Wording {
+        let runtimes = indices
+            .compactMap { index in disc.titles.first { $0.index == index } }
+            .map { plainDuration($0.durationSeconds) }
+            .joined(separator: " and ")
+        let n = indices.count
+        return Wording(
+            plain: "This disc has \(n) movies on it (\(runtimes)). Pick the one to rip first.",
+            detail: "\(n) full-length features on this disc — \(runtimes). "
+                + "No main feature was chosen; pick the one to rip."
+        )
+    }
+
     /// #0140 — the collapsed disclosure's one-line summary for the
     /// (purely informational, #0036) subtitle list, e.g. "21 subtitle
     /// tracks, none carried into the output". `count` is the number of

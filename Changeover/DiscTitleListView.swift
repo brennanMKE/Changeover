@@ -183,6 +183,24 @@ struct DiscTitleListView: View {
             }
             titleTable(result.disc, badgeIndex: suggestion?.index, badgeLabel: "Recommended")
 
+        case .multipleFeatures(let indices):
+            // #0157 — several films on one disc. The table is shown with every
+            // feature badged, and nothing preselected: the app knows how many
+            // films there are and not which is which, so choosing for the user
+            // would be a guess dressed as an answer.
+            VStack(alignment: .leading, spacing: 2) {
+                WordingText(
+                    wording: DiscTitleFormatting.multipleFeaturesWording(
+                        indices: indices, disc: result.disc),
+                    font: .subheadline,
+                    tint: .orange
+                )
+                DetailOnlyText(
+                    text: "Rip one now and put the disc back in for the other"
+                        + (indices.count > 2 ? "s" : "") + ".")
+            }
+            titleTable(result.disc, badgeIndex: nil, badgeIndices: Set(indices), badgeLabel: "Feature")
+
         case .noTitles:
             // #0039 — a scan that read zero titles is a failure-shaped
             // state, not the `.none` picker: there is nothing to choose
@@ -330,20 +348,26 @@ struct DiscTitleListView: View {
     // MARK: - Full title table (the 0-candidate and Play All fallback; the
     // "Show all titles" disclosure for `.single`)
 
-    private func titleTable(_ disc: DiscInfo, badgeIndex: Int?, badgeLabel: String? = nil) -> some View {
+    /// `badgeIndices` (#0157) badges *several* rows — a disc with more than
+    /// one feature has no single row to point at. `badgeIndex` remains for the
+    /// one-answer cases; passing both is meaningless and never done.
+    private func titleTable(_ disc: DiscInfo, badgeIndex: Int?,
+                            badgeIndices: Set<Int> = [], badgeLabel: String? = nil) -> some View {
         let selection = Binding<Int?>(
             get: { jobs.selectedTitleIndex },
             set: { jobs.selectTitle($0, settings: settings) }
         )
         return List(disc.titles, selection: selection) { title in
-            titleRow(title, badgeIndex: badgeIndex, badgeLabel: badgeLabel)
+            titleRow(title, badgeIndex: badgeIndex,
+                     badgeIndices: badgeIndices, badgeLabel: badgeLabel)
                 .tag(title.index)
         }
         .listStyle(.inset)
         .frame(minHeight: 160, maxHeight: 260)
     }
 
-    private func titleRow(_ title: DiscTitle, badgeIndex: Int?, badgeLabel: String? = nil) -> some View {
+    private func titleRow(_ title: DiscTitle, badgeIndex: Int?,
+                          badgeIndices: Set<Int> = [], badgeLabel: String? = nil) -> some View {
         HStack(spacing: 10) {
             // Which row is the movie, stated rather than implied. The list's
             // own highlight is nearly invisible when the window is not focused
@@ -383,7 +407,7 @@ struct DiscTitleListView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Spacer(minLength: 0)
-            if title.index == badgeIndex {
+            if title.index == badgeIndex || badgeIndices.contains(title.index) {
                 Text(badgeLabel ?? (showsDetails ? "Main feature" : DiscTitleFormatting.plainFeatureLabel))
                     .font(.caption2)
                     .padding(.horizontal, 6)

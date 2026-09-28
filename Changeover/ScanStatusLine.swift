@@ -82,6 +82,18 @@ nonisolated enum ScanStatusLine {
                     tone: .success,
                     action: .none
                 )
+            case .multipleFeatures(let indices):
+                // #0157 — the headline fact about this disc, said plainly.
+                // Nothing is preselected and nothing may be: the app knows
+                // there are several films and does not know which is which,
+                // so the count is the whole message.
+                let n = indices.count
+                return Line(
+                    text: "Scan complete — \(titles), \(n) full-length features",
+                    plain: "Disc ready — this disc has \(n) movies on it. You'll name each one next.",
+                    tone: .warning,
+                    action: .none
+                )
             case .playAll:
                 // #0025: nothing is preselected on a Play All disc, and the
                 // strip must not imply otherwise.
