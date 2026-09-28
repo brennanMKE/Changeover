@@ -168,6 +168,48 @@ final class RipFlowController {
     /// `search.selectedMovie`, and clearing this would not unpick anything.
     private(set) var recommendedMovieID: Int?
 
+    // MARK: - Several films on one disc (#0160)
+
+    /// Which film the user has named for each feature, on a disc that holds
+    /// more than one (#0157's `DiscTitleHeuristic.multipleFeatures`).
+    ///
+    /// Empty — and every question on it answers "no" — for a single-feature
+    /// disc, which is why nothing on the ordinary path had to change. The
+    /// decisions live in the pure `FeatureSelection`; this class only keeps
+    /// it in step with the scan and mirrors the chosen film into the flow's
+    /// existing single selection.
+    private(set) var featureSelection = FeatureSelection()
+
+    /// One search context per feature, keyed by disc title index.
+    ///
+    /// Composed rather than folded into `MovieSearchViewModel`: that type
+    /// already holds a query, a debounce, a generation guard, results, a
+    /// selection and a runtime lookup, all of which a *second* film needs its
+    /// own copy of. Making one view model indexable would have meant
+    /// rewriting every one of those for a case that does not arise on 24 of
+    /// the 26 discs measured; making several costs one dictionary. It also
+    /// gives each feature its own `queryIsUserEntered` (#0156) for free, so
+    /// what the user typed against one film is never cleared by anything
+    /// happening to another.
+    private var featureSearchModels: [Int: MovieSearchViewModel] = [:]
+
+    /// The search context for one feature, or `nil` before `reconcile` has
+    /// seen a scan naming it. Views render nothing for a feature with no
+    /// context rather than creating one — a view body must not mutate
+    /// observable state.
+    func featureSearch(_ feature: Int) -> MovieSearchViewModel? {
+        featureSearchModels[feature]
+    }
+
+    /// The film that will actually be ripped on this pass.
+    ///
+    /// Always `search.selectedMovie`: on a multi-feature disc the active
+    /// feature's pick is *mirrored* into that same single selection (see
+    /// `applyActiveFeature`), so every consumer downstream — `ripRequest`,
+    /// the Confirm step, the library check, the archive — keeps reading the
+    /// one field it always read.
+    var chosenMovie: TMDBMovie? { search.selectedMovie }
+
     /// `search` is optional rather than defaulted to `MovieSearchViewModel()`
     /// in the signature: a default argument expression is evaluated in a
     /// `nonisolated` context, and the view model is explicitly `@MainActor`.
@@ -291,6 +333,146 @@ final class RipFlowController {
         if search.selectedMovie != nil {
             movieConfirmed = true
         }
+    }
+
+    // MARK: - Naming each film on a multi-feature disc (#0160)
+
+    /// Keep `featureSelection` and its search contexts in step with the scan.
+    ///
+    /// Called from `reconcile`, which already runs on every event that could
+    /// change what is in the drive or what is known about it. A scan that
+    /// reads the same features again changes nothing (`setFeatures` is keyed
+    /// on the list), so this is safe to call as often as everything else in
+    /// `reconcile` is.
+    private func syncFeatures(jobs: JobController, apiKey: String) {
+        let indices = FeatureSelection.features(in: Self.discOutcome(jobs.scanState))
+        guard indices != featureSelection.features else { return }
+
+        featureSelection.setFeatures(indices)
+        featureSearchModels = featureSearchModels.filter { indices.contains($0.key) }
+        for index in indices where featureSearchModels[index] == nil {
+            featureSearchModels[index] = MovieSearchViewModel()
+        }
+
+        // #0156 — never throw away what the user typed.
+        //
+        // The scan takes tens of seconds and the search box is on screen the
+        // whole time, so text typed before the disc had answered lives in the
+        // single search model. That is exactly how "The Campaign" was typed
+        // on 2026-09-27. When the answer turns out to be "several films",
+        // that box stops being drawn — so carry the text into the first
+        // feature's box, where they can still see and use it, rather than
+        // leaving it somewhere nothing shows.
+        if search.queryIsUserEntered,
+           !search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let first = indices.first,
+           let model = featureSearchModels[first],
+           model.query.isEmpty {
+            model.query = search.query
+            model.queryChanged(apiKey: apiKey)
+        }
+    }
+
+    /// `DiscTitleHeuristic`'s verdict for the scan currently held, or `nil`
+    /// when no scan has completed. The same classification the Choose step's
+    /// table and the scan status line already run — read here rather than
+    /// stored, so there is one answer and no copy of it to go stale.
+    nonisolated static func discOutcome(_ scanState: ScanState) -> DiscTitleHeuristic.Outcome? {
+        guard case .scanned(let result) = scanState else { return nil }
+        return DiscTitleHeuristic.classify(result.disc, mainFeatureIndex: result.mainFeatureIndex)
+    }
+
+    /// A results row clicked inside one feature's block (or the pick cleared).
+    func selectFeature(movieID: Int?, feature: Int, jobs: JobController, settings: AppSettings) {
+        guard let model = featureSearchModels[feature] else { return }
+        model.select(movieID: movieID, apiKey: settings.tmdbAPIKey)
+        featureSelection.choose(movieID: movieID, for: feature)
+        applyActiveFeature(jobs: jobs, settings: settings)
+    }
+
+    /// "Rip this one first" — switches which named film this pass will rip.
+    /// The other stays named; nothing is thrown away.
+    func makeFeatureActive(_ feature: Int, jobs: JobController, settings: AppSettings) {
+        featureSelection.makeActive(feature)
+        applyActiveFeature(jobs: jobs, settings: settings)
+    }
+
+    /// A keystroke in one feature's search box.
+    ///
+    /// Clears **that feature's** pick only, for the reason `queryChanged`
+    /// clears the single one (#0030's stuck-re-pick bug): a new result set
+    /// makes the previous row id meaningless. A film named against another
+    /// feature is untouched — it was judged against a different runtime and
+    /// nothing about it has changed.
+    func featureQueryChanged(_ feature: Int, jobs: JobController, settings: AppSettings) {
+        guard let model = featureSearchModels[feature] else { return }
+        if featureSelection.movieID(for: feature) != nil {
+            featureSelection.choose(movieID: nil, for: feature)
+            applyActiveFeature(jobs: jobs, settings: settings)
+        }
+        model.queryChanged(apiKey: settings.tmdbAPIKey)
+    }
+
+    /// Return / the Search button inside one feature's block.
+    func runFeatureSearchNow(_ feature: Int, jobs: JobController, settings: AppSettings) {
+        guard let model = featureSearchModels[feature] else { return }
+        if featureSelection.movieID(for: feature) != nil {
+            featureSelection.choose(movieID: nil, for: feature)
+            applyActiveFeature(jobs: jobs, settings: settings)
+        }
+        model.runSearchNow(apiKey: settings.tmdbAPIKey)
+    }
+
+    /// The view model dropped a feature's selection under us (the debounced
+    /// search firing), so the flow follows — `followSelectionDrop` for the
+    /// per-feature path.
+    func followFeatureSelectionDrop(_ feature: Int, jobs: JobController, settings: AppSettings) {
+        guard let model = featureSearchModels[feature],
+              model.selectedMovie == nil,
+              featureSelection.movieID(for: feature) != nil else { return }
+        featureSelection.choose(movieID: nil, for: feature)
+        applyActiveFeature(jobs: jobs, settings: settings)
+    }
+
+    /// Mirror the active feature's film into the flow's single selection, and
+    /// settle the disc title that goes with it.
+    ///
+    /// **This is what keeps the rest of the app singular.** Everything after
+    /// the Choose step is built on one film and one title, correctly: the
+    /// pipeline encodes one title (#0014) and a `RipRequest` carries one
+    /// `MovieMetadata`. Rather than teach the Confirm step, the library
+    /// check, the duplicate notice, the archive and `ripRequest` about
+    /// features — five places, each a chance to regress the 24-in-26 case —
+    /// the film the user is ripping *now* is copied into the state they
+    /// already read.
+    ///
+    /// The seam for ripping the second film later is `featureSelection`: the
+    /// other feature's film stays named in `choices` (`waitingFeatures`), so
+    /// a queue can start the next job from it without asking again. Today the
+    /// user puts the disc back in, and the block for the film they already
+    /// named is still on screen.
+    ///
+    /// A single-feature disc never reaches here.
+    private func applyActiveFeature(jobs: JobController, settings: AppSettings) {
+        guard featureSelection.isMultiFeature else { return }
+        let apiKey = settings.tmdbAPIKey
+
+        guard let feature = featureSelection.active,
+              let model = featureSearchModels[feature],
+              let movie = model.selectedMovie else {
+            select(movieID: nil, jobs: jobs, apiKey: apiKey)
+            jobs.selectTitle(nil, settings: settings)
+            return
+        }
+
+        // `search.select` resolves the movie out of `results`, so the results
+        // have to be there before the pick is made.
+        search.present(query: model.query, results: model.results)
+        select(movieID: movie.id, jobs: jobs, apiKey: apiKey)
+        // Nothing is preselected on a multi-feature disc (#0157) — naming the
+        // film for one feature is the only statement the user makes about
+        // which part of the disc to rip, so it settles the title too.
+        jobs.selectTitle(feature, settings: settings)
     }
 
     // MARK: - Search (#0030)
@@ -537,6 +719,10 @@ final class RipFlowController {
             // `selectionDisc`.
             clearLibraryCheck()
         }
+        // #0160 — before the search ladder below, which must know whether
+        // this disc holds one film or several before it offers the volume
+        // label as a term for "the" film.
+        syncFeatures(jobs: jobs, apiKey: apiKey)
         seedEdition(jobs: jobs)
         if let settings {
             resolveDiscSearch(jobs: jobs, settings: settings)
@@ -603,6 +789,10 @@ final class RipFlowController {
         }
 
         resolutionStartedFor = nil
+        // #0160: the features, the films named for them and their search
+        // boxes all belonged to the disc that just left.
+        featureSelection = FeatureSelection()
+        featureSearchModels = [:]
         editionSeededFor = nil
         edition = ""
         menuTitleTriedFor = nil
@@ -648,6 +838,24 @@ final class RipFlowController {
         else { return }
 
         resolutionStartedFor = disc
+
+        // #0160 — a disc with several films on it has no single answer, so
+        // there is nothing for this ladder to look up.
+        //
+        // Every rung here asks "what film is this disc?". On the Uncle Buck /
+        // The Great Outdoors disc the first rung derives "Uncle Buck Great
+        // Outdoors" from the volume label, TMDB returns nothing, and the user
+        // is left looking at a search box that filled itself with something
+        // that does not work — which reads as a fault rather than as a
+        // question. A blank box per film is honest: the app knows how many
+        // films there are and not which is which.
+        guard SearchPrefill.mayUseWholeLabel(featureCount: featureSelection.features.count) else {
+            let count = featureSelection.features.count
+            jobs.note("▶ This disc holds \(count) films — name each one below")
+            isResolvingDisc = false
+            return
+        }
+
         isResolvingDisc = true
 
         let label = disc.label
@@ -752,6 +960,13 @@ final class RipFlowController {
     /// Still a pre-selection. The list stays open, nothing advances, and
     /// every other result is one click away.
     func attemptAutoSelect(jobs: JobController, settings: AppSettings) {
+        // #0160 — never on a disc with several films. The auto-selector
+        // matches one search's results against the settled title's runtime;
+        // on this disc there is no settled title and no single search, and
+        // #0157's whole finding is that picking here is a guess dressed as an
+        // answer. Two films 9 to 15 minutes apart are exactly the case where
+        // a runtime match feels convincing and names the wrong one.
+        guard !featureSelection.isMultiFeature else { return }
         guard settings.autoSelectSearchResult,
               jobs.insertedDisc != nil,
               search.selectedMovie == nil,
@@ -910,7 +1125,11 @@ final class RipFlowController {
             runtimeLookup:       search.runtimeLookup,
             mismatchAcknowledgement: jobs.mismatchAcknowledgement,
             libraryCheck:            libraryCheck,
-            replaceAcknowledgement:  replaceAcknowledgement
+            replaceAcknowledgement:  replaceAcknowledgement,
+            // #0160 — on a disc holding several films, "no film chosen" has
+            // its own refusal, because the screen has one search box per film
+            // and "Choose a movie." does not say which.
+            featureChoices:          featureSelection.gateInput
         )
     }
 

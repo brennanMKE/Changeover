@@ -8,14 +8,30 @@ import SwiftUI
 /// slower than it is today. Everything else that used to share this screen —
 /// the folder preview, the title table, the tracks, the warnings, the log —
 /// belongs to a later step or to the History window.
+///
+/// #0160 — a disc can hold more than one film, and then this step asks the
+/// same question once per film instead of once. The two layouts are separate
+/// bodies rather than one body with conditions inside it: the single-feature
+/// disc is 24 of the 26 measured captures, and it must behave exactly as it
+/// did — including which `onChange` handlers exist at all.
 struct ChooseMovieStepView: View {
     @Environment(AppSettings.self) private var settings
     @Environment(JobController.self) private var jobs
     @Environment(RipFlowController.self) private var flow
 
     var body: some View {
+        if flow.featureSelection.isMultiFeature {
+            multipleFeaturesBody
+        } else {
+            singleFeatureBody
+        }
+    }
+
+    // MARK: - One film on the disc (the ordinary case)
+
+    private var singleFeatureBody: some View {
         @Bindable var search = flow.search
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             if let line = ScanStatusLine.line(for: jobs.scanState) {
                 ScanStatusStrip(line: line)
                 Divider()
@@ -93,6 +109,76 @@ struct ChooseMovieStepView: View {
         .onChange(of: search.selectedMovie?.id) { _, _ in flow.followSelectionDrop() }
     }
 
+    // MARK: - Several films on the disc (#0160)
+
+    /// One block per film, each with its own runtime, search box and results.
+    ///
+    /// Nothing is preselected and nothing may be: #0157 established that the
+    /// app knows *how many* films a disc holds and not *which is which*, so
+    /// every block starts blank — never with the whole volume label, which on
+    /// this disc names all of them at once and matches none of them
+    /// (`SearchPrefill.mayUseWholeLabel`).
+    ///
+    /// A `ScrollView`, like every other step body, so the blocks never
+    /// contribute to the window's minimum height (#0140).
+    private var multipleFeaturesBody: some View {
+        VStack(spacing: 0) {
+            if let line = ScanStatusLine.line(for: jobs.scanState) {
+                ScanStatusStrip(line: line)
+                Divider()
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    let features = flow.featureSelection.features
+                    ForEach(Array(features.enumerated()), id: \.element) { position, feature in
+                        if let search = flow.featureSearch(feature) {
+                            FeatureSearchBlock(
+                                feature: feature,
+                                position: position + 1,
+                                count: features.count,
+                                title: discTitle(feature),
+                                search: search
+                            )
+                            if feature != features.last { Divider() }
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: .infinity)
+
+            Divider()
+            StepActionBar {
+                // Which film this pass will rip, said once rather than in
+                // every block: only one job runs at a time (#0014), so the
+                // disc goes back in for the other one.
+                if let movie = flow.chosenMovie {
+                    Text("Ripping “\(movie.title)” first — put the disc back in for the other afterwards.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer()
+                Button("Continue") { flow.continueToConfirm() }
+                    .disabled(flow.chosenMovie == nil)
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                    .help(flow.chosenMovie == nil
+                          ? (StartDecision.noFeatureChosen.reason ?? "")
+                          : "Confirm the disc title and tracks for this movie.")
+                    .accessibilityHint(flow.chosenMovie == nil
+                                       ? "Name at least one of this disc's movies first."
+                                       : "Next: check the disc, then start.")
+            }
+        }
+    }
+
+    /// The scanned title behind one feature index, for its runtime.
+    private func discTitle(_ index: Int) -> DiscTitle? {
+        guard case .scanned(let result) = jobs.scanState else { return nil }
+        return result.disc.titles.first { $0.index == index }
+    }
+
     /// The selection binding goes through the flow controller, which binds
     /// the pick to the disc in the drive (#0034) and starts #0032's runtime
     /// lookup.
@@ -115,6 +201,157 @@ struct ChooseMovieStepView: View {
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+// MARK: - One film's block on a multi-feature disc (#0160)
+
+/// One feature on a disc that holds several: its runtime, its own search box,
+/// its own results, and the film the user named for it.
+///
+/// Every piece of state here belongs to this feature alone — including
+/// `queryIsUserEntered` (#0156), so text typed against one film is never
+/// cleared by anything that happens to another.
+private struct FeatureSearchBlock: View {
+    @Environment(AppSettings.self) private var settings
+    @Environment(JobController.self) private var jobs
+    @Environment(RipFlowController.self) private var flow
+
+    /// The disc title index this block is about.
+    let feature: Int
+    /// Which of the disc's films this is, and how many there are — the
+    /// heading's "Movie 1 of 2".
+    let position: Int
+    let count: Int
+    /// The scanned title, for its runtime. `nil` only if the scan moved on
+    /// under us, in which case the heading simply omits the runtime.
+    let title: DiscTitle?
+    /// This feature's own search context.
+    let search: MovieSearchViewModel
+
+    /// How many result rows a block shows.
+    ///
+    /// The step has two or three of these stacked, and a full-length list in
+    /// each would put the action bar below the screen. Six is enough to hold
+    /// the right answer for a term specific enough to have been typed at a
+    /// named film; anything vaguer is better narrowed than scrolled.
+    private static let visibleResults = 6
+
+    var body: some View {
+        @Bindable var search = search
+        return VStack(alignment: .leading, spacing: 8) {
+            header
+            HStack(spacing: 8) {
+                TextField("Search movies…", text: $search.query)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { flow.runFeatureSearchNow(feature, jobs: jobs, settings: settings) }
+                Button("Search") { flow.runFeatureSearchNow(feature, jobs: jobs, settings: settings) }
+                    .disabled(search.query.trimmingCharacters(in: .whitespaces).isEmpty || search.isLoading)
+            }
+            results
+        }
+        .padding()
+        .task(id: search.results.map(\.id)) {
+            await search.loadCredits(apiKey: settings.tmdbAPIKey)
+        }
+        .onChange(of: search.query) { _, _ in
+            flow.featureQueryChanged(feature, jobs: jobs, settings: settings)
+        }
+        .onChange(of: search.selectedMovie?.id) { _, _ in
+            flow.followFeatureSelectionDrop(feature, jobs: jobs, settings: settings)
+        }
+    }
+
+    private var isChosen: Bool { flow.featureSelection.movieID(for: feature) != nil }
+    private var isActive: Bool { flow.featureSelection.active == feature }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            WordingText(
+                wording: DiscTitleFormatting.featureBlockWording(
+                    position: position, of: count, title: title),
+                font: .headline
+            )
+            Spacer(minLength: 8)
+            if isChosen {
+                if isActive {
+                    Text("Ripping this one")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.2), in: Capsule())
+                        .foregroundStyle(Color.accentColor)
+                } else {
+                    // Both films are named; this says which to do first.
+                    // Nothing is thrown away either way — the other one stays
+                    // named for the pass after this.
+                    Button("Rip this one first") {
+                        flow.makeFeatureActive(feature, jobs: jobs, settings: settings)
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var results: some View {
+        if let chosen = search.selectedMovie {
+            HStack(alignment: .top, spacing: 8) {
+                MovieRow(movie: chosen, posterURL: search.posterURL(for: chosen),
+                         credits: search.creditsByID[chosen.id], isChosen: true)
+                Spacer(minLength: 8)
+                Button("Change") {
+                    flow.selectFeature(movieID: nil, feature: feature, jobs: jobs, settings: settings)
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+            }
+        } else if search.isLoading {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Searching…").font(.caption).foregroundStyle(.secondary)
+            }
+        } else if let wording = search.errorWording {
+            WordingText(wording: wording, font: .caption, tint: .red)
+        } else if search.results.isEmpty {
+            // The same rule as the single-feature empty state: a blank
+            // rectangle is not an answer, and on this disc the box is blank
+            // *on purpose*, so it has to say so.
+            Text(emptyLine)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            VStack(spacing: 0) {
+                ForEach(Array(search.results.prefix(Self.visibleResults))) { movie in
+                    Button {
+                        flow.selectFeature(movieID: movie.id, feature: feature,
+                                           jobs: jobs, settings: settings)
+                    } label: {
+                        MovieRow(movie: movie, posterURL: search.posterURL(for: movie),
+                                 credits: search.creditsByID[movie.id], isChosen: false)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                if search.results.count > Self.visibleResults {
+                    Text("…and \(search.results.count - Self.visibleResults) more. Add the year to narrow it down.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 4)
+                }
+            }
+        }
+    }
+
+    private var emptyLine: String {
+        if let searched = search.lastSearchedQuery, !searched.isEmpty {
+            return "No movies found for “\(searched)”. Try a different spelling."
+        }
+        return "Type this movie's name and press Search."
     }
 }
 

@@ -14,6 +14,30 @@ nonisolated struct MismatchAcknowledgement: Equatable, Sendable {
     let movieID: Int
 }
 
+/// #0160 — how many films a disc holds, and how many of them the user has
+/// named, as the two integers `StartGate` needs.
+///
+/// A plain value rather than a reference to `FeatureSelection` for the reason
+/// every other input to `decide` is one: the gate must stay a pure function
+/// over integers a test can type out, and the same decision has to be able to
+/// cross a wire to a remote client (#0149) without carrying the flow
+/// controller's state with it.
+///
+/// The default — zero features, zero chosen — is an ordinary single-feature
+/// disc, so every existing caller keeps its behaviour by passing nothing.
+nonisolated struct FeatureChoices: Equatable, Sendable {
+    var featureCount: Int = 0
+    var chosenCount: Int = 0
+
+    /// Two or more feature films on one disc: the only case that adds a
+    /// refusal below.
+    var isMultiFeature: Bool { featureCount >= 2 }
+
+    /// At least one of them has a film against it, which is all Start needs —
+    /// it rips one film per pass and the disc goes back in for the next.
+    var hasChoice: Bool { chosenCount > 0 }
+}
+
 /// #0053 — every reason `StartGate.decide` can refuse, each carrying a
 /// short, user-facing sentence naming the next action. File-scope and
 /// `nonisolated`, not nested inside `StartGate`/`JobController`, matching
@@ -38,6 +62,11 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
     case scanFailed
     case noTitlesOnDisc
     case noMovieSelected
+    /// #0160 — this disc holds several films (`DiscTitleHeuristic
+    /// .multipleFeatures`) and none of them has been named yet. Distinct
+    /// from `.noMovieSelected` because the instruction differs: there is no
+    /// single search box to choose from, there is one per film.
+    case noFeatureChosen
     case noTitleSelected
     case noAudioTrackSelected
     case runtimeLookupLoading
@@ -97,6 +126,8 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
             return "The scan read no titles from this disc — rescan before starting."
         case .noMovieSelected:
             return "Choose a movie."
+        case .noFeatureChosen:
+            return "This disc holds several feature films — name at least one of them before starting."
         case .noTitleSelected:
             return "Pick a title."
         case .noAudioTrackSelected:
@@ -158,6 +189,10 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
         case .noMovieSelected:
             // Already plain, and already the shortest true sentence.
             return "Choose a movie."
+        case .noFeatureChosen:
+            // Names the fact the person does not have — that there is more
+            // than one film on this disc — and then the one action.
+            return "This disc has more than one movie on it. Choose at least one to rip."
         case .noTitleSelected:
             return "Pick which part of the disc to rip."
         case .noAudioTrackSelected:
@@ -242,11 +277,18 @@ nonisolated enum StartGate {
         runtimeLookup: RuntimeLookup,
         mismatchAcknowledgement: MismatchAcknowledgement?,
         libraryCheck: LibraryCheck = .idle,
-        replaceAcknowledgement: ReplaceAcknowledgement? = nil
+        replaceAcknowledgement: ReplaceAcknowledgement? = nil,
+        featureChoices: FeatureChoices = FeatureChoices()
     ) -> StartDecision {
         guard !isRunning else { return .jobRunning }
         guard !discUnavailable else { return .discUnavailable }
         guard hasDisc else { return .noDisc }
+        // #0160, checked before `hasMovieSelected` and only ever true on a
+        // disc holding several films: both refusals mean "no film is
+        // chosen", and this one says what the person is actually looking at.
+        // "Choose a movie." sends them hunting for one search box on a
+        // screen that deliberately has several.
+        if featureChoices.isMultiFeature, !featureChoices.hasChoice { return .noFeatureChosen }
         guard hasMovieSelected else { return .noMovieSelected }
 
         switch scanState {
@@ -385,7 +427,8 @@ nonisolated enum StartGate {
         runtimeLookup: RuntimeLookup,
         mismatchAcknowledgement: MismatchAcknowledgement?,
         libraryCheck: LibraryCheck = .idle,
-        replaceAcknowledgement: ReplaceAcknowledgement? = nil
+        replaceAcknowledgement: ReplaceAcknowledgement? = nil,
+        featureChoices: FeatureChoices = FeatureChoices()
     ) -> Bool {
         decide(
             hasMovieSelected: hasMovieSelected,
@@ -398,7 +441,8 @@ nonisolated enum StartGate {
             runtimeLookup: runtimeLookup,
             mismatchAcknowledgement: mismatchAcknowledgement,
             libraryCheck: libraryCheck,
-            replaceAcknowledgement: replaceAcknowledgement
+            replaceAcknowledgement: replaceAcknowledgement,
+            featureChoices: featureChoices
         ) == .ready
     }
 

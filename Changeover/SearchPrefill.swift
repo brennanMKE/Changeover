@@ -37,18 +37,44 @@ nonisolated enum SearchPrefill {
     ///     attempted for — `RipFlowController`'s own record, so a repeated
     ///     `reconcile` call for the same disc (e.g. a job starting/finishing
     ///     with nothing else changing) is a no-op.
+    ///   - featureCount: how many feature films the scan found on this disc
+    ///     (`DiscTitleHeuristic.multipleFeatures`). One — or none, before the
+    ///     scan has answered — is the ordinary disc, and the default, so
+    ///     every existing caller keeps its behaviour.
     static func decide(
         disc: DiscInsertion,
         term: String?,
         query: String,
-        alreadyAttemptedFor: DiscInsertion?
+        alreadyAttemptedFor: DiscInsertion?,
+        featureCount: Int = 1
     ) -> Action {
         if let alreadyAttemptedFor, SelectionReset.sameDisc(alreadyAttemptedFor, disc) {
             return .skip
+        }
+        guard mayUseWholeLabel(featureCount: featureCount) else {
+            return .markAttempted
         }
         guard let term, query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return .markAttempted
         }
         return .fill(term)
+    }
+
+    /// #0160 — whether the volume label may be offered as **one** search
+    /// term for this disc.
+    ///
+    /// On a disc holding several films the label names them all at once.
+    /// `UNCLE_BUCK_GREAT_OUTDOORS` derives the term "Uncle Buck Great
+    /// Outdoors", which matches no film on TMDB: the box fills itself with
+    /// something that finds nothing, and an app that puts a wrong answer in
+    /// front of someone is worse than one that puts none. A blank box is
+    /// honest here — the screen is asking them to name each film, and
+    /// nothing the app holds is a term for any *one* of them.
+    ///
+    /// Splitting a label into per-film candidates is a separate piece of
+    /// work (`DiscLabelSplit`), deliberately not attempted here: this
+    /// function only refuses the concatenation.
+    static func mayUseWholeLabel(featureCount: Int) -> Bool {
+        featureCount < 2
     }
 }
