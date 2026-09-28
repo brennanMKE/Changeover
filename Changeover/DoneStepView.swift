@@ -15,6 +15,12 @@ struct DoneStepView: View {
     @Environment(RipFlowController.self) private var flow
 
     let jobID: JobID
+    /// #0164/#0165 — the whole disc's plan, when there is one.
+    ///
+    /// Defaulted so every existing `DoneStepView(jobID:)` call site keeps
+    /// compiling and keeps today's behaviour. #0163 owns where the plan comes
+    /// from and passes it here.
+    var plan: DiscRipPlan?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -47,6 +53,7 @@ struct DoneStepView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        discReport
                         DetailsDisclosure {
                             VStack(alignment: .leading, spacing: 4) {
                                 ForEach(card.lines, id: \.self) { line in
@@ -93,6 +100,47 @@ struct DoneStepView: View {
                         .buttonStyle(.borderedProminent)
                 }
             }
+        }
+    }
+
+    /// #0165 phase 4 — the per-disc report: every film on the disc, one row
+    /// each, with the disc-level total above them.
+    ///
+    /// Drawn only when the disc holds more than one film. On a one-film disc
+    /// the outcome card above *is* the report — `DiscRipPlanPresentation`
+    /// .report would give one row saying "Imported into Plex." directly under
+    /// the card's own "Added to Plex.", and repeating a sentence under itself
+    /// is the bug `Wording.lines(showingDetails:)` exists to avoid.
+    ///
+    /// Asked for by name on the John Candy disc: the second film's fate —
+    /// imported, skipped as a duplicate, or never reached — had no line
+    /// anywhere in the app.
+    @ViewBuilder
+    private var discReport: some View {
+        if let plan, plan.entries.count > 1, let report = DiscRipPlanPresentation.report(plan) {
+            VStack(alignment: .leading, spacing: 6) {
+                if let summary = report.summary {
+                    WordingText(wording: summary, font: .subheadline.weight(.semibold), tint: .primary)
+                }
+                ForEach(Array(report.rows.enumerated()), id: \.offset) { _, row in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Circle()
+                            .fill(row.tone.color)
+                            .frame(width: 6, height: 6)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(row.name)
+                                .font(.subheadline)
+                                .fixedSize(horizontal: false, vertical: true)
+                            WordingText(wording: row.status, font: .caption)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            .padding(.top, 4)
         }
     }
 
@@ -147,7 +195,13 @@ struct DoneStepView: View {
         case .eject:
             Button("Eject") { Task { await jobs.ejectDisc() } }
         case .nextDisc:
-            Button("Next Disc") { flow.dismissOutcome(jobs: jobs) }
+            // #0164 — "Next Disc" is a promise the app cannot keep while this
+            // disc still owes a film: it is the one button on the screen and
+            // it tells the person the disc is finished when the app is about
+            // to start another encode off it. `wayForwardTitle` says
+            // "Continue" instead; the action is unchanged either way — it only
+            // ever dismissed the card.
+            Button(DiscRipPlanPresentation.wayForwardTitle(plan)) { flow.dismissOutcome(jobs: jobs) }
                 .buttonStyle(.borderedProminent)
         }
     }
