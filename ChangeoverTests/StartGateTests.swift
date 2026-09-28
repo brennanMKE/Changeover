@@ -213,8 +213,9 @@ struct StartGateTests {
         for decision in StartDecision.allCases where decision != .ready {
             #expect(decision.reason?.isEmpty == false, "\(decision) has no reason")
         }
-        // 14 through #0143, plus §7.4's three upgrade cases.
-        #expect(StartDecision.allCases.count == 17)
+        // 14 through #0143, plus §7.4's three upgrade cases, plus #0160's
+        // `.noFeatureChosen` for a disc holding several feature films.
+        #expect(StartDecision.allCases.count == 18)
     }
 
     // MARK: - #0143: the "already in Plex" check
