@@ -11,6 +11,13 @@ struct RippingStepView: View {
     @Environment(JobController.self) private var jobs
 
     let jobID: JobID
+    /// #0164 — the whole disc's plan, when the disc holds more than one film.
+    ///
+    /// Defaulted so every existing `RippingStepView(jobID:)` call site keeps
+    /// compiling and keeps today's behaviour: `DiscRipPlanPresentation`
+    /// answers `nil` to a `nil` plan, so nothing new is drawn. #0163 owns
+    /// where the plan comes from and passes it here.
+    var plan: DiscRipPlan?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -104,6 +111,14 @@ struct RippingStepView: View {
         )
         return VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
+                // #0164 — which film of how many, above the film's own name.
+                // The name alone answers "what is ripping"; on a disc holding
+                // two films it does not answer "and is that all of it?", and
+                // that was the question nothing on this screen addressed.
+                // Nothing at all on a one-film disc.
+                if let position = DiscRipPlanPresentation.position(ofJob: jobID, in: plan) {
+                    WordingText(wording: position, font: .caption.weight(.semibold))
+                }
                 Text(snapshot.metadata.baseName)
                     .font(.title3)
                 // Where it will land is Plex's folder convention, not a

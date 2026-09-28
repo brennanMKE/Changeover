@@ -125,6 +125,31 @@ struct RipFlowView: View {
     /// title has the layout priority, so the disc subtitle is the only
     /// element that yields — it already truncates in the middle.
     private func header(_ step: FlowStep) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            titleRow(step)
+            // #0165 — where this disc is in its five-phase visit. A constant,
+            // one-line height (see `DiscPhaseIndicatorView`): the step title
+            // says which screen, and this says which of five it is, which is
+            // the part a two-film disc made load-bearing.
+            DiscPhaseIndicatorView(current: DiscPhaseIndicator.phase(
+                step: step, scanned: isScanned))
+        }
+        .padding(.horizontal)
+        // 6, not the 10 this strip used before: the bordered buttons are
+        // taller than the title alone, and the strip must not grow.
+        .padding(.vertical, 6)
+    }
+
+    /// `true` once the scan has produced titles — what separates phase 1,
+    /// *Reading the disc*, from phase 2, *Choosing*. The Choose step is on
+    /// screen from the moment a disc mounts, long before anything is known
+    /// about what is on it.
+    private var isScanned: Bool {
+        if case .scanned = jobs.scanState { return true }
+        return false
+    }
+
+    private func titleRow(_ step: FlowStep) -> some View {
         HStack(alignment: .center, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 Text(step.title)
@@ -144,10 +169,6 @@ struct RipFlowView: View {
                 chromeButton(destination)
             }
         }
-        .padding(.horizontal)
-        // 6, not the 10 this strip used before: the bordered buttons are
-        // taller than the title alone, and the strip must not grow.
-        .padding(.vertical, 6)
     }
 
     /// Icon-only, bordered, always enabled — including mid-job: History is

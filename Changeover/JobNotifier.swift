@@ -97,12 +97,13 @@ enum JobNotifier {
         jobID: String,
         discRemovedDuringJob: Bool = false,
         discWasEjected: Bool? = nil,
+        plan: DiscRipPlan? = nil,
         poster: JobNotificationPoster = UNNotificationCenterPoster()
     ) async {
         guard !isRunningUnderXCTest else { return }
         await post(metadata: metadata, outcome: outcome, jobID: jobID,
                    discRemovedDuringJob: discRemovedDuringJob,
-                   discWasEjected: discWasEjected, poster: poster)
+                   discWasEjected: discWasEjected, plan: plan, poster: poster)
     }
 
     /// The un-gated post, split out for the same reason `authorize` is: a
@@ -114,11 +115,13 @@ enum JobNotifier {
         jobID: String,
         discRemovedDuringJob: Bool = false,
         discWasEjected: Bool? = nil,
+        plan: DiscRipPlan? = nil,
         poster: JobNotificationPoster
     ) async {
         let (title, body) = message(for: metadata, outcome: outcome,
                                     discRemovedDuringJob: discRemovedDuringJob,
-                                    discWasEjected: discWasEjected)
+                                    discWasEjected: discWasEjected,
+                                    plan: plan)
         await poster.post(title: title, body: body, identifier: jobID)
     }
 
@@ -146,26 +149,50 @@ enum JobNotifier {
     ///   banner asserted the opposite of the truth on exactly the nights
     ///   somebody was watching for it. A notification is the one surface seen
     ///   without opening a window, which is precisely why it must not guess.
+    /// - Parameter plan: #0164 — the whole disc's `DiscRipPlan`, when the disc
+    ///   holds more than one film. `nil` is every caller written before
+    ///   multi-feature discs existed and every one-film disc, and it produces
+    ///   exactly the message above, unchanged: the plan only ever *adds* a
+    ///   sentence, and only on a disc that has one to add
+    ///   (`DiscRipPlanPresentation.multiFilm`).
+    ///
+    ///   It also suppresses the eject sentence while films remain. Not for
+    ///   tidiness: on a two-film disc the first film's banner used to be the
+    ///   app's loudest claim that the disc was finished, at the exact moment
+    ///   the app was about to start the second film off that same disc. A
+    ///   banner saying "the disc has been ejected" there is either false or an
+    ///   instruction to break the run.
     nonisolated static func message(
         for metadata: MovieMetadata,
         outcome: JobOutcome,
         discRemovedDuringJob: Bool = false,
-        discWasEjected: Bool? = nil
+        discWasEjected: Bool? = nil,
+        plan: DiscRipPlan? = nil
     ) -> (title: String, body: String) {
         switch outcome {
         case .succeeded:
+            var sentences = ["Encoded and moved into Plex."]
+            // #0164 — what the disc as a whole is doing, before anything is
+            // said about where the disc is. `nil` on a one-film disc.
+            if let planSentence = DiscRipPlanPresentation.notificationSentence(plan) {
+                sentences.append(planSentence)
+            }
             // Three states, and silence is the right answer for the third:
             // a person who is told nothing about the disc goes and looks,
-            // which is a far better outcome than being told wrongly.
-            let disc: String
-            switch discWasEjected {
-            case true?:  disc = " The disc has been ejected."
-            case false?: disc = " The disc is still in the drive."
-            case nil:    disc = ""
+            // which is a far better outcome than being told wrongly. A fourth
+            // now: while the disc still owes a film, the plan sentence above
+            // has already said where the disc must stay, and repeating the
+            // eject answer under it could only contradict it.
+            if !DiscRipPlanPresentation.hasMoreToCome(plan) {
+                switch discWasEjected {
+                case true?:  sentences.append("The disc has been ejected.")
+                case false?: sentences.append("The disc is still in the drive.")
+                case nil:    break
+                }
             }
             return (
                 "\(metadata.title) (\(metadata.year)) is ready",
-                "Encoded and moved into Plex." + disc
+                sentences.joined(separator: " ")
             )
         case .failed(let failure) where failure.reason == .cancelled && discRemovedDuringJob:
             // #0052: distinct from the plain-cancel case below — the job
@@ -184,6 +211,12 @@ enum JobNotifier {
                 "Changeover stopped the job before it finished. Nothing new was filed in Plex, and the disc is still in the drive."
             )
         case .failed(let failure):
+            // #0164 deliberately adds nothing here. The three failure bodies
+            // above and below already either say the disc is still in the
+            // drive or say nothing about it, so none of them can imply the
+            // disc is finished — and whether the app carries on to the next
+            // film *after a failure* is #0163's decision, not a promise a
+            // banner should make on its behalf.
             return (
                 "Changeover couldn't finish \(metadata.title)",
                 // `docs/plain-language-ui.md` §3.18: a notification is the
