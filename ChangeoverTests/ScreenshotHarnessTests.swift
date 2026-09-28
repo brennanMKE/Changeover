@@ -411,6 +411,65 @@ import Testing
                 return (s, jobs, RipFlowController())
             }))
 
+        // ── Path 6: a disc holding more than one film (#0157/#0160) ──────
+        /// The real Uncle Buck / The Great Outdoors disc, as captured.
+        func doubleFeatureScan() -> ScanState {
+            let outdoors = DiscTitle(index: 1, durationSeconds: 5_425, chapterCount: 17,
+                                     sizeBytes: 0, outputFileName: nil, displayAspect: 1.78)
+            let buck = DiscTitle(index: 2, durationSeconds: 5_978, chapterCount: 17,
+                                 sizeBytes: 0, outputFileName: nil, displayAspect: 1.78)
+            let trailer = DiscTitle(index: 3, durationSeconds: 169, chapterCount: 3,
+                                    sizeBytes: 0, outputFileName: nil, displayAspect: 1.33)
+            let info = DiscInfo(volumeName: "UNCLE_BUCK_GREAT_OUTDOORS",
+                                driveName: "disk4", titles: [outdoors, buck, trailer])
+            return .scanned(DiscScanner.Result(disc: info, mainFeatureIndex: 1, warnings: []))
+        }
+
+        all.append(Scenario(
+            id: "6a-two-features-unnamed",
+            path: "Path 6 — two films on one disc",
+            title: "Two features, neither named yet",
+            purpose: "The disc holds two films. Both search boxes are deliberately blank: the volume label is UNCLE_BUCK_GREAT_OUTDOORS, and prefilling that whole string returns 0 results and looks broken.",
+            lookAt: "THE KEY SCREEN: is it obvious there are two films and that each needs naming? Are the blocks distinguishable by runtime alone, with no poster and no title?",
+            dwell: "Until the user names at least one film.",
+            expected: .chooseMovie,
+            height: WindowSizing.defaultHeight(for: .full),
+            build: {
+                let s = settings(autoStart: true)
+                let jobs = JobController(runner: { ctx, _ in fakeSuccess(ctx, destination: URL(fileURLWithPath: "/tmp/x.mp4")) },
+                                         ejector: PipelineTestSupport.fakeEject)
+                jobs.insertedDisc = disc("UNCLE_BUCK_GREAT_OUTDOORS", id: "disc-ub")
+                jobs.scanState = doubleFeatureScan()
+                let flow = RipFlowController()
+                flow.reconcile(jobs: jobs, apiKey: "", settings: s)
+                return (s, jobs, flow)
+            }))
+
+        all.append(Scenario(
+            id: "6b-two-features-one-named",
+            path: "Path 6 — two films on one disc",
+            title: "One film named, one still to go",
+            purpose: "The user has searched for and picked Uncle Buck for the 1h 40m feature. The other block is still waiting.",
+            lookAt: "Does the named block read as settled, and the unnamed one as outstanding? Is it clear which film this pass will actually rip?",
+            dwell: "Until the second film is named, or Start is pressed.",
+            expected: .chooseMovie,
+            height: WindowSizing.defaultHeight(for: .full),
+            build: {
+                let s = settings(autoStart: true)
+                let jobs = JobController(runner: { ctx, _ in fakeSuccess(ctx, destination: URL(fileURLWithPath: "/tmp/x.mp4")) },
+                                         ejector: PipelineTestSupport.fakeEject)
+                jobs.insertedDisc = disc("UNCLE_BUCK_GREAT_OUTDOORS", id: "disc-ub")
+                jobs.scanState = doubleFeatureScan()
+                let flow = RipFlowController()
+                flow.reconcile(jobs: jobs, apiKey: "", settings: s)
+                if let model = flow.featureSearch(2) {
+                    model.query = "Uncle Buck"
+                    model.results = [try movie(id: 2616, title: "Uncle Buck", date: "1989-08-16")]
+                    flow.selectFeature(movieID: 2616, feature: 2, jobs: jobs, settings: s)
+                }
+                return (s, jobs, flow)
+            }))
+
         return all
     }
 

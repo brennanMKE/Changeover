@@ -43,7 +43,7 @@
     "lookAt" : "Whether the evidence panel is big enough to be read, and whether the progress block and the panel are fighting for the same space.",
     "path" : "Path 1 — automatic import",
     "purpose" : "The encode is running. The evidence panel exists so the reasoning stays on screen for the forty minutes the encode takes.",
-    "step" : "ripping(job-20260926-221741-7CA1)",
+    "step" : "ripping(job-20260927-233255-5CA0)",
     "title" : "Ripping, with the identification evidence carried forward",
     "width" : "620"
   },
@@ -91,7 +91,7 @@
     "lookAt" : "The heading change, and whether “✎ You chose …” is distinguishable enough from the app's own lines.",
     "path" : "Path 2 — the user identifies it",
     "purpose" : "The evidence panel now records both halves: what the app guessed, and what the user chose. Before #0154 the heading claimed the app had identified it.",
-    "step" : "ripping(job-20260926-221743-95A4)",
+    "step" : "ripping(job-20260927-233257-2873)",
     "title" : "Ripping a film the user chose by hand",
     "width" : "620"
   },
@@ -127,7 +127,7 @@
     "lookAt" : "THE USER'S OTHER COMPLAINT: this screen loses most of the useful detail the Ripping screen had. Should the evidence panel survive into Done?",
     "path" : "Path 4 — endings",
     "purpose" : "The successful ending. The disc has been ejected and the file is in the library.",
-    "step" : "done(job-20260926-221744-9A9B)",
+    "step" : "done(job-20260927-233258-ECA0)",
     "title" : "Finished, filed into Plex",
     "width" : "620"
   },
@@ -141,6 +141,30 @@
     "purpose" : "The eject ladder is running. On joe's USB drive this can take minutes and six attempts, because loginwindow dissents while the screen is locked.",
     "step" : "insertDisc(Changeover.FlowStep.InsertReason.ejecting)",
     "title" : "Ejecting",
+    "width" : "620"
+  },
+  {
+    "dwell" : "Until the user names at least one film.",
+    "file" : "6a-two-features-unnamed.png",
+    "height" : "640",
+    "id" : "6a-two-features-unnamed",
+    "lookAt" : "THE KEY SCREEN: is it obvious there are two films and that each needs naming? Are the blocks distinguishable by runtime alone, with no poster and no title?",
+    "path" : "Path 6 — two films on one disc",
+    "purpose" : "The disc holds two films. Both search boxes are deliberately blank: the volume label is UNCLE_BUCK_GREAT_OUTDOORS, and prefilling that whole string returns 0 results and looks broken.",
+    "step" : "chooseMovie",
+    "title" : "Two features, neither named yet",
+    "width" : "620"
+  },
+  {
+    "dwell" : "Until the second film is named, or Start is pressed.",
+    "file" : "6b-two-features-one-named.png",
+    "height" : "640",
+    "id" : "6b-two-features-one-named",
+    "lookAt" : "Does the named block read as settled, and the unnamed one as outstanding? Is it clear which film this pass will actually rip?",
+    "path" : "Path 6 — two films on one disc",
+    "purpose" : "The user has searched for and picked Uncle Buck for the 1h 40m feature. The other block is still waiting.",
+    "step" : "chooseMovie",
+    "title" : "One film named, one still to go",
     "width" : "620"
   }
 ]
