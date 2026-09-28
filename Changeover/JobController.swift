@@ -92,6 +92,12 @@ final class JobController {
         /// reaches controller state: a partial eject (unmounted, not
         /// ejected) sets `discUnavailable` exactly as a manual one does.
         let eject: @MainActor (URL) async -> DiscEjector.Outcome
+        /// #0163 — whether the disc this job read still holds another film
+        /// that is going to be imported, which suppresses the eject above.
+        /// Bound by `start` to the controller's `discHasMoreWork`, which the
+        /// flow sets from its `DiscRipPlan`; defaulted to `{ false }` so a
+        /// hand-built context in a test needn't supply one.
+        var keepDisc: @MainActor () -> Bool = { false }
         /// #0052 — bound to this job's own `Job.discRemovedDuringJob`, the
         /// same closure shape `FallbackPolicy`'s `discStillPresent` already
         /// uses. `DVDPipeline` reads it once, at the end of the run, to mark
@@ -234,6 +240,16 @@ final class JobController {
     /// `mountURL`/`deviceNode` to know what to eject. Cleared when
     /// `DVDMonitor.onDVDRemoved` fires.
     var insertedDisc: DiscInsertion?
+
+    /// #0163 — the disc in the drive still holds a film this session intends
+    /// to import, so the end-of-job eject must not run.
+    ///
+    /// Set by `RipFlowController` from its `DiscRipPlan` immediately before
+    /// each `start`, and cleared by `removeDisc` so a stale `true` can never
+    /// keep the *next* disc in the drive. This controller runs one job at a
+    /// time and knows nothing about plans; it only carries the fact to
+    /// `DVDPipeline`, which is where the eject lives.
+    var discHasMoreWork = false
 
     /// #0152 — the eject veto for an unmounted disc, when one is held.
     ///
@@ -498,6 +514,7 @@ final class JobController {
             reportPhase: context.phase,
             reportProgress: context.progress,
             eject:       context.eject,
+            keepDisc:    context.keepDisc,
             discRemoved: context.discRemoved
         ).run()
     }
@@ -781,6 +798,12 @@ final class JobController {
                 self?.applyAutomaticEject(outcome, volumeURL: url)
                 return outcome
             },
+            // #0163: read at the moment the pipeline would eject, not now —
+            // the flow settles its plan while the encode runs, and a disc
+            // whose remaining film turns out to be already in Plex should
+            // come out on this job's own eject rather than wait for the
+            // post-job sweep.
+            keepDisc: { [weak self] in self?.discHasMoreWork ?? false },
             discRemoved: { [job] in job.discRemovedDuringJob }
         )
 
@@ -1148,6 +1171,11 @@ final class JobController {
             task?.cancel()
         }
         insertedDisc = nil
+        // #0163: whatever was still to be imported off that disc is gone with
+        // it. A hold that outlived its disc would keep the *next* one in the
+        // drive, which is the failure this feature exists to prevent, aimed
+        // at the wrong disc.
+        discHasMoreWork = false
         isEjecting = false
         discUnavailable = false
         scanGeneration += 1
