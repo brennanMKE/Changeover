@@ -16,7 +16,33 @@ nonisolated enum RuntimeLookup: Equatable, Sendable {
 @MainActor
 @Observable
 final class MovieSearchViewModel {
-    var query:        String      = ""
+    /// The search box's text.
+    ///
+    /// #0156 — writing to this marks the text as the **user's**, because the
+    /// only writer that isn't the user is `present(query:results:)`, which
+    /// goes through `setDerivedQuery` instead. Anything the user typed is then
+    /// never thrown away automatically; see `resetForNewDisc`.
+    var query: String {
+        get { storedQuery }
+        set {
+            storedQuery = newValue
+            queryIsUserEntered = !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    private var storedQuery: String = ""
+
+    /// Whether the current text came from the person rather than from the
+    /// disc-name/menu/model resolution ladder.
+    private(set) var queryIsUserEntered = false
+
+    /// The ladder's own term. Deliberately not `query`'s setter: a term the
+    /// app derived may be replaced freely later, one the user typed may not.
+    private func setDerivedQuery(_ term: String) {
+        storedQuery = term
+        queryIsUserEntered = false
+    }
+
     var results:      [TMDBMovie] = []
     var isLoading:    Bool        = false
     var errorMessage: String?
@@ -291,7 +317,7 @@ final class MovieSearchViewModel {
     /// of it becomes visible.
     func present(query: String, results: [TMDBMovie]) {
         cancelSearch()
-        self.query = query
+        self.setDerivedQuery(query)
         self.results = results
         self.lastSearchedQuery = query
         self.errorMessage = nil
@@ -380,7 +406,16 @@ final class MovieSearchViewModel {
     func resetForNewDisc() {
         cancelSearch()
         select(movieID: nil, apiKey: "")
-        query = ""
+        // #0156 — never throw away what the user typed.
+        //
+        // On 2026-09-27 a user typed "The Campaign" while the disc was still
+        // being read, and the moment the scan finished the field was empty and
+        // nothing was matched. Their rule, and it is the right one: someone
+        // typing a search term knows which disc they put in, so the app has no
+        // standing to overrule them. A term the *app* derived is ours to clear.
+        if !queryIsUserEntered {
+            storedQuery = ""
+        }
         results = []
         errorMessage = nil
         // Without this the empty state keeps naming the *previous* disc:

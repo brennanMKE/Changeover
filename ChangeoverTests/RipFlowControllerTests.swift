@@ -136,7 +136,10 @@ struct RipFlowControllerTests {
         #expect(flow.selectionDisc == nil)
         #expect(flow.movieConfirmed == false)
         #expect(flow.search.results.isEmpty)
-        #expect(flow.search.query.isEmpty)
+        // #0156: the *selection* is reset, but the user's typed text is not —
+        // it was set through `query`, so it is theirs. The results still go,
+        // because they belong to the disc that left.
+        #expect(flow.search.query == "fargo")
         #expect(flow.step(jobs: jobs) == .chooseMovie)
     }
 

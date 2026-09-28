@@ -582,7 +582,18 @@ final class RipFlowController {
         // settled — or with no settings to hand — cleared nothing, and the
         // previous disc's edition was written into the next disc's filename.
         defer { lastSeenDisc = current }
-        guard let previous = lastSeenDisc, previous != current else { return }
+        guard let previous = lastSeenDisc else { return }
+
+        // #0156 — the same physical disc is not a new disc just because we now
+        // know more about it.
+        //
+        // This compared whole `DiscInsertion` values. A disc inserted while the
+        // screen is locked arrives unmounted and nameless (#0152), and its
+        // label is recovered from libdvdnav part-way through the scan — which
+        // changed the value, read as a disc swap, and wiped the search field,
+        // the selection and the edition mid-typing. Identity, not equality, is
+        // the question, and `sameDisc` is what every other guard already uses.
+        if let current, SelectionReset.sameDisc(previous, current) { return }
 
         // #0153: only another *disc* clears the explanation. The eject itself
         // is a disc change (to nil), and clearing there would wipe the reason

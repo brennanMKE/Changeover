@@ -125,7 +125,10 @@ struct MovieSearchDebounceTests {
 
         for _ in 0..<1_000 { await Task.yield() }
         callCount.withLock { #expect($0 == 0) }
-        #expect(vm.query.isEmpty)
+        // #0156: the text was typed, so it survives the reset. What this test
+        // is actually about — the debounced search being cancelled, and the
+        // previous disc's results being dropped — is unchanged.
+        #expect(vm.query == "the previous disc's movie")
         #expect(vm.results.isEmpty)
     }
 
