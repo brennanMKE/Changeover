@@ -164,6 +164,65 @@ struct ChooseMovieStepView: View {
         .padding(.vertical, 10)
     }
 
+    /// #0170 — a feature with no film yet whose turn has not come.
+    ///
+    /// Says so, rather than borrowing the settled row's checkmark and its
+    /// Change link. Nothing has been chosen here, so there is nothing to
+    /// change; the only thing worth offering in advance is leaving it out.
+    @ViewBuilder
+    private func pendingFeatureRow(feature: Int, position: Int, count: Int) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "circle.dotted")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Movie \(position) of \(count)")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Text("Next, after this one")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+            Button("Don't import this one") {
+                flow.setFeatureSkipped(true, feature: feature, jobs: jobs, settings: settings)
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// #0170 — a feature the user has excluded, named or not.
+    @ViewBuilder
+    private func excludedFeatureRow(feature: Int, position: Int, count: Int) -> some View {
+        let movie = flow.featureSearch(feature)?.selectedMovie
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "minus.circle")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(movie.map { "\($0.title) (\($0.yearText))" } ?? "Movie \(position) of \(count)")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Text("Not importing this one")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+            Button("Import this one") {
+                flow.setFeatureSkipped(false, feature: feature, jobs: jobs, settings: settings)
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .combine)
+    }
+
     private var multipleFeaturesBody: some View {
         VStack(spacing: 0) {
             if let line = ScanStatusLine.line(for: jobs.scanState) {
@@ -207,10 +266,15 @@ struct ChooseMovieStepView: View {
                     // box, and the ones already named collapse to a line each.
                     // Ask one question, take one answer, move on — and the
                     // runtime is then a fact the app uses, not a riddle.
-                    let pending = features.first { flow.featureSelection.movieID(for: $0) == nil }
                     ForEach(Array(features.enumerated()), id: \.element) { position, feature in
                         if let search = flow.featureSearch(feature) {
-                            if feature == pending {
+                            // #0170 — four states, not two. Treating every
+                            // feature but the first unnamed one as settled
+                            // drew feature 2 with a checkmark and the
+                            // placeholder name "Movie 2", while the Start gate
+                            // was saying `noFeatureChosen` about the same disc.
+                            switch flow.featureSelection.question(for: feature) {
+                            case .ask:
                                 FeatureSearchBlock(
                                     feature: feature,
                                     position: position + 1,
@@ -218,10 +282,18 @@ struct ChooseMovieStepView: View {
                                     title: discTitle(feature),
                                     search: search
                                 )
-                            } else {
+                            case .named:
                                 namedFeatureRow(feature: feature,
                                                 position: position + 1,
                                                 count: features.count)
+                            case .waiting:
+                                pendingFeatureRow(feature: feature,
+                                                  position: position + 1,
+                                                  count: features.count)
+                            case .excluded:
+                                excludedFeatureRow(feature: feature,
+                                                   position: position + 1,
+                                                   count: features.count)
                             }
                             if feature != features.last { Divider() }
                         }

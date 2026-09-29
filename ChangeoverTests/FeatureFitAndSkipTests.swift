@@ -702,3 +702,89 @@ import Testing
         }
     }
 }
+
+/// #0170 — which question the Choose step is asking about which feature.
+///
+/// The fault: the view derived this itself as "the first feature with no film
+/// gets the search box, everything else is settled", so on a two-film disc
+/// with nothing named, feature 2 was drawn as a finished row — checkmark,
+/// Change link, and the placeholder "Movie 2" standing where a film title
+/// belongs — while `StartGate` said `noFeatureChosen` about the same disc.
+@Suite struct FeatureQuestionTests {
+
+    private func selection(_ features: [Int]) -> FeatureSelection {
+        var s = FeatureSelection()
+        s.setFeatures(features)
+        return s
+    }
+
+    @Test func nothingNamedAsksAboutTheFirstAndQueuesTheRest() {
+        let s = selection([4, 5, 6])
+        #expect(s.featureBeingAsked == 4)
+        #expect(s.question(for: 4) == .ask)
+        // The regression: these were `.named`.
+        #expect(s.question(for: 5) == .waiting)
+        #expect(s.question(for: 6) == .waiting)
+    }
+
+    @Test func namingOneMovesTheQuestionOn() {
+        var s = selection([4, 5])
+        s.choose(movieID: 100, for: 4)
+        #expect(s.featureBeingAsked == 5)
+        #expect(s.question(for: 4) == .named)
+        #expect(s.question(for: 5) == .ask)
+    }
+
+    @Test func everythingNamedAsksNothing() {
+        var s = selection([4, 5])
+        s.choose(movieID: 100, for: 4)
+        s.choose(movieID: 200, for: 5)
+        #expect(s.featureBeingAsked == nil)
+        #expect(s.question(for: 4) == .named)
+        #expect(s.question(for: 5) == .named)
+    }
+
+    /// Excluding the feature being asked about hands the question to the next
+    /// one rather than leaving the step stuck on a film nobody wants.
+    @Test func excludingTheAskedFeatureMovesOn() {
+        var s = selection([4, 5])
+        s.setSkipped(true, for: 4)
+        #expect(s.question(for: 4) == .excluded)
+        #expect(s.featureBeingAsked == 5)
+        #expect(s.question(for: 5) == .ask)
+    }
+
+    /// Excluded beats named: a film the user chose and then said not to
+    /// import is not a settled import.
+    @Test func anExcludedFilmReadsAsExcludedNotNamed() {
+        var s = selection([4, 5])
+        s.choose(movieID: 100, for: 4)
+        s.setSkipped(true, for: 4)
+        #expect(s.question(for: 4) == .excluded)
+        #expect(s.runnableFeatures.isEmpty)
+    }
+
+    @Test func everyFeatureExcludedAsksNothing() {
+        var s = selection([4, 5])
+        s.setSkipped(true, for: 4)
+        s.setSkipped(true, for: 5)
+        #expect(s.featureBeingAsked == nil)
+    }
+
+    /// A feature this disc does not have is not a question about this disc.
+    @Test func anUnknownFeatureIsNotAsked() {
+        let s = selection([4, 5])
+        #expect(s.question(for: 99) == .waiting)
+    }
+
+    /// #0169's one-film-per-feature rule reopens the question it freed.
+    @Test func stealingAFilmReopensTheFeatureItCameFrom() {
+        var s = selection([4, 5])
+        s.choose(movieID: 100, for: 4)
+        s.choose(movieID: 200, for: 5)
+        s.choose(movieID: 100, for: 5)   // same film typed into the second box
+        #expect(s.question(for: 4) == .ask)
+        #expect(s.question(for: 5) == .named)
+        #expect(s.featureBeingAsked == 4)
+    }
+}

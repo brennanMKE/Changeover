@@ -55,6 +55,45 @@ nonisolated struct FeatureSelection: Equatable, Sendable {
     /// The film named for one feature, if any.
     func movieID(for feature: Int) -> Int? { choices[feature] }
 
+    /// #0170 — what this step is doing about one feature right now.
+    ///
+    /// The Choose step asks one question at a time (#0169), and the view read
+    /// that as "the first feature with no film gets the search box, everything
+    /// else is settled". Everything else is not settled: on a two-film disc
+    /// with nothing named, feature 2 was drawn as a finished row — a
+    /// checkmark, a Change link and the placeholder name "Movie 2" where a
+    /// film title belongs. Captured on joe 2026-09-29, with the Start gate
+    /// simultaneously reporting `noFeatureChosen`, which is the screen and the
+    /// gate disagreeing about the same disc for the fourth time.
+    ///
+    /// Four states, because there are four: the one being asked about, the
+    /// ones already answered, the ones queued behind the question, and the
+    /// ones the user has excluded.
+    nonisolated enum Question: Equatable, Sendable {
+        /// The single feature whose search box is open.
+        case ask
+        /// A film has been named for it.
+        case named
+        /// No film yet, and it is not this feature's turn.
+        case waiting
+        /// The user said not to import it, named or not.
+        case excluded
+    }
+
+    /// The one feature the step is asking about: the first that is neither
+    /// named nor excluded. `nil` when every feature is accounted for, which is
+    /// exactly when Continue becomes the only thing left to do.
+    var featureBeingAsked: Int? {
+        features.first { choices[$0] == nil && !skipped.contains($0) }
+    }
+
+    func question(for feature: Int) -> Question {
+        guard features.contains(feature) else { return .waiting }
+        if skipped.contains(feature) { return .excluded }
+        if choices[feature] != nil { return .named }
+        return feature == featureBeingAsked ? .ask : .waiting
+    }
+
     /// The film Start will rip, if one has been named.
     var activeMovieID: Int? { active.flatMap { choices[$0] } }
 
