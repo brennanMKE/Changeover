@@ -411,3 +411,92 @@ import Testing
         #expect(Self.gate(choices, library: Self.present()) == .ready)
     }
 }
+
+/// #0167 — skipping must cost nothing, and re-ripping must never be the only
+/// way forward.
+///
+/// Reported 2026-09-29: "You want me to wait 30 minutes to encode a feature
+/// instead of just skipping it and moving onto the 2nd feature?" The app
+/// exists to save that time; making a user re-encode a film they already have,
+/// purely to get past a gate, is the opposite of its purpose.
+@Suite struct SkippingCostsNothingTests {
+
+    private static let disc = DiscInsertion(
+        mountURL: URL(fileURLWithPath: "/Volumes/UB"), deviceNode: "disk4", discID: "ub")
+
+    private static func film(_ title: String, _ id: String) -> MovieMetadata {
+        MovieMetadata(title: title, year: "1989", tmdbID: id)
+    }
+
+    /// A disc with one film held and one new imports the new one and encodes
+    /// nothing for the held one.
+    @Test func aheldFilmIsSkippedAndOnlyTheNewOneIsEncoded() {
+        var plan = DiscRipPlan.make(disc: Self.disc, films: [
+            (feature: 1, metadata: Self.film("The Great Outdoors", "2617")),
+            (feature: 2, metadata: Self.film("Uncle Buck", "2616")),
+        ])!
+        plan.skip(1, reason: "already in Plex")
+
+        #expect(plan.next?.feature == 2, "the new film is what runs")
+        let id = JobID.make()
+        plan.markRunning(2, jobID: id)
+        plan.settle(jobID: id, succeeded: true)
+
+        #expect(plan.isFinished)
+        #expect(plan.completed.map(\.feature) == [2], "exactly one encode, for the film not held")
+    }
+
+    /// And the skipped film is still reported — skipping is not forgetting.
+    @Test func askippedFilmStillAppearsInTheReport() {
+        var plan = DiscRipPlan.make(disc: Self.disc, films: [
+            (feature: 1, metadata: Self.film("The Great Outdoors", "2617")),
+            (feature: 2, metadata: Self.film("Uncle Buck", "2616")),
+        ])!
+        plan.skip(1, reason: "already in Plex")
+        let id = JobID.make()
+        plan.markRunning(2, jobID: id); plan.settle(jobID: id, succeeded: true)
+
+        #expect(plan.entries.count == 2, "both films are accounted for")
+        guard case .skipped(let reason) = plan.entries[0].state else {
+            Issue.record("feature 1 should be skipped"); return
+        }
+        #expect(reason.contains("already in Plex"))
+    }
+
+    /// A disc where every film is held runs **no jobs at all** — no encode, no
+    /// waiting, nothing to acknowledge.
+    @Test func adiscYouAlreadyOwnEntirelyEncodesNothing() {
+        var plan = DiscRipPlan.make(disc: Self.disc, films: [
+            (feature: 1, metadata: Self.film("The Great Outdoors", "2617")),
+            (feature: 2, metadata: Self.film("Uncle Buck", "2616")),
+        ])!
+        plan.skip(1, reason: "already in Plex")
+        plan.skip(2, reason: "already in Plex")
+
+        #expect(plan.next == nil, "nothing to run")
+        #expect(plan.isFinished, "and the disc is free to come out at once")
+        #expect(plan.completed.isEmpty)
+    }
+
+    /// The gate agrees: a disc with one importable film starts with no
+    /// acknowledgement, so the user never has to choose between waiting out an
+    /// unnecessary encode and being stuck.
+    @Test func themixedDiscStartsWithNoAcknowledgementAtAll() {
+        let title = DiscTitle(index: 1, durationSeconds: 5_978, chapterCount: 17,
+                              sizeBytes: 0, outputFileName: nil, displayAspect: 1.78)
+        let scan = ScanState.scanned(DiscScanner.Result(
+            disc: DiscInfo(volumeName: "UB", driveName: "disk4", titles: [title]),
+            mainFeatureIndex: 1, warnings: []))
+        let decision = StartGate.decide(
+            hasMovieSelected: true, isRunning: false, hasDisc: true,
+            scanState: scan, selectedTitleIndex: 1, selectedAudioTrackNumbers: [1],
+            runtimeLookup: .loaded(movieID: 2616, runtimeMinutes: 100),
+            mismatchAcknowledgement: nil,
+            libraryCheck: .done(tmdbID: "2616", .present([
+                LibraryEntry(folderName: "F", folderPath: "/F",
+                             files: [LibraryFile(name: "f.mp4", sizeBytes: 5)])])),
+            replaceAcknowledgement: nil,
+            featureChoices: FeatureChoices(featureCount: 2, chosenCount: 2, importableCount: 1))
+        #expect(decision == .ready, "no Replace, no ticking, no wasted encode")
+    }
+}

@@ -24,6 +24,11 @@ import SwiftUI
 /// `issues/0026.md`'s `## Fix`).
 struct DiscTitleListView: View {
     @Bindable var jobs: JobController
+    /// #0167 — the per-feature state, so a film can be skipped from the step
+    /// the user is actually stopped on. Taken from the environment rather than
+    /// the initialiser because every call site is already inside the rip
+    /// window, which injects it.
+    @Environment(RipFlowController.self) private var flow
     let settings: AppSettings
     let runtimeLookup: RuntimeLookup
 
@@ -137,6 +142,48 @@ struct DiscTitleListView: View {
 
     // MARK: - Scanned
 
+    /// #0167 — skipping a film, on the step where the blocking happens.
+    ///
+    /// The control was built on the Choose step and the user is stopped on
+    /// Confirm, so it existed and could not be reached from where it was
+    /// needed. Reported 2026-09-29: "I could not skip a movie which was
+    /// already imported."
+    ///
+    /// Skipping is the cheap answer and re-ripping is the expensive one — a
+    /// film already in Plex costs forty minutes of encoding to obtain a file
+    /// the user already has. The skip is offered first and named plainly, and
+    /// the app does it by itself when it knows the film is held.
+    @ViewBuilder
+    private func featureSkipControls(indices: [Int], disc: DiscInfo) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(indices, id: \.self) { feature in
+                if flow.featureSelection.movieID(for: feature) != nil {
+                    HStack(spacing: 8) {
+                        Text(flow.featureSearch(feature)?.selectedMovie?.title
+                             ?? "Feature \(feature)")
+                            .font(.caption)
+                        if case .present = flow.libraryStatus(for: feature) {
+                            Text("already in Plex")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                        Button(flow.featureSelection.isSkipped(feature)
+                               ? "Import this one" : "Don't import this one") {
+                            flow.setFeatureSkipped(!flow.featureSelection.isSkipped(feature),
+                                                   feature: feature, jobs: jobs, settings: settings)
+                        }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                        .help("Leaves this film out. Nothing is encoded for it, and the "
+                              + "report still lists it.")
+                    }
+                }
+            }
+        }
+        .padding(.top, 4)
+    }
+
     @ViewBuilder
     private func scannedView(_ result: DiscScanner.Result) -> some View {
         let outcome = DiscTitleHeuristic.classify(result.disc, mainFeatureIndex: result.mainFeatureIndex)
@@ -198,6 +245,7 @@ struct DiscTitleListView: View {
                 DetailOnlyText(
                     text: "Rip one now and put the disc back in for the other"
                         + (indices.count > 2 ? "s" : "") + ".")
+                featureSkipControls(indices: indices, disc: result.disc)
             }
             titleTable(result.disc, badgeIndex: nil, badgeIndices: Set(indices), badgeLabel: "Feature")
 
