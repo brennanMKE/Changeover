@@ -409,6 +409,11 @@ struct RipFlowControllerTests {
             flow.acknowledgeReplace()
 
             if clear == "query" {
+                // #0167: the query has to actually change, and by the *user* —
+                // `.onChange(of: search.query)` also fires when the resolution
+                // ladder writes a term, and clearing on that dropped the film
+                // the app had just found. Setting `query` is the user path.
+                flow.search.query = "something else"
                 flow.queryChanged(apiKey: "")
             } else {
                 jobs.insertedDisc = Self.discB

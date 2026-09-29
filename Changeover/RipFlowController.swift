@@ -435,6 +435,8 @@ final class RipFlowController {
                 looked[term] = await Self.candidate(for: term, apiKey: apiKey)
             }
 
+            FlowDiagnostics.note("feature match: looked up \(looked.count) terms, "
+                + "\(looked.values.compactMap { $0 }.count) resolved")
             guard let assignments = FeatureMatching.bestSplit(
                 features: titles, splits: splits, lookUp: { looked[$0] ?? nil })
             else {
@@ -444,18 +446,33 @@ final class RipFlowController {
 
             // Still the same disc, and the user has not started naming films
             // themselves in the meantime (#0156 — never overwrite their text).
-            guard jobs.insertedDisc.map({ SelectionReset.sameDisc($0, disc) }) == true else { return }
+            guard jobs.insertedDisc.map({ SelectionReset.sameDisc($0, disc) }) == true else {
+                FlowDiagnostics.note("feature match: the disc changed — dropping the assignment")
+                return
+            }
             for assignment in assignments {
-                guard let model = self.featureSearchModels[assignment.feature],
-                      !model.queryIsUserEntered,
-                      self.featureSelection.movieID(for: assignment.feature) == nil
-                else { continue }
+                guard let model = self.featureSearchModels[assignment.feature] else {
+                    FlowDiagnostics.note("feature match: no search model for feature \(assignment.feature)")
+                    continue
+                }
+                guard !model.queryIsUserEntered else {
+                    FlowDiagnostics.note("feature match: feature \(assignment.feature) has the user's own text — leaving it")
+                    continue
+                }
+                guard self.featureSelection.movieID(for: assignment.feature) == nil else {
+                    FlowDiagnostics.note("feature match: feature \(assignment.feature) already has a film")
+                    continue
+                }
                 let candidate = assignment.candidate
                 let results = (try? await TMDBClient().searchMovies(
                     query: candidate.term, apiKey: apiKey)) ?? []
                 model.present(query: candidate.term, results: results)
                 self.selectFeature(movieID: candidate.movieID, feature: assignment.feature,
                                    jobs: jobs, settings: settings)
+                FlowDiagnostics.note("feature match: feature \(assignment.feature) <- "
+                    + "\(candidate.title) (id \(candidate.movieID)); choices now "
+                    + "\(self.featureSelection.choices.count), runnable "
+                    + "\(self.featureSelection.runnableFeatures.count)")
                 jobs.note("  · \(candidate.title) (\(candidate.year)) on feature "
                     + "\(assignment.feature) — \(String(format: "%.1f", assignment.errorMinutes)) min from its runtime")
             }
@@ -529,6 +546,18 @@ final class RipFlowController {
     /// nothing about it has changed.
     func featureQueryChanged(_ feature: Int, jobs: JobController, settings: AppSettings) {
         guard let model = featureSearchModels[feature] else { return }
+        // #0167 — only a *keystroke* clears the pick.
+        //
+        // `.onChange(of: search.query)` cannot tell who wrote the text, and
+        // the resolution ladder writes it too: `present` sets the term and the
+        // change lands after the selection, so the app's own answer was being
+        // cleared a moment after it arrived. On the Uncle Buck disc both films
+        // were assigned correctly, `choices` went 1 then 1 instead of 1 then
+        // 2, and Start stayed at `noFeatureChosen` with no way past it.
+        //
+        // #0156's `queryIsUserEntered` is exactly this distinction, already
+        // made for exactly this reason.
+        guard model.queryIsUserEntered else { return }
         if featureSelection.movieID(for: feature) != nil {
             featureSelection.choose(movieID: nil, for: feature)
             applyActiveFeature(jobs: jobs, settings: settings)
@@ -609,6 +638,10 @@ final class RipFlowController {
     /// rather than showing a Confirm step for a movie that is no longer
     /// picked.
     func queryChanged(apiKey: String) {
+        // #0167 — same rule on the single-film path: the ladder presents its
+        // answer through `search.present`, and clearing the selection on that
+        // change would drop the film it just found.
+        guard search.queryIsUserEntered else { return }
         clearSelection()
         search.queryChanged(apiKey: apiKey)
     }

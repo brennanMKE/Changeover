@@ -158,3 +158,108 @@ import Testing
         #expect(!s.isMultiFeature)
     }
 }
+
+/// #0167 — the blocker: the app's own answer cleared itself a moment later.
+///
+/// On the Uncle Buck disc, three eject/reinsert cycles all ended the same way:
+/// both films assigned correctly, and Start refusing with `noFeatureChosen`.
+/// The trace showed it exactly —
+///
+///     feature 1 <- The Great Outdoors; choices now 1, runnable 1
+///     feature 2 <- Uncle Buck;         choices now 1, runnable 1
+///
+/// — the second pick replacing the first rather than joining it.
+///
+/// `.onChange(of: search.query)` cannot tell who wrote the text. The
+/// resolution ladder writes it through `present`, the change lands *after* the
+/// selection, and the handler cleared the pick as though a key had been
+/// pressed.
+@MainActor
+@Suite struct AppWrittenQueryDoesNotClearPicksTests {
+
+    private static func settings() -> AppSettings {
+        let s = AppSettings(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        s.plexMediaRoot = NSTemporaryDirectory()
+        return s
+    }
+
+    private static func jobs() -> JobController {
+        let c = JobController(
+            runner: { ctx, _ in fakeSuccess(ctx, destination: URL(fileURLWithPath: "/tmp/x.mp4")) },
+            ejector: PipelineTestSupport.fakeEject)
+        c.insertedDisc = DiscInsertion(
+            mountURL: URL(fileURLWithPath: "/Volumes/UB"), deviceNode: "disk4", discID: "disc-ub")
+        let outdoors = DiscTitle(index: 1, durationSeconds: 5_425, chapterCount: 17,
+                                 sizeBytes: 0, outputFileName: nil, displayAspect: 1.78)
+        let buck = DiscTitle(index: 2, durationSeconds: 5_978, chapterCount: 17,
+                             sizeBytes: 0, outputFileName: nil, displayAspect: 1.78)
+        c.scanState = .scanned(DiscScanner.Result(
+            disc: DiscInfo(volumeName: "UNCLE_BUCK_GREAT_OUTDOORS", driveName: "disk4",
+                           titles: [outdoors, buck]),
+            mainFeatureIndex: 1, warnings: []))
+        return c
+    }
+
+    private static func movie(_ id: Int, _ title: String) throws -> TMDBMovie {
+        try JSONDecoder().decode(TMDBMovie.self, from: Data(
+            #"{"id": \#(id), "title": "\#(title)", "release_date": "1989-01-01", "poster_path": null}"#.utf8))
+    }
+
+    /// Both films named by the app survive the `.onChange` that follows.
+    @Test func bothAppNamedFilmsSurvive() throws {
+        let s = Self.settings(), jobs = Self.jobs()
+        let flow = RipFlowController()
+        flow.reconcile(jobs: jobs, apiKey: "", settings: s)
+
+        for (feature, id, title) in [(1, 2617, "The Great Outdoors"), (2, 2616, "Uncle Buck")] {
+            let model = try #require(flow.featureSearch(feature))
+            // Exactly what the ladder does: present the term, then pick.
+            model.present(query: title, results: [try Self.movie(id, title)])
+            flow.selectFeature(movieID: id, feature: feature, jobs: jobs, settings: s)
+            // SwiftUI's .onChange, arriving after the selection.
+            flow.featureQueryChanged(feature, jobs: jobs, settings: s)
+        }
+
+        #expect(flow.featureSelection.choices.count == 2,
+                "the app's own text must not clear the film it just chose")
+        #expect(flow.featureSelection.runnableFeatures == [1, 2])
+        #expect(flow.featureSelection.gateInput.hasChoice, "Start must be reachable")
+    }
+
+    /// A real keystroke still clears that feature's pick — #0030's stuck
+    /// re-pick bug must stay fixed.
+    @Test func arealKeystrokeStillClearsThePick() throws {
+        let s = Self.settings(), jobs = Self.jobs()
+        let flow = RipFlowController()
+        flow.reconcile(jobs: jobs, apiKey: "", settings: s)
+
+        let model = try #require(flow.featureSearch(1))
+        model.present(query: "The Great Outdoors", results: [try Self.movie(2617, "The Great Outdoors")])
+        flow.selectFeature(movieID: 2617, feature: 1, jobs: jobs, settings: s)
+        #expect(flow.featureSelection.movieID(for: 1) == 2617)
+
+        model.query = "something else"          // the user typing
+        flow.featureQueryChanged(1, jobs: jobs, settings: s)
+        #expect(flow.featureSelection.movieID(for: 1) == nil,
+                "a new result set makes the old row id meaningless")
+    }
+
+    /// And one feature's keystroke leaves the other feature's film alone.
+    @Test func typingInOneBlockLeavesTheOtherAlone() throws {
+        let s = Self.settings(), jobs = Self.jobs()
+        let flow = RipFlowController()
+        flow.reconcile(jobs: jobs, apiKey: "", settings: s)
+
+        for (feature, id, title) in [(1, 2617, "The Great Outdoors"), (2, 2616, "Uncle Buck")] {
+            let model = try #require(flow.featureSearch(feature))
+            model.present(query: title, results: [try Self.movie(id, title)])
+            flow.selectFeature(movieID: id, feature: feature, jobs: jobs, settings: s)
+        }
+        let model = try #require(flow.featureSearch(1))
+        model.query = "retyping"
+        flow.featureQueryChanged(1, jobs: jobs, settings: s)
+
+        #expect(flow.featureSelection.movieID(for: 1) == nil)
+        #expect(flow.featureSelection.movieID(for: 2) == 2616, "the other film is untouched")
+    }
+}

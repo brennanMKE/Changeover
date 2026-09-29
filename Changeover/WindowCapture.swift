@@ -99,14 +99,69 @@ enum WindowCapture {
             guard window.isVisible,
                   let view = window.contentView,
                   view.bounds.width > 1, view.bounds.height > 1,
-                  let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds)
+                  let png = png(of: view)
             else { continue }
-            view.cacheDisplay(in: view.bounds, to: rep)
-            guard let png = rep.representation(using: .png, properties: [:]) else { continue }
             let path = "\(outputPrefix)-\(index).png"
             guard (try? png.write(to: URL(fileURLWithPath: path))) != nil else { continue }
             written.append(path)
         }
         return written
+    }
+
+    /// One window's contents as PNG data.
+    ///
+    /// **The layer tree, not `cacheDisplay`.** `cacheDisplay(in:to:)` walks the
+    /// `NSView` draw path, and a SwiftUI window on screen is not drawn that
+    /// way: its content is composited from `CALayer`s, so the bitmap came back
+    /// with the AppKit-backed controls present — text fields, images, the
+    /// links — and **every piece of text missing**. Captured on joe,
+    /// 2026-09-29: two search boxes, two posters, two tick marks, and not one
+    /// word of the headings, the runtimes, the phase row or the buttons.
+    ///
+    /// That made this worse than useless for judging the window, because it
+    /// looked like a screenshot. It is the reason a real screenshot had to be
+    /// asked for, twice, and the reason a wrong conclusion was drawn from one
+    /// of these images.
+    ///
+    /// `CALayer.render(in:)` draws what is actually composited, text included.
+    /// `cacheDisplay` stays as the fallback for a window with no layer, where
+    /// it is the correct path and always was.
+    private static func png(of view: NSView) -> Data? {
+        if let data = layerPNG(of: view) { return data }
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    private static func layerPNG(of view: NSView) -> Data? {
+        guard let layer = view.layer else { return nil }
+        let scale = view.window?.backingScaleFactor ?? 2
+        let pixels = CGSize(width: view.bounds.width * scale, height: view.bounds.height * scale)
+        guard pixels.width >= 1, pixels.height >= 1,
+              let context = CGContext(
+                data: nil,
+                width: Int(pixels.width), height: Int(pixels.height),
+                bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)
+        else { return nil }
+
+        // The window's own backdrop. A layer tree renders only what it draws,
+        // and SwiftUI leaves the material behind the content to the window —
+        // without this the text lands on transparency and reads as black on
+        // black wherever it is dark.
+        context.setFillColor((view.window?.backgroundColor ?? .windowBackgroundColor)
+            .usingColorSpace(.deviceRGB)?.cgColor ?? NSColor.white.cgColor)
+        context.fill(CGRect(origin: .zero, size: pixels))
+
+        // A CGContext's origin is bottom-left and a layer draws top-down, so
+        // rendering straight in produces an upside-down window — which is
+        // exactly what the first layer-rendered capture gave.
+        context.translateBy(x: 0, y: pixels.height)
+        context.scaleBy(x: scale, y: -scale)
+        layer.render(in: context)
+
+        guard let image = context.makeImage() else { return nil }
+        return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
     }
 }
