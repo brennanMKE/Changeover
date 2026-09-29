@@ -503,6 +503,23 @@ final class RipFlowController {
         applyActiveFeature(jobs: jobs, settings: settings)
     }
 
+    /// #0167 — how many films on this disc will actually be imported.
+    ///
+    /// Named, not skipped, and either absent from Plex or acknowledged for
+    /// replacement. This is what Start is judged on: a disc holding one film
+    /// the user owns and one they do not must start, because `DiscRipPlan`
+    /// skips the owned one and imports the other.
+    var importableFeatureCount: Int {
+        featureSelection.runnableFeatures.filter { feature in
+            guard case .present = libraryStatus(for: feature) else { return true }
+            // "Replace the Existing File" is a statement about one film, so it
+            // only excuses the film it was given for.
+            guard let ack = replaceAcknowledgement,
+                  let movieID = featureSelection.movieID(for: feature) else { return false }
+            return ack.movieID == movieID
+        }.count
+    }
+
     /// #0167 — whether the film named in one block fits that block's runtime.
     func fit(for feature: Int) -> FeatureFit.Verdict {
         guard featureSelection.isMultiFeature,
@@ -1391,7 +1408,7 @@ final class RipFlowController {
             // #0160 — on a disc holding several films, "no film chosen" has
             // its own refusal, because the screen has one search box per film
             // and "Choose a movie." does not say which.
-            featureChoices:          featureSelection.gateInput
+            featureChoices:          featureSelection.gateInput(importable: importableFeatureCount)
         )
     }
 

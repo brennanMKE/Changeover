@@ -33,6 +33,15 @@ nonisolated struct FeatureChoices: Equatable, Sendable {
     /// refusal below.
     var isMultiFeature: Bool { featureCount >= 2 }
 
+    /// #0167 — films that will be imported: named, not skipped, and not
+    /// already in Plex (or acknowledged for replacement).
+    ///
+    /// The whole point of the multi-feature work. A disc holding one film the
+    /// user owns and one they do not must start: `DiscRipPlan` already skips
+    /// the one in the library, so refusing the disc because the *active*
+    /// selection is a duplicate blocks an import that would have been correct.
+    var importableCount: Int = 0
+
     /// At least one film will actually run: named, and not skipped (#0167).
     /// A film the user has excluded does not count, so a disc whose only
     /// named film was skipped correctly refuses to start.
@@ -80,6 +89,12 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
     /// staged `replaceItemAt`), so without this a re-rip silently overwrites
     /// a good library copy *after* a 40-minute encode.
     case duplicateUnacknowledged
+    /// #0167 — every film on a multi-feature disc is one the library already
+    /// has. Distinct from `duplicateUnacknowledged`, which is about one film
+    /// and names a button: here there is nothing to acknowledge, because
+    /// replacing one film would still leave the disc's other films alone. The
+    /// honest next step is to take the disc out.
+    case everyFilmAlreadyInPlex
     /// §7.4 — every row on the upgrade card is refused or unticked, so there
     /// is nothing for a remux to write. Never offered as a no-op.
     case upgradeNothingSelected
@@ -146,6 +161,8 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
             return "Confirm the runtime mismatch with Rip anyway."
         case .libraryCheckInProgress:
             return "Checking the Plex library for this movie."
+        case .everyFilmAlreadyInPlex:
+            return "Every film on this disc is already in Plex — nothing to import."
         case .duplicateUnacknowledged:
             // Name the control, the way `.runtimeMismatchUnconfirmed` does:
             // the notice above the action bar offers exactly this button.
@@ -200,6 +217,10 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
             return "Pick which part of the disc to rip."
         case .noAudioTrackSelected:
             return "Tick at least one audio track."
+        case .everyFilmAlreadyInPlex:
+            // States the fact and the next move. There is no button to name:
+            // acknowledging one film would still leave the others.
+            return "You already have every movie on this disc. Take it out when you're ready."
         case .runtimeLookupLoading:
             return "Checking the movie's length — one moment."
         case .runtimeMismatchUnconfirmed:
@@ -334,6 +355,25 @@ nonisolated enum StartGate {
             // #0143, checked **last**, after every other check passes: the
             // caption must name the first thing to do, and a duplicate must
             // never be reported before the disc has even been scanned.
+            //
+            // #0167 — on a disc holding several films the duplicate question
+            // is per film, not per disc. `DiscRipPlan` skips the ones already
+            // in Plex and imports the rest, so refusing the whole disc because
+            // the film currently active happens to be one the user owns blocks
+            // an import that would have been right. Reported on the Uncle Buck
+            // disc: "I could not skip a movie which was already imported."
+            //
+            // When nothing at all is importable the refusal still stands, and
+            // it is the true statement about the disc.
+            if featureChoices.isMultiFeature {
+                // Something to import: the plan skips what is already held and
+                // rips the rest, so the disc starts.
+                if featureChoices.importableCount > 0 { return .ready }
+                // Nothing to import, and every film was named — the disc is
+                // genuinely finished with, and says so rather than naming a
+                // button that would only excuse one of its films.
+                if featureChoices.hasChoice { return .everyFilmAlreadyInPlex }
+            }
             return libraryDecision(libraryCheck, replaceAcknowledgement: replaceAcknowledgement)
         }
     }

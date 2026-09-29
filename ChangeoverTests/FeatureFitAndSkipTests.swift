@@ -338,3 +338,76 @@ import Testing
         #expect(Self.gate(.done(tmdbID: "2616", .absent)) != .duplicateUnacknowledged)
     }
 }
+
+/// #0167 — THE GOAL: a disc with one film you own and one you do not must
+/// import the one you do not.
+///
+/// Four days stuck on this. `DiscRipPlan` has skipped already-held films since
+/// #0163, but `StartGate` refused the whole disc before `startRipping` ever
+/// ran, because it judged the disc by whichever single film was active. So the
+/// import the app was ready to do correctly could never begin, and the only
+/// offered remedy — "Replace the Existing File" — was about the wrong film.
+@Suite struct MultiFeatureDuplicateDoesNotBlockTheDiscTests {
+
+    private static func gate(_ choices: FeatureChoices,
+                             library: LibraryCheck = .idle) -> StartDecision {
+        let title = DiscTitle(index: 1, durationSeconds: 5_978, chapterCount: 17,
+                              sizeBytes: 0, outputFileName: nil, displayAspect: 1.78)
+        let scan = ScanState.scanned(DiscScanner.Result(
+            disc: DiscInfo(volumeName: "UB", driveName: "disk4", titles: [title]),
+            mainFeatureIndex: 1, warnings: []))
+        return StartGate.decide(
+            hasMovieSelected: true, isRunning: false, hasDisc: true,
+            scanState: scan, selectedTitleIndex: 1, selectedAudioTrackNumbers: [1],
+            runtimeLookup: .loaded(movieID: 2616, runtimeMinutes: 100),
+            mismatchAcknowledgement: nil,
+            libraryCheck: library, replaceAcknowledgement: nil,
+            featureChoices: choices)
+    }
+
+    private static func present() -> LibraryCheck {
+        .done(tmdbID: "2616", .present([
+            LibraryEntry(folderName: "Uncle Buck (1989) {tmdb-2616}",
+                         folderPath: "/M/Uncle Buck (1989) {tmdb-2616}",
+                         files: [LibraryFile(name: "Uncle Buck (1989).mp4", sizeBytes: 5)])
+        ]))
+    }
+
+    /// The headline. Two films named, one already in Plex, one not — the disc
+    /// starts, and the plan skips the one that is held.
+    @Test func adiscWithOneNewFilmStartsEvenThoughTheOtherIsHeld() {
+        let choices = FeatureChoices(featureCount: 2, chosenCount: 2, importableCount: 1)
+        #expect(Self.gate(choices, library: Self.present()) == .ready,
+                "the active film being a duplicate must not block the film that is not")
+    }
+
+    /// Every film held: no button can help, so say the true thing instead of
+    /// naming one that would only excuse a single film.
+    @Test func adiscWhereEveryFilmIsHeldSaysSoRatherThanNamingAButton() {
+        let choices = FeatureChoices(featureCount: 2, chosenCount: 2, importableCount: 0)
+        let decision = Self.gate(choices, library: Self.present())
+        #expect(decision == .everyFilmAlreadyInPlex)
+        #expect(decision.reason?.contains("nothing to import") == true)
+        #expect(decision.plainReason?.isEmpty == false)
+    }
+
+    /// Nothing named yet is still "name one" — this must not swallow #0160's
+    /// refusal.
+    @Test func nothingNamedIsStillNoFeatureChosen() {
+        let choices = FeatureChoices(featureCount: 2, chosenCount: 0, importableCount: 0)
+        #expect(Self.gate(choices, library: Self.present()) == .noFeatureChosen)
+    }
+
+    /// A single-film disc is untouched: a duplicate there still refuses and
+    /// still names the Replace button, which is #0143's whole guard against
+    /// overwriting a good library copy after a 40-minute encode.
+    @Test func asingleFilmDiscStillRefusesADuplicate() {
+        #expect(Self.gate(FeatureChoices(), library: Self.present()) == .duplicateUnacknowledged)
+    }
+
+    /// Three films, one new: still starts.
+    @Test func athreeFilmDiscStartsForOneNewFilm() {
+        let choices = FeatureChoices(featureCount: 3, chosenCount: 3, importableCount: 1)
+        #expect(Self.gate(choices, library: Self.present()) == .ready)
+    }
+}

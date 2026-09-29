@@ -73,9 +73,15 @@ nonisolated struct FeatureSelection: Equatable, Sendable {
     /// named. A disc whose only named film the user has skipped is a disc with
     /// nothing to start, and Start must say so rather than offering to rip
     /// something that was explicitly excluded.
-    var gateInput: FeatureChoices {
-        FeatureChoices(featureCount: features.count, chosenCount: runnableFeatures.count)
+    func gateInput(importable: Int) -> FeatureChoices {
+        FeatureChoices(featureCount: features.count,
+                       chosenCount: runnableFeatures.count,
+                       importableCount: importable)
     }
+
+    /// Kept for callers that do not know the library answers — every runnable
+    /// film counts as importable, which is what a disc with no checks yet is.
+    var gateInput: FeatureChoices { gateInput(importable: runnableFeatures.count) }
 
     /// The feature titles an outcome names, in disc order. `[]` for every
     /// other outcome — a single-feature disc has no per-feature state at all,
