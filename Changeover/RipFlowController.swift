@@ -448,9 +448,14 @@ final class RipFlowController {
         let count = featureSelection.features.count
         let titles = featureTitles()
         let apiKey = settings.tmdbAPIKey
-        let splits = DiscLabelSplit.candidateSplits(volumeName: disc.label, count: count)
+        let labelSplits = DiscLabelSplit.candidateSplits(volumeName: disc.label, count: count)
+        // #0171 — the menus, which this function claimed to read and never did.
+        let menuQuestion = settings.usesAppleIntelligence
+            ? MultiTitleInference.question(volumeName: disc.label,
+                                           ocr: jobs.menuState.intelligence?.ocr)
+            : nil
 
-        guard !splits.isEmpty, !titles.isEmpty, !apiKey.isEmpty else {
+        guard !titles.isEmpty, !apiKey.isEmpty, !(labelSplits.isEmpty && menuQuestion == nil) else {
             jobs.note("▶ This disc holds \(count) films — name each one below")
             isResolvingDisc = false
             return
@@ -467,16 +472,57 @@ final class RipFlowController {
             // cached, so three splits of a four-word label cost at most the
             // number of distinct parts rather than three times the films.
             var looked: [String: FeatureMatching.Candidate?] = [:]
-            for term in Set(splits.flatMap { $0 }) {
-                looked[term] = await Self.candidate(for: term, apiKey: apiKey)
+            func resolve(_ splits: [[String]]) async -> [FeatureMatching.Assignment]? {
+                for term in Set(splits.flatMap { $0 }) where looked[term] == nil {
+                    looked[term] = await Self.candidate(for: term, apiKey: apiKey)
+                }
+                return FeatureMatching.bestSplit(
+                    features: titles, splits: splits, lookUp: { looked[$0] ?? nil })
             }
 
-            FlowDiagnostics.note("feature match: looked up \(looked.count) terms, "
-                + "\(looked.values.compactMap { $0 }.count) resolved")
-            guard let assignments = FeatureMatching.bestSplit(
-                features: titles, splits: splits, lookUp: { looked[$0] ?? nil })
-            else {
-                jobs.note("  · the label did not name films that fit these runtimes — name them below")
+            // Rung 1: the volume label, cut every way it can be cut.
+            var assignments = labelSplits.isEmpty ? nil : await resolve(labelSplits)
+            FlowDiagnostics.note("feature match: label gave \(labelSplits.count) split(s), "
+                + "\(looked.values.compactMap { $0 }.count) of \(looked.count) terms resolved, "
+                + "assigned=\(assignments != nil)")
+
+            // Rung 2: the disc's own menus.
+            //
+            // #0171 — this rung was described in the comment above this
+            // function from the day it was written and never existed. The
+            // label rung can only work on a disc whose label names its films,
+            // and the label on the Get Hard / The Campaign disc is
+            // `7000078778_1`, a stock number. `DiscLabelSplit` returned
+            // nothing, the guard above returned, and the OCR sitting in the
+            // archive — GET HARD, D°ÇAMPAIGN, and the PLAY block printed once
+            // per film — was never read. Every automatic match in joe's
+            // flow.log was the one disc whose label happens to spell both
+            // titles.
+            //
+            // Tried after the label rather than instead of it, and also when
+            // the label produced splits that would not assign: a label that
+            // names the films is better evidence than a low-resolution menu
+            // read through OCR, and there is no reason to spend a model call
+            // when it already worked.
+            if assignments == nil, let menuQuestion {
+                switch await MultiTitleInference.answer(for: menuQuestion, expecting: count) {
+                case .titles(let reading):
+                    FlowDiagnostics.note("feature match: the menus named "
+                        + "\(reading.titles.count) film(s) — \(reading.titles.joined(separator: " | "))"
+                        + "; count agreement \(reading.agreement)")
+                    // The count comparison is deliberately not enforced here.
+                    // `splits(from:choose:)` turns a surplus into every subset
+                    // of the right size and lets the runtimes throw out the
+                    // spurious name, and turns a shortfall into nothing at all.
+                    assignments = await resolve(
+                        FeatureMatching.splits(from: reading.titles, choose: count))
+                case .unavailable(let why):
+                    FlowDiagnostics.note("feature match: the menus named no film — \(why)")
+                }
+            }
+
+            guard let assignments else {
+                jobs.note("  · neither the disc label nor its menus named films that fit these runtimes — name them below")
                 return
             }
 

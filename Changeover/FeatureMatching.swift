@@ -138,6 +138,44 @@ nonisolated enum FeatureMatching {
         return best?.assignments
     }
 
+    /// #0171 — candidate splits from a flat list of titles.
+    ///
+    /// `bestSplit` takes splits because a volume label can be *cut* several
+    /// ways. A model reading the menus does not produce cuts, it produces a
+    /// list — and `assign` needs exactly one film per feature, so a list of a
+    /// different length is unusable as it stands.
+    ///
+    /// Equal lengths are the ordinary case and become one split. A longer list
+    /// becomes every subset of the right size, which is the honest thing to do
+    /// with a surplus: the model has named a film that is not on this disc —
+    /// an actor read as a title, a trailer, a bonus feature — and the disc's
+    /// own runtimes are what can tell which naming is the spurious one. A
+    /// shorter list becomes nothing, because a film is unaccounted for and no
+    /// arrangement of too few titles covers the disc.
+    ///
+    /// Bounded by construction: `MultiTitleInference.maximumTitles` is 8 and
+    /// `DiscTitleHeuristic.maximumFeaturesPerDisc` is 4, so the worst case is
+    /// the 70 subsets of 8 choose 4 — and every one of them draws on the same
+    /// 8 lookups, which the caller caches by term.
+    static func splits(from titles: [String], choose count: Int) -> [[String]] {
+        guard count > 0, titles.count >= count else { return [] }
+        guard titles.count > count else { return [titles] }
+        var result: [[String]] = []
+        var current: [String] = []
+        func walk(_ index: Int) {
+            if current.count == count { result.append(current); return }
+            guard index < titles.count else { return }
+            // Enough left to finish, or there is no point descending.
+            guard titles.count - index >= count - current.count else { return }
+            current.append(titles[index])
+            walk(index + 1)
+            current.removeLast()
+            walk(index + 1)
+        }
+        walk(0)
+        return result
+    }
+
     /// All orderings of a small array. Written out rather than pulled in
     /// because the only sizes that reach it are 1 to 4.
     private static func permutations(of items: [Int]) -> [[Int]] {
