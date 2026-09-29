@@ -221,10 +221,13 @@ nonisolated enum DiscTitleFormatting {
     nonisolated static func featureBlockWording(position: Int, of count: Int, title: DiscTitle?) -> Wording {
         let plain = "Movie \(position) of \(count)"
         guard let title else { return Wording(plain: plain) }
-        return Wording(
-            plain: plain,
-            detail: "Feature \(position) of \(count) — \(confirmationDetail(index: title.index, title: title))"
-        )
+        // Not `confirmationDetail`, which appends the runtime and the chapter
+        // count. Neither register carries a duration here: the user is being
+        // asked for a title, and every number beside that box is a number
+        // they are implicitly being asked to reconcile. The Confirm step
+        // still shows the disc's full technical line, where it is a check on
+        // a decision already made rather than an input to one.
+        return Wording(plain: plain, detail: "Feature \(position) of \(count) — title \(title.index)")
     }
 
     /// #0140 — the collapsed disclosure's one-line summary for the

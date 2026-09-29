@@ -253,7 +253,11 @@ import Testing
         let wording = DiscTitleFormatting.featureBlockWording(
             position: 1, of: 2, title: title)
         #expect(wording.plain == "Movie 1 of 2")
+        // Neither register. A duration beside a search box is a number the
+        // user is being asked to reconcile, whichever register it is in.
         let rendered = DiscTitleFormatting.plainDuration(title.durationSeconds)
         #expect(!wording.plain.contains(rendered))
+        #expect(wording.detail?.contains(rendered) != true)
+        #expect(wording.detail?.contains(":") != true, "no clock time either")
     }
 }
