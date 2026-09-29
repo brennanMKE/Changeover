@@ -263,3 +263,78 @@ import Testing
         #expect(flow.featureSelection.movieID(for: 2) == 2616, "the other film is untouched")
     }
 }
+
+/// #0167 — the Start gate and the Replace button must be drawn from the same
+/// answer.
+///
+/// Reported on the Uncle Buck disc, 2026-09-29: the Confirm step's footer read
+/// "Already in Plex. Press Replace the Existing File to rip it again." with
+/// Start Ripping disabled — and no such button anywhere on the screen.
+///
+/// The gate was given the raw `libraryCheck` and the notice the
+/// edition-filtered `libraryCheckForThisEdition`. When an edition is seeded
+/// that no library file carries — which a concatenated label like
+/// UNCLE_BUCK_GREAT_OUTDOORS invites — the two disagree: the gate refuses as a
+/// duplicate, the notice decides this cut is not in the library and draws
+/// nothing, and the user is told to press a control that does not exist.
+@Suite struct DuplicateGateAgreesWithNoticeTests {
+
+    private static let metadata = MovieMetadata(title: "Uncle Buck", year: "1989", tmdbID: "2616")
+
+    private static func present(_ folder: String, _ file: String) -> LibraryCheck {
+        .done(tmdbID: "2616", .present([
+            LibraryEntry(folderName: folder, folderPath: "/M/\(folder)",
+                         files: [LibraryFile(name: file, sizeBytes: 500_000_000)])
+        ]))
+    }
+
+    /// A settled disc: scanned, a title picked, audio picked, runtime agreed.
+    /// Everything ahead of the duplicate check has to pass or the decision
+    /// never reaches it — which is what made the first version of this test
+    /// assert against `.scanInProgress`.
+    private static func gate(_ check: LibraryCheck) -> StartDecision {
+        let title = DiscTitle(index: 1, durationSeconds: 5_978, chapterCount: 17,
+                              sizeBytes: 0, outputFileName: nil, displayAspect: 1.78)
+        let scan = ScanState.scanned(DiscScanner.Result(
+            disc: DiscInfo(volumeName: "UB", driveName: "disk4", titles: [title]),
+            mainFeatureIndex: 1, warnings: []))
+        return StartGate.decide(
+            hasMovieSelected: true, isRunning: false, hasDisc: true,
+            scanState: scan, selectedTitleIndex: 1, selectedAudioTrackNumbers: [1],
+            runtimeLookup: .loaded(movieID: 2616, runtimeMinutes: 100),
+            mismatchAcknowledgement: nil,
+            libraryCheck: check, replaceAcknowledgement: nil)
+    }
+
+    /// Whatever the check says, the two must agree: a refusal that names the
+    /// Replace button requires the notice to be offering one.
+    @Test func arefusalNamingReplaceAlwaysComesWithAReplaceButton() throws {
+        for check in [Self.present("Uncle Buck (1989) {tmdb-2616}", "Uncle Buck (1989).mp4"),
+                      .done(tmdbID: "2616", .absent),
+                      .done(tmdbID: "2616", .unreachable(reason: "not mounted")),
+                      .idle] {
+            let decision = Self.gate(check)
+            let notice = DuplicatePresentation.notice(
+                check: check, acknowledgement: nil, metadata: Self.metadata, now: Date())
+            if decision == .duplicateUnacknowledged {
+                #expect(notice?.offersReplace == true,
+                        "Start refuses as a duplicate but no Replace button is drawn for \(check)")
+            }
+        }
+    }
+
+    /// And the ordinary duplicate still refuses, with a button — the guard
+    /// this must not weaken.
+    @Test func arealDuplicateStillRefusesAndOffersTheButton() throws {
+        let check = Self.present("Uncle Buck (1989) {tmdb-2616}", "Uncle Buck (1989).mp4")
+        #expect(Self.gate(check) == .duplicateUnacknowledged)
+        let notice = try #require(DuplicatePresentation.notice(
+            check: check, acknowledgement: nil, metadata: Self.metadata, now: Date()))
+        #expect(notice.offersReplace)
+    }
+
+    /// A film the library does not have starts without ceremony.
+    @Test func afilmNotInTheLibraryIsNotRefused() {
+        #expect(Self.gate(.done(tmdbID: "2616", .absent)) != .duplicateUnacknowledged)
+    }
+}

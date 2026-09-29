@@ -1372,7 +1372,21 @@ final class RipFlowController {
             selectedAudioTrackNumbers: jobs.selectedAudioTrackNumbers,
             runtimeLookup:       search.runtimeLookup,
             mismatchAcknowledgement: jobs.mismatchAcknowledgement,
-            libraryCheck:            libraryCheck,
+            // #0167 — the SAME answer the duplicate notice is drawn from.
+            //
+            // The gate took the raw check while `duplicateNotice` took the
+            // edition-filtered one, so the two could disagree: the gate
+            // refused Start as a duplicate while the notice decided this
+            // edition was not in the library and drew nothing — leaving the
+            // footer saying "Press Replace the Existing File to rip it again"
+            // beside no such button. Reported on the Uncle Buck disc,
+            // 2026-09-29, whose concatenated volume label seeds an edition
+            // that no library file carries.
+            //
+            // The filtered answer is the correct one for both: a different cut
+            // of a film is not a duplicate of it, so it should neither be
+            // refused nor need acknowledging.
+            libraryCheck:            libraryCheckForThisEdition,
             replaceAcknowledgement:  replaceAcknowledgement,
             // #0160 — on a disc holding several films, "no film chosen" has
             // its own refusal, because the screen has one search box per film
