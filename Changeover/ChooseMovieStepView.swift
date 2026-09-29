@@ -266,6 +266,7 @@ private struct FeatureSearchBlock: View {
                 Button("Search") { flow.runFeatureSearchNow(feature, jobs: jobs, settings: settings) }
                     .disabled(search.query.trimmingCharacters(in: .whitespaces).isEmpty || search.isLoading)
             }
+            fitWarning
             results
         }
         .padding()
@@ -293,6 +294,24 @@ private struct FeatureSearchBlock: View {
     }
 
     private var isChosen: Bool { flow.featureSelection.movieID(for: feature) != nil }
+    private var isSkippedHere: Bool { flow.featureSelection.isSkipped(feature) }
+
+    /// #0167 — the film named here does not match this block's runtime.
+    /// Caught where the mistake was made rather than five steps later at the
+    /// Confirm step, which reported it as "Δ +518s" against a title number.
+    @ViewBuilder
+    private var fitWarning: some View {
+        let verdict = flow.fit(for: feature)
+        if case .mismatch(_, let better) = verdict,
+           let wording = FeatureFit.wording(
+               verdict,
+               positionOfBetterFeature: better.flatMap { index in
+                   flow.featureSelection.features.firstIndex(of: index).map { $0 + 1 }
+               },
+               count: count) {
+            WordingText(wording: wording, font: .caption, tint: .orange)
+        }
+    }
     private var isActive: Bool { flow.featureSelection.active == feature }
 
     private var header: some View {
@@ -314,7 +333,17 @@ private struct FeatureSearchBlock: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
+            // #0167 — the way out of a film you do not want. Shown once a
+            // film is named, because before that there is nothing to exclude.
             if isChosen {
+                Button(isSkippedHere ? "Import this one" : "Don't import this one") {
+                    flow.setFeatureSkipped(!isSkippedHere, feature: feature,
+                                           jobs: jobs, settings: settings)
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+            }
+            if isChosen, !isSkippedHere {
                 if isActive {
                     Text("Ripping this one")
                         .font(.caption2)

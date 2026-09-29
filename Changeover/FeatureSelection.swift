@@ -68,8 +68,13 @@ nonisolated struct FeatureSelection: Equatable, Sendable {
 
     /// What `StartGate.decide` needs to refuse with a reason that names what
     /// is missing.
+    ///
+    /// #0167 — counts the films that will actually RUN, not the ones merely
+    /// named. A disc whose only named film the user has skipped is a disc with
+    /// nothing to start, and Start must say so rather than offering to rip
+    /// something that was explicitly excluded.
     var gateInput: FeatureChoices {
-        FeatureChoices(featureCount: features.count, chosenCount: choices.count)
+        FeatureChoices(featureCount: features.count, chosenCount: runnableFeatures.count)
     }
 
     /// The feature titles an outcome names, in disc order. `[]` for every
@@ -87,6 +92,7 @@ nonisolated struct FeatureSelection: Equatable, Sendable {
     /// stale picks go. Same reasoning as #0034's `SelectionReset` — a film
     /// chosen against one thing must never be filed against another.
     mutating func setFeatures(_ indices: [Int]) {
+        skipped = skipped.filter { indices.contains($0) }
         guard indices != features else { return }
         features = indices
         choices = choices.filter { indices.contains($0.key) }
@@ -111,6 +117,39 @@ nonisolated struct FeatureSelection: Equatable, Sendable {
             // have said what that disc holds, and Start should not go dead
             // because they changed their mind about which to do first.
             if active == feature { active = lowestChosen }
+        }
+    }
+
+    /// #0167 — features the user has said not to import.
+    ///
+    /// Distinct from "no film named": a film can be named, recognised as one
+    /// already in Plex, and deliberately left out. Before this there was no
+    /// way to say so — the only offer was "Replace the Existing File", and a
+    /// film the user did not want blocked the whole disc, because `StartGate`
+    /// judged it by whichever film was active.
+    private(set) var skipped: Set<Int> = []
+
+    func isSkipped(_ feature: Int) -> Bool { skipped.contains(feature) }
+
+    /// Films that will actually be imported: named, and not skipped.
+    var runnableFeatures: [Int] {
+        features.filter { choices[$0] != nil && !skipped.contains($0) }
+    }
+
+    /// Whether anything at all will run — what Start should be judged on,
+    /// rather than on the single mirrored selection.
+    var hasRunnableFilm: Bool { !runnableFeatures.isEmpty }
+
+    mutating func setSkipped(_ skip: Bool, for feature: Int) {
+        guard features.contains(feature) else { return }
+        if skip {
+            skipped.insert(feature)
+            // A skipped film must not stay the active one, or the disc is
+            // still being judged by a film that is not going to run.
+            if active == feature { active = runnableFeatures.first }
+        } else {
+            skipped.remove(feature)
+            if active == nil { active = feature }
         }
     }
 

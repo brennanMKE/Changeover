@@ -349,6 +349,7 @@ final class RipFlowController {
         guard indices != featureSelection.features else { return }
 
         featureSelection.setFeatures(indices)
+        currentScanState = jobs.scanState
         featureLibraryChecks = featureLibraryChecks.filter { indices.contains($0.key) }
         featureLibraryGenerations = featureLibraryGenerations.filter { indices.contains($0.key) }
         featureSearchModels = featureSearchModels.filter { indices.contains($0.key) }
@@ -393,6 +394,124 @@ final class RipFlowController {
         featureLibraryChecks[feature] = nil
         applyActiveFeature(jobs: jobs, settings: settings)
     }
+
+    /// #0167 — fill one search box per film, assigned by runtime.
+    ///
+    /// Three sources, in the order they are worth trusting: the volume label
+    /// cut into candidate titles (`DiscLabelSplit`), and — when that yields
+    /// nothing — the films the on-device model read off the menus. Either way
+    /// the candidates are placed on titles by `FeatureMatching`, which refuses
+    /// a one-to-one assignment it cannot make within three minutes. Measured
+    /// on this disc: The Great Outdoors 0.6 min out on title 1, Uncle Buck 0.4
+    /// on title 2.
+    ///
+    /// Refusing is the normal outcome on a disc whose label is a catalogue
+    /// number, and it leaves exactly what was there before: empty boxes and a
+    /// note saying how many films to name.
+    private func resolveEachFeature(disc: DiscInsertion, jobs: JobController, settings: AppSettings) {
+        let count = featureSelection.features.count
+        let titles = featureTitles()
+        let apiKey = settings.tmdbAPIKey
+        let splits = DiscLabelSplit.candidateSplits(volumeName: disc.label, count: count)
+
+        guard !splits.isEmpty, !titles.isEmpty, !apiKey.isEmpty else {
+            jobs.note("▶ This disc holds \(count) films — name each one below")
+            isResolvingDisc = false
+            return
+        }
+
+        isResolvingDisc = true
+        jobs.note("▶ This disc holds \(count) films — working out which is which")
+
+        Task { [weak self] in
+            defer { self?.isResolvingDisc = false }
+            guard let self else { return }
+
+            // One TMDB lookup per distinct term across every candidate split,
+            // cached, so three splits of a four-word label cost at most the
+            // number of distinct parts rather than three times the films.
+            var looked: [String: FeatureMatching.Candidate?] = [:]
+            for term in Set(splits.flatMap { $0 }) {
+                looked[term] = await Self.candidate(for: term, apiKey: apiKey)
+            }
+
+            guard let assignments = FeatureMatching.bestSplit(
+                features: titles, splits: splits, lookUp: { looked[$0] ?? nil })
+            else {
+                jobs.note("  · the label did not name films that fit these runtimes — name them below")
+                return
+            }
+
+            // Still the same disc, and the user has not started naming films
+            // themselves in the meantime (#0156 — never overwrite their text).
+            guard jobs.insertedDisc.map({ SelectionReset.sameDisc($0, disc) }) == true else { return }
+            for assignment in assignments {
+                guard let model = self.featureSearchModels[assignment.feature],
+                      !model.queryIsUserEntered,
+                      self.featureSelection.movieID(for: assignment.feature) == nil
+                else { continue }
+                let candidate = assignment.candidate
+                let results = (try? await TMDBClient().searchMovies(
+                    query: candidate.term, apiKey: apiKey)) ?? []
+                model.present(query: candidate.term, results: results)
+                self.selectFeature(movieID: candidate.movieID, feature: assignment.feature,
+                                   jobs: jobs, settings: settings)
+                jobs.note("  · \(candidate.title) (\(candidate.year)) on feature "
+                    + "\(assignment.feature) — \(String(format: "%.1f", assignment.errorMinutes)) min from its runtime")
+            }
+        }
+    }
+
+    /// One TMDB search plus its runtime, as `FeatureMatching` needs it.
+    private static func candidate(for term: String, apiKey: String) async -> FeatureMatching.Candidate? {
+        let client = TMDBClient()
+        guard let top = try? await client.searchMovies(query: term, apiKey: apiKey).first,
+              let details = try? await client.movieDetails(id: top.id, apiKey: apiKey),
+              let runtime = details.runtimeMinutes
+        else { return nil }
+        return FeatureMatching.Candidate(term: term, movieID: top.id, title: top.title,
+                                         year: top.yearText, runtimeMinutes: runtime)
+    }
+
+    /// #0167 — "Don't import this one".
+    ///
+    /// The gap the user hit on 2026-09-29: both films on the Uncle Buck disc
+    /// were already in Plex, and there was no way to say so. `DiscRipPlan`
+    /// could skip, but only inside `startRipping` — and Start was what was
+    /// blocked, because the Confirm step judged the whole disc by whichever
+    /// film happened to be active. A film you do not want should not have to
+    /// be ripped or argued past.
+    func setFeatureSkipped(_ skip: Bool, feature: Int, jobs: JobController, settings: AppSettings) {
+        featureSelection.setSkipped(skip, for: feature)
+        applyActiveFeature(jobs: jobs, settings: settings)
+    }
+
+    /// #0167 — whether the film named in one block fits that block's runtime.
+    func fit(for feature: Int) -> FeatureFit.Verdict {
+        guard featureSelection.isMultiFeature,
+              let model = featureSearchModels[feature],
+              case .loaded(_, let minutes) = model.runtimeLookup
+        else { return .unknown }
+        return FeatureFit.judge(runtimeMinutes: minutes,
+                                feature: featureTitle(feature),
+                                allFeatures: featureTitles())
+    }
+
+    /// The scanned titles for this disc's features, in disc order.
+    func featureTitles() -> [DiscTitle] {
+        guard case .scanned(let result) = currentScanState else { return [] }
+        return featureSelection.features.compactMap { index in
+            result.disc.titles.first { $0.index == index }
+        }
+    }
+
+    private func featureTitle(_ feature: Int) -> DiscTitle? {
+        featureTitles().first { $0.index == feature }
+    }
+
+    /// Set by `syncFeatures`, so the fit check has the scan without needing a
+    /// `JobController` handed to every view that asks.
+    private(set) var currentScanState: ScanState = .idle
 
     /// "Rip this one first" — switches which named film this pass will rip.
     /// The other stays named; nothing is thrown away.
@@ -915,9 +1034,18 @@ final class RipFlowController {
         // question. A blank box per film is honest: the app knows how many
         // films there are and not which is which.
         guard SearchPrefill.mayUseWholeLabel(featureCount: featureSelection.features.count) else {
-            let count = featureSelection.features.count
-            jobs.note("▶ This disc holds \(count) films — name each one below")
-            isResolvingDisc = false
+            // #0167 — a disc with several films gets one search per film,
+            // assigned by runtime rather than guessed.
+            //
+            // The whole label is still never prefilled into a box. What is
+            // new is that the label can be *cut up*: UNCLE_BUCK_GREAT_OUTDOORS
+            // splits three ways, only one of which has a film behind both
+            // halves, and the disc's own runtimes say which film goes on which
+            // title. Without this the user had to know that Uncle Buck runs
+            // 100 minutes and The Great Outdoors 91 — and on 2026-09-29 they
+            // typed them into the wrong boxes, which nothing noticed until the
+            // Confirm step refused the disc with "Δ +518s".
+            resolveEachFeature(disc: disc, jobs: jobs, settings: settings)
             return
         }
 
@@ -1727,6 +1855,11 @@ final class RipFlowController {
             return [(feature, metadata(for: movie))]
         }
         return featureSelection.features.compactMap { feature in
+            // #0167 — a film the user said not to import never enters the
+            // plan at all. Distinct from the automatic "already in Plex" skip
+            // below: this one is a decision, and it applies even to a film
+            // Plex does not have.
+            guard !featureSelection.skipped.contains(feature) else { return nil }
             guard let model = featureSearchModels[feature],
                   let movie = model.selectedMovie,
                   // The block's own pick, not a stale `selectedMovie` the view

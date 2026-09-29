@@ -33,8 +33,9 @@ nonisolated struct FeatureChoices: Equatable, Sendable {
     /// refusal below.
     var isMultiFeature: Bool { featureCount >= 2 }
 
-    /// At least one of them has a film against it, which is all Start needs —
-    /// it rips one film per pass and the disc goes back in for the next.
+    /// At least one film will actually run: named, and not skipped (#0167).
+    /// A film the user has excluded does not count, so a disc whose only
+    /// named film was skipped correctly refuses to start.
     var hasChoice: Bool { chosenCount > 0 }
 }
 
@@ -191,7 +192,9 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
             return "Choose a movie."
         case .noFeatureChosen:
             // Names the fact the person does not have — that there is more
-            // than one film on this disc — and then the one action.
+            // than one film on this disc — and then the one action. Also the
+            // refusal when every named film has been skipped (#0167), which
+            // is the same statement: nothing here is going to be imported.
             return "This disc has more than one movie on it. Choose at least one to rip."
         case .noTitleSelected:
             return "Pick which part of the disc to rip."
