@@ -34,6 +34,12 @@ nonisolated struct EjectExplanation: Equatable, Sendable, Codable {
         /// that would otherwise park a disc forever waiting for a decision
         /// nobody is there to make.
         case alreadyInPlex
+        /// #0168 — a disc holding several films, every one of which the
+        /// library already has. Distinct from `alreadyInPlex`, which is about
+        /// one film: here the disc is finished with as a whole, and the
+        /// explanation has to name each film or it does not account for the
+        /// disc.
+        case everyFilmAlreadyInPlex
     }
 
     var cause: Cause
@@ -47,12 +53,17 @@ nonisolated struct EjectExplanation: Equatable, Sendable, Codable {
     var existingFile: String?
     /// That file's size, already formatted.
     var existingSize: String?
+    /// #0168 — every film on the disc, in disc order, when the whole disc was
+    /// already held. The report has to account for all of them.
+    var films: [String] = []
 
-    init(cause: Cause, movie: String? = nil, existingFile: String? = nil, existingSize: String? = nil) {
+    init(cause: Cause, movie: String? = nil, existingFile: String? = nil,
+         existingSize: String? = nil, films: [String] = []) {
         self.cause = cause
         self.movie = movie
         self.existingFile = existingFile
         self.existingSize = existingSize
+        self.films = films
     }
 
     // MARK: - What the screen says
@@ -64,6 +75,11 @@ nonisolated struct EjectExplanation: Equatable, Sendable, Codable {
         case .alreadyInPlex:
             guard let movie else { return "Ejected — that film is already in Plex" }
             return "Ejected — \(movie) is already in Plex"
+        case .everyFilmAlreadyInPlex:
+            let n = films.count
+            return n == 2
+                ? "Ejected — both films on this disc are already in Plex"
+                : "Ejected — all \(n) films on this disc are already in Plex"
         }
     }
 
@@ -77,6 +93,11 @@ nonisolated struct EjectExplanation: Equatable, Sendable, Codable {
             let where_ = file.isEmpty ? "in your Plex movies folder" : "in your Plex movies folder as \(file)"
             return "A copy is already \(where_), so the disc was not ripped "
                 + "and the drive was freed for the next one."
+        case .everyFilmAlreadyInPlex:
+            // Names every film, because "both are already there" without
+            // saying which is exactly the report that cannot be checked.
+            return films.map { "\($0) — already in Plex" }.joined(separator: "\n")
+                + "\nNothing was ripped, and the disc was ejected for the next one."
         }
     }
 
@@ -91,6 +112,9 @@ nonisolated struct EjectExplanation: Equatable, Sendable, Codable {
             return "To rip it anyway, put the disc back in and tick "
                 + "“Replace the Existing File”. If Plex does not list the film, "
                 + "the file is there but Plex has matched it to something else."
+        case .everyFilmAlreadyInPlex:
+            return "To rip one of them anyway, put the disc back in and tick "
+                + "“Replace the Existing File” for that film."
         }
     }
 

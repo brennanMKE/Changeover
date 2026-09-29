@@ -1628,6 +1628,73 @@ final class RipFlowController {
     /// rip is correctly refused and then the disc waits for a decision nobody
     /// is there to make. Ejecting turns "already have it" into the same
     /// gesture as "finished with it".
+    /// Whether this feature's film is known to be in the library already.
+    /// A check still running is deliberately not an answer.
+    private func isHeldInPlex(_ feature: Int) -> Bool {
+        if case .present = libraryStatus(for: feature) { return true }
+        return false
+    }
+
+    /// #0168 — a disc with nothing to import reports and ejects itself.
+    ///
+    /// Phase 4 into phase 5 of the flow the user asked for: run the imports
+    /// skipping what is already held, show what was done, then take the disc
+    /// out. On a disc where *every* film is already in Plex there is nothing
+    /// to run, so the report is immediate and so is the eject.
+    ///
+    /// Before this the disc sat on the Confirm step saying "You already have
+    /// every movie on this disc. Take it out when you're ready." — which is
+    /// true, and is also the app asking a person to do the one piece of manual
+    /// work it exists to remove. Reported 2026-09-29: "Why is it not
+    /// automatically ejecting and showing after it is ejected the reason?"
+    ///
+    /// Safe to do unattended and without `autoStartRipping`, unlike
+    /// `shouldEjectDuplicate`: nothing is being encoded, nothing is being
+    /// replaced, and no decision is being taken away from anyone. The only
+    /// question a person could answer here is "rip it anyway", and the report
+    /// names every film so that remains possible on the next insertion.
+    private func evaluateNothingToImport(jobs: JobController, settings: AppSettings) {
+        guard let disc = jobs.insertedDisc,
+              featureSelection.isMultiFeature,
+              !jobs.isRunning, !jobs.isEjecting,
+              ripPlan == nil,
+              !autoEjectedDiscs.contains(Self.discIdentity(disc)),
+              // Every film named, so "nothing to import" is a statement about
+              // the whole disc rather than about the films named so far.
+              featureSelection.runnableFeatures.count == featureSelection.features.count,
+              featureSelection.features.allSatisfy { featureSelection.movieID(for: $0) != nil },
+              importableFeatureCount == 0,
+              // And every one of them is held, not merely unchecked — a check
+              // still in flight is not an answer.
+              featureSelection.features.allSatisfy(isHeldInPlex)
+        else { return }
+
+        autoEjectedDiscs.insert(Self.discIdentity(disc))
+        cancelAutoStart()
+
+        // A plan with every film skipped: `isFinished` at once, nothing to
+        // run, and the report lists all of them with their reason.
+        if var plan = DiscRipPlan.make(disc: disc, films: plannedFilms(jobs: jobs)) {
+            for entry in plan.entries {
+                plan.skip(entry.feature, reason: "already in Plex")
+            }
+            ripPlan = plan
+        }
+
+        // #0153's screen is what the user sees once the tray opens, so the
+        // reason has to be recorded before the eject rather than after: the
+        // disc going is what makes that screen appear.
+        let films = featureSelection.features.compactMap { feature -> String? in
+            guard let movie = featureSearchModels[feature]?.selectedMovie else { return nil }
+            return "\(movie.title) (\(movie.yearText))"
+        }
+        let explanation = EjectExplanation(cause: .everyFilmAlreadyInPlex, films: films)
+        unexplainedEjection = explanation
+        jobs.logEvent(explanation.logLine)
+        FlowDiagnostics.note("nothing to import: \(films.count) films, all already in Plex — ejecting")
+        Task { await jobs.ejectDisc() }
+    }
+
     private func evaluateAutoEject(jobs: JobController, settings: AppSettings) {
         guard let disc = jobs.insertedDisc,
               !autoEjectedDiscs.contains(Self.discIdentity(disc)),
@@ -1781,6 +1848,7 @@ final class RipFlowController {
     func evaluateAutoStart(jobs: JobController, settings: AppSettings) {
         recordIdentification(jobs: jobs, settings: settings)
         evaluatePostJobEject(jobs: jobs, settings: settings)
+        evaluateNothingToImport(jobs: jobs, settings: settings)
         evaluateAutoEject(jobs: jobs, settings: settings)
         let decision = AutoStartPolicy.decide(
             enabled: settings.autoStartRipping,

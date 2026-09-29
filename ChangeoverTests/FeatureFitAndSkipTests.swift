@@ -500,3 +500,69 @@ import Testing
         #expect(decision == .ready, "no Replace, no ticking, no wasted encode")
     }
 }
+
+/// #0168 — a disc with nothing to import ejects itself and says why.
+///
+/// Reported 2026-09-29: "Why is it not automatically ejecting and showing
+/// after it is ejected the reason?" The disc sat on the Confirm step saying
+/// "You already have every movie on this disc. Take it out when you're ready."
+/// — true, and also the app asking a person to do the one piece of manual work
+/// it exists to remove. Phases 4 and 5 of the flow: report, then eject.
+@Suite struct NothingToImportEjectsItselfTests {
+
+    /// Both films named, and the explanation accounts for each of them —
+    /// "both are already there" without saying which cannot be checked.
+    @Test func theExplanationNamesEveryFilm() {
+        let e = EjectExplanation(cause: .everyFilmAlreadyInPlex,
+                                 films: ["The Great Outdoors (1988)", "Uncle Buck (1989)"])
+        #expect(e.headline == "Ejected — both films on this disc are already in Plex")
+        #expect(e.detail.contains("The Great Outdoors (1988) — already in Plex"))
+        #expect(e.detail.contains("Uncle Buck (1989) — already in Plex"))
+        #expect(e.detail.contains("Nothing was ripped"))
+    }
+
+    /// Three films count themselves.
+    @Test func threeFilmsAreCounted() {
+        let e = EjectExplanation(cause: .everyFilmAlreadyInPlex,
+                                 films: ["A (2001)", "B (2002)", "C (2003)"])
+        #expect(e.headline.contains("all 3 films"))
+        for film in ["A (2001)", "B (2002)", "C (2003)"] {
+            #expect(e.detail.contains(film))
+        }
+    }
+
+    /// The way out is still offered — the disc is not being refused forever.
+    @Test func theAdviceStillOffersARerip() {
+        let e = EjectExplanation(cause: .everyFilmAlreadyInPlex, films: ["A (2001)", "B (2002)"])
+        #expect(e.advice.contains("Replace the Existing File"))
+    }
+
+    /// Every cause still produces a full set of sentences, so a case added
+    /// later cannot ship with a blank screen.
+    @Test func everyCauseStillSaysSomething() {
+        for cause in EjectExplanation.Cause.allCases {
+            let e = EjectExplanation(cause: cause, movie: "M (1931)", films: ["M (1931)", "N (1932)"])
+            #expect(!e.headline.isEmpty)
+            #expect(!e.detail.isEmpty)
+            #expect(!e.advice.isEmpty)
+            #expect(e.logLine.hasPrefix("⏏ "))
+        }
+    }
+
+    /// It rides on FlowStep, so it has to survive the wire.
+    @Test func itRoundTripsThroughJSON() throws {
+        let e = EjectExplanation(cause: .everyFilmAlreadyInPlex,
+                                 films: ["The Great Outdoors (1988)", "Uncle Buck (1989)"])
+        let data = try JSONEncoder().encode(FlowStep.ejected(e))
+        #expect(try JSONDecoder().decode(FlowStep.self, from: data) == .ejected(e))
+    }
+
+    /// The single-film explanation is unchanged — #0153's own tests still
+    /// describe it, and this must not have moved it.
+    @Test func thesingleFilmExplanationIsUnchanged() {
+        let e = EjectExplanation(cause: .alreadyInPlex, movie: "Knowing (2009)",
+                                 existingFile: "Knowing (2009).mp4", existingSize: "601 MB")
+        #expect(e.headline == "Ejected — Knowing (2009) is already in Plex")
+        #expect(e.detail.contains("Knowing (2009).mp4"))
+    }
+}
