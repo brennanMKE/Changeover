@@ -210,6 +210,42 @@ final class RipFlowController {
     /// one field it always read.
     var chosenMovie: TMDBMovie? { search.selectedMovie }
 
+    /// #0170 — the films Continue will import, in disc order, as the user
+    /// would say them: `Get Hard (2015)`.
+    ///
+    /// Read from `plannedFilms` in spirit but not in fact — that needs a
+    /// `JobController` and this is a label. On a single-feature disc it is the
+    /// one selected film, so the Choose step's action bar says the same kind
+    /// of thing whether the disc holds one film or three.
+    var runnableFilmTitles: [String] {
+        guard featureSelection.isMultiFeature else {
+            return search.selectedMovie.map { ["\($0.title) (\($0.yearText))"] } ?? []
+        }
+        return featureSelection.runnableFeatures.compactMap { titleOfChoice($0) }
+    }
+
+    /// The films the user named and then excluded. Separate from "not named"
+    /// — an unnamed feature is an unanswered question, a skipped one is an
+    /// answer, and only the second is worth reporting back.
+    var skippedFilmTitles: [String] {
+        guard featureSelection.isMultiFeature else { return [] }
+        return featureSelection.features
+            .filter { featureSelection.isSkipped($0) }
+            .compactMap { titleOfChoice($0) }
+    }
+
+    /// The film named for one feature, as text. Goes through
+    /// `featureSelection` rather than the view model's `selectedMovie` so a
+    /// model that has not caught up cannot put a film in this list that the
+    /// plan will not run (the same guard `plannedFilms` applies).
+    private func titleOfChoice(_ feature: Int) -> String? {
+        guard let id = featureSelection.movieID(for: feature),
+              let movie = featureSearchModels[feature]?.selectedMovie,
+              movie.id == id
+        else { return nil }
+        return "\(movie.title) (\(movie.yearText))"
+    }
+
     /// `search` is optional rather than defaulted to `MovieSearchViewModel()`
     /// in the signature: a default argument expression is evaluated in a
     /// `nonisolated` context, and the view model is explicitly `@MainActor`.

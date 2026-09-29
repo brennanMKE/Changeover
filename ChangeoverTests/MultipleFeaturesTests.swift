@@ -225,16 +225,35 @@ import Testing
         #expect(line.tone == .warning, "nothing is preselected, so this is not a success")
     }
 
-    /// The picker's sentence names both runtimes.
-    @Test func theWordingNamesEveryFeaturesRuntime() {
+    /// #0170 — the picker's plain sentence says how many films, and NOT how
+    /// long they are.
+    ///
+    /// It used to recite both runtimes, on the reasoning that they were the
+    /// only thing distinguishing the two rows. They are — to the app. To the
+    /// user they are two numbers carried to a search box that takes titles,
+    /// which is what "I am supposed to know how long both films are and pick
+    /// which one to search" was reporting. The runtimes stay in the detail
+    /// register, where they are a fact rather than an instruction.
+    @Test func theWordingCountsTheFilmsWithoutRecitingRuntimes() {
         let wording = DiscTitleFormatting.multipleFeaturesWording(
             indices: [4, 5], disc: Self.doubleFeature)
         #expect(wording.plain.contains("2 movies"))
-        // Rendered the way every other runtime in the window is — "1h 25m",
-        // not raw minutes — so the two rows can be told apart at a glance.
         for title in Self.doubleFeature.titles {
             let rendered = DiscTitleFormatting.plainDuration(title.durationSeconds)
-            #expect(wording.plain.contains(rendered), "runtime \(rendered) should appear")
+            #expect(!wording.plain.contains(rendered),
+                    "runtime \(rendered) must not be in the plain sentence")
+            #expect(wording.detail?.contains(rendered) == true,
+                    "runtime \(rendered) still belongs in the detail register")
         }
+    }
+
+    /// #0170 — and neither does the heading over a feature's search block.
+    @Test func theFeatureHeadingIsJustItsPosition() {
+        let title = Self.doubleFeature.titles[0]
+        let wording = DiscTitleFormatting.featureBlockWording(
+            position: 1, of: 2, title: title)
+        #expect(wording.plain == "Movie 1 of 2")
+        let rendered = DiscTitleFormatting.plainDuration(title.durationSeconds)
+        #expect(!wording.plain.contains(rendered))
     }
 }

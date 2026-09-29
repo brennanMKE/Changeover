@@ -136,8 +136,11 @@ struct ChooseMovieStepView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(movie.map { "\($0.title) (\($0.yearText))" } ?? "Movie \(position)")
                     .font(.subheadline.weight(.medium))
-                DetailOnlyText(text: "Movie \(position) of \(count) · "
-                    + (discTitle(feature).map { DiscTitleFormatting.duration($0.durationSeconds) } ?? "—"))
+                // #0170 — no runtime here. The film is named; its length is
+                // not a thing the user does anything with, and printing it
+                // beside the title reads as though it still had to be
+                // reconciled by hand. It stays in the detail register.
+                DetailOnlyText(text: "Movie \(position) of \(count)")
             }
             if case .present = flow.libraryStatus(for: feature) {
                 Text("already in Plex")
@@ -229,11 +232,20 @@ struct ChooseMovieStepView: View {
 
             Divider()
             StepActionBar {
-                // Which film this pass will rip, said once rather than in
-                // every block: only one job runs at a time (#0014), so the
-                // disc goes back in for the other one.
-                if let movie = flow.chosenMovie {
-                    Text("Ripping “\(movie.title)” first — put the disc back in for the other afterwards.")
+                // What Continue will actually do.
+                //
+                // #0170 — this used to read "Ripping X first — put the disc
+                // back in for the other afterwards", which stopped being
+                // true when `DiscRipPlan` landed (#0162): the plan holds every
+                // named film and `startNextFilm` begins the next one as soon
+                // as the previous job settles, on the same disc, with nobody
+                // touching the drive. Telling the user to come back and
+                // re-insert it was asking for a step the app had already
+                // taken over.
+                if let summary = ChooseSummary.line(
+                    films: flow.runnableFilmTitles,
+                    skipped: flow.skippedFilmTitles) {
+                    Text(summary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)

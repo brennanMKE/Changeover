@@ -184,8 +184,13 @@ nonisolated enum DiscTitleFormatting {
     /// #0157 — the sentence for a disc holding several feature films.
     ///
     /// Leads with the count, because that is the fact the user does not have
-    /// and cannot get anywhere else. The runtimes follow, since they are how
-    /// a person tells which row is which film.
+    /// and cannot get anywhere else.
+    ///
+    /// #0170 — the plain sentence no longer recites the runtimes. It used to,
+    /// "since they are how a person tells which row is which film", which
+    /// mistook a fact the app can use for one the user can. Two lengths in a
+    /// sentence are two numbers to carry to a search box that does not accept
+    /// numbers. The detail register keeps them.
     nonisolated static func multipleFeaturesWording(indices: [Int], disc: DiscInfo) -> Wording {
         let runtimes = indices
             .compactMap { index in disc.titles.first { $0.index == index } }
@@ -193,22 +198,28 @@ nonisolated enum DiscTitleFormatting {
             .joined(separator: " and ")
         let n = indices.count
         return Wording(
-            plain: "This disc has \(n) movies on it (\(runtimes)). Pick the one to rip first.",
+            plain: "This disc has \(n) movies on it. You'll name them one at a time.",
             detail: "\(n) full-length features on this disc — \(runtimes). "
-                + "No main feature was chosen; pick the one to rip."
+                + "No main feature was chosen; each one is named in turn."
         )
     }
 
     /// #0160 — the heading over one feature's search block on the Choose
-    /// step, e.g. "Movie 1 of 2 · 1h 40m".
+    /// step: "Movie 1 of 2".
     ///
-    /// The runtime is in the heading rather than buried in the block because
-    /// it is the only thing that tells one film from the other before either
-    /// is named: the two rows on the Uncle Buck disc differ by 9m13s and by
-    /// nothing else a person can see.
+    /// **No runtime in the plain register (#0170).** It was there on the
+    /// argument that it is "the only thing that tells one film from the other
+    /// before either is named" — true, and beside the point: a length is not
+    /// something a person can turn into a title. Asked to search from
+    /// "Movie 1 of 2 · 1h 25m", the user reported "I am supposed to know how
+    /// long both films are and pick which one to search" — and they are not.
+    /// Matching a runtime to a film is the app's job (`FeatureMatching`), and
+    /// doing it in the heading only moved the work onto the person.
+    ///
+    /// The runtime stays in the detail register, which is where the disc's
+    /// technical facts belong and where nobody is being asked to act on it.
     nonisolated static func featureBlockWording(position: Int, of count: Int, title: DiscTitle?) -> Wording {
-        let runtime = title.map { plainDuration($0.durationSeconds) }
-        let plain = "Movie \(position) of \(count)" + (runtime.map { " · \($0)" } ?? "")
+        let plain = "Movie \(position) of \(count)"
         guard let title else { return Wording(plain: plain) }
         return Wording(
             plain: plain,

@@ -650,3 +650,55 @@ import Testing
         #expect(s.movieID(for: 3) == 10)
     }
 }
+
+/// #0170 — the line above Continue on the Choose step.
+@Suite struct ChooseSummaryTests {
+
+    @Test func nothingChosenSaysNothing() {
+        #expect(ChooseSummary.line(films: [], skipped: []) == nil)
+    }
+
+    @Test func oneFilmNamesIt() {
+        #expect(ChooseSummary.line(films: ["Get Hard (2015)"], skipped: [])
+                == "Importing “Get Hard (2015)”.")
+    }
+
+    /// The fault this replaces: two named films used to be reported as
+    /// "Ripping “X” first — put the disc back in for the other afterwards",
+    /// which asked for a second insertion that `DiscRipPlan` removed the need
+    /// for. Both films run off one disc, in order.
+    @Test func twoFilmsRunOneAfterTheOtherOnTheSameDisc() {
+        let line = ChooseSummary.line(
+            films: ["Get Hard (2015)", "The Campaign (2012)"], skipped: [])
+        #expect(line == "Importing “Get Hard (2015)” and “The Campaign (2012)”, one after the other.")
+        #expect(!(line ?? "").contains("back in"))
+        #expect(!(line ?? "").contains("first"))
+    }
+
+    @Test func threeFilmsUseACommaAndAnAnd() {
+        #expect(ChooseSummary.line(films: ["A (1)", "B (2)", "C (3)"], skipped: [])
+                == "Importing “A (1)”, “B (2)” and “C (3)”, one after the other.")
+    }
+
+    /// A skipped film is an answer the user gave, so it is reported back.
+    @Test func aSkippedFilmIsAccountedFor() {
+        let line = ChooseSummary.line(
+            films: ["The Campaign (2012)"], skipped: ["Get Hard (2015)"])
+        #expect(line == "Importing “The Campaign (2012)”. Skipping “Get Hard (2015)”.")
+    }
+
+    @Test func everythingSkippedStillSaysSo() {
+        #expect(ChooseSummary.line(films: [], skipped: ["A (1)", "B (2)"])
+                == "Skipping “A (1)” and “B (2)”.")
+    }
+
+    /// No runtime, ever — the whole point of #0170.
+    @Test func noRuntimeAppearsAnywhere() {
+        let line = ChooseSummary.line(
+            films: ["Get Hard (2015)", "The Campaign (2012)"],
+            skipped: []) ?? ""
+        for fragment in ["1h", "1:25", "min", "·"] {
+            #expect(!line.contains(fragment), "\(fragment) must not appear")
+        }
+    }
+}
