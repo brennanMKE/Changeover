@@ -289,27 +289,20 @@ struct ConfirmStepView: View {
     /// `StartGate.decide` a Phase 4 remote client will use to gate its own
     /// Start command. Computed once per body evaluation so `.disabled`, the
     /// tooltip and the caption can never disagree about why it is greyed.
+    /// #0167 — the controller's decision, not a second one built here.
+    ///
+    /// This view used to construct its own `StartGate.decide(...)` with the
+    /// same ten arguments. Two call sites meant two answers: the controller
+    /// learned that a duplicate on one film must not block a disc with another
+    /// film to import, and the button did not — so the gate logged
+    /// `everyFilmAlreadyInPlex` while the footer still read "Press Replace the
+    /// Existing File to rip it again" beside a disabled Start. Four days of
+    /// that shape of bug came from having more than one source of truth.
+    ///
+    /// `RipFlowController.startDecision(jobs:)` is the one answer, and it is
+    /// what `autoStart` and `startRipping` already consult.
     private var startDecision: StartDecision {
-        StartGate.decide(
-            hasMovieSelected:    flow.search.selectedMovie != nil,
-            isRunning:           jobs.isRunning,
-            // #0045 review: a disc being ejected by hand is not a disc to
-            // start on (`start` refuses it too).
-            hasDisc:             jobs.insertedDisc != nil && !jobs.isEjecting,
-            // #0049: an earlier eject unmounted the disc but failed to
-            // physically eject it.
-            discUnavailable:     jobs.discUnavailable,
-            scanState:           jobs.scanState,
-            selectedTitleIndex:  jobs.selectedTitleIndex,
-            selectedAudioTrackNumbers: jobs.selectedAudioTrackNumbers,
-            runtimeLookup:       flow.search.runtimeLookup,
-            mismatchAcknowledgement: jobs.mismatchAcknowledgement,
-            // #0143: checked last, so the caption still names the first thing
-            // to do and a duplicate is never reported before the disc has
-            // even been scanned.
-            libraryCheck:            flow.libraryCheckForThisEdition,
-            replaceAcknowledgement:  flow.replaceAcknowledgement
-        )
+        flow.startDecision(jobs: jobs)
     }
 
     /// The countdown, when this disc is about to start on its own.
