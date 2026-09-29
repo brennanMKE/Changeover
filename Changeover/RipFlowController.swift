@@ -515,9 +515,11 @@ final class RipFlowController {
             // names the films is better evidence than a low-resolution menu
             // read through OCR, and there is no reason to spend a model call
             // when it already worked.
+            var modelTitles: [String] = []
             if assignments == nil, let menuQuestion {
                 switch await MultiTitleInference.answer(for: menuQuestion, expecting: count) {
                 case .titles(let reading):
+                    modelTitles = reading.titles
                     FlowDiagnostics.note("feature match: the menus named "
                         + "\(reading.titles.count) film(s) — \(reading.titles.joined(separator: " | "))"
                         + "; count agreement \(reading.agreement)")
@@ -530,6 +532,26 @@ final class RipFlowController {
                 case .unavailable(let why):
                     FlowDiagnostics.note("feature match: the menus named no film — \(why)")
                 }
+            }
+
+            // Rung 3: the menu text itself, read several ways.
+            //
+            // #0171 — the model reads a clean title and cannot repair a
+            // damaged one. Measured on this disc: it answered GET HARD and
+            // nothing else, and when told the disc holds two films it invented
+            // DREAMSCAPE. So the damaged line goes to TMDB instead, which is a
+            // fuzzy search over real titles — "D°ÇAMPAIGN" finds a 1912
+            // newsreel, "CAMPAIGN" finds The Campaign (2012).
+            //
+            // Several readings per line, and the disc's own clock throws out
+            // everything that does not fit: one film per feature, each within
+            // three minutes. A term that means nothing finds nothing.
+            if assignments == nil, let menuQuestion {
+                let terms = OCRSearchTerms.terms(lines: menuQuestion.lines, known: modelTitles)
+                FlowDiagnostics.note("feature match: trying \(terms.count) term(s) "
+                    + "off the menu text — \(terms.joined(separator: " | "))")
+                assignments = await resolve(FeatureMatching.splits(from: terms, choose: count))
+                FlowDiagnostics.note("feature match: menu-text terms assigned=\(assignments != nil)")
             }
 
             guard let assignments else {

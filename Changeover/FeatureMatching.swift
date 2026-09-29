@@ -86,6 +86,15 @@ nonisolated enum FeatureMatching {
         tolerance: Double = maximumErrorMinutes
     ) -> [Assignment]? {
         guard !features.isEmpty, features.count == candidates.count else { return nil }
+        // #0171 — two features are two DIFFERENT films.
+        //
+        // The candidate pool can now hold several readings of one menu line
+        // ("D°ÇAMPAIGN", "CAMPAIGN"), and two of them resolve to the same TMDB
+        // id. Placing that film on both features would be a perfectly scored
+        // assignment of one film to a disc holding two — the same fault #0169
+        // fixed at the point where the user picks, arriving here by a
+        // different road.
+        guard Set(candidates.map(\.movieID)).count == candidates.count else { return nil }
 
         // Exhaustive over permutations, which is correct and cheap at the
         // sizes involved: `DiscTitleHeuristic.maximumFeaturesPerDisc` is 4, so

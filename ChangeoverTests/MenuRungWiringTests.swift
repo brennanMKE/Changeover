@@ -192,3 +192,95 @@ import Testing
         #expect(menu.isEmpty)
     }
 }
+
+/// #0171 — reading one menu line several ways.
+///
+/// Measured on joe 2026-09-29. The on-device model, given this disc's menu
+/// text, answers `GET HARD` and stops; told the disc holds two films it
+/// answers `GET HARD, DREAMSCAPE`; asked again naming what it found, it
+/// answers `Get Hard, DREAMLAND`. It reads the clean title and cannot repair
+/// the damaged one, and pressure makes it invent — which is why the expected
+/// count is kept out of the prompt in the first place.
+///
+/// TMDB can do what the model cannot, because the damage is at the front of
+/// the word: `D°ÇAMPAIGN` finds a 1912 newsreel, `CAMPAIGN` finds
+/// The Campaign (2012) as its top hit.
+@Suite struct OCRSearchTermsTests {
+
+    /// The real line, and the reading that finds the film.
+    @Test func theDamagedLineYieldsTheTermThatWorks() {
+        let terms = OCRSearchTerms.terms(lines: ["D°ÇAMPAIGN"])
+        #expect(terms.contains("CAMPAIGN"),
+                "dropping the damaged leading characters is what finds The Campaign")
+    }
+
+    @Test func accentsFoldAndPunctuationGoes() {
+        #expect(OCRSearchTerms.fold("D°ÇAMPAIGN") == "D CAMPAIGN")
+        #expect(OCRSearchTerms.fold("GET:HARD") == "GET HARD")
+        #expect(OCRSearchTerms.fold("  THE  CAMPAIGN  ") == "THE CAMPAIGN")
+    }
+
+    /// A caption the lexicon knows outright is not searched at all.
+    @Test func knownMenuLabelsAreNotSearched() {
+        let terms = OCRSearchTerms.terms(lines: ["PLAY", "Subtitles", "Scene Selection"])
+        #expect(terms.isEmpty)
+    }
+
+    /// A line the lexicon only partly knows — `WITH ENGLISH SUBTITLES`, which
+    /// matches no entry whole — sinks behind real candidates rather than being
+    /// dropped, because `Child's Play` and `The Player` are films and a wasted
+    /// lookup costs nothing the runtime check does not already catch.
+    @Test func partialMenuVocabularyRanksLastWithoutBeingDropped() {
+        #expect(OCRSearchTerms.looksLikeMenuFurniture("WITH ENGLISH SUBTITLES"))
+        #expect(!OCRSearchTerms.looksLikeMenuFurniture("D CAMPAIGN"))
+        let terms = OCRSearchTerms.terms(lines: ["WITH ENGLISH SUBTITLES", "D°ÇAMPAIGN"])
+        let campaign = try? #require(terms.firstIndex(of: "CAMPAIGN"))
+        let subtitles = terms.firstIndex { $0.uppercased().contains("SUBTITLE") }
+        #expect(campaign != nil)
+        if let campaign, let subtitles {
+            #expect(campaign < subtitles, "the film's term must survive the cap first")
+        }
+    }
+
+    /// Titles the model did read lead the pool: they are the best evidence
+    /// there is, and the cut at `maximumTerms` must not fall on them.
+    @Test func modelTitlesComeFirst() {
+        let terms = OCRSearchTerms.terms(
+            lines: (1...30).map { "MENULINE\($0)" }, known: ["Get Hard"])
+        #expect(terms.first == "Get Hard")
+        #expect(terms.count <= OCRSearchTerms.maximumTerms)
+    }
+
+    /// Short strings match far too much to be worth a lookup.
+    @Test func shortLinesAreSkipped() {
+        #expect(OCRSearchTerms.terms(lines: ["ABC", "A", ""]).isEmpty)
+    }
+
+    /// The whole disc's real menu text, as the app now sends it.
+    @Test func theRealMenuTextProducesBothFilmsTerms() {
+        let lines = ["KEVN MART", "GET HARD", "D°ÇAMPAIGN", "PLAY",
+                     "WITH ENGLISH SUBTITLES", "WITH SPANISH SUBTITLES"]
+        let terms = OCRSearchTerms.terms(lines: lines, known: ["Get Hard"])
+        #expect(terms.first == "Get Hard")
+        #expect(terms.contains("CAMPAIGN"))
+        #expect(terms.count <= OCRSearchTerms.maximumTerms)
+    }
+
+    /// The safety net. Several readings of ONE line resolve to one film, and
+    /// one film cannot account for a disc holding two.
+    @Test func oneFilmCannotFillBothFeatures() {
+        let features = [
+            DiscTitle(index: 4, durationSeconds: 5122, chapterCount: 11,
+                      sizeBytes: 0, outputFileName: nil, displayAspect: 1.78),
+            DiscTitle(index: 5, durationSeconds: 5122, chapterCount: 11,
+                      sizeBytes: 0, outputFileName: nil, displayAspect: 1.78),
+        ]
+        // Two terms, same film, and both runtimes fit perfectly.
+        let candidates = ["CAMPAIGN", "D CAMPAIGN"].map {
+            FeatureMatching.Candidate(term: $0, movieID: 77953, title: "The Campaign",
+                                      year: "2012", runtimeMinutes: 85)
+        }
+        #expect(FeatureMatching.assign(features: features, candidates: candidates) == nil,
+                "one film placed on two features is not an answer")
+    }
+}
