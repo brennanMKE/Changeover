@@ -58,8 +58,31 @@ nonisolated struct MenuIntelligence: Equatable, Sendable {
     var markerRows: [MarkerRow] { markerPlan.rows }
 
     /// Whether anything at all came out of the disc.
+    ///
+    /// #0171 — **the OCR counts.** This used to ask only whether the *rules*
+    /// found something: a play button, chapter names, a languages page, a
+    /// title guess. On the Get Hard / The Campaign disc every rule came back
+    /// empty — the buttons resolve to no scanned title and the disc prints no
+    /// chapter names — while the OCR had read `GET HARD`, `D°ÇAMPAIGN` and the
+    /// PLAY block twice. `MenuReader` turned that into
+    /// `.unavailable(.noMenus)`, `MenuState.intelligence` went nil, and the
+    /// text was dropped on the floor by a disc that had just been read
+    /// perfectly. The archive still got it, which is how it was found sitting
+    /// in `ocr.json` while the app reported the disc had no menus.
+    ///
+    /// The rules were the only consumer when this was written. They are not
+    /// any more: `MultiTitleInference` (#0159) and `DiscTitleInference` both
+    /// want the raw lines, and for them a still with words on it is the whole
+    /// result. "Nothing came out of the disc" has to mean no words either.
     var isEmpty: Bool {
-        playButton == nil && chapterNames.isEmpty && (languages?.isEmpty ?? true) && titleText == nil
+        guard !hasOCRText else { return false }
+        return playButton == nil && chapterNames.isEmpty
+            && (languages?.isEmpty ?? true) && titleText == nil
+    }
+
+    /// Whether OCR read any text at all off this disc's menus.
+    var hasOCRText: Bool {
+        ocr?.stills.contains { !$0.observations.isEmpty } ?? false
     }
 }
 
@@ -85,6 +108,17 @@ nonisolated enum MenuState: Equatable, Sendable {
     /// disc with no menus, no helper or no libdvdcss is a settled answer too
     /// — waiting for `.ready` on one of those would wait forever and the
     /// search box would never fill in.
+    /// One word for the log — #0171, where "which state was it in" was the
+    /// question and nothing recorded the answer.
+    var diagnosticName: String {
+        switch self {
+        case .idle: return "idle"
+        case .reading: return "reading"
+        case .ready(let value): return "ready(\(value.ocr?.stills.count ?? 0) still(s))"
+        case .unavailable(let reason): return "unavailable(\(reason))"
+        }
+    }
+
     var hasSettled: Bool {
         switch self {
         case .idle, .reading: return false

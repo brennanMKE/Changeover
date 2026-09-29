@@ -139,3 +139,56 @@ import Testing
         #expect(assignments?.map(\.candidate.title).sorted() == ["Get Hard", "The Campaign"])
     }
 }
+
+/// #0171 — a disc whose menus say words has menus.
+///
+/// `MenuIntelligence.isEmpty` decided `.ready` vs `.unavailable(.noMenus)` and
+/// asked only whether the RULES found something. On the Get Hard / The
+/// Campaign disc every rule came back empty while the OCR had read both film
+/// titles, so `MenuReader` reported the disc as having no menus and threw the
+/// text away — captured on joe 2026-09-29 as
+/// `menuState=unavailable(noMenus)` while that disc's own `ocr.json` held
+/// `GET HARD`. The archive is written before that guard, which is why the
+/// evidence survived to be found.
+@Suite struct MenuTextCountsAsAResultTests {
+
+    private static func ocr(_ slug: String) throws -> MenuOCRDocument {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/discs/\(slug)/menus/ocr.json")
+        return try MenuOCRDocument.decode(Data(contentsOf: url))
+    }
+
+    @Test func nothingAtAllIsStillEmpty() {
+        #expect(MenuIntelligence().isEmpty)
+        #expect(!MenuIntelligence().hasOCRText)
+    }
+
+    /// The regression, on the disc that produced it.
+    @Test func theRealOCRAloneMakesItNonEmpty() throws {
+        var menu = MenuIntelligence()
+        menu.ocr = try Self.ocr("get-hard-campaign")
+        #expect(menu.hasOCRText)
+        #expect(!menu.isEmpty, "the rules found nothing, but the disc said GET HARD")
+        // Nothing else was salvaged — that is exactly the case that used to
+        // be discarded.
+        #expect(menu.playButton == nil)
+        #expect(menu.chapterNames.isEmpty)
+        #expect(menu.titleText == nil)
+    }
+
+    /// An OCR document that read no words is not a result: the same disc's
+    /// stills with every observation stripped.
+    @Test func stillsWithNoWordsAreStillEmpty() throws {
+        var document = try Self.ocr("get-hard-campaign")
+        document.stills = document.stills.map { still in
+            var blank = still
+            blank.observations = []
+            return blank
+        }
+        var menu = MenuIntelligence()
+        menu.ocr = document
+        #expect(!menu.hasOCRText)
+        #expect(menu.isEmpty)
+    }
+}

@@ -455,6 +455,17 @@ final class RipFlowController {
                                            ocr: jobs.menuState.intelligence?.ocr)
             : nil
 
+        // #0171 — say why, in `flow.log`, not only in the job log. The job
+        // log is a pane the Choose step does not show, so when this gave up
+        // the whole record was a sentence nobody could reach: the rung fired,
+        // refused and left no trace, which is how it went a full day looking
+        // like "the OCR stopped working".
+        FlowDiagnostics.note("feature resolve: \(count) features, "
+            + "\(titles.count) scanned title(s), apiKey=\(!apiKey.isEmpty), "
+            + "labelSplits=\(labelSplits.count), "
+            + "menus=\(menuQuestion.map { "\($0.lines.count) line(s)" } ?? "none") "
+            + "(AI on=\(settings.usesAppleIntelligence), menuState=\(jobs.menuState.diagnosticName))")
+
         guard !titles.isEmpty, !apiKey.isEmpty, !(labelSplits.isEmpty && menuQuestion == nil) else {
             jobs.note("▶ This disc holds \(count) films — name each one below")
             isResolvingDisc = false
