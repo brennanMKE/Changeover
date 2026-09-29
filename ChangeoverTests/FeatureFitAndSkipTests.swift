@@ -566,3 +566,87 @@ import Testing
         #expect(e.detail.contains("Knowing (2009).mp4"))
     }
 }
+
+/// #0169 — one film, one feature; and one question at a time.
+///
+/// Reported 2026-09-29 on a second double feature: "I just put in the same
+/// movie search for both fields and it automatically selected for both
+/// features and immediately ejected the disc as already imported. It matched 2
+/// different movies but let me match them to the same movie."
+///
+/// Two features on a disc are two *different* films. Letting one film stand
+/// for both made a disc look entirely held when only one of its films was, and
+/// the app ejected on the strength of it.
+@Suite struct OneFilmPerFeatureTests {
+
+    private static func selection() -> FeatureSelection {
+        var s = FeatureSelection()
+        s.setFeatures([1, 2])
+        return s
+    }
+
+    /// The reported bug, directly.
+    @Test func thesameFilmCannotBeOnTwoFeatures() {
+        var s = Self.selection()
+        s.choose(movieID: 2616, for: 1)
+        s.choose(movieID: 2616, for: 2)
+
+        #expect(s.movieID(for: 2) == 2616, "the newest pick stands")
+        #expect(s.movieID(for: 1) == nil, "and the older one is released")
+        #expect(s.choices.count == 1, "one film cannot account for two features")
+    }
+
+    /// Which means a disc is never *fully* named on the strength of one film,
+    /// so it cannot be ejected as entirely held.
+    @Test func adiscIsNotFullyNamedByOneFilmTwice() {
+        var s = Self.selection()
+        s.choose(movieID: 2616, for: 1)
+        s.choose(movieID: 2616, for: 2)
+        let named = s.features.filter { s.movieID(for: $0) != nil }
+        #expect(named.count < s.features.count,
+                "a feature is still unidentified, so the disc is not finished with")
+    }
+
+    /// Two different films are fine, which is the ordinary case.
+    @Test func twoDifferentFilmsBothStay() {
+        var s = Self.selection()
+        s.choose(movieID: 2617, for: 1)
+        s.choose(movieID: 2616, for: 2)
+        #expect(s.movieID(for: 1) == 2617)
+        #expect(s.movieID(for: 2) == 2616)
+        #expect(s.runnableFeatures == [1, 2])
+    }
+
+    /// Re-picking the same film for the feature it is already on changes
+    /// nothing — it must not clear itself.
+    @Test func repickingTheSameFilmOnItsOwnFeatureIsANoOp() {
+        var s = Self.selection()
+        s.choose(movieID: 2616, for: 1)
+        s.choose(movieID: 2616, for: 1)
+        #expect(s.movieID(for: 1) == 2616)
+        #expect(s.choices.count == 1)
+    }
+
+    /// Moving a film from one feature to another also drops any skip on the
+    /// feature it left — that decision was about a film no longer there.
+    @Test func movingAFilmReleasesTheOldFeaturesSkip() {
+        var s = Self.selection()
+        s.choose(movieID: 2616, for: 1)
+        s.setSkipped(true, for: 1)
+        s.choose(movieID: 2616, for: 2)
+        #expect(!s.isSkipped(1))
+        #expect(s.movieID(for: 1) == nil)
+    }
+
+    /// Three features, same film twice: only the newest keeps it.
+    @Test func withThreeFeaturesOnlyTheNewestKeepsTheFilm() {
+        var s = FeatureSelection()
+        s.setFeatures([1, 2, 3])
+        s.choose(movieID: 10, for: 1)
+        s.choose(movieID: 20, for: 2)
+        s.choose(movieID: 10, for: 3)
+        #expect(s.movieID(for: 1) == nil)
+        #expect(s.movieID(for: 2) == 20)
+        #expect(s.movieID(for: 3) == 10)
+    }
+}

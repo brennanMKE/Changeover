@@ -1674,20 +1674,27 @@ final class RipFlowController {
 
         // A plan with every film skipped: `isFinished` at once, nothing to
         // run, and the report lists all of them with their reason.
+        var built: DiscRipPlan?
         if var plan = DiscRipPlan.make(disc: disc, films: plannedFilms(jobs: jobs)) {
             for entry in plan.entries {
                 plan.skip(entry.feature, reason: "already in Plex")
             }
             ripPlan = plan
+            built = plan
         }
 
         // #0153's screen is what the user sees once the tray opens, so the
         // reason has to be recorded before the eject rather than after: the
         // disc going is what makes that screen appear.
-        let films = featureSelection.features.compactMap { feature -> String? in
-            guard let movie = featureSearchModels[feature]?.selectedMovie else { return nil }
-            return "\(movie.title) (\(movie.yearText))"
-        }
+        // #0169 — the names come from the PLAN, not from the search models.
+        //
+        // Each `DiscRipPlan.Entry` carries its own `MovieMetadata`, bound to
+        // the feature it was chosen for. Reading the view models instead meant
+        // re-reading mirrored state that had already moved on: the first
+        // ejected disc reported "Get Hard (2015)" twice, for a disc holding
+        // neither film. Same rule `RipRequest` follows — build from the entry
+        // and nothing else.
+        let films = (built?.entries ?? []).map { "\($0.metadata.title) (\($0.metadata.year))" }
         let explanation = EjectExplanation(cause: .everyFilmAlreadyInPlex, films: films)
         unexplainedEjection = explanation
         jobs.logEvent(explanation.logLine)

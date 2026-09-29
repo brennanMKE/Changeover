@@ -121,6 +121,46 @@ struct ChooseMovieStepView: View {
     ///
     /// A `ScrollView`, like every other step body, so the blocks never
     /// contribute to the window's minimum height (#0140).
+    /// #0169 — a feature whose film is settled, as one line.
+    ///
+    /// It says what was matched and offers the two things still worth doing:
+    /// change it, or leave it out. No search box, because that question has
+    /// been answered.
+    @ViewBuilder
+    private func namedFeatureRow(feature: Int, position: Int, count: Int) -> some View {
+        let movie = flow.featureSearch(feature)?.selectedMovie
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(movie.map { "\($0.title) (\($0.yearText))" } ?? "Movie \(position)")
+                    .font(.subheadline.weight(.medium))
+                DetailOnlyText(text: "Movie \(position) of \(count) · "
+                    + (discTitle(feature).map { DiscTitleFormatting.duration($0.durationSeconds) } ?? "—"))
+            }
+            if case .present = flow.libraryStatus(for: feature) {
+                Text("already in Plex")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Button("Change") {
+                flow.selectFeature(movieID: nil, feature: feature, jobs: jobs, settings: settings)
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+            Button(flow.featureSelection.isSkipped(feature) ? "Import this one" : "Don't import this one") {
+                flow.setFeatureSkipped(!flow.featureSelection.isSkipped(feature),
+                                       feature: feature, jobs: jobs, settings: settings)
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
     private var multipleFeaturesBody: some View {
         VStack(spacing: 0) {
             if let line = ScanStatusLine.line(for: jobs.scanState) {
@@ -149,15 +189,37 @@ struct ChooseMovieStepView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     let features = flow.featureSelection.features
+                    // #0169 — one film at a time.
+                    //
+                    // Every feature used to get its own open search box at
+                    // once, headed only by a runtime: "Movie 1 of 2 · 1h 30m"
+                    // and "Movie 2 of 2 · 1h 40m". That asks the user to know
+                    // how long each film runs in order to know which box to
+                    // type in, which is the app's job and not theirs.
+                    // Reported 2026-09-29: "I do not understand why it lists
+                    // two search fields with durations like I am supposed to
+                    // know how long both films are and pick which one."
+                    //
+                    // So: the first feature with no film named gets the search
+                    // box, and the ones already named collapse to a line each.
+                    // Ask one question, take one answer, move on — and the
+                    // runtime is then a fact the app uses, not a riddle.
+                    let pending = features.first { flow.featureSelection.movieID(for: $0) == nil }
                     ForEach(Array(features.enumerated()), id: \.element) { position, feature in
                         if let search = flow.featureSearch(feature) {
-                            FeatureSearchBlock(
-                                feature: feature,
-                                position: position + 1,
-                                count: features.count,
-                                title: discTitle(feature),
-                                search: search
-                            )
+                            if feature == pending {
+                                FeatureSearchBlock(
+                                    feature: feature,
+                                    position: position + 1,
+                                    count: features.count,
+                                    title: discTitle(feature),
+                                    search: search
+                                )
+                            } else {
+                                namedFeatureRow(feature: feature,
+                                                position: position + 1,
+                                                count: features.count)
+                            }
                             if feature != features.last { Divider() }
                         }
                     }

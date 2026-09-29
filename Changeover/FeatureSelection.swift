@@ -114,6 +114,22 @@ nonisolated struct FeatureSelection: Equatable, Sendable {
     mutating func choose(movieID: Int?, for feature: Int) {
         guard features.contains(feature) else { return }
         if let movieID {
+            // #0169 — one film, one feature.
+            //
+            // Two features on a disc are two DIFFERENT films; the same film
+            // cannot be both. Without this the user could type the same title
+            // into both boxes, both features matched it, and the disc was
+            // ejected as "already imported" on the strength of one film
+            // standing in for two — reported 2026-09-29.
+            //
+            // The newest pick wins and the older one is released, because the
+            // user is stating what they just looked at. The freed feature goes
+            // back to unidentified rather than silently keeping a film the
+            // user has now said belongs elsewhere.
+            for (other, existing) in choices where other != feature && existing == movieID {
+                choices.removeValue(forKey: other)
+                skipped.remove(other)
+            }
             choices[feature] = movieID
             active = feature
         } else {
