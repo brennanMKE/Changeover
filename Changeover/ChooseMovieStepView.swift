@@ -141,6 +141,14 @@ struct ChooseMovieStepView: View {
                 // beside the title reads as though it still had to be
                 // reconciled by hand. It stays in the detail register.
                 DetailOnlyText(text: "Movie \(position) of \(count)")
+                // #0172 — and if it no longer FITS this title, say so here.
+                //
+                // The warning existed only inside an open search block, so a
+                // settled row that stopped fitting was silent: Get Hard, 100
+                // minutes, sat ticked on an 85-minute title with Continue
+                // enabled, and the only sign was the Start gate refusing two
+                // steps later.
+                fitWarning(feature: feature, count: count)
             }
             if case .present = flow.libraryStatus(for: feature) {
                 Text("already in Plex")
@@ -162,6 +170,22 @@ struct ChooseMovieStepView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+    }
+
+    /// #0172 — "this film does not fit this part of the disc", wherever the
+    /// film is shown. Same verdict and same wording the search block uses.
+    @ViewBuilder
+    private func fitWarning(feature: Int, count: Int) -> some View {
+        let verdict = flow.fit(for: feature)
+        if case .mismatch(_, let better) = verdict,
+           let wording = FeatureFit.wording(
+               verdict,
+               positionOfBetterFeature: better.flatMap { index in
+                   flow.featureSelection.features.firstIndex(of: index).map { $0 + 1 }
+               },
+               count: count) {
+            WordingText(wording: wording, font: .caption, tint: .orange)
+        }
     }
 
     /// #0170 — a feature with no film yet whose turn has not come.
@@ -223,8 +247,56 @@ struct ChooseMovieStepView: View {
         .accessibilityElement(children: .combine)
     }
 
+    private var continueHelp: String {
+        if !flow.featureSelection.hasRunnableFilm {
+            return "Name at least one of this disc's movies first."
+        }
+        if let feature = flow.misfittingFeatures.first,
+           let position = flow.featureSelection.features.firstIndex(of: feature).map({ $0 + 1 }) {
+            return "Movie \(position) is not the right length for that part of the disc — fix it first."
+        }
+        return "Next: check the disc, then start."
+    }
+
+    /// #0172 — the pick that was refused because that film is already on
+    /// another feature. Shown where the user clicked, in their words: a
+    /// refusal nobody can see is indistinguishable from a click that did
+    /// nothing, which is how the silent version of this rule sent a user
+    /// round the same loop.
+    @ViewBuilder
+    private var duplicateFilmNotice: some View {
+        if let rejection = flow.featureSelection.alreadyChosenElsewhere,
+           let position = flow.featureSelection.features
+               .firstIndex(of: rejection.heldBy).map({ $0 + 1 }) {
+            let name = flow.featureSearch(rejection.heldBy)?.selectedMovie
+                .map { "\($0.title) (\($0.yearText))" } ?? "That film"
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+                WordingText(
+                    wording: Wording(
+                        plain: "\(name) is already Movie \(position) of this disc. "
+                            + "Two features are two different films — pick a different one, "
+                            + "or change Movie \(position) first.",
+                        detail: "Refused: movie id \(rejection.movieID) is already assigned to "
+                            + "feature \(rejection.heldBy)."),
+                    font: .caption,
+                    tint: .orange)
+                Spacer(minLength: 0)
+                Button("OK") { flow.acknowledgeFeatureRejection() }
+                    .buttonStyle(.link)
+                    .font(.caption)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            Divider()
+        }
+    }
+
     private var multipleFeaturesBody: some View {
         VStack(spacing: 0) {
+            duplicateFilmNotice
             if let line = ScanStatusLine.line(for: jobs.scanState) {
                 ScanStatusStrip(line: line)
                 Divider()
@@ -323,16 +395,16 @@ struct ChooseMovieStepView: View {
                         .lineLimit(2)
                 }
                 Spacer()
+                // #0172 — a film that fails its own runtime check does not
+                // go through to Confirm. Start refuses it there anyway; this
+                // refuses it where the mistake was made and where fixing it
+                // is one click.
                 Button("Continue") { flow.continueToConfirm() }
-                    .disabled(flow.chosenMovie == nil)
+                    .disabled(!flow.mayContinueFromChoose)
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
-                    .help(flow.chosenMovie == nil
-                          ? (StartDecision.noFeatureChosen.reason ?? "")
-                          : "Confirm the disc title and tracks for this movie.")
-                    .accessibilityHint(flow.chosenMovie == nil
-                                       ? "Name at least one of this disc's movies first."
-                                       : "Next: check the disc, then start.")
+                    .help(continueHelp)
+                    .accessibilityHint(continueHelp)
             }
         }
     }

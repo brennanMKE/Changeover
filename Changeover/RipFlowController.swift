@@ -217,6 +217,33 @@ final class RipFlowController {
     /// `JobController` and this is a label. On a single-feature disc it is the
     /// one selected film, so the Choose step's action bar says the same kind
     /// of thing whether the disc holds one film or three.
+    /// #0172 — features whose named film does not fit the title it sits on.
+    ///
+    /// The Choose step showed this only inside an open search block, so a
+    /// settled row that stopped fitting said nothing at all: on 2026-09-30,
+    /// Get Hard (100 min) sat named on an 85-minute title with a tick beside
+    /// it and Continue enabled, and the only sign was `runtimeMismatch`
+    /// appearing at the Start gate two steps later. That is #0167's fault
+    /// exactly, one step earlier.
+    var misfittingFeatures: [Int] {
+        featureSelection.runnableFeatures.filter {
+            if case .mismatch = fit(for: $0) { return true }
+            return false
+        }
+    }
+
+    /// Whether Continue may be pressed on a multi-feature disc.
+    ///
+    /// A film that fails its own runtime check is not a film to carry into
+    /// Confirm. Start would refuse it there anyway — the point is to refuse it
+    /// where the mistake was made and where the fix is one click.
+    var mayContinueFromChoose: Bool {
+        guard featureSelection.isMultiFeature else { return chosenMovie != nil }
+        return featureSelection.hasRunnableFilm && misfittingFeatures.isEmpty
+    }
+
+    func acknowledgeFeatureRejection() { featureSelection.acknowledgeRejection() }
+
     var runnableFilmTitles: [String] {
         guard featureSelection.isMultiFeature else {
             return search.selectedMovie.map { ["\($0.title) (\($0.yearText))"] } ?? []
@@ -426,6 +453,17 @@ final class RipFlowController {
         guard let model = featureSearchModels[feature] else { return }
         model.select(movieID: movieID, apiKey: settings.tmdbAPIKey)
         featureSelection.choose(movieID: movieID, for: feature)
+        // #0172 — a refused pick must not leave a tick on screen.
+        //
+        // `choose` declines a film that already belongs to another feature
+        // instead of moving it. The view model has already recorded the click
+        // by then, so without this the row stays ticked while the app has not
+        // accepted it — a screen that disagrees with the state behind it,
+        // which is the shape of every one of this step's worst bugs.
+        if movieID != nil, featureSelection.movieID(for: feature) != movieID {
+            model.select(movieID: nil, apiKey: settings.tmdbAPIKey)
+            return
+        }
         // #0161: last film's answer must not sit under this film's name.
         featureLibraryChecks[feature] = nil
         applyActiveFeature(jobs: jobs, settings: settings)

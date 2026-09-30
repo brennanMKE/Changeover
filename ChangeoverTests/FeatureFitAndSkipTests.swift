@@ -586,13 +586,17 @@ import Testing
     }
 
     /// The reported bug, directly.
+    ///
+    /// #0172 changed the remedy from moving the film to refusing the pick.
+    /// Moving it was still one click producing several wrong things at once:
+    /// see `DuplicateFilmChoiceTests`.
     @Test func thesameFilmCannotBeOnTwoFeatures() {
         var s = Self.selection()
         s.choose(movieID: 2616, for: 1)
         s.choose(movieID: 2616, for: 2)
 
-        #expect(s.movieID(for: 2) == 2616, "the newest pick stands")
-        #expect(s.movieID(for: 1) == nil, "and the older one is released")
+        #expect(s.movieID(for: 1) == 2616, "the film stays where it was")
+        #expect(s.movieID(for: 2) == nil, "and the duplicate pick is refused")
         #expect(s.choices.count == 1, "one film cannot account for two features")
     }
 
@@ -605,6 +609,7 @@ import Testing
         let named = s.features.filter { s.movieID(for: $0) != nil }
         #expect(named.count < s.features.count,
                 "a feature is still unidentified, so the disc is not finished with")
+        #expect(s.alreadyChosenElsewhere != nil, "and the user is told why")
     }
 
     /// Two different films are fine, which is the ordinary case.
@@ -627,27 +632,31 @@ import Testing
         #expect(s.choices.count == 1)
     }
 
-    /// Moving a film from one feature to another also drops any skip on the
-    /// feature it left — that decision was about a film no longer there.
-    @Test func movingAFilmReleasesTheOldFeaturesSkip() {
+    /// #0172 — a refused pick leaves the feature that holds the film exactly
+    /// as it was, skip decision and all. Nothing about that feature was what
+    /// the user just clicked on.
+    @Test func arefusedPickDisturbsNothingOnTheFeatureThatHoldsIt() {
         var s = Self.selection()
         s.choose(movieID: 2616, for: 1)
         s.setSkipped(true, for: 1)
         s.choose(movieID: 2616, for: 2)
-        #expect(!s.isSkipped(1))
-        #expect(s.movieID(for: 1) == nil)
+        #expect(s.isSkipped(1))
+        #expect(s.movieID(for: 1) == 2616)
+        #expect(s.movieID(for: 2) == nil)
     }
 
-    /// Three features, same film twice: only the newest keeps it.
-    @Test func withThreeFeaturesOnlyTheNewestKeepsTheFilm() {
+    /// Three features, same film twice: the first keeps it and the third is
+    /// refused. The other two features are untouched either way.
+    @Test func withThreeFeaturesTheDuplicateIsRefused() {
         var s = FeatureSelection()
         s.setFeatures([1, 2, 3])
         s.choose(movieID: 10, for: 1)
         s.choose(movieID: 20, for: 2)
         s.choose(movieID: 10, for: 3)
-        #expect(s.movieID(for: 1) == nil)
+        #expect(s.movieID(for: 1) == 10)
         #expect(s.movieID(for: 2) == 20)
-        #expect(s.movieID(for: 3) == 10)
+        #expect(s.movieID(for: 3) == nil)
+        #expect(s.alreadyChosenElsewhere?.heldBy == 1)
     }
 }
 
@@ -777,14 +786,19 @@ import Testing
         #expect(s.question(for: 99) == .waiting)
     }
 
-    /// #0169's one-film-per-feature rule reopens the question it freed.
-    @Test func stealingAFilmReopensTheFeatureItCameFrom() {
+    /// #0172 — a refused duplicate does not move the question. The feature
+    /// that already held the film stays named; the one the user was on stays
+    /// the one being asked about, so the refusal notice and the search box the
+    /// user is looking at are about the same feature.
+    @Test func arefusedDuplicateLeavesTheQuestionWhereItWas() {
         var s = selection([4, 5])
         s.choose(movieID: 100, for: 4)
         s.choose(movieID: 200, for: 5)
-        s.choose(movieID: 100, for: 5)   // same film typed into the second box
-        #expect(s.question(for: 4) == .ask)
-        #expect(s.question(for: 5) == .named)
-        #expect(s.featureBeingAsked == 4)
+        s.choose(movieID: nil, for: 5)   // "Change" on the second row
+        #expect(s.featureBeingAsked == 5)
+        s.choose(movieID: 100, for: 5)   // the same film typed into it
+        #expect(s.question(for: 4) == .named)
+        #expect(s.question(for: 5) == .ask)
+        #expect(s.featureBeingAsked == 5)
     }
 }

@@ -109,6 +109,18 @@ struct RipFlowView: View {
         // already there, are the last two things automatic ripping waits on.
         .onChange(of: flow.selectedMovieID) { flow.evaluateAutoStart(jobs: jobs, settings: settings) }
         .onChange(of: flow.libraryCheck) { flow.evaluateAutoStart(jobs: jobs, settings: settings) }
+        // #0172 — and the PER-FEATURE answers, which on a multi-feature disc
+        // are the only ones that exist.
+        //
+        // `libraryCheck` above is the singular one. A disc holding two films
+        // becomes "every film is already in Plex" when the SECOND per-feature
+        // probe lands, and nothing was watching for that: the eject decision
+        // ran only when some unrelated event happened to fire afterwards. On
+        // 2026-09-29 the Get Hard / The Campaign disc sat at `ready` with both
+        // films already filed as {tmdb-257091} and {tmdb-77953}. It worked on
+        // the Uncle Buck disc purely because the active feature's answer
+        // mirrors into `libraryCheck` and its probe happened to finish last.
+        .onChange(of: flow.featureLibraryChecks) { flow.evaluateAutoStart(jobs: jobs, settings: settings) }
         .onChange(of: flow.search.runtimeLookup) { flow.evaluateAutoStart(jobs: jobs, settings: settings) }
     }
 

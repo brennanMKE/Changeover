@@ -138,6 +138,8 @@ nonisolated struct FeatureSelection: Equatable, Sendable {
     /// chosen against one thing must never be filed against another.
     mutating func setFeatures(_ indices: [Int]) {
         skipped = skipped.filter { indices.contains($0) }
+        // A refusal belongs to the disc it was refused on.
+        alreadyChosenElsewhere = nil
         guard indices != features else { return }
         features = indices
         choices = choices.filter { indices.contains($0.key) }
@@ -153,25 +155,33 @@ nonisolated struct FeatureSelection: Equatable, Sendable {
     mutating func choose(movieID: Int?, for feature: Int) {
         guard features.contains(feature) else { return }
         if let movieID {
-            // #0169 — one film, one feature.
+            // #0169/#0172 — one film, one feature, and the pick is REFUSED
+            // rather than moved.
             //
-            // Two features on a disc are two DIFFERENT films; the same film
-            // cannot be both. Without this the user could type the same title
-            // into both boxes, both features matched it, and the disc was
-            // ejected as "already imported" on the strength of one film
-            // standing in for two — reported 2026-09-29.
+            // Two features on a disc are two different films, so the same film
+            // cannot be both. #0169 enforced that by letting the newest pick
+            // win and silently releasing the older feature. That turned out to
+            // be the wrong half of the rule: on 2026-09-30 the app had
+            // correctly placed The Campaign on title 4 and Get Hard on title
+            // 5, the user re-searched title 4 and chose Get Hard, and the app
+            // moved it — leaving title 4 holding a 100-minute film on an
+            // 85-minute title, title 5 suddenly blank, and its search box
+            // still showing Get Hard ticked. One click produced three wrong
+            // things and reported none of them.
             //
-            // The newest pick wins and the older one is released, because the
-            // user is stating what they just looked at. The freed feature goes
-            // back to unidentified rather than silently keeping a film the
-            // user has now said belongs elsewhere.
-            for (other, existing) in choices where other != feature && existing == movieID {
-                choices.removeValue(forKey: other)
-                skipped.remove(other)
+            // Refusing says what is true: that film is already accounted for.
+            // `alreadyChosenElsewhere` is what the view reads to explain it.
+            // Nothing is destroyed, so the user's next click is a real choice
+            // rather than an undo.
+            if let other = choices.first(where: { $0.key != feature && $0.value == movieID })?.key {
+                alreadyChosenElsewhere = Rejection(feature: feature, movieID: movieID, heldBy: other)
+                return
             }
+            alreadyChosenElsewhere = nil
             choices[feature] = movieID
             active = feature
         } else {
+            alreadyChosenElsewhere = nil
             choices.removeValue(forKey: feature)
             // Clearing the film Start was going to rip falls back to another
             // one the user has already named, rather than to nothing: they
@@ -180,6 +190,25 @@ nonisolated struct FeatureSelection: Equatable, Sendable {
             if active == feature { active = lowestChosen }
         }
     }
+
+    /// #0172 — the last pick refused because that film is on another feature.
+    ///
+    /// Cleared by the next successful choice, so it describes only what just
+    /// happened. Held here rather than in the view because the view is not
+    /// where this is decided, and because a refusal nobody can see is
+    /// indistinguishable from a click that did nothing.
+    nonisolated struct Rejection: Equatable, Sendable {
+        /// The feature the user was trying to name.
+        var feature: Int
+        var movieID: Int
+        /// The feature that already holds that film.
+        var heldBy: Int
+    }
+
+    private(set) var alreadyChosenElsewhere: Rejection?
+
+    /// Dismiss the refusal notice — the user has read it.
+    mutating func acknowledgeRejection() { alreadyChosenElsewhere = nil }
 
     /// #0167 — features the user has said not to import.
     ///
