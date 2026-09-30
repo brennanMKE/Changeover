@@ -68,6 +68,24 @@ final class RipFlowController {
         libraryCheck = value
     }
 
+    /// Adopt a multi-feature disc's titles and name films for them, with no
+    /// scan, no disc and no view. Tests only.
+    ///
+    /// #0172 — the production path for both is `reconcile` → `syncFeatures` →
+    /// `selectFeature`, and what that path *did not* do is the whole bug:
+    /// the per-feature library probe only ever ran from a view that stops
+    /// existing the moment its feature is named.
+    func adoptFeaturesForTesting(_ indices: [Int]) {
+        featureSelection.setFeatures(indices)
+        for index in indices where featureSearchModels[index] == nil {
+            featureSearchModels[index] = MovieSearchViewModel()
+        }
+    }
+
+    func chooseForTesting(movieID: Int?, feature: Int) {
+        featureSelection.choose(movieID: movieID, for: feature)
+    }
+
     /// Set the eject explanation directly. Tests and the screenshot harness
     /// only — the production path is `evaluateAutoEject`, which needs the whole
     /// autoselect chain to have run first.
@@ -467,6 +485,28 @@ final class RipFlowController {
         // #0161: last film's answer must not sit under this film's name.
         featureLibraryChecks[feature] = nil
         applyActiveFeature(jobs: jobs, settings: settings)
+
+        // #0172 — and ask the library here, not from a view that may not
+        // exist.
+        //
+        // #0161 hung the per-feature probe on `FeatureSearchBlock.task`, which
+        // was right while every feature had a search block. #0169 collapsed a
+        // NAMED feature to a plain row with no task, so on a disc the app
+        // identifies by itself — both films named, neither block on screen —
+        // the probe never ran for either. `importableFeatureCount` counts an
+        // unchecked film as importable, so the Start gate read `ready` and the
+        // disc sat in the drive with both of its films already in Plex as
+        // {tmdb-257091} and {tmdb-77953}. Watching `featureLibraryChecks` for
+        // changes cannot help when nothing ever writes to it.
+        //
+        // Choosing a film is the event that makes the question askable, so the
+        // ask belongs here. The block's own `.task` stays: it is generation
+        // guarded, so the two cannot disagree.
+        guard featureSelection.movieID(for: feature) != nil else { return }
+        Task { [weak self] in
+            await self?.checkLibraryForFeature(feature, settings: settings)
+            self?.evaluateAutoStart(jobs: jobs, settings: settings)
+        }
     }
 
     /// #0167 — fill one search box per film, assigned by runtime.

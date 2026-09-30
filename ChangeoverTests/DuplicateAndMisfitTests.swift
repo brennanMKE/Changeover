@@ -132,3 +132,73 @@ import Testing
         #expect(wording.plain == "This looks like Movie 2 of 2, not this one.")
     }
 }
+
+/// #0172 — the per-feature library check must run for a film the APP named,
+/// not only for one the user is looking at.
+///
+/// #0161 hung the probe on `FeatureSearchBlock.task`, correct while every
+/// feature had a search block. #0169 collapsed a named feature to a plain row
+/// with no task, so on a disc the app identifies by itself the probe never ran
+/// for either film. `importableFeatureCount` counts an unchecked film as
+/// importable, the Start gate read `ready`, and the Get Hard / The Campaign
+/// disc sat in the drive on 2026-09-30 with both films already filed as
+/// {tmdb-257091} and {tmdb-77953}.
+@Suite struct FeatureLibraryProbeRunsTests {
+
+    /// A library folder named the way `MovieMetadata.folderName` names them.
+    private static func entry(_ tmdbID: String) -> LibraryEntry {
+        let folder = "Film (2000) {tmdb-\(tmdbID)}"
+        return LibraryEntry(
+            folderName: folder,
+            folderPath: "/Movies/\(folder)",
+            files: [LibraryFile(name: "Film (2000).mp4", sizeBytes: 1)])
+    }
+
+    private static func controller(features: [Int]) -> RipFlowController {
+        let flow = RipFlowController()
+        flow.adoptFeaturesForTesting(features)
+        return flow
+    }
+
+    /// Both films held: every feature reports `.present`, nothing is
+    /// importable, and that is what makes the disc ejectable.
+    @Test func bothFilmsHeldLeavesNothingImportable() async {
+        let flow = Self.controller(features: [4, 5])
+        flow.chooseForTesting(movieID: 77953, feature: 4)
+        flow.chooseForTesting(movieID: 257091, feature: 5)
+
+        let settings = AppSettings(defaults: UserDefaults(suiteName: #function)!)
+        settings.plexMediaRoot = "/tmp/does-not-matter"
+        for feature in [4, 5] {
+            await flow.checkLibraryForFeature(feature, settings: settings) { _, tmdbID in
+                .present([Self.entry(tmdbID)])
+            }
+        }
+        #expect(flow.importableFeatureCount == 0)
+    }
+
+    /// One held, one not: the disc still has work, so it must not be ejected.
+    @Test func oneFilmMissingKeepsTheDisc() async {
+        let flow = Self.controller(features: [4, 5])
+        flow.chooseForTesting(movieID: 77953, feature: 4)
+        flow.chooseForTesting(movieID: 257091, feature: 5)
+
+        let settings = AppSettings(defaults: UserDefaults(suiteName: #function)!)
+        settings.plexMediaRoot = "/tmp/does-not-matter"
+        await flow.checkLibraryForFeature(4, settings: settings) { _, tmdbID in
+            .present([Self.entry(tmdbID)])
+        }
+        await flow.checkLibraryForFeature(5, settings: settings) { _, _ in .absent }
+        #expect(flow.importableFeatureCount == 1)
+    }
+
+    /// An unchecked film counts as importable — which is correct, and exactly
+    /// why never running the check made the disc look like it had work to do.
+    @Test func anUncheckedFilmCountsAsImportable() {
+        let flow = Self.controller(features: [4, 5])
+        flow.chooseForTesting(movieID: 77953, feature: 4)
+        flow.chooseForTesting(movieID: 257091, feature: 5)
+        #expect(flow.importableFeatureCount == 2,
+                "no answer is not the answer 'already held'")
+    }
+}
