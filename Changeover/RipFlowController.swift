@@ -858,6 +858,20 @@ final class RipFlowController {
     /// replacement. This is what Start is judged on: a disc holding one film
     /// the user owns and one they do not must start, because `DiscRipPlan`
     /// skips the owned one and imports the other.
+    /// #0185 — whether anything other than a film is ticked to come off this
+    /// disc.
+    ///
+    /// Read off the same ticked set `ExtrasPlan.make` reads, so the eject
+    /// decision and the pipeline cannot disagree about whether there is work
+    /// left. Deliberately does NOT ask the library whether each extra is
+    /// already filed: Plex has no per-extra record the app can query the way
+    /// `LibraryProbe` queries a film's `{tmdb-ID}` folder, so "already have
+    /// this featurette" is not a question this can answer. Keeping the disc is
+    /// the cheap mistake; ejecting it is the expensive one.
+    func hasImportableExtras(jobs: JobController) -> Bool {
+        !jobs.selectedExtraTitleIndices.isEmpty
+    }
+
     var importableFeatureCount: Int {
         featureSelection.runnableFeatures.filter { feature in
             guard case .present = libraryStatus(for: feature) else { return true }
@@ -2548,7 +2562,16 @@ final class RipFlowController {
               importableFeatureCount == 0,
               // And every one of them is held, not merely unchecked — a check
               // still in flight is not an answer.
-              featureSelection.features.allSatisfy(isHeldInPlex)
+              featureSelection.features.allSatisfy(isHeldInPlex),
+              // #0185 — and nothing else on the disc is waiting to be taken.
+              //
+              // "Nothing to import" meant "no film to import", which stopped
+              // being the same sentence when the app learned to take bonus
+              // material. A disc holding two films the library has and a
+              // 58-minute making-of it does not is a disc with work left on
+              // it, and ejecting it is the one action that puts that work out
+              // of reach.
+              !hasImportableExtras(jobs: jobs)
         else { return }
 
         autoEjectedDiscs.insert(Self.discIdentity(disc))
@@ -2595,7 +2618,10 @@ final class RipFlowController {
                   selectedMovieID: selectedMovieID,
                   recommendedMovieID: recommendedMovieID,
                   acknowledgedReplace: replaceAcknowledgement != nil,
-                  edition: MovieMetadata.normalizedEdition(edition)
+                  edition: MovieMetadata.normalizedEdition(edition),
+                  // #0185 — a held film does not finish a disc that still has
+                  // bonus material ticked on it.
+                  hasImportableExtras: hasImportableExtras(jobs: jobs)
               )
         else { return }
 

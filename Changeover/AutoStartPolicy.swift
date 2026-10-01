@@ -59,11 +59,26 @@ nonisolated enum AutoStartPolicy {
         selectedMovieID: Int?,
         recommendedMovieID: Int?,
         acknowledgedReplace: Bool,
-        edition: String? = nil
+        edition: String? = nil,
+        hasImportableExtras: Bool = false
     ) -> Bool {
         guard enabled else { return false }
         // The user has said "replace it" — that is a rip, not an eject.
         guard !acknowledgedReplace else { return false }
+        // #0185 — the film is held, but the disc is not finished with.
+        //
+        // "Already in Plex" has always meant "already have the film", and that
+        // was the whole truth while a film was all the app could take off a
+        // disc. It is not any more: a disc whose feature is in the library may
+        // still carry a making-of, a commentary reel or six featurettes that
+        // are not, and ejecting it is throwing them away on the grounds that
+        // something else was already saved.
+        //
+        // This is the shape most people's shelves are in. They ripped the main
+        // feature years ago and the extras are still on the disc — which is
+        // the entire reason for the work in #0174 onwards. Taking the disc out
+        // from under them is the one outcome that makes that work unreachable.
+        guard !hasImportableExtras else { return false }
         guard let selected = selectedMovieID, selected == recommendedMovieID else { return false }
         guard case .done(_, let lookup) = libraryCheck, case .present(let entries) = lookup else { return false }
         // The film is in the library, but this disc may be a different cut of
