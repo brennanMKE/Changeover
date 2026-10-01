@@ -84,7 +84,12 @@ nonisolated struct DiscEvidence: Equatable, Sendable {
             .filter { $0.durationSeconds >= 60 }
             .sorted { $0.durationSeconds > $1.durationSeconds }
             .prefix(20)
-            .map { "- title \($0.index): \(DiscTitleFormatting.plainDuration($0.durationSeconds))" }
+            // #0183 — the same shape the instructions ask the model to answer
+            // in. This printed `59m` while the question asked for `(58:54)`,
+            // the model sensibly echoed the shape it had been shown, and the
+            // parser rejected it — so Signs' 58:54 bonus reel was nominated
+            // from the runtimes and then lost its name.
+            .map { "- title \($0.index): \(DiscTitleFormatting.duration($0.durationSeconds))" }
             .joined(separator: "\n")
     }
 }

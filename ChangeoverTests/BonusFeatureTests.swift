@@ -336,3 +336,79 @@ import Testing
         #expect(MenuExtraLabels.match(printed: printed, to: titles).isEmpty)
     }
 }
+
+/// #0183 — the runtime formats the app itself prints.
+///
+/// Measured on joe 2026-10-01. The Signs disc's 58:54 reel was nominated from
+/// the runtimes (`nominated 8`) and the model named it correctly —
+/// "Behind-the-scenes film (59m)" — and the finding was dropped, because
+/// `duration` only accepted `58:54`. The model used `59m` because that is what
+/// the prompt showed it: the title table rendered `- title 8: 59m` while the
+/// instructions asked for `(58:54)`. Shown one shape, parsed for another.
+@Suite struct SpelledDurationTests {
+
+    @Test func theShapeThePromptUsedToShow() {
+        #expect(MenuExtraLabels.duration("59m") == 3540)
+        #expect(MenuExtraLabels.duration("1h 46m") == 6360)
+        #expect(MenuExtraLabels.duration("46m") == 2760)
+    }
+
+    @Test func theWaysAPersonWritesIt() {
+        #expect(MenuExtraLabels.duration("22 min") == 1320)
+        #expect(MenuExtraLabels.duration("1 hr 46 min") == 6360)
+        #expect(MenuExtraLabels.duration("1h") == 3600)
+    }
+
+    /// The colon forms still work — this is an addition, not a replacement.
+    @Test func theColonFormsAreUnchanged() {
+        #expect(MenuExtraLabels.duration("6:11") == 371)
+        #expect(MenuExtraLabels.duration("1:22:33") == 4953)
+        #expect(MenuExtraLabels.duration("58:54") == 3534)
+    }
+
+    /// A bare number is still not a duration: it is a year, a chapter count or
+    /// a disc number far more often.
+    @Test func abareNumberIsStillRefused() {
+        #expect(MenuExtraLabels.duration("2002") == nil)
+        #expect(MenuExtraLabels.duration("21") == nil)
+        #expect(MenuExtraLabels.duration("") == nil)
+        #expect(MenuExtraLabels.duration("Signs") == nil)
+        #expect(MenuExtraLabels.duration("12m34") == nil, "trailing digits with no unit")
+        #expect(MenuExtraLabels.duration("9999m") == nil, "nothing on a disc runs that long")
+        #expect(MenuExtraLabels.duration("1h 75m") == nil, "minutes past the hour is a misread")
+    }
+
+    /// The whole reported case, end to end: the model's answer now binds to
+    /// the title the runtimes had already nominated.
+    @Test func thesignsBonusReelIsNamedAfterAll() throws {
+        let printed = try #require(
+            MenuExtraLabels.printed(from: "Behind-the-scenes film (59m)"))
+        #expect(printed.label == "Behind-the-scenes film")
+        #expect(printed.seconds == 3540)
+
+        let reel = DiscTitle(index: 8, durationSeconds: 3534, chapterCount: 7,
+                             sizeBytes: 0, outputFileName: nil, displayAspect: 1.33)
+        // 3540 against 3534 is six seconds — inside the twelve the matcher
+        // allows, and the reason that tolerance is not tighter.
+        let matches = MenuExtraLabels.match(printed: [printed], to: [reel])
+        #expect(matches.map(\.titleIndex) == [8])
+        #expect(matches.first?.label == "Behind-the-scenes film")
+    }
+
+    /// And the prompt now shows the shape it asks for, so the two cannot
+    /// drift apart again.
+    @Test func thepromptSpeaksTheShapeItAsksFor() {
+        let evidence = DiscEvidence(
+            volumeName: "Signs", menuPages: [["play"]],
+            titles: [DiscTitle(index: 8, durationSeconds: 3534, chapterCount: 7,
+                               sizeBytes: 0, outputFileName: nil, displayAspect: 1.33)],
+            mainFeatureIndex: nil)
+        #expect(evidence.titleTableForPrompt.contains("0:58:54"))
+        #expect(!evidence.titleTableForPrompt.contains("59m"))
+        // And what it prints parses.
+        let printed = evidence.titleTableForPrompt
+            .split(separator: ":").dropFirst().joined(separator: ":")
+            .trimmingCharacters(in: .whitespaces)
+        #expect(MenuExtraLabels.duration(printed) == 3534)
+    }
+}

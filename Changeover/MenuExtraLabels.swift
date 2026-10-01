@@ -74,9 +74,26 @@ nonisolated enum MenuExtraLabels {
         return Printed(label: label, seconds: seconds)
     }
 
-    /// `6:11` or `1:22:33`. Nothing else — a bare number is a chapter count,
-    /// a year, or a disc number far more often than it is a duration.
+    /// `6:11`, `1:22:33` — and `59m`, `1h 46m`, `22 min`.
+    ///
+    /// A bare number is still refused: a chapter count, a year or a disc
+    /// number far more often than a duration.
+    ///
+    /// #0183 — the spelled forms were missing and it cost the Signs disc its
+    /// bonus feature. Title 8 runs 58:54; the model answered
+    /// "Behind-the-scenes film (59m)", which is right, and this returned `nil`
+    /// for it, so the claim could not be corroborated and the finding was
+    /// dropped. The app had already nominated title 8 from the runtimes alone
+    /// and then discarded the name that would have made it importable.
+    ///
+    /// The model used `59m` because that is the format the prompt showed it:
+    /// `DiscEvidence.titleTableForPrompt` renders `- title 8: 59m` while the
+    /// instructions ask for `(58:54)`. Shown one shape and parsed for another.
+    /// Both ends are fixed — the table now speaks in the shape it asks for —
+    /// and this accepts the spelled forms anyway, because a model told one
+    /// thing and asked for another will reasonably produce either.
     static func duration(_ text: String) -> Int? {
+        if let spelled = spelledDuration(text) { return spelled }
         let parts = text.split(separator: ":", omittingEmptySubsequences: false)
         guard parts.count == 2 || parts.count == 3 else { return nil }
         var total = 0
@@ -88,6 +105,56 @@ nonisolated enum MenuExtraLabels {
             total = total * 60 + value
         }
         return total
+    }
+
+    /// `1h 46m`, `59m`, `22 min`, `1 hr 46 min` — the way a person writes a
+    /// runtime, and the way this app itself prints one
+    /// (`DiscTitleFormatting.runtime`).
+    ///
+    /// Requires a unit letter, so `2002` stays a year and `21` stays a
+    /// chapter count. Minutes alone are capped at a DVD's reach: nothing on a
+    /// disc runs a thousand minutes, and a four-digit number followed by an
+    /// `m` is a misread, not a film.
+    static func spelledDuration(_ text: String) -> Int? {
+        let lowered = text.lowercased()
+        guard lowered.contains(where: \.isLetter) else { return nil }
+
+        var hours: Int?
+        var minutes: Int?
+        var digits = ""
+        var index = lowered.startIndex
+
+        while index < lowered.endIndex {
+            let character = lowered[index]
+            if character.isNumber {
+                digits.append(character)
+                index = lowered.index(after: index)
+                continue
+            }
+            if character.isWhitespace { index = lowered.index(after: index); continue }
+            guard !digits.isEmpty, let value = Int(digits) else { return nil }
+            let rest = lowered[index...]
+            if rest.hasPrefix("hr") || rest.hasPrefix("hour") || rest.hasPrefix("h") {
+                guard hours == nil, value < 24 else { return nil }
+                hours = value
+            } else if rest.hasPrefix("min") || rest.hasPrefix("m") {
+                guard minutes == nil else { return nil }
+                minutes = value
+            } else {
+                return nil
+            }
+            digits = ""
+            // Skip the rest of the unit word.
+            while index < lowered.endIndex, lowered[index].isLetter {
+                index = lowered.index(after: index)
+            }
+        }
+        // Trailing digits with no unit are not a duration.
+        guard digits.isEmpty else { return nil }
+        guard hours != nil || minutes != nil else { return nil }
+        if hours == nil, let only = minutes, only >= 1_000 { return nil }
+        guard (minutes ?? 0) < 60 || hours == nil else { return nil }
+        return (hours ?? 0) * 3600 + (minutes ?? 0) * 60
     }
 
     /// Every printed label on a menu page, in the order it was printed.
