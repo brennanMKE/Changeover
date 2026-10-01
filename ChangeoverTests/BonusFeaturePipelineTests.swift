@@ -213,7 +213,9 @@ import Testing
         let mixed = ExtrasPlan.make(featureIndex: 1, requested: [9, 10], disc: Self.signs,
                                     labels: [9: "looking for Signs"])
         let detail = DiscTitleFormatting.extrasSummaryWording(mixed).detail
-        #expect(detail?.contains("1 named by the disc, filed with the movie as extras") == true)
+        // #0182 dropped "by the disc": a bonus feature the user named files
+        // the same way and did not come off a menu.
+        #expect(detail?.contains("1 named, filed with the movie as extras") == true)
         #expect(detail?.contains("the other 1 filed outside the Plex library") == true)
         // The running total itself is label-independent, so nothing the user
         // was already reading moves.

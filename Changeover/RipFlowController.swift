@@ -506,6 +506,10 @@ final class RipFlowController {
         // #0161: last film's answer must not sit under this film's name.
         featureLibraryChecks[feature] = nil
         applyActiveFeature(jobs: jobs, settings: settings)
+        // #0182: naming (or un-naming) a film changes what a bonus feature on
+        // this disc has to attach to, so the attachments are re-resolved here
+        // rather than discovered to be wrong at Start.
+        applyBonusFeatures(jobs: jobs)
 
         // #0172 — and ask the library here, not from a view that may not
         // exist.
@@ -715,6 +719,137 @@ final class RipFlowController {
     func setFeatureSkipped(_ skip: Bool, feature: Int, jobs: JobController, settings: AppSettings) {
         featureSelection.setSkipped(skip, for: feature)
         applyActiveFeature(jobs: jobs, settings: settings)
+        // Skipping a film takes its bonus features with it — there is no folder
+        // left to put them in. `FeatureSelection.bonusTarget` already says so;
+        // this is what makes the extras selection agree.
+        applyBonusFeatures(jobs: jobs)
+    }
+
+    // MARK: - Saying what each feature IS (#0182)
+
+    /// "This one is a movie" — the way back from every bonus-feature decision.
+    func markFeatureAsFilm(_ feature: Int, jobs: JobController, settings: AppSettings) {
+        featureSelection.markAsFilm(feature)
+        applyBonusFeatures(jobs: jobs)
+        applyActiveFeature(jobs: jobs, settings: settings)
+    }
+
+    /// "This one is a bonus feature of that movie."
+    ///
+    /// The film's own library answer is dropped with the film: this slot no
+    /// longer has a film of its own, so an "already in Plex" verdict sitting
+    /// beside it would be an answer about a question that is gone (#0161's
+    /// rule, which `selectFeature` applies for the same reason).
+    func markFeatureAsBonus(
+        _ feature: Int,
+        of film: Int,
+        label: String,
+        jobs: JobController,
+        settings: AppSettings
+    ) {
+        featureSelection.markAsBonusFeature(of: film, label: label, for: feature)
+        guard featureSelection.isBonusFeature(feature) else { return }
+        featureLibraryChecks[feature] = nil
+        featureSearchModels[feature]?.select(movieID: nil, apiKey: settings.tmdbAPIKey)
+        applyBonusFeatures(jobs: jobs)
+        applyActiveFeature(jobs: jobs, settings: settings)
+    }
+
+    /// The name typed into a bonus feature's field, as it is typed.
+    func setBonusLabel(_ label: String, feature: Int, jobs: JobController) {
+        featureSelection.setBonusLabel(label, for: feature)
+        applyBonusFeatures(jobs: jobs)
+    }
+
+    /// Which film a bonus feature is imported with, when the disc holds more
+    /// than one it could belong to.
+    func setBonusTarget(_ film: Int, feature: Int, jobs: JobController) {
+        featureSelection.setBonusTarget(film, for: feature)
+        applyBonusFeatures(jobs: jobs)
+    }
+
+    /// The film one feature has been named as, for the bonus feature's "part
+    /// of" control. Goes through `titleOfChoice`, so the picker can only ever
+    /// offer a film the plan would actually run.
+    func namedFilmTitle(for feature: Int) -> String? { titleOfChoice(feature) }
+
+    /// The bonus features Continue will import, as the user named them — for
+    /// the one line above the button that says what pressing it will do.
+    var importedBonusFeatureNames: [String] {
+        featureSelection.bonusImports.map(\.label)
+    }
+
+    /// Re-state the bonus features onto the extras selection `JobController`
+    /// already builds its `ExtrasPlan` from.
+    ///
+    /// **This is the whole of the new wiring, and it is deliberately the only
+    /// of it.** #0174/#0178 already built every part of filing a bonus feature:
+    /// `ExtrasPlan.Filing.bonusFeature`, `LibraryDestination.bonusFeature`,
+    /// `PlexOrganizer`'s narrowed guard and `DVDPipeline`'s extras loop, all
+    /// tested, all working, all driven by one `Set<Int>` of title indices and
+    /// one `[Int: String]` of names. A feature-length title the user has called
+    /// a bonus feature is, to every one of those, an extra with a name. So it
+    /// is entered as one, rather than as a `DiscRipPlan` entry with its own
+    /// `MovieMetadata` — which would have needed a TMDB id it does not have and
+    /// a second filing path beside the one that already exists.
+    ///
+    /// The tick for a feature slot is owned here and nowhere else. On a
+    /// multi-feature disc a feature-length title is either a film or a bonus
+    /// feature — never one of #0031's unnamed `Clips` extras — so the title
+    /// table's own checkbox has no correct answer to give about one, and two
+    /// controls writing one fact and arguing about it is this window's oldest
+    /// failure (#0030, #0167, #0172). Slots that are not features are left
+    /// entirely alone, so the trailers-and-featurettes picker is untouched.
+    ///
+    /// Never while a job is running: the extras then belong to the job, and
+    /// `startNextFilm` is the only thing allowed to move them.
+    ///
+    /// Every write is guarded by an equality check. This runs on every
+    /// reconcile, both properties are `@Observable`, and Observation posts a
+    /// change on every `set` whether or not the value moved — so writing
+    /// unconditionally from something a view's `onChange` drives is how a
+    /// redraw loop starts.
+    private func applyBonusFeatures(jobs: JobController) {
+        guard !jobs.isRunning else { return }
+        let imports = featureSelection.bonusImports
+        let labels = Dictionary(imports.map { ($0.feature, $0.label) },
+                                uniquingKeysWith: { first, _ in first })
+        if jobs.userExtraLabels != labels { jobs.userExtraLabels = labels }
+
+        let wanted = Set(imports.map(\.feature))
+        for feature in featureSelection.features {
+            let ticked = jobs.selectedExtraTitleIndices.contains(feature)
+            if wanted.contains(feature), !ticked {
+                jobs.selectedExtraTitleIndices.insert(feature)
+            } else if !wanted.contains(feature), ticked {
+                jobs.selectedExtraTitleIndices.remove(feature)
+            }
+        }
+    }
+
+    /// The extras one film's job will encode.
+    ///
+    /// #0182 — a bonus feature belongs to **one** film, and the extras
+    /// selection is one set per disc, so the set has to be read per film or the
+    /// second film's job would encode the first film's making-of into its own
+    /// folder. That is the #0034 shape within a single disc, and it is the one
+    /// genuinely new rule this ticket adds to the pipeline's inputs.
+    ///
+    /// The rule, stated once: **no feature slot is an extra, except a bonus
+    /// feature of this film.** `ExtrasPlan.make` drops only the one index it is
+    /// told is the feature, so without this a disc of two films could file
+    /// film B into `Clips/<Film A>/` as a nameless clip — and with bonus
+    /// features in play, film B's job would additionally encode film A's
+    /// making-of into film B's own folder.
+    ///
+    /// A single-feature disc has no feature slots to reason about and gets the
+    /// set exactly as it is passed today.
+    private func extraTitleIndices(forFilm film: Int, jobs: JobController) -> [Int] {
+        guard featureSelection.isMultiFeature else { return jobs.selectedExtraTitleIndices.sorted() }
+        return jobs.selectedExtraTitleIndices
+            .subtracting(featureSelection.features)
+            .union(featureSelection.bonusFeatures(of: film))
+            .sorted()
     }
 
     /// #0167 — how many films on this disc will actually be imported.
@@ -1335,6 +1470,12 @@ final class RipFlowController {
         // this disc holds one film or several before it offers the volume
         // label as a term for "the" film.
         syncFeatures(jobs: jobs, apiKey: apiKey)
+        // #0182 — re-stated on every event, after `syncFeatures` has settled
+        // which titles are features, for the reason `enforceManualTitle` is:
+        // `startScan` wipes the extras selection and the names along with it,
+        // so the user's statement about this disc has to be put back rather
+        // than lost to a Scan Again.
+        applyBonusFeatures(jobs: jobs)
         seedEdition(jobs: jobs)
         if let settings {
             // #0176 — re-stated here because the scan re-states its own
@@ -1749,6 +1890,11 @@ final class RipFlowController {
         interrogationStartedFor = nil
         // #0180: and the names it gave the last disc's extras.
         jobs.modelExtraLabels = [:]
+        // #0182: including the ones the user typed. The fact itself goes with
+        // `featureSelection` above — a kind set for Signs must never decide
+        // that the next disc's second feature is a making-of — and this clears
+        // the projection of it, so neither copy can outlive the disc.
+        jobs.userExtraLabels = [:]
         // #0176: so did what the user said that disc held. `ManualOverride`
         // refuses another disc on its own (`adopt`), and this is the second,
         // independent wipe — the pattern #0034 established for a statement
@@ -2093,7 +2239,10 @@ final class RipFlowController {
         RipRequest(
             metadata: metadata,
             featureTitleIndex: feature,
-            extraTitleIndices: jobs.selectedExtraTitleIndices.sorted(),
+            // #0182 — this film's extras, which on a multi-feature disc is not
+            // the whole set: a bonus feature goes with the one film it was
+            // attached to.
+            extraTitleIndices: extraTitleIndices(forFilm: feature, jobs: jobs),
             audioTrackNumbers: jobs.selectedAudioTrackNumbers,
             // Menu intelligence: the disc's own chapter names, only when the
             // read finished before Start and only when their count matches

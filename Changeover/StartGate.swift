@@ -42,6 +42,14 @@ nonisolated struct FeatureChoices: Equatable, Sendable {
     /// selection is a duplicate blocks an import that would have been correct.
     var importableCount: Int = 0
 
+    /// #0182 — bonus features the user has named with no film to attach them
+    /// to: the film is unnamed, or excluded, or was never on the disc.
+    ///
+    /// Only ever used to choose *which* refusal to give when nothing is going
+    /// to run, never to add one: a disc with a runnable film imports its bonus
+    /// features and does not care how many of them there are.
+    var unattachedBonusCount: Int = 0
+
     /// At least one film will actually run: named, and not skipped (#0167).
     /// A film the user has excluded does not count, so a disc whose only
     /// named film was skipped correctly refuses to start.
@@ -77,6 +85,15 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
     /// from `.noMovieSelected` because the instruction differs: there is no
     /// single search box to choose from, there is one per film.
     case noFeatureChosen
+    /// #0182 — the user has said one of this disc's features is a bonus
+    /// feature, and there is no film for it to be imported with: either no
+    /// film has been named, or the one it was attached to has been excluded.
+    ///
+    /// Distinct from `.noFeatureChosen` because that sentence ("this disc holds
+    /// several feature films") describes a disc the user has just told us this
+    /// is not — and because the action differs: there is nothing to name for the
+    /// bonus feature itself, the missing answer is the movie it goes with.
+    case bonusFeatureWithoutFilm
     case noTitleSelected
     case noAudioTrackSelected
     case runtimeLookupLoading
@@ -144,6 +161,8 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
             return "Choose a movie."
         case .noFeatureChosen:
             return "This disc holds several feature films — name at least one of them before starting."
+        case .bonusFeatureWithoutFilm:
+            return "A bonus feature is imported into a film's own folder — name that film before starting."
         case .noTitleSelected:
             return "Pick a title."
         case .noAudioTrackSelected:
@@ -213,6 +232,11 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
             // refusal when every named film has been skipped (#0167), which
             // is the same statement: nothing here is going to be imported.
             return "This disc has more than one movie on it. Choose at least one to rip."
+        case .bonusFeatureWithoutFilm:
+            // Names the fact and the one action, like `.noFeatureChosen`. A
+            // bonus feature goes in the movie's folder, so without the movie
+            // there is nowhere for it to go — and nothing to name here.
+            return "A bonus feature goes with a movie. Choose the movie on this disc first."
         case .noTitleSelected:
             return "Pick which part of the disc to rip."
         case .noAudioTrackSelected:
@@ -322,7 +346,13 @@ nonisolated enum StartGate {
         // chosen", and this one says what the person is actually looking at.
         // "Choose a movie." sends them hunting for one search box on a
         // screen that deliberately has several.
-        if featureChoices.isMultiFeature, !featureChoices.hasChoice { return .noFeatureChosen }
+        if featureChoices.isMultiFeature, !featureChoices.hasChoice {
+            // #0182 — on a disc where the user has called one of the features a
+            // bonus feature, "name one of this disc's films" is still the
+            // action, but "this disc holds several feature films" is no longer
+            // the fact. Say the one that is true of what they have told us.
+            return featureChoices.unattachedBonusCount > 0 ? .bonusFeatureWithoutFilm : .noFeatureChosen
+        }
         guard hasMovieSelected else { return .noMovieSelected }
 
         switch scanState {

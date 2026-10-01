@@ -485,7 +485,11 @@ struct DiscTitleListView: View {
             if TitleRowControls.showsExtraToggle(
                 titleIndex: title.index,
                 selectedIndex: jobs.selectedTitleIndex,
-                showsDetails: showsDetails
+                showsDetails: showsDetails,
+                // #0182 — a feature slot's extras status is set on the Choose
+                // step ("it's a bonus feature of…"), so there is no second
+                // checkbox here to disagree with it.
+                featureIndices: flow.featureSelection.features
             ) {
                 Toggle("Extra", isOn: Binding(
                     get: { jobs.selectedExtraTitleIndices.contains(title.index) },

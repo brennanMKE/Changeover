@@ -1190,6 +1190,10 @@ final class JobController {
         selectedTitleIndex = nil
         selectedAudioTrackNumbers = []
         selectedExtraTitleIndices = []
+        // #0182: the bonus-feature names belonged to the disc that just left,
+        // and `RipFlowController` clears the fact they were projected from at
+        // the same moment. Two independent wipes, the #0034 pattern.
+        userExtraLabels = [:]
         mismatchAcknowledgement = nil
     }
 
@@ -1545,21 +1549,8 @@ final class JobController {
     /// so this cannot misfile anything either way; it is the assignment that
     /// would quietly get worse.
     func extraLabels(for indices: [Int], feature: Int? = nil) -> [Int: String] {
-        guard !indices.isEmpty,
-              case .scanned(let scan) = scanState,
-              let ocr = menuState.intelligence?.ocr
-        else { return [:] }
+        guard !indices.isEmpty, case .scanned(let scan) = scanState else { return [:] }
 
-        // `DiscEvidence.make` is the one place that turns OCR observations
-        // into menu lines, and it drops the furniture repeated on every
-        // screen — reproducing that here would be a second, diverging reader
-        // of the same stills.
-        let evidence = DiscEvidence.make(
-            volumeName:       insertedDisc?.label ?? "",
-            ocr:              ocr,
-            disc:             scan.disc,
-            mainFeatureIndex: scan.mainFeatureIndex
-        )
         // Not the feature, and not the logo stings and menu loops #0175
         // already refuses to name — a title under thirty seconds has no name
         // worth having and only crowds the assignment.
@@ -1568,7 +1559,41 @@ final class JobController {
             $0.index != featureIndex
                 && $0.durationSeconds >= DiscInterrogation.shortestWorthNaming
         }
-        var named = ExtrasPlan.labels(printedOn: evidence.allLines, titles: candidates)
+
+        // #0182 — the user's own words first, and nothing overwrites them.
+        //
+        // Both readings below are inferences: a name printed beside a runtime,
+        // and a name a model read off a still. A name the person typed while
+        // looking at the disc's own menu is not an inference, and the whole
+        // point of #0182 is that the app cannot tell a making-of from a second
+        // feature and the person can. It is also checked against the scan
+        // rather than against `candidates`, deliberately: `shortestWorthNaming`
+        // is the app's judgement about which titles are worth *guessing* names
+        // for, and it has no business filtering an answer.
+        var named: [Int: String] = [:]
+        for (index, label) in userExtraLabels where index != featureIndex {
+            guard scan.disc.titles.contains(where: { $0.index == index }) else { continue }
+            named[index] = label
+        }
+
+        // #0178 — then the disc's own printed pages.
+        //
+        // `DiscEvidence.make` is the one place that turns OCR observations
+        // into menu lines, and it drops the furniture repeated on every
+        // screen — reproducing that here would be a second, diverging reader
+        // of the same stills.
+        if let ocr = menuState.intelligence?.ocr {
+            let evidence = DiscEvidence.make(
+                volumeName:       insertedDisc?.label ?? "",
+                ocr:              ocr,
+                disc:             scan.disc,
+                mainFeatureIndex: scan.mainFeatureIndex
+            )
+            for (index, label) in ExtrasPlan.labels(printedOn: evidence.allLines, titles: candidates)
+            where named[index] == nil {
+                named[index] = label
+            }
+        }
 
         // #0180 — then the model's own reading, for the titles the printed
         // path could not name.
@@ -1603,6 +1628,21 @@ final class JobController {
     /// between the screen and the gate. Set once per disc and cleared with
     /// everything else that belonged to it.
     var modelExtraLabels: [Int: String] = [:]
+
+    /// #0182 — the names the **user** gave this disc's bonus features, keyed by
+    /// disc title index.
+    ///
+    /// Held here for exactly the reason `modelExtraLabels` is: `JobController`
+    /// builds the `ExtrasPlan`, and a plan that reached across to
+    /// `RipFlowController` for part of its input would be a second reader of
+    /// one fact (#0172's shape). The *fact* lives in
+    /// `FeatureSelection.kinds` — that is where the user edits it and that is
+    /// what a disc swap clears. This is a projection of it, re-stated onto this
+    /// controller by `RipFlowController.applyBonusFeatures` on every reconcile
+    /// and after every change, the same write-through pattern
+    /// `enforceManualTitle` uses for `selectedTitleIndex` (#0176). So it can go
+    /// stale for at most one event, and a rescan that wipes it has it put back.
+    var userExtraLabels: [Int: String] = [:]
 
     /// #0027: the audio-track preselection for `titleIndex` on whatever scan
     /// `scanState` holds — `[]` when `titleIndex` is `nil` or isn't a title

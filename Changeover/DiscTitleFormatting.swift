@@ -383,7 +383,11 @@ nonisolated enum DiscTitleFormatting {
             return Wording(plain: plainExtrasLine(plan),
                            detail: "\(stem), filed outside the Plex library")
         }
-        let named = "\(bonus) named by the disc, filed with the movie as extras"
+        // #0182: "named by the disc" was true while the only name source was
+        // the disc's own menus. A bonus feature the USER named has the same
+        // filing and a different provenance, and the sentence has no business
+        // claiming one.
+        let named = "\(bonus) named, filed with the movie as extras"
         let rest = count - bonus
         let detail = rest > 0
             ? "\(stem) — \(named); the other \(rest) filed outside the Plex library"

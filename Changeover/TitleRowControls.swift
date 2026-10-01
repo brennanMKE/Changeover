@@ -26,8 +26,28 @@ nonisolated enum TitleRowControls {
     /// 2. **Never on the selected feature row.** Previously it was rendered
     ///    and disabled there, which is how it came to look broken. Absent says
     ///    "not applicable here"; present-but-dead says "broken".
-    static func showsExtraToggle(titleIndex: Int, selectedIndex: Int?, showsDetails: Bool) -> Bool {
+    /// 3. **Never on a feature slot of a multi-feature disc** (#0182).
+    ///
+    /// Rule 3 is the two-writer rule. On a disc the app reads as holding
+    /// several features, each of those stretches is either a film or a bonus
+    /// feature of one, and the Choose step is where the user says which —
+    /// `RipFlowController.applyBonusFeatures` then owns whether that title is
+    /// ticked as an extra. A checkbox here would be a second control writing
+    /// the same fact, and the next reconcile would silently overrule it. Two
+    /// controls arguing over one fact is this window's oldest failure shape
+    /// (#0030, #0167, #0172), and a tick that undoes itself a moment later is
+    /// its worst form: it reads as an app that lost the click.
+    ///
+    /// `featureIndices` is empty on a single-feature disc — the common case —
+    /// so the trailers-and-featurettes picker is exactly what it was.
+    static func showsExtraToggle(
+        titleIndex: Int,
+        selectedIndex: Int?,
+        showsDetails: Bool,
+        featureIndices: [Int] = []
+    ) -> Bool {
         guard showsDetails else { return false }
+        guard featureIndices.count < 2 || !featureIndices.contains(titleIndex) else { return false }
         return titleIndex != selectedIndex
     }
 

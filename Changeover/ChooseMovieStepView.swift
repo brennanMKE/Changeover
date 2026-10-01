@@ -172,9 +172,63 @@ struct ChooseMovieStepView: View {
             }
             .buttonStyle(.link)
             .font(.caption)
+            FeatureKindToggle(feature: feature)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+    }
+
+    /// #0182 — a settled bonus feature, as one line: what it is called, which
+    /// film it goes with, and which of Plex's extras folders it will land in.
+    ///
+    /// The folder is named on purpose. It is derived from the name the user
+    /// typed (`PlexExtra.kind(forLabel:)`), so saying it is the only way they
+    /// can see that "The Making of Signs" became *Behind The Scenes* rather
+    /// than *Featurettes* — and the only way a wrong guess is correctable
+    /// before the encode rather than afterwards in the Finder.
+    @ViewBuilder
+    private func bonusFeatureRow(feature: Int, position: Int, count: Int) -> some View {
+        let label = flow.featureSelection.bonusLabel(for: feature) ?? ""
+        let film = flow.featureSelection.bonusTarget(for: feature)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "paperclip")
+                .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(label)
+                    .font(.subheadline.weight(.medium))
+                Text(bonusAttachmentLine(label: label, film: film))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                DetailOnlyText(text: "Part \(position) of \(count)")
+            }
+            Spacer(minLength: 0)
+            Button("Rename") {
+                // Clearing the name reopens this slot's question, which is the
+                // editor the name was typed into. One state, one way in.
+                flow.setBonusLabel("", feature: feature, jobs: jobs)
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+            Button(flow.featureSelection.isSkipped(feature) ? "Import this one" : "Don't import this one") {
+                flow.setFeatureSkipped(!flow.featureSelection.isSkipped(feature),
+                                       feature: feature, jobs: jobs, settings: settings)
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+            FeatureKindToggle(feature: feature)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+    }
+
+    /// "Imported with “Signs (2002)”, as Behind The Scenes."
+    private func bonusAttachmentLine(label: String, film: Int?) -> String {
+        let folder = PlexExtra.kind(forLabel: label).folderName
+        guard let film, let name = flow.namedFilmTitle(for: film) else {
+            return "A bonus feature — choose which movie it goes with."
+        }
+        return "Imported with “\(name)”, as \(folder)."
     }
 
     /// #0172 — "this film does not fit this part of the disc", wherever the
@@ -218,6 +272,12 @@ struct ChooseMovieStepView: View {
             }
             .buttonStyle(.link)
             .font(.caption)
+            // #0182 — offered before this slot's turn comes, because on the
+            // Signs disc the user can see from the runtimes alone that the
+            // second feature is not a second film, and making them answer a
+            // TMDB search they know is wrong first would be the app insisting
+            // on its own reading.
+            FeatureKindToggle(feature: feature)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -357,17 +417,38 @@ struct ChooseMovieStepView: View {
                             // was saying `noFeatureChosen` about the same disc.
                             switch flow.featureSelection.question(for: feature) {
                             case .ask:
-                                FeatureSearchBlock(
-                                    feature: feature,
-                                    position: position + 1,
-                                    count: features.count,
-                                    title: discTitle(feature),
-                                    search: search
-                                )
+                                // #0182 — the same slot, two different
+                                // questions. A film's is "which film?", and
+                                // TMDB answers it. A bonus feature's is "what
+                                // is it called, and which film does it go
+                                // with?", and nothing but the person holding
+                                // the box can.
+                                if flow.featureSelection.isBonusFeature(feature) {
+                                    BonusFeatureBlock(
+                                        feature: feature,
+                                        position: position + 1,
+                                        count: features.count,
+                                        title: discTitle(feature)
+                                    )
+                                } else {
+                                    FeatureSearchBlock(
+                                        feature: feature,
+                                        position: position + 1,
+                                        count: features.count,
+                                        title: discTitle(feature),
+                                        search: search
+                                    )
+                                }
                             case .named:
-                                namedFeatureRow(feature: feature,
-                                                position: position + 1,
-                                                count: features.count)
+                                if flow.featureSelection.isBonusFeature(feature) {
+                                    bonusFeatureRow(feature: feature,
+                                                    position: position + 1,
+                                                    count: features.count)
+                                } else {
+                                    namedFeatureRow(feature: feature,
+                                                    position: position + 1,
+                                                    count: features.count)
+                                }
                             case .waiting:
                                 pendingFeatureRow(feature: feature,
                                                   position: position + 1,
@@ -402,7 +483,11 @@ struct ChooseMovieStepView: View {
                 // taken over.
                 if let summary = ChooseSummary.line(
                     films: flow.runnableFilmTitles,
-                    skipped: flow.skippedFilmTitles) {
+                    skipped: flow.skippedFilmTitles,
+                    // #0182 — a bonus feature is not a film and gets no line
+                    // of its own in the list of films, but it IS something
+                    // Continue is about to import, so it is said.
+                    bonusFeatures: flow.importedBonusFeatureNames) {
                     Text(summary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -574,6 +659,11 @@ private struct FeatureSearchBlock: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
+            // #0182 — "this is not a film at all", offered in the header of
+            // the question itself. The user is looking at a search box that
+            // will never find "The Making of Signs" on TMDB, which is exactly
+            // the moment the other answer is worth having.
+            FeatureKindToggle(feature: feature)
             // #0167 — the way out of a film you do not want. Shown once a
             // film is named, because before that there is nothing to exclude.
             if isChosen {
@@ -656,6 +746,178 @@ private struct FeatureSearchBlock: View {
             return "No movies found for “\(searched)”. Try a different spelling."
         }
         return "Type this movie's name and press Search."
+    }
+}
+
+// MARK: - What a feature IS (#0182)
+
+/// The one control that says whether a feature-length stretch of the disc is a
+/// film or a bonus feature, wherever that slot is drawn.
+///
+/// One view rather than a line in each of the four row states, because the two
+/// things this ticket is judged on are that the choice is **obvious** and that
+/// it is **reversible** — and a control whose wording or availability differed
+/// between the asked row and the settled row would be neither. It is the same
+/// link in both directions: the slot's kind decides which sentence it shows.
+///
+/// Disabled, not hidden, when the disc has no named film yet. A bonus feature
+/// is filed inside a film's own folder, so there is genuinely nowhere to put
+/// one until a film is named — and #0053's rule is that a control the user
+/// cannot use still has to say why, because a missing control reads as an app
+/// that cannot do the thing at all. That is the whole of the complaint this
+/// ticket answers: "the current workflow does not support doing this".
+private struct FeatureKindToggle: View {
+    @Environment(AppSettings.self) private var settings
+    @Environment(JobController.self) private var jobs
+    @Environment(RipFlowController.self) private var flow
+
+    let feature: Int
+
+    var body: some View {
+        if flow.featureSelection.isBonusFeature(feature) {
+            Button("It's a movie") {
+                flow.markFeatureAsFilm(feature, jobs: jobs, settings: settings)
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+            .help("Import this as a movie of its own, in its own folder.")
+        } else {
+            let target = flow.featureSelection.bonusTargets.first
+            Button("It's a bonus feature") {
+                guard let target else { return }
+                flow.markFeatureAsBonus(feature, of: target, label: "",
+                                        jobs: jobs, settings: settings)
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+            .disabled(target == nil)
+            .help(target == nil
+                  ? "Name one of this disc's movies first — a bonus feature is imported into the movie's own folder."
+                  : "Import this with one of this disc's movies instead, as an extra.")
+        }
+    }
+}
+
+/// #0182 — the question asked about a slot the user has called a bonus
+/// feature: what is it called, and which film does it go with?
+///
+/// Deliberately **not** a search box. A making-of is not in a movie database
+/// and has no year, no cast and no id; what it has is the name printed on the
+/// disc's own bonus menu. Offering TMDB here would be the mistake #0181 just
+/// fixed in the other direction — asking someone for a fact the app should
+/// already have — in reverse: asking a database for a fact only the disc has.
+///
+/// The name is bound straight through to `FeatureSelection`, with no local
+/// `@State` copy. That is not an economy: a second copy of the name is a
+/// second writer of it, and #0172 is this window's standing proof of what two
+/// writers of one fact cost.
+private struct BonusFeatureBlock: View {
+    @Environment(AppSettings.self) private var settings
+    @Environment(JobController.self) private var jobs
+    @Environment(RipFlowController.self) private var flow
+
+    let feature: Int
+    let position: Int
+    let count: Int
+    /// The scanned title, for its runtime — the one piece of evidence that
+    /// makes "this is nearly an hour long" believable as a bonus feature
+    /// rather than as a trailer.
+    let title: DiscTitle?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            header
+            TextField("What is this called? e.g. The Making of Signs", text: name)
+                .textFieldStyle(.roundedBorder)
+            attachment
+            destinationLine
+        }
+        .padding()
+    }
+
+    /// Bound straight to the single source of truth.
+    private var name: Binding<String> {
+        Binding(
+            get: { flow.featureSelection.bonusLabel(for: feature) ?? "" },
+            set: { flow.setBonusLabel($0, feature: feature, jobs: jobs) }
+        )
+    }
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            WordingText(
+                wording: DiscTitleFormatting.featureBlockWording(
+                    position: position, of: count, title: title),
+                font: .headline
+            )
+            Spacer(minLength: 8)
+            FeatureKindToggle(feature: feature)
+            Button("Don't import this one") {
+                flow.setFeatureSkipped(true, feature: feature, jobs: jobs, settings: settings)
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+        }
+    }
+
+    /// Which film it goes with. A picker only when there is a choice to make:
+    /// on the disc this ticket is about there is exactly one film, and a
+    /// one-item picker is a question with one answer.
+    @ViewBuilder
+    private var attachment: some View {
+        let targets = flow.featureSelection.bonusTargets
+        if targets.count > 1 {
+            Picker("Goes with", selection: targetBinding) {
+                ForEach(targets, id: \.self) { film in
+                    Text(flow.namedFilmTitle(for: film) ?? "Movie \(positionOf(film))").tag(film)
+                }
+            }
+            .pickerStyle(.menu)
+            .font(.caption)
+        } else if let film = targets.first, let movie = flow.namedFilmTitle(for: film) {
+            Text("Goes with “\(movie)”.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            // Reachable only by the fallback branch of `featureBeingAsked`:
+            // every slot on the disc is unanswered and this one happens to be
+            // first. Say what is missing rather than drawing a dead picker.
+            Text("Name one of this disc's movies first — a bonus feature is imported into the movie's own folder.")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
+    }
+
+    /// Where it will actually land, from the name as it is typed. The folder
+    /// is Plex's own vocabulary and the only thing that makes the file show up
+    /// as part of the film, so it is shown rather than inferred silently.
+    @ViewBuilder
+    private var destinationLine: some View {
+        let typed = flow.featureSelection.bonusLabel(for: feature) ?? ""
+        if flow.featureSelection.hasUsableBonusLabel(feature) {
+            Text("Filed as \(PlexExtra.kind(forLabel: typed).folderName).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            Text("Give it the name the disc's own menu uses — that is what Plex will show.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var targetBinding: Binding<Int> {
+        Binding(
+            get: {
+                flow.featureSelection.bonusTarget(for: feature)
+                    ?? flow.featureSelection.bonusTargets.first
+                    ?? feature
+            },
+            set: { flow.setBonusTarget($0, feature: feature, jobs: jobs) }
+        )
+    }
+
+    private func positionOf(_ film: Int) -> Int {
+        (flow.featureSelection.features.firstIndex(of: film) ?? 0) + 1
     }
 }
 

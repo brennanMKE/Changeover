@@ -24,10 +24,16 @@ nonisolated enum ChooseSummary {
     /// - Parameters:
     ///   - films: the films that will be imported, in disc order.
     ///   - skipped: the films the user named and then excluded.
+    ///   - bonusFeatures: #0182 — the bonus features that will be imported
+    ///     *with* those films, as the user named them. Said separately because
+    ///     they are not films and do not become library entries of their own:
+    ///     a user who has just told the app that the 58-minute stretch of the
+    ///     Signs disc is a making-of needs to see that the app took it as one,
+    ///     and "Importing “Signs (2002)”" alone does not say that.
     /// - Returns: `nil` when nothing will run and nothing was excluded — the
     ///   empty Choose step, where Continue is disabled and the step's own
     ///   heading is already the whole message.
-    static func line(films: [String], skipped: [String]) -> String? {
+    static func line(films: [String], skipped: [String], bonusFeatures: [String] = []) -> String? {
         let importing: String?
         switch films.count {
         case 0: importing = nil
@@ -46,7 +52,14 @@ nonisolated enum ChooseSummary {
         default: excluded = "Skipping \(list(skipped))."
         }
 
-        let parts = [importing, excluded].compactMap { $0 }
+        let bonus: String?
+        switch bonusFeatures.count {
+        case 0: bonus = nil
+        case 1: bonus = "Also importing “\(bonusFeatures[0])” with it."
+        default: bonus = "Also importing \(list(bonusFeatures)) with them."
+        }
+
+        let parts = [importing, bonus, excluded].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
