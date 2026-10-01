@@ -479,13 +479,22 @@ private struct FeatureSearchBlock: View {
     /// This feature's own search context.
     let search: MovieSearchViewModel
 
-    /// How many result rows a block shows.
+    /// #0181 — every result is shown.
     ///
-    /// The step has two or three of these stacked, and a full-length list in
-    /// each would put the action bar below the screen. Six is enough to hold
-    /// the right answer for a term specific enough to have been typed at a
-    /// named film; anything vaguer is better narrowed than scrolled.
-    private static let visibleResults = 6
+    /// This used to stop at six and say "…and N more. Add the year to narrow
+    /// it down." The premise was that the step stacks two or three search
+    /// blocks and a full list in each would push the action bar off screen.
+    /// #0169 ended that: one feature is asked about at a time and the rest
+    /// collapse to a line each, so there is one list and the body is already
+    /// in a `ScrollView`.
+    ///
+    /// The advice was worse than the cap. Reported 2026-10-01 on the Signs
+    /// disc: the user searched "Signs", was told to add the year, did not know
+    /// it, guessed 2009, and got "No movies found" — the film is 2002. TMDB
+    /// returns under thirty results for an ordinary title and ranks them by
+    /// popularity, so the answer is almost always near the top and scrolling
+    /// costs nothing. Asking someone for a fact they came here to look up is
+    /// the app handing back its own work, the same fault as #0170's runtimes.
 
     var body: some View {
         @Bindable var search = search
@@ -626,7 +635,7 @@ private struct FeatureSearchBlock: View {
                 .foregroundStyle(.secondary)
         } else {
             VStack(spacing: 0) {
-                ForEach(Array(search.results.prefix(Self.visibleResults))) { movie in
+                ForEach(search.results) { movie in
                     Button {
                         flow.selectFeature(movieID: movie.id, feature: feature,
                                            jobs: jobs, settings: settings)
@@ -637,13 +646,6 @@ private struct FeatureSearchBlock: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                }
-                if search.results.count > Self.visibleResults {
-                    Text("…and \(search.results.count - Self.visibleResults) more. Add the year to narrow it down.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 4)
                 }
             }
         }
