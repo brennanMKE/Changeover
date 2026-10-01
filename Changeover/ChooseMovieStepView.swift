@@ -29,6 +29,48 @@ struct ChooseMovieStepView: View {
 
     // MARK: - One film on the disc (the ordinary case)
 
+    /// #0184 — what else is coming with the film, on the step where the user
+    /// is standing.
+    ///
+    /// The app had been finding Signs' 58:54 making-of, naming it, ticking it
+    /// and filing it correctly, and saying none of that until the Confirm
+    /// step. From the outside that is identical to not doing it at all, which
+    /// is what the user reasonably concluded.
+    @ViewBuilder
+    private var includedExtrasRow: some View {
+        let items = IncludedExtras.items(
+            ticked: jobs.selectedExtraTitleIndices,
+            labels: jobs.extraLabels(for: Array(jobs.selectedExtraTitleIndices)),
+            titles: scannedTitles)
+        if let line = IncludedExtras.line(items) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "plus.rectangle.on.folder")
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+                WordingText(
+                    wording: Wording(plain: line, detail: IncludedExtras.detail(items)),
+                    font: .caption)
+                Spacer(minLength: 0)
+                // The way out, where the thing is. An extra the app chose is
+                // still the user's time and the user's disk.
+                Button("Don't include") {
+                    for item in items { jobs.selectedExtraTitleIndices.remove(item.titleIndex) }
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            Divider()
+        }
+    }
+
+    /// The disc's scanned titles, for the row above.
+    private var scannedTitles: [DiscTitle] {
+        guard case .scanned(let result) = jobs.scanState else { return [] }
+        return result.disc.titles
+    }
+
     private var singleFeatureBody: some View {
         @Bindable var search = flow.search
         return VStack(spacing: 0) {
@@ -80,6 +122,7 @@ struct ChooseMovieStepView: View {
             }
 
             Divider()
+            includedExtrasRow
             StepActionBar {
                 // #0176 — always here, on every disc, whatever the app made
                 // of it. A control that appears only once the app has admitted
@@ -466,6 +509,7 @@ struct ChooseMovieStepView: View {
             .frame(maxHeight: .infinity)
 
             Divider()
+            includedExtrasRow
             StepActionBar {
                 // #0176 — the same control on the multi-feature layout, where
                 // the misread disc is most often the problem: here it is also
