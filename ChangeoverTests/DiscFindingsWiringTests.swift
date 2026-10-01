@@ -102,8 +102,12 @@ struct DiscFindingsWiringTests {
                             "WITH SPANISH SUBTITLES"])])
     }
 
+    // `/Volumes/Signs`, not `/Volumes/SIGNS`: `DiscInsertion.label` falls back
+    // to the mount point's last component, and that string goes into the
+    // prompt verbatim. The real disc mounts as `Signs` on joe, so a fixture
+    // that shouts it is testing a disc that does not exist.
     private static let signsDisc = DiscInsertion(
-        mountURL: URL(fileURLWithPath: "/Volumes/SIGNS"),
+        mountURL: URL(fileURLWithPath: "/Volumes/Signs"),
         deviceNode: "disk6", discID: "disc-signs")
 
     private static let otherDisc = DiscInsertion(
