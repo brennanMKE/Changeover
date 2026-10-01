@@ -49,17 +49,44 @@ struct ExtrasOnlyIntentTests {
         }
     }
 
-    /// `.film` is additive on the wire: a `RipRequest` recorded before this
-    /// ticket has no `intent` key and must decode as an ordinary rip, never as
-    /// a job that silently declines to encode the film.
-    @Test func aRequestWithNoIntentKeyDecodesAsAnOrdinaryRip() throws {
+    /// `.film` is the default, so every construction site that predates this
+    /// ticket means what it always meant: a run that encodes the film.
+    ///
+    /// Deliberately NOT a test about decoding an older *recorded* request.
+    /// Nothing in this app encodes or decodes a `RipRequest` — `Codable` is
+    /// here for the Phase 4 wire and for round-trip tests — so there is no
+    /// stored history to stay compatible with, and asserting one pins a
+    /// fiction. Swift's synthesised decoder does not fall back to a property's
+    /// default for a missing key, as `extraTitleIndices` demonstrates, so the
+    /// test that claimed otherwise was describing the opposite of the truth.
+    @Test func anOrdinaryRequestIsAFilmRunWithoutSayingSo() throws {
         let json = """
-        {"metadata": {"title": "Signs", "year": "2002", "tmdbID": "452"},
-         "featureTitleIndex": 1, "audioTrackNumbers": [1]}
+        {"id": 452, "title": "Signs", "release_date": "2002-08-02", "poster_path": null}
         """.data(using: .utf8)!
-        let request = try JSONDecoder().decode(RipRequest.self, from: json)
-        #expect(request.intent == .film)
+        let metadata = MovieMetadata(from: try JSONDecoder().decode(TMDBMovie.self, from: json))
+        let request = RipRequest(metadata: metadata,
+                                 featureTitleIndex: 1, audioTrackNumbers: [1])
+        #expect(request.intent == JobIntent.film)
         #expect(!request.isExtrasOnly)
+        #expect(request.intent.featureDestination == LibraryDestination.feature,
+                "an ordinary run still has a feature to file")
+    }
+
+    /// And the intent survives a round trip, which is what `Codable` is for.
+    @Test func theIntentSurvivesARoundTrip() throws {
+        let json = """
+        {"id": 452, "title": "Signs", "release_date": "2002-08-02", "poster_path": null}
+        """.data(using: .utf8)!
+        let metadata = MovieMetadata(from: try JSONDecoder().decode(TMDBMovie.self, from: json))
+        var request = RipRequest(metadata: metadata,
+                                 featureTitleIndex: 1, extraTitleIndices: [8],
+                                 audioTrackNumbers: [1])
+        request.intent = .extrasOnly
+        let decoded = try JSONDecoder().decode(
+            RipRequest.self, from: try JSONEncoder().encode(request))
+        #expect(decoded.intent == JobIntent.extrasOnly)
+        #expect(decoded.isExtrasOnly)
+        #expect(decoded == request)
     }
 }
 
@@ -520,9 +547,13 @@ struct ExtrasOnlyStartRefusalTests {
         var request = RipRequest(metadata: try Self.metadata(), featureTitleIndex: 1,
                                  extraTitleIndices: [11], audioTrackNumbers: [])
         request.intent = .extrasOnly
+        // A NON-EMPTY upgrade, deliberately. `UpgradePlan.isEmpty` is true with
+        // no chapters and no audio, and §7.4's empty-upgrade guard sits above
+        // this one — so an empty plan is refused for being empty and never
+        // reaches the contradiction this test is about.
         request.upgrade = UpgradePlan(
             filePath: "/Volumes/Plex/Movies/Signs (2002) {tmdb-452}/Signs (2002).mp4",
-            audio: [])
+            audio: [AudioTag(track: 0, language: "eng", title: "English")])
         #expect(controller.start(request: request, settings: AppSettings()) == false)
         #expect(controller.logLines.contains { $0.contains("cannot both upgrade") })
     }
