@@ -157,17 +157,24 @@ import Testing
                 == .single(index: 1, source: .scanner))
     }
 
-    /// A film with a feature-length bonus documentary. Both clear the floor and
-    /// their chapter counts differ, so this *does* read as two features — the
-    /// known cost of the rule, recorded rather than hidden. Asking is still
-    /// better than silently ripping one and never mentioning the other.
-    @Test func aFeatureLengthDocumentaryReadsAsASecondFeature() {
+    /// A film with a feature-length bonus documentary is one film.
+    ///
+    /// This test used to assert the opposite, and said so in as many words:
+    /// "the known cost of the rule, recorded rather than hidden. Asking is
+    /// still better than silently ripping one and never mentioning the other."
+    /// Signs, 2026-10-01, is the disc that priced that trade properly — the
+    /// app asked the user to name two films for a disc holding one, and there
+    /// was no way to answer, because the second film does not exist. #0173
+    /// separates them by relative length: 55 minutes against 107 is 0.514,
+    /// well under `minimumSecondFeatureRatio`.
+    @Test func aFeatureLengthDocumentaryIsNotASecondFeature() {
         let withDoc = Self.disc([
             Self.title(1, seconds: 6_420, chapters: 21),
             Self.title(2, seconds: 3_300, chapters: 6),
         ])
+        #expect(DiscTitleHeuristic.severalFeatures(withDoc) == nil)
         #expect(DiscTitleHeuristic.classify(withDoc, mainFeatureIndex: 1)
-                == .multipleFeatures(indices: [1, 2]))
+                == .single(index: 1, source: .scanner))
     }
 
     /// A theatrical/extended pair is one film in two cuts, not two films.
@@ -259,5 +266,77 @@ import Testing
         #expect(!wording.plain.contains(rendered))
         #expect(wording.detail?.contains(rendered) != true)
         #expect(wording.detail?.contains(":") != true, "no clock time either")
+    }
+}
+
+/// #0173 — a bonus documentary is not a second feature.
+///
+/// Signs, captured on joe 2026-10-01 (`vol-signs-8224851968`). Title 1 is the
+/// film at 1:46:25, 16:9, 22 chapters. Title 8 is a 58:54 behind-the-scenes
+/// documentary, 4:3, 7 chapters. Both clear the 45-minute floor — which was
+/// derived when the longest non-feature in the corpus was Super Troopers 2's
+/// 39:46 featurette, with 5:14 of margin — so the disc was offered as a double
+/// feature and the user was asked to name two films for a disc holding one.
+@Suite struct BonusDocumentaryIsNotAFeatureTests {
+
+    private static func title(_ index: Int, seconds: Int, chapters: Int,
+                              aspect: Double) -> DiscTitle {
+        DiscTitle(index: index, durationSeconds: seconds, chapterCount: chapters,
+                  sizeBytes: 0, outputFileName: nil, displayAspect: aspect)
+    }
+
+    /// The disc as captured, trimmed to the titles that clear the floor.
+    private static var signs: DiscInfo {
+        DiscInfo(volumeName: "Signs", driveName: "disk4", titles: [
+            Self.title(1, seconds: 6385, chapters: 22, aspect: 1.78),   // the film
+            Self.title(8, seconds: 3534, chapters: 7, aspect: 1.33),    // the making-of
+            Self.title(9, seconds: 375, chapters: 2, aspect: 1.33),
+            Self.title(11, seconds: 1357, chapters: 2, aspect: 1.33),
+        ])
+    }
+
+    @Test func signsIsNotADoubleFeature() {
+        #expect(DiscTitleHeuristic.severalFeatures(Self.signs) == nil,
+                "106 minutes beside 59 is a film and its making-of")
+    }
+
+    /// And it classifies as the single film the scanner named.
+    @Test func signsClassifiesAsItsOwnFeature() {
+        let outcome = DiscTitleHeuristic.classify(Self.signs, mainFeatureIndex: 1)
+        #expect(outcome == .single(index: 1, source: .scanner))
+    }
+
+    /// The measured ratios this is drawn from. Both real double features stay
+    /// on the multi-feature side of the line.
+    @Test func therealDoubleFeaturesAreUnaffected() {
+        // Get Hard / The Campaign — 100m and 85m, ratio 0.852.
+        let getHard = DiscInfo(volumeName: "7000078778_1", driveName: "disk4", titles: [
+            Self.title(4, seconds: 5122, chapters: 11, aspect: 1.78),
+            Self.title(5, seconds: 6012, chapters: 14, aspect: 1.78),
+        ])
+        #expect(DiscTitleHeuristic.severalFeatures(getHard)?.count == 2)
+
+        // Uncle Buck / The Great Outdoors — 100m and 90m, ratio 0.907.
+        let uncleBuck = DiscInfo(volumeName: "UNCLE_BUCK_GREAT_OUTDOORS", driveName: "disk4", titles: [
+            Self.title(1, seconds: 5425, chapters: 17, aspect: 1.78),
+            Self.title(2, seconds: 5978, chapters: 17, aspect: 1.78),
+        ])
+        #expect(DiscTitleHeuristic.severalFeatures(uncleBuck)?.count == 2)
+    }
+
+    /// The line itself, from both sides, at the titles' own lengths.
+    @Test func theRatioIsWhereTheEvidencePutsIt() {
+        func disc(_ shorter: Int) -> DiscInfo {
+            DiscInfo(volumeName: "T", driveName: "disk4", titles: [
+                Self.title(1, seconds: 6000, chapters: 20, aspect: 1.78),
+                Self.title(2, seconds: shorter, chapters: 20, aspect: 1.78),
+            ])
+        }
+        // A 90-minute film beside a 60-minute B-picture is kept, deliberately:
+        // a false negative silently drops a real film, a false positive blocks
+        // the disc.
+        #expect(DiscTitleHeuristic.severalFeatures(disc(4000)) != nil)
+        // Signs' own ratio, 0.553.
+        #expect(DiscTitleHeuristic.severalFeatures(disc(3318)) == nil)
     }
 }

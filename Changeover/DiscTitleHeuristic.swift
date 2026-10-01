@@ -255,12 +255,55 @@ nonisolated enum DiscTitleHeuristic {
         // removal: it scored three misses to the cap's none.
         guard groups.count <= maximumFeaturesPerDisc else { return nil }
 
+        // #0173 — a second FEATURE is comparable in length to the first. A
+        // bonus documentary is not.
+        //
+        // The 45-minute floor was derived when the longest non-feature in the
+        // corpus was Super Troopers 2's 39:46 featurette — 5:14 of margin.
+        // Signs, 2026-10-01, walks straight through it: title 1 is the film at
+        // 1:46:25 and title 8 is a 58:54 behind-the-scenes documentary, 4:3
+        // against the film's 16:9, 7 chapters against 22. Both clear 45
+        // minutes, so the disc was offered as a double feature and the user
+        // was asked to name two films for a disc holding one.
+        //
+        // Measured over every archived disc with two or more candidates,
+        // shortest over longest:
+        //
+        //     Get Hard / The Campaign      100m / 85m   0.852   two films
+        //     Uncle Buck / Great Outdoors  100m / 90m   0.907   two films
+        //     Adventureland (49 variants)  116m / 98m   0.848   ONE film
+        //     Signs                        106m / 59m   0.553   ONE film + a doc
+        //
+        // Two thirds sits 11 points below Signs and 18 below the nearest real
+        // double feature. Adventureland's 0.848 is no argument against it: its
+        // variants are collapsed into one group long before this line, by
+        // runtime proximity, and the cap above is what catches the shape in
+        // any case.
+        //
+        // The cost of being wrong here is asymmetric, which is why the bar is
+        // not higher. A false positive asks for a film that does not exist and
+        // blocks the disc — what Signs did. A false negative falls back to the
+        // scanner's own `MainFeature`, which rips the main film correctly and
+        // silently leaves the second; so a genuine double feature pairing a
+        // 90-minute film with a 60-minute B-picture (0.67) is deliberately
+        // kept on the multi-feature side of the line.
+        let lengths = groups.compactMap { $0.map(\.durationSeconds).max() }
+        if let longest = lengths.max(), let shortest = lengths.min(), longest > 0 {
+            let ratio = Double(shortest) / Double(longest)
+            guard ratio >= minimumSecondFeatureRatio else { return nil }
+        }
+
         // One title per film: the longest in each group, which for a
         // theatrical/extended pair is the fuller cut.
         return groups
             .compactMap { $0.max { $0.durationSeconds < $1.durationSeconds } }
             .sorted { $0.index < $1.index }
     }
+
+    /// #0173 — how short the shortest feature may be, against the longest, on
+    /// a disc claimed to hold several films. See `severalFeatures` for the
+    /// measured table this comes from.
+    static let minimumSecondFeatureRatio = 2.0 / 3.0
 
     /// How far apart two runtimes must be to be different films rather than
     /// two cuts of one. Five minutes: longer than the front-matter and
