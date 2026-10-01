@@ -1147,9 +1147,323 @@ final class RipFlowController {
         syncFeatures(jobs: jobs, apiKey: apiKey)
         seedEdition(jobs: jobs)
         if let settings {
+            // #0177 — alongside the ladder, not inside it. See
+            // `interrogateDisc` for why this is its own pass.
+            interrogateDisc(jobs: jobs, settings: settings)
             resolveDiscSearch(jobs: jobs, settings: settings)
             attemptAutoSelect(jobs: jobs, settings: settings)
         }
+    }
+
+    // MARK: - Asking the disc several questions (#0177)
+
+    /// What the disc said about itself, once the menus had settled, or `nil`
+    /// before the interrogation has answered for the disc now in the drive.
+    ///
+    /// Observable, and cleared by `clearWhatBelongedToTheLastDisc` with
+    /// `featureSelection` and `featureLibraryChecks`, for the same reason they
+    /// are: an answer about the disc that just left is not an answer, and the
+    /// shape of this step's worst bugs is a screen that still shows one.
+    private(set) var discUnderstanding: DiscInterrogation.Understanding?
+
+    /// What `discUnderstanding` licensed, kept beside it so the decision is
+    /// not recomputed differently by each reader.
+    private(set) var discFindings: DiscFindings.Plan?
+
+    /// The disc the questions have already been put for. One interrogation per
+    /// disc, whatever the answers: the model is asked three times and the
+    /// answers do not improve on being asked again (`FoundationModelAsk` pins
+    /// greedy sampling precisely so they cannot).
+    ///
+    /// Compared with `SelectionReset.sameDisc`, not `==`. A disc inserted
+    /// while the screen is locked arrives unmounted and nameless (#0152) and
+    /// has its label recovered part-way through the scan, which changes the
+    /// `DiscInsertion` value — and under `!=` that reads as a new disc and
+    /// asks all three questions a second time. Identity is the question,
+    /// which is #0156's finding at the point where it costs model calls
+    /// instead of the user's typing.
+    private var interrogationStartedFor: DiscInsertion?
+
+    /// The model seam. `nil` in production, where `DiscInterrogation.run`
+    /// defaults to the on-device model; set by tests and by the screenshot
+    /// harness, which have no model, no disc and no network.
+    ///
+    /// `@ObservationIgnored` because nothing renders it and because
+    /// `@ObservationTracked` cannot synthesise an `inout` accessor for a
+    /// stored `@Sendable` async closure — the observable state it produces is
+    /// `discUnderstanding`, which is tracked.
+    @ObservationIgnored var interrogationAskingForTesting: DiscInterrogation.Asking?
+
+    /// What this disc calls one of its titles, when it named it.
+    ///
+    /// Read off `discUnderstanding` rather than copied into a second
+    /// dictionary — a copy is a thing that can go stale, and the whole point
+    /// of #0172 was a cached answer disagreeing with the state behind it.
+    func discLabel(forTitle index: Int) -> String? {
+        guard let understanding = discUnderstanding else { return nil }
+        return understanding.allFindings.first { $0.titleIndex == index }?.label
+    }
+
+    /// Claims the disc made and could not prove, as sentences to show.
+    ///
+    /// Never empty just because the interrogation found nothing: a disc that
+    /// says something unconfirmable is still telling us something, and #0171's
+    /// whole cost was an answer that existed and reached nobody.
+    var unconfirmedDiscClaims: [String] {
+        discFindings.map(DiscFindings.unconfirmedLines) ?? []
+    }
+
+    /// Ask the disc what is on it, once its menus have settled.
+    ///
+    /// ## Why this is its own pass and not a rung
+    ///
+    /// `resolveEachFeature`'s ladder answers one question — "which film goes
+    /// in which search box" — and it only runs at all on a disc
+    /// `DiscTitleHeuristic` called `.multipleFeatures`. Two of the three
+    /// questions here are about something else entirely: Signs holds one film,
+    /// a 58:54 making-of and six named featurettes, so the disc that most
+    /// needs the bonus and extras questions is a disc that ladder never
+    /// touches. Folding them in would have meant running the ladder on
+    /// single-film discs for its side effects, which is how a function ends up
+    /// doing two jobs and neither of them visibly.
+    ///
+    /// It is also gated differently, deliberately. `resolveDiscSearch` refuses
+    /// to start once the search box has anything in it, because its job is to
+    /// fill that box and it must never type over the user. This has no such
+    /// business: a disc whose film the user has already named by hand still
+    /// has a making-of worth importing, and refusing to look would be refusing
+    /// for a reason that does not apply.
+    ///
+    /// Nothing is awaited by anything. The answers arrive late, apply through
+    /// `applyUnderstanding`'s guards, and a disc swap in the meantime drops
+    /// them — the same contract `resolveEachFeature`'s assignment runs under.
+    private func interrogateDisc(jobs: JobController, settings: AppSettings) {
+        guard let disc = jobs.insertedDisc,
+              interrogationStartedFor.map({ !SelectionReset.sameDisc($0, disc) }) ?? true,
+              // Settled either way: ready with menus, or known to have none.
+              jobs.menuState.hasSettled,
+              case .scanned(let scan) = jobs.scanState
+        else { return }
+
+        interrogationStartedFor = disc
+
+        let evidence = DiscEvidence.make(
+            volumeName: disc.label,
+            ocr: jobs.menuState.intelligence?.ocr,
+            disc: scan.disc,
+            mainFeatureIndex: scan.mainFeatureIndex)
+
+        FlowDiagnostics.note("interrogate: \(evidence.titles.count) title(s), "
+            + "\(evidence.menuPages.count) menu page(s), "
+            + "\(evidence.allLines.count) line(s), label \"\(evidence.volumeName)\" "
+            + "(AI on=\(settings.usesAppleIntelligence), menuState=\(jobs.menuState.diagnosticName))")
+
+        // Two reasons not to ask, and the disc's own arithmetic still runs for
+        // both. The log says which one it was, because "the bonus reel was not
+        // imported" has several very different causes and last time telling
+        // them apart cost a day (#0171).
+        //
+        // No menu text is a refusal on the merits, not a shortcut. Every one
+        // of these questions is a question about what the menus say: a volume
+        // label cannot tell anyone which extras a disc offers, and asking
+        // anyway spends three model calls to be told so. `MultiTitleInference`
+        // draws the same line by returning `nil` without OCR.
+        let reasonNotToAsk: String?
+        if !settings.usesAppleIntelligence {
+            reasonNotToAsk = "Apple Intelligence is off"
+        } else if evidence.menuPages.isEmpty {
+            reasonNotToAsk = "the disc printed no menu text to read"
+        } else {
+            reasonNotToAsk = nil
+        }
+        if let reasonNotToAsk {
+            FlowDiagnostics.note("interrogate: \(reasonNotToAsk) — "
+                + "no questions asked; runtime nomination only")
+            Task { [weak self] in
+                await self?.apply(DiscInterrogation.Understanding(),
+                                  disc: disc, jobs: jobs, settings: settings)
+            }
+            return
+        }
+
+        let ask = interrogationAskingForTesting ?? DiscInterrogation.onDeviceAsking
+        Task { [weak self] in
+            let understanding = await DiscInterrogation.run(evidence: evidence, ask: ask)
+            guard let self else { return }
+            // Still the same disc. An answer about a disc that has left the
+            // drive is worse than no answer: it would name titles that are no
+            // longer there.
+            guard jobs.insertedDisc.map({ SelectionReset.sameDisc($0, disc) }) == true else {
+                FlowDiagnostics.note("interrogate: the disc changed — dropping the answers")
+                return
+            }
+            await self.apply(understanding, disc: disc, jobs: jobs, settings: settings)
+        }
+    }
+
+    /// Record what the disc said, then act on the part of it the disc proved.
+    ///
+    /// Split out from `interrogateDisc` so the whole of the acting-on is one
+    /// function with plain values at its edges: an `Understanding` in, state
+    /// changes and log lines out, and `DiscFindings.plan` making every
+    /// decision in between.
+    private func apply(
+        _ understanding: DiscInterrogation.Understanding,
+        disc: DiscInsertion,
+        jobs: JobController,
+        settings: AppSettings
+    ) async {
+        discUnderstanding = understanding
+
+        // The disc's own arithmetic, independently of anything the model said:
+        // titles over the 45-minute feature floor that are too short against
+        // the film to be a second feature (#0173/#0174). On Signs that is
+        // title 8 at 58:54, 0.553 of the film.
+        let feature = jobs.selectedTitleIndex
+            ?? Self.featureIndex(of: Self.discOutcome(jobs.scanState))
+        let nominated: [Int]
+        if case .scanned(let scan) = jobs.scanState, let feature {
+            nominated = BonusFeature.candidates(in: scan.disc, featureIndex: feature).map(\.index)
+        } else {
+            nominated = []
+        }
+
+        let plan = DiscFindings.plan(
+            from: understanding,
+            features: featureSelection.features,
+            named: Set(featureSelection.features.filter { featureSelection.movieID(for: $0) != nil }),
+            userTyped: Set(featureSelection.features.filter {
+                featureSearchModels[$0]?.queryIsUserEntered == true
+            }),
+            bonusCandidates: nominated)
+        discFindings = plan
+
+        FlowDiagnostics.note("interrogate: \(plan.diagnostic) "
+            + "(feature title \(feature.map(String.init) ?? "unknown"), "
+            + "nominated \(nominated.map(String.init).joined(separator: ",")))")
+
+        // Everything the disc could not prove, said out loud. #0171: an
+        // answer nobody can reach is indistinguishable from no answer.
+        for line in DiscFindings.unconfirmedLines(plan) {
+            FlowDiagnostics.note("interrogate unconfirmed: \(line)")
+            jobs.note("  · \(line)")
+        }
+
+        for (titleIndex, label) in plan.extraLabels.sorted(by: { $0.key < $1.key }) {
+            FlowDiagnostics.note("interrogate extra: title \(titleIndex) is “\(label)”")
+            jobs.note("  · title \(titleIndex) is “\(label)”")
+        }
+
+        // A bonus feature the menus named and the runtimes nominated gets
+        // ticked for import, once. Only once: the interrogation runs a single
+        // time per disc, so a user who unticks the box has the last word —
+        // which matters, because a 58-minute reel on top of a 106-minute film
+        // is most of an hour of someone's evening.
+        for item in plan.bonusImports {
+            guard !jobs.selectedExtraTitleIndices.contains(item.titleIndex) else {
+                FlowDiagnostics.note("interrogate bonus: title \(item.titleIndex) already ticked")
+                continue
+            }
+            jobs.toggleExtra(item.titleIndex)
+            let ticked = jobs.selectedExtraTitleIndices.contains(item.titleIndex)
+            FlowDiagnostics.note("interrogate bonus: title \(item.titleIndex) “\(item.label)” "
+                + "→ \(item.kind.folderName), ticked=\(ticked), "
+                + "off by \(item.offBySeconds.map(String.init) ?? "?")s")
+            if ticked {
+                jobs.note("  · importing “\(item.label)” from title \(item.titleIndex) "
+                    + "as \(item.kind.folderName)")
+            }
+        }
+        for titleIndex in plan.nominatedBonusTitles {
+            FlowDiagnostics.note("interrogate bonus: title \(titleIndex) is long enough to be "
+                + "bonus material but the menus did not name it — left for the user")
+        }
+
+        await applyFilmNamings(plan.filmNamings, disc: disc, jobs: jobs, settings: settings)
+    }
+
+    /// Fill the search box for each feature the disc both named and placed.
+    ///
+    /// The label is not believed on its own. It goes to TMDB, and the film
+    /// that comes back has to fit the title it would be filed against —
+    /// `FeatureMatching.assign` over one feature and one candidate, the same
+    /// three-minute tolerance every other rung is held to. Measured errors on
+    /// correct pairings run 0.2 to 0.6 minutes, so the gap between right and
+    /// wrong here is an order of magnitude.
+    ///
+    /// Re-checked rather than trusted because the two checks are checks of
+    /// different things: `DiscInterrogation.verify` proved the *menu* was
+    /// talking about that title, and this proves the *film* is the right
+    /// length for it. A menu can print a correct runtime beside a title it
+    /// mislabels.
+    private func applyFilmNamings(
+        _ namings: [DiscFindings.FilmNaming],
+        disc: DiscInsertion,
+        jobs: JobController,
+        settings: AppSettings
+    ) async {
+        guard !namings.isEmpty else { return }
+        let apiKey = settings.tmdbAPIKey
+        guard !apiKey.isEmpty else {
+            FlowDiagnostics.note("interrogate film: no TMDB key — \(namings.count) naming(s) dropped")
+            return
+        }
+
+        for naming in namings {
+            guard let model = featureSearchModels[naming.feature] else {
+                FlowDiagnostics.note("interrogate film: no search model for feature \(naming.feature)")
+                continue
+            }
+            // #0156 — never over the user's own text, and never over a film
+            // they already named. Re-checked here and not only in `plan`
+            // because the lookup below is a network round trip and they may
+            // have typed during it.
+            guard !model.queryIsUserEntered else {
+                FlowDiagnostics.note("interrogate film: feature \(naming.feature) has the user's own text — leaving it")
+                continue
+            }
+            guard featureSelection.movieID(for: naming.feature) == nil else {
+                FlowDiagnostics.note("interrogate film: feature \(naming.feature) already has a film")
+                continue
+            }
+            guard let title = featureTitles().first(where: { $0.index == naming.feature }) else {
+                FlowDiagnostics.note("interrogate film: feature \(naming.feature) is not a scanned title")
+                continue
+            }
+            guard let candidate = await Self.candidate(for: naming.label, apiKey: apiKey) else {
+                FlowDiagnostics.note("interrogate film: “\(naming.label)” found no film with a runtime")
+                continue
+            }
+            guard let assignment = FeatureMatching.assign(
+                features: [title], candidates: [candidate])?.first else {
+                FlowDiagnostics.note("interrogate film: “\(naming.label)” resolved to "
+                    + "\(candidate.title) at \(candidate.runtimeMinutes) min, which does not fit "
+                    + "title \(title.index) — refused")
+                continue
+            }
+            guard jobs.insertedDisc.map({ SelectionReset.sameDisc($0, disc) }) == true else {
+                FlowDiagnostics.note("interrogate film: the disc changed — dropping the naming")
+                return
+            }
+            let results = (try? await TMDBClient().searchMovies(
+                query: candidate.term, apiKey: apiKey)) ?? []
+            model.present(query: candidate.term, results: results)
+            selectFeature(movieID: candidate.movieID, feature: naming.feature,
+                          jobs: jobs, settings: settings)
+            FlowDiagnostics.note("interrogate film: feature \(naming.feature) <- "
+                + "\(candidate.title) (id \(candidate.movieID)), "
+                + "\(String(format: "%.1f", assignment.errorMinutes)) min from its runtime")
+            jobs.note("  · \(candidate.title) (\(candidate.year)) on feature \(naming.feature) "
+                + "— the disc's menus named it")
+        }
+    }
+
+    /// The feature title index a single-film classification settled on, so the
+    /// bonus nomination has a film to measure against before the user has
+    /// touched anything.
+    nonisolated static func featureIndex(of outcome: DiscTitleHeuristic.Outcome?) -> Int? {
+        guard case .single(let index, _) = outcome else { return nil }
+        return index
     }
 
     // MARK: - Search prefill from the disc name
@@ -1220,6 +1534,13 @@ final class RipFlowController {
         // boxes all belonged to the disc that just left.
         featureSelection = FeatureSelection()
         featureSearchModels = [:]
+        // #0177: the answers were about the disc that just left. Cleared with
+        // `featureSelection` because they are the same kind of thing — what is
+        // known about one physical disc — and because a making-of named off
+        // Signs' menus has no business sitting on the next disc's titles.
+        discUnderstanding = nil
+        discFindings = nil
+        interrogationStartedFor = nil
         editionSeededFor = nil
         edition = ""
         menuTitleTriedFor = nil
