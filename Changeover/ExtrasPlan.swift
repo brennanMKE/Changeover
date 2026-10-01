@@ -11,6 +11,49 @@ import Foundation
 /// built on MainActor (`JobController.start`) and consumed by the
 /// `nonisolated` `DVDPipeline`/`EncodeController`.
 nonisolated struct ExtrasPlan: Equatable, Sendable {
+
+    /// #0178 — where one encoded extra is filed: the non-Plex `Clips` tree,
+    /// or a Plex extras subfolder inside the film's own folder.
+    ///
+    /// **Why this is a case on `Item` and not a second, parallel plan type.**
+    /// The obvious alternative is a `BonusPlan` with its own loop in
+    /// `DVDPipeline`, and it was rejected on the strength of what that loop
+    /// actually contains. Encoding a non-feature title carries #0046's two
+    /// cancel boundaries (between extras, and the one inside a killed
+    /// `HandBrakeCLI`), #0037's post-encode duration check, #0031's
+    /// delete-the-partial-and-carry-on rule, #0035's skip when the feature
+    /// came from the MakeMKV fallback, and the invariant that none of it may
+    /// change the job's outcome. Every one of those applies to a bonus
+    /// feature exactly as it applies to a clip — a 58-minute making-of is
+    /// encoded by the same HandBrake, cancelled by the same cancel and
+    /// measured by the same `AVURLAsset`. The *only* thing that differs is
+    /// the single `LibraryDestination` value handed to `PlexOrganizer.move`.
+    ///
+    /// A second loop would be a second copy of all of that, free to drift
+    /// from this one; and the drift would be silent, because the loop's
+    /// properties are exactly the kind that only show up on a disc nobody
+    /// has in the drive. One extra case states the difference once.
+    nonisolated enum Filing: Equatable, Sendable {
+        /// #0031's default and still the right answer for a title nothing
+        /// named: `Clips/<folder>/<base> - tNN.<ext>`, deliberately not
+        /// Plex-shaped, outside any library Plex scans.
+        case clip
+        /// #0174/#0178 — inside the film's own folder, in one of Plex's
+        /// recognised extras subfolders, under the name the disc printed:
+        /// `Movies/<folder>/Behind The Scenes/looking for Signs.mp4`.
+        ///
+        /// **The name is what makes this safe**, in two separate ways. Plex
+        /// scans a movie folder for films, so a file dropped beside the
+        /// feature becomes a second, wrongly-named movie — that hazard is
+        /// what sent `.extra` to `Clips` in #0031, and the only exemption
+        /// from it is `PlexExtra.Kind`, the fixed set of subfolder names
+        /// Plex reads as extras instead. And a file in one of those folders
+        /// is shown to a person by its filename, so `Bonus Feature - t08`
+        /// beside the film would be an unexplained object in the library.
+        /// A title with no name gets `.clip`; see `make(…labels:)`.
+        case bonusFeature(kind: PlexExtra.Kind, label: String)
+    }
+
     /// Everything `DVDPipeline`'s extras loop needs for one extra, resolved
     /// once against the scan: `durationSeconds`/`frameRate`/
     /// `interlaceDetected` come straight off the matching `DiscTitle`, the
@@ -21,6 +64,47 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
         let durationSeconds: Int
         let frameRate: Double?
         let interlaceDetected: Bool?
+        /// #0178. `var` with a default rather than `let`, so the memberwise
+        /// initialiser keeps it optional and the ~15 existing construction
+        /// sites across `ExtrasPipelineTests`, `OutputDurationCheckTests`,
+        /// `DVDPipelineCancellationTests`, `JobStateMachineTests`,
+        /// `MakeMKVFallbackTests` and `DiscTitleFormattingTests` compile
+        /// unchanged — the same additive shape `DVDPipeline.extras` itself
+        /// took.
+        var filing: Filing = .clip
+
+        /// The one `LibraryDestination` the pipeline hands to
+        /// `PlexOrganizer.move` for this item.
+        ///
+        /// Derived here rather than stored, so the title index in the path
+        /// is always the title index that was resolved against the scan —
+        /// `LibraryDestination.bonusFeature` carries one of its own (it is
+        /// `PlexExtra.fileName`'s fallback when a label sanitises away), and
+        /// two copies of the same integer is how #0028's class of bug
+        /// starts.
+        var destination: LibraryDestination {
+            switch filing {
+            case .clip:
+                return .extra(titleIndex: titleIndex)
+            case .bonusFeature(let kind, let label):
+                return .bonusFeature(titleIndex: titleIndex, kind: kind, label: label)
+            }
+        }
+
+        /// The name the disc gave this title, for the log. `nil` for a clip
+        /// — HandBrake gives an extra no name of its own, which is the whole
+        /// reason `.clip`'s filename is an index.
+        var label: String? {
+            switch filing {
+            case .clip: return nil
+            case .bonusFeature(_, let label): return label
+            }
+        }
+
+        var isBonusFeature: Bool {
+            if case .bonusFeature = filing { return true }
+            return false
+        }
     }
 
     var items: [Item] = []
@@ -30,6 +114,11 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
     /// ticket's Description was originally written against.
     var totalDurationSeconds: Int {
         items.reduce(0) { $0 + $1.durationSeconds }
+    }
+
+    /// #0178 — how many of these land beside the film rather than in `Clips`.
+    var bonusFeatureCount: Int {
+        items.filter(\.isBonusFeature).count
     }
 
     /// Resolves `requested` (`RipRequest.extraTitleIndices`) against `disc`:
@@ -43,7 +132,35 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
     ///
     /// An empty `requested` gives an empty plan — zero extras is the
     /// default and a valid job.
-    nonisolated static func make(featureIndex: Int, requested: [Int], disc: DiscInfo) -> ExtrasPlan {
+    ///
+    /// #0178 — `labels` names titles the disc itself named, keyed by title
+    /// index, and a named title is filed beside the film instead of in
+    /// `Clips` (see `Filing.bonusFeature`). Three rules, all of them here so
+    /// the pipeline never has to decide anything:
+    ///
+    /// 1. **A label for a title that was not requested, or that resolved
+    ///    away, is ignored.** The labels are a dictionary, not a parallel
+    ///    array, and they are looked up by an index this function has
+    ///    already checked against `disc` — so a label can never pull a title
+    ///    into the plan, and can never attach to the wrong one. This is
+    ///    #0028's rule applied to the second input: an index from one scan
+    ///    must not be believed against another.
+    /// 2. **A label that sanitises to nothing is not a label.**
+    ///    `PlexExtra.sanitize("..")` is `""`, and a nameless file in a Plex
+    ///    extras folder is worse than the same file in `Clips` — there is
+    ///    nothing for Plex to show a person. It falls back to `.clip`, which
+    ///    is exactly what it would have been before this ticket.
+    /// 3. **The raw label, not the sanitised one, is carried into the
+    ///    destination.** `PlexExtra.kind(forLabel:)` reads keywords, and
+    ///    `PlexExtra.fileName` sanitises again at the point the string
+    ///    becomes a path component — one sanitiser, at the boundary, the way
+    ///    `MovieMetadata` does it (#0010).
+    nonisolated static func make(
+        featureIndex: Int,
+        requested: [Int],
+        disc: DiscInfo,
+        labels: [Int: String] = [:]
+    ) -> ExtrasPlan {
         let titlesByIndex = Dictionary(uniqueKeysWithValues: disc.titles.map { ($0.index, $0) })
 
         var seen = Set<Int>()
@@ -58,9 +175,61 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
                 titleIndex:        title.index,
                 durationSeconds:   title.durationSeconds,
                 frameRate:         title.frameRate,
-                interlaceDetected: title.interlaceDetected
+                interlaceDetected: title.interlaceDetected,
+                filing:            filing(forLabel: labels[index])
             )
         }
         return ExtrasPlan(items: items)
+    }
+
+    /// Rule 2 above, on its own so it is testable without a `DiscInfo`.
+    nonisolated static func filing(forLabel label: String?) -> Filing {
+        guard let label, !PlexExtra.sanitize(label).isEmpty else { return .clip }
+        return .bonusFeature(kind: PlexExtra.kind(forLabel: label), label: label)
+    }
+
+    // MARK: - Where the labels come from
+
+    /// #0178 — the `labels` map, read off the disc's own menu text with no
+    /// model involved.
+    ///
+    /// This is #0174's measured path and nothing more: a printed runtime next
+    /// to a printed name is a fact two independent readings of the disc agree
+    /// on, and `MenuExtraLabels.match` binds them one to one, globally
+    /// optimally. On Signs that is six labels onto titles 9–14, every pairing
+    /// inside five seconds. A label that fits no title is dropped rather than
+    /// forced — naming a title wrongly puts the wrong video in the film's own
+    /// folder, which is worse than leaving it in `Clips` unnamed.
+    ///
+    /// `titles` should be the titles a label could plausibly be about: not
+    /// the feature, and not the sub-30-second logo stings and menu loops
+    /// `DiscInterrogation.shortestWorthNaming` already refuses to name.
+    /// `MenuExtraLabels.match` caps both sides at eight (`maximumLabels`) and
+    /// returns nothing past that, so a very crowded disc goes unnamed — which
+    /// is #0174's deliberate stance, not an oversight.
+    nonisolated static func labels(printedOn menuLines: [String], titles: [DiscTitle]) -> [Int: String] {
+        let matches = MenuExtraLabels.match(
+            printed: MenuExtraLabels.printedLabels(in: menuLines),
+            to: titles
+        )
+        return Dictionary(matches.map { ($0.titleIndex, $0.label) },
+                          uniquingKeysWith: { first, _ in first })
+    }
+
+    /// #0178 — the same map out of a #0175 interrogation, for the half of
+    /// this that reads the disc by asking a model rather than by parsing a
+    /// printed runtime.
+    ///
+    /// Only `bonusFeatures` and `extras` are taken. `films` is deliberately
+    /// excluded: a film is imported as a film (`DiscRipPlan`), and filing one
+    /// as its own extra would hide a whole feature inside another film's
+    /// folder — the #0034 data-loss shape. `unverified` is excluded for the
+    /// reason it exists: the disc could not corroborate it, and an
+    /// uncorroborated name is exactly the DREAMSCAPE failure #0175 was built
+    /// to keep out of the library.
+    nonisolated static func labels(from understanding: DiscInterrogation.Understanding) -> [Int: String] {
+        let named = understanding.bonusFeatures + understanding.extras
+        return Dictionary(named.map { ($0.titleIndex, $0.label) },
+                          uniquingKeysWith: { first, _ in first })
     }
 }

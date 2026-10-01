@@ -664,9 +664,16 @@ final class JobController {
         // is about.
         // §7.4: an upgrade encodes nothing at all, so it can carry no extras,
         // whatever the request asked for.
+        // #0178: `labels` is resolved against the same held scan and the same
+        // held menu read, at the same moment — so a name can only ever reach
+        // a title this very plan kept.
         let extrasPlan = request.isUpgrade
             ? ExtrasPlan()
-            : ExtrasPlan.make(featureIndex: request.featureTitleIndex, requested: request.extraTitleIndices, disc: scan.disc)
+            : ExtrasPlan.make(featureIndex: request.featureTitleIndex,
+                              requested:    request.extraTitleIndices,
+                              disc:         scan.disc,
+                              labels:       extraLabels(for: request.extraTitleIndices,
+                                                        feature: request.featureTitleIndex))
         // §7.4: an upgrade with nothing in its plan is a no-op that would
         // still overwrite a library file. `StartGate.decideUpgrade` disables
         // the button; this is the failsafe at the point of harm, the same
@@ -1279,10 +1286,17 @@ final class JobController {
     /// never count a title the pipeline will drop. Empty without a scan.
     var selectedExtrasPlan: ExtrasPlan {
         guard case .scanned(let scan) = scanState else { return ExtrasPlan() }
+        let requested = selectedExtraTitleIndices.sorted()
+        // #0178: labels too, for the same reason the rest of this exists —
+        // this must be the plan `start` will build, not a plan that merely
+        // counts the same. The count and the total are label-independent, so
+        // nothing on screen moves; what changes is that the Confirm step can
+        // now say where each extra is going, from the plan itself.
         return ExtrasPlan.make(
             featureIndex: selectedTitleIndex ?? Int.min,
-            requested:    selectedExtraTitleIndices.sorted(),
-            disc:         scan.disc
+            requested:    requested,
+            disc:         scan.disc,
+            labels:       extraLabels(for: requested)
         )
     }
 
@@ -1498,6 +1512,64 @@ final class JobController {
     var chapterMarkerRows: [MarkerRow]? {
         let plan = chapterMarkerPlan(forTitleIndex: selectedTitleIndex)
         return plan.isWrite ? plan.rows : nil
+    }
+
+    /// #0178 — the names the disc's own menus printed for `indices`, keyed by
+    /// title index, for `ExtrasPlan.make`. A named extra is filed beside the
+    /// film in a Plex extras subfolder; an unnamed one keeps #0031's `Clips`
+    /// tree.
+    ///
+    /// **Derived, never stored**, and for the same reason
+    /// `chapterMarkerPlan(forTitleIndex:)` is: the names are read off one
+    /// disc's menus and must never be believed about another. Both inputs
+    /// come out of this controller's own current state — `menuState`'s OCR
+    /// and `scanState`'s titles, each cleared together by `removeDisc()` and
+    /// by every fresh `startScan` — so there is no third thing to keep in
+    /// step and no reset to forget. `[:]` is a correct and common answer: a
+    /// disc whose menus were not read, or that prints no runtimes, files its
+    /// extras exactly as it did before this ticket.
+    ///
+    /// The match runs over every plausible title and is filtered to
+    /// `indices` afterwards, not before. `MenuExtraLabels.match` is a
+    /// one-to-one assignment over both sides at once — that is what stops
+    /// "the effects of Signs" and "last voices" swapping — so narrowing the
+    /// title side to the handful the user ticked would ask it to solve a
+    /// different, easier and wronger problem.
+    ///
+    /// `feature` is passed explicitly by `start`, from the request it was
+    /// actually handed, rather than read off `selectedTitleIndex`. #0163's
+    /// second film is started for an index named outright, and the mirrored
+    /// singular selection is not required to agree with it — the index that
+    /// decides which titles compete for a name has to be the index being
+    /// encoded. `ExtrasPlan.make` drops the feature from the plan regardless,
+    /// so this cannot misfile anything either way; it is the assignment that
+    /// would quietly get worse.
+    func extraLabels(for indices: [Int], feature: Int? = nil) -> [Int: String] {
+        guard !indices.isEmpty,
+              case .scanned(let scan) = scanState,
+              let ocr = menuState.intelligence?.ocr
+        else { return [:] }
+
+        // `DiscEvidence.make` is the one place that turns OCR observations
+        // into menu lines, and it drops the furniture repeated on every
+        // screen — reproducing that here would be a second, diverging reader
+        // of the same stills.
+        let evidence = DiscEvidence.make(
+            volumeName:       insertedDisc?.label ?? "",
+            ocr:              ocr,
+            disc:             scan.disc,
+            mainFeatureIndex: scan.mainFeatureIndex
+        )
+        // Not the feature, and not the logo stings and menu loops #0175
+        // already refuses to name — a title under thirty seconds has no name
+        // worth having and only crowds the assignment.
+        let featureIndex = feature ?? selectedTitleIndex
+        let candidates = scan.disc.titles.filter {
+            $0.index != featureIndex
+                && $0.durationSeconds >= DiscInterrogation.shortestWorthNaming
+        }
+        let named = ExtrasPlan.labels(printedOn: evidence.allLines, titles: candidates)
+        return named.filter { indices.contains($0.key) }
     }
 
     /// #0027: the audio-track preselection for `titleIndex` on whatever scan
