@@ -278,6 +278,15 @@ nonisolated enum StartGate {
     ///     comes back `.mismatch` for `selectedTitleIndex`, and only counts
     ///     when it names that title and the movie the lookup is for — a
     ///     mismatch is a stop-and-ask, not a warning (#0032's "Decisions").
+    ///   - manualOverride: #0176 — the user has said what this disc holds
+    ///     (`ManualOverride.isActive`). A plain `Bool`, deliberately not a
+    ///     second acknowledgement keyed to a title and a movie: an override
+    ///     is a statement about the *disc*, and keying it to the very pairing
+    ///     the user is overriding would rebuild the gate it exists to open.
+    ///     It downgrades the runtime cross-check and nothing else — every
+    ///     refusal above it is either an environment fact or a guard in front
+    ///     of a file that already exists, and neither is an inference the
+    ///     user is contradicting.
     ///
     /// #0053: ordered so the returned `StartDecision`'s `.reason` names the
     /// *first* thing the user should do, not an arbitrary one. Environment
@@ -302,7 +311,8 @@ nonisolated enum StartGate {
         mismatchAcknowledgement: MismatchAcknowledgement?,
         libraryCheck: LibraryCheck = .idle,
         replaceAcknowledgement: ReplaceAcknowledgement? = nil,
-        featureChoices: FeatureChoices = FeatureChoices()
+        featureChoices: FeatureChoices = FeatureChoices(),
+        manualOverride: Bool = false
     ) -> StartDecision {
         guard !isRunning else { return .jobRunning }
         guard !discUnavailable else { return .discUnavailable }
@@ -346,8 +356,22 @@ nonisolated enum StartGate {
                 return .runtimeLookupLoading
             }
 
+            // #0176 — a mismatch is a warning, not a gate, once the user
+            // has set this disc up by hand.
+            //
+            // #0032 made it a stop-and-ask because ripping the wrong title
+            // costs forty minutes, and that reasoning is sound right up to
+            // the moment the person has told the app which title is which
+            // film. Then the arithmetic is checking the user's answer against
+            // a TMDB runtime and refusing the user's answer, which on
+            // 2026-09-30 is what left a correct pick with Start disabled and
+            // nothing on the screen that could unblock it.
+            //
+            // The mismatch still shows, with its delta, in
+            // `DiscTitleListView` — alongside `ManualOverride.mismatchWarning`
+            // saying why it is no longer stopping anything.
             let verdict = RuntimeCrossCheck.evaluate(discSeconds: title.durationSeconds, lookup: runtimeLookup)
-            if case .mismatch = verdict,
+            if case .mismatch = verdict, !manualOverride,
                !isAcknowledged(mismatchAcknowledgement, titleIndex: index, runtimeLookup: runtimeLookup) {
                 return .runtimeMismatchUnconfirmed
             }
@@ -471,7 +495,8 @@ nonisolated enum StartGate {
         mismatchAcknowledgement: MismatchAcknowledgement?,
         libraryCheck: LibraryCheck = .idle,
         replaceAcknowledgement: ReplaceAcknowledgement? = nil,
-        featureChoices: FeatureChoices = FeatureChoices()
+        featureChoices: FeatureChoices = FeatureChoices(),
+        manualOverride: Bool = false
     ) -> Bool {
         decide(
             hasMovieSelected: hasMovieSelected,
@@ -485,7 +510,8 @@ nonisolated enum StartGate {
             mismatchAcknowledgement: mismatchAcknowledgement,
             libraryCheck: libraryCheck,
             replaceAcknowledgement: replaceAcknowledgement,
-            featureChoices: featureChoices
+            featureChoices: featureChoices,
+            manualOverride: manualOverride
         ) == .ready
     }
 
