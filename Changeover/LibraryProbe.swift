@@ -48,7 +48,12 @@ nonisolated enum LibraryProbe {
             let box = FirstAnswer(continuation)
             Task.detached(priority: .utility) {
                 onBegin()
-                box.resume(listing(moviesPath: moviesPath, tmdbID: tmdbID))
+                // #0187 — `await`, because the listing now measures each
+                // extra's runtime. The timeout race around it is unchanged and
+                // is what keeps a slow or dropped NAS from hanging the probe:
+                // whichever of the two tasks answers first wins, so the added
+                // I/O can never outlast `timeout`.
+                box.resume(await listing(moviesPath: moviesPath, tmdbID: tmdbID))
             }
             Task.detached(priority: .utility) {
                 try? await Task.sleep(for: timeout)
@@ -77,7 +82,7 @@ nonisolated enum LibraryProbe {
 
     /// A missing or unlistable `moviesPath` is `.unreachable`, **never**
     /// `.absent` — see `LibraryLookup`.
-    static func listing(moviesPath: String, tmdbID: String) -> LibraryLookup {
+    static func listing(moviesPath: String, tmdbID: String) async -> LibraryLookup {
         let fm = FileManager.default
         var isDirectory: ObjCBool = false
         guard fm.fileExists(atPath: moviesPath, isDirectory: &isDirectory) else {
@@ -94,11 +99,44 @@ nonisolated enum LibraryProbe {
         }
 
         let matched = LibraryMatch.folders(in: names.sorted(), tmdbID: tmdbID)
-        let folders: [(name: String, path: String, files: [LibraryFile])] = matched.map { name in
+        var folders: [(String, String, [LibraryFile], [LibraryExtraFile])] = []
+        for name in matched {
             let path = (moviesPath as NSString).appendingPathComponent(name)
-            return (name: name, path: path, files: files(in: path))
+            folders.append((name, path, files(in: path), await extras(in: path)))
         }
-        return LibraryMatch.lookup(folders: folders)
+        return LibraryMatch.lookup(foldersWithExtras: folders)
+    }
+
+    /// #0187 — what is already filed in this folder's Plex extras subfolders.
+    ///
+    /// One `contentsOfDirectory` per recognised extras folder that exists,
+    /// which on a real library is zero or one and never more than eight. The
+    /// film's own folder has already been listed by `files(in:)` above, so the
+    /// names are in hand; this only descends into the ones Plex itself treats
+    /// as extras (`PlexExtra.recognisedFolderNames`) and never anywhere else.
+    ///
+    /// **This reads durations, which the rest of this file deliberately does
+    /// not.** The header's "never a byte of media read" is about the feature:
+    /// measuring a 1–2 GB library copy over SMB is a seek to its tail for a
+    /// number the file size already implies. An extra is a different
+    /// proposition — it is small, there are a handful of them, and the number
+    /// is the only thing that can say whether the disc's making-of is the one
+    /// already filed. A name cannot: the library copy was named by whatever
+    /// tool filed it, possibly by hand and possibly years ago.
+    private static func extras(in folderPath: String) async -> [LibraryExtraFile] {
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: folderPath) else { return [] }
+        var found: [LibraryExtraFile] = []
+        for name in names.sorted() where PlexExtra.isRecognisedFolder(name) {
+            let sub = (folderPath as NSString).appendingPathComponent(name)
+            for file in files(in: sub) {
+                let path = (sub as NSString).appendingPathComponent(file.name)
+                var measured = file
+                measured.durationSeconds = await MediaDuration.seconds(ofFileAt: path)
+                found.append(LibraryExtraFile(folderName: name, file: measured))
+            }
+        }
+        return found
     }
 
     private static func files(in folderPath: String) -> [LibraryFile] {

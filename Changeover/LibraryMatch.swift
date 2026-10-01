@@ -19,6 +19,20 @@ nonisolated struct LibraryFile: Equatable, Sendable, Codable {
     }
 }
 
+/// #0187 — one file already filed as an extra of this film.
+///
+/// Plex keeps extras in named subfolders of the movie's own folder, so
+/// "already have this featurette" is a question about the filesystem rather
+/// than about Plex's database — which the app cannot query the way it queries
+/// a `{tmdb-ID}` folder. #0185 said the question was unanswerable and resolved
+/// the doubt towards keeping the disc. It is answerable; it just needed
+/// looking at.
+nonisolated struct LibraryExtraFile: Equatable, Sendable, Codable {
+    /// The Plex extras folder it sits in, e.g. `Behind The Scenes`.
+    let folderName: String
+    let file: LibraryFile
+}
+
 /// One folder in `Movies/` carrying the movie's `{tmdb-ID}` tag.
 nonisolated struct LibraryEntry: Equatable, Sendable, Codable {
     /// As on disk — which is not necessarily `MovieMetadata.folderName`: a
@@ -27,6 +41,17 @@ nonisolated struct LibraryEntry: Equatable, Sendable, Codable {
     let folderPath: String
     /// Video files only, name-sorted.
     let files: [LibraryFile]
+    /// #0187 — what is already filed in this folder's Plex extras subfolders.
+    /// Empty when nothing is, and when the probe was not asked to look.
+    var extras: [LibraryExtraFile] = []
+
+    init(folderName: String, folderPath: String, files: [LibraryFile],
+         extras: [LibraryExtraFile] = []) {
+        self.folderName = folderName
+        self.folderPath = folderPath
+        self.files = files
+        self.extras = extras
+    }
 }
 
 /// #0143 — the answer to "is this film already in Plex?".
@@ -112,12 +137,32 @@ nonisolated enum LibraryMatch {
     }
 
     static func lookup(folders: [(name: String, path: String, files: [LibraryFile])]) -> LibraryLookup {
+        lookup(foldersWithExtras: folders.map { ($0.name, $0.path, $0.files, []) })
+    }
+
+    /// #0187 — the same, carrying what each folder's Plex extras subfolders
+    /// hold.
+    ///
+    /// A folder whose only videos are extras is still **not** a duplicate: the
+    /// film is not there, nothing would be overwritten, and treating it as one
+    /// would refuse a rip on the strength of a featurette. So the `videos`
+    /// test is unchanged and `extras` rides alongside it.
+    /// Named apart from `lookup(folders:)` rather than overloading it: an
+    /// empty literal cannot choose between two overloads, and
+    /// `lookup(folders: [])` is a real call in the tests.
+    static func lookup(
+        foldersWithExtras folders: [(name: String, path: String, files: [LibraryFile], extras: [LibraryExtraFile])]
+    ) -> LibraryLookup {
         let entries: [LibraryEntry] = folders.compactMap { folder in
             let videos = folder.files
                 .filter { isVideoFile($0.name) }
                 .sorted { $0.name < $1.name }
             guard !videos.isEmpty else { return nil }
-            return LibraryEntry(folderName: folder.name, folderPath: folder.path, files: videos)
+            return LibraryEntry(folderName: folder.name, folderPath: folder.path,
+                                files: videos,
+                                extras: folder.extras
+                                    .filter { isVideoFile($0.file.name) }
+                                    .sorted { ($0.folderName, $0.file.name) < ($1.folderName, $1.file.name) })
         }
         return entries.isEmpty ? .absent : .present(entries)
     }
