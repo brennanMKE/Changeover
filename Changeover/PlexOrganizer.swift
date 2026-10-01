@@ -137,6 +137,40 @@ enum PlexOrganizer {
                              reason: .destinationUnwritable(path: folderPath))
         }
 
+        // #0174 — a bonus feature DOES land under `Movies/`, and may only land
+        // in a folder Plex reads as extras.
+        //
+        // #0031's rule above is "never inside the library", and it is right
+        // for `.extra`, whose `Clips` tree is not Plex-shaped: an unrecognised
+        // video beside a film is scanned as a second film. Plex excludes a
+        // fixed set of named subfolders from that scan, so a file in one of
+        // them is attached to the film instead of mistaken for one — and that
+        // set is the only exemption. The check is on the *resolved* path's own
+        // last component, not on what the caller intended, so a label that
+        // tried to climb out ("../../Movies") cannot arrive here looking like
+        // an extras folder.
+        if case .bonusFeature = destination {
+            let leaf = (folderPath as NSString).lastPathComponent
+            let parent = (folderPath as NSString).deletingLastPathComponent
+            let inMovies = (parent as NSString).deletingLastPathComponent
+            guard PlexExtra.isRecognisedFolder(leaf) else {
+                await log("✗ ERROR moving file: “\(leaf)” is not a folder Plex reads as extras — refusing to put a bonus feature there, Plex would scan it as a film")
+                throw JobFailure(stage: .organize,
+                                 reason: .destinationUnwritable(path: folderPath))
+            }
+            // And it must be directly inside the film's folder, which must be
+            // directly inside Movies. Two levels, no more: Plex only reads
+            // extras one deep.
+            func settled(_ path: String) -> String {
+                WorkingFiles.canonicalPath(path) ?? (path as NSString).standardizingPath
+            }
+            guard settled(inMovies) == settled(roots.moviesPath) else {
+                await log("✗ ERROR moving file: a bonus feature must sit directly inside its film's folder — refusing \(folderPath)")
+                throw JobFailure(stage: .organize,
+                                 reason: .destinationUnwritable(path: folderPath))
+            }
+        }
+
         // #0143 — a replacement is never invisible in the log. `replaceItemAt`
         // below overwrites an existing library copy on purpose (#0012), which
         // is exactly what the Confirm step's duplicate check warns about

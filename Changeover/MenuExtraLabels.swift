@@ -1,0 +1,179 @@
+import Foundation
+
+/// #0174 — naming a disc's bonus titles from the labels its own menu printed.
+///
+/// Signs' bonus menu lists every extra *with its runtime*, and the OCR reads
+/// them cleanly:
+///
+///     looking for Signs (6:11)          scanned title  9 — 6:15
+///     building Signs (8:02)                           10 — 8:05
+///     making Signs: a commentary (22:33)              11 — 22:37
+///     the effects of Signs (8:31)                     12 — 8:36
+///     last voices: the music of Signs (8:26)          13 — 8:30
+///     full circle (4:48)                              14 — 4:51
+///
+/// One to one, every pairing inside five seconds, no collisions. The disc has
+/// told us what each title is; nothing has to be guessed and no DVD virtual
+/// machine has to be emulated to find out.
+///
+/// **This is why it is a runtime match and not a command walk.** Signs' menu
+/// buttons do not name titles: each is a `Set` instruction writing a different
+/// value into a register, and one shared post-command links to a dispatcher
+/// that reads the register and jumps. `PlayButtonResolver` deliberately
+/// refuses to follow that — it would mean evaluating conditionals on registers
+/// the app does not model — so on this disc it resolves zero buttons to zero
+/// titles. The printed runtimes are the disc's own answer, in plain sight.
+///
+/// Same shape as `FeatureMatching`, and for the same reason: a runtime is a
+/// fact two independent sources agree on, and agreement across sources is far
+/// harder to hit by accident than any single reading.
+nonisolated enum MenuExtraLabels {
+
+    /// A label the menu printed, with the runtime printed beside it.
+    nonisolated struct Printed: Equatable, Sendable {
+        /// The text with the runtime removed — what the extra is called.
+        var label: String
+        var seconds: Int
+
+        init(label: String, seconds: Int) {
+            self.label = label
+            self.seconds = seconds
+        }
+    }
+
+    /// One printed label bound to one scanned title.
+    nonisolated struct Match: Equatable, Sendable {
+        var titleIndex: Int
+        var label: String
+        /// How far the printed runtime sits from the scanned one.
+        var offBySeconds: Int
+    }
+
+    /// How far a printed runtime may sit from the scanned title's.
+    ///
+    /// Twelve seconds. Measured errors on Signs run 3 to 5, all in the same
+    /// direction — the menu rounds down and the scan counts the tail — and
+    /// twelve leaves room for a disc that rounds to the nearest minute on a
+    /// short extra without admitting a neighbouring title. The extras on that
+    /// disc are 4 to 22 minutes apart from each other, so the gap between
+    /// right and wrong here is enormous.
+    static let toleranceSeconds = 12
+
+    /// Reads `looking for Signs (6:11)` into a label and a runtime.
+    ///
+    /// Only a *trailing* parenthesised time counts. A title with a bracket in
+    /// it ("Alien (Director's Cut)") has no digits-and-colon inside, so it is
+    /// left whole, and a year in brackets has no colon either.
+    static func printed(from line: String) -> Printed? {
+        let text = line.trimmingCharacters(in: .whitespaces)
+        guard text.hasSuffix(")"), let open = text.lastIndex(of: "(") else { return nil }
+        let inside = text[text.index(after: open)..<text.index(before: text.endIndex)]
+        guard let seconds = duration(String(inside)) else { return nil }
+        let label = String(text[text.startIndex..<open]).trimmingCharacters(in: .whitespaces)
+        guard !label.isEmpty else { return nil }
+        return Printed(label: label, seconds: seconds)
+    }
+
+    /// `6:11` or `1:22:33`. Nothing else — a bare number is a chapter count,
+    /// a year, or a disc number far more often than it is a duration.
+    static func duration(_ text: String) -> Int? {
+        let parts = text.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2 || parts.count == 3 else { return nil }
+        var total = 0
+        for (position, part) in parts.enumerated() {
+            guard !part.isEmpty, part.allSatisfy(\.isNumber), let value = Int(part) else { return nil }
+            // Minutes and seconds are two digits and under sixty; the leading
+            // field is hours (or minutes) and may be anything.
+            if position > 0 { guard part.count == 2, value < 60 else { return nil } }
+            total = total * 60 + value
+        }
+        return total
+    }
+
+    /// Every printed label on a menu page, in the order it was printed.
+    static func printedLabels(in lines: [String]) -> [Printed] {
+        lines.compactMap(printed(from:))
+    }
+
+    /// Binds printed labels to scanned titles by runtime, one to one.
+    ///
+    /// A label is matched to the closest title inside `toleranceSeconds`, and
+    /// a title already taken is never taken twice — the same one-to-one rule
+    /// `FeatureMatching.assign` applies to films, for the same reason: two
+    /// extras are two different videos. A label matching nothing is dropped
+    /// rather than forced; naming a title wrongly is worse than not naming it.
+    static func match(printed labels: [Printed], to titles: [DiscTitle]) -> [Match] {
+        guard !labels.isEmpty, !titles.isEmpty else { return [] }
+
+        // **Globally optimal, not greedy.** Signs is the disc that settles
+        // this: "the effects of Signs" is printed at 8:31 (511s) and
+        // "last voices" at 8:26 (506s), against scanned titles of 516s and
+        // 510s. Taking the tightest pairing first binds 511 to the 510 title
+        // — off by one, and the best single pairing available — which then
+        // forces 506 onto the 516 title, ten seconds out and the wrong video.
+        // Minimising the TOTAL error picks the right answer instead: 23
+        // seconds across six extras against the greedy 25.
+        //
+        // Same rule as `FeatureMatching.assign`, and the same reason it is
+        // affordable: a bonus menu lists a handful of items, not hundreds.
+        let ranked = labels.sorted { $0.seconds < $1.seconds }
+        let sortedTitles = titles.sorted { $0.durationSeconds < $1.durationSeconds }
+
+        // Beyond this the permutation search is not worth running, and a menu
+        // listing more than eight extras is past the point where a wrong
+        // pairing matters more than no pairing at all.
+        guard ranked.count <= maximumLabels, sortedTitles.count <= maximumLabels else { return [] }
+
+        var best: (error: Int, matches: [Match])?
+        for chosen in combinations(of: sortedTitles, choose: min(ranked.count, sortedTitles.count)) {
+            for order in permutations(of: Array(chosen.indices)) {
+                var total = 0
+                var matches: [Match] = []
+                var fits = true
+                for (position, label) in ranked.prefix(order.count).enumerated() {
+                    let title = chosen[order[position]]
+                    let error = abs(title.durationSeconds - label.seconds)
+                    guard error <= toleranceSeconds else { fits = false; break }
+                    total += error
+                    matches.append(Match(titleIndex: title.index, label: label.label,
+                                         offBySeconds: error))
+                }
+                guard fits, matches.count == min(ranked.count, sortedTitles.count) else { continue }
+                if best == nil || total < best!.error { best = (total, matches) }
+            }
+        }
+        return (best?.matches ?? []).sorted { $0.titleIndex < $1.titleIndex }
+    }
+
+    /// The most labels the search will take. Eight, matching
+    /// `MultiTitleInference.maximumTitles`: 8! is 40,320 orderings, which is
+    /// instant, and a longer bonus menu is better left unnamed than guessed.
+    static let maximumLabels = 8
+
+    private static func combinations<T>(of items: [T], choose count: Int) -> [[T]] {
+        guard count > 0, items.count >= count else { return [] }
+        guard items.count > count else { return [items] }
+        var result: [[T]] = []
+        var current: [T] = []
+        func walk(_ index: Int) {
+            if current.count == count { result.append(current); return }
+            guard index < items.count,
+                  items.count - index >= count - current.count else { return }
+            current.append(items[index]); walk(index + 1); current.removeLast()
+            walk(index + 1)
+        }
+        walk(0)
+        return result
+    }
+
+    private static func permutations(of items: [Int]) -> [[Int]] {
+        guard items.count > 1 else { return [items] }
+        var result: [[Int]] = []
+        for (index, item) in items.enumerated() {
+            var rest = items
+            rest.remove(at: index)
+            for tail in permutations(of: rest) { result.append([item] + tail) }
+        }
+        return result
+    }
+}

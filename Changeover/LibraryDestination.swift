@@ -44,6 +44,22 @@ nonisolated enum LibraryDestination: Equatable, Sendable {
     /// title number, carried in the filename because HandBrake gives extras
     /// no names of their own.
     case extra(titleIndex: Int)
+    /// #0174 — `<root>/Movies/<Title (Year) {tmdb-ID}>/<Kind>/<Label>.<ext>`:
+    /// a substantial bonus feature filed **inside the film's own folder**, in
+    /// one of Plex's recognised extras subfolders.
+    ///
+    /// This is the one case that may land under `Movies/`, and the reason it
+    /// is safe is the reason `.extra` is not. Plex scans a movie folder for
+    /// films, so an arbitrary video dropped beside the feature becomes a
+    /// second, wrongly-named movie — which is what sent `.extra` to a separate
+    /// `Clips` tree in the first place. Plex also *excludes* a fixed set of
+    /// named subfolders from that scan and reads them as the film's extras.
+    /// `PlexExtra.Kind` is exactly that set, spelled as Plex spells it, so a
+    /// file here is attached to the film rather than mistaken for one.
+    ///
+    /// Signs is the disc that asked for it: a 58:54 bonus reel and six named
+    /// featurettes that belong with the film and nowhere else.
+    case bonusFeature(titleIndex: Int, kind: PlexExtra.Kind, label: String)
 }
 
 /// The pure path resolver. `PlexOrganizer.move` is the only caller in
@@ -82,6 +98,15 @@ nonisolated enum LibraryPaths {
             let paddedIndex = String(format: "%02d", titleIndex)
             let ext = sourceExtension.isEmpty ? "mp4" : sourceExtension
             let name = "\(metadata.baseName) - t\(paddedIndex).\(ext)"
+            let file = (folder as NSString).appendingPathComponent(name)
+            return Resolved(folder: folder, file: file)
+
+        case .bonusFeature(let titleIndex, let kind, let label):
+            // The film's own folder, then Plex's extras subfolder inside it.
+            let movieFolder = (roots.moviesPath as NSString).appendingPathComponent(metadata.folderName)
+            let folder = (movieFolder as NSString).appendingPathComponent(kind.folderName)
+            let ext = sourceExtension.isEmpty ? "mp4" : sourceExtension
+            let name = PlexExtra.fileName(label: label, titleIndex: titleIndex, extension: ext)
             let file = (folder as NSString).appendingPathComponent(name)
             return Resolved(folder: folder, file: file)
         }
