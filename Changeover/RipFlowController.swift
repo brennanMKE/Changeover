@@ -1545,6 +1545,16 @@ final class RipFlowController {
             jobs.note("  · \(line)")
         }
 
+        // #0180 — and hand them to the thing that builds the plan.
+        //
+        // `ExtrasPlan.labels(from:)` was written for exactly this in #0178 and
+        // called from nowhere, which is the shape that left the whole OCR rung
+        // dead for a day in #0171. A model-named extra reaches the pipeline
+        // only as a FALLBACK: `JobController.extraLabels` prefers a name
+        // printed beside a runtime on the disc's own page, and takes these for
+        // the titles that path could not name.
+        jobs.modelExtraLabels = ExtrasPlan.labels(from: understanding)
+
         for (titleIndex, label) in plan.extraLabels.sorted(by: { $0.key < $1.key }) {
             FlowDiagnostics.note("interrogate extra: title \(titleIndex) is “\(label)”")
             jobs.note("  · title \(titleIndex) is “\(label)”")
@@ -1737,6 +1747,8 @@ final class RipFlowController {
         discUnderstanding = nil
         discFindings = nil
         interrogationStartedFor = nil
+        // #0180: and the names it gave the last disc's extras.
+        jobs.modelExtraLabels = [:]
         // #0176: so did what the user said that disc held. `ManualOverride`
         // refuses another disc on its own (`adopt`), and this is the second,
         // independent wipe — the pattern #0034 established for a statement

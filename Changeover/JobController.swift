@@ -1568,9 +1568,41 @@ final class JobController {
             $0.index != featureIndex
                 && $0.durationSeconds >= DiscInterrogation.shortestWorthNaming
         }
-        let named = ExtrasPlan.labels(printedOn: evidence.allLines, titles: candidates)
+        var named = ExtrasPlan.labels(printedOn: evidence.allLines, titles: candidates)
+
+        // #0180 — then the model's own reading, for the titles the printed
+        // path could not name.
+        //
+        // `labels(printedOn:)` needs a runtime printed beside a name, which is
+        // what the Signs bonus menu does and what many discs do not: a menu
+        // that lists "The Making Of" with no time beside it names the extra
+        // perfectly well to a person and gives this nothing to match on. The
+        // interrogation's findings are already corroborated against the scan
+        // (#0175), so they are evidence of the same standard arriving by a
+        // different road.
+        //
+        // Printed first and never overwritten. A time printed on the disc
+        // beside a name on the disc is two independent readings agreeing; a
+        // model's answer is one reading checked against the clock. Both are
+        // good, and when they disagree the disc's own page wins.
+        for (index, label) in modelExtraLabels where named[index] == nil {
+            guard candidates.contains(where: { $0.index == index }) else { continue }
+            named[index] = label
+        }
         return named.filter { indices.contains($0.key) }
     }
+
+    /// #0180 — extras the on-device model named, bound to titles the scan
+    /// confirmed, handed over by `RipFlowController` once the interrogation
+    /// settles.
+    ///
+    /// Held here rather than read back out of the flow controller because
+    /// `JobController` is what builds the `ExtrasPlan`, and a plan that
+    /// reached across to the flow for part of its input would be the third
+    /// writer of one fact — the shape that produced #0172's disagreement
+    /// between the screen and the gate. Set once per disc and cleared with
+    /// everything else that belonged to it.
+    var modelExtraLabels: [Int: String] = [:]
 
     /// #0027: the audio-track preselection for `titleIndex` on whatever scan
     /// `scanState` holds — `[]` when `titleIndex` is `nil` or isn't a title

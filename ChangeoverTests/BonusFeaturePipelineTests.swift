@@ -447,3 +447,89 @@ struct BonusFeaturePipelineTests {
         #expect(try Self.jobDirectories(under: URL(fileURLWithPath: settings.workingEncodePath)).isEmpty)
     }
 }
+
+/// #0180 — the model's names reach the pipeline, as a fallback behind the
+/// disc's own printed ones.
+///
+/// `ExtrasPlan.labels(from:)` was written in #0178 for exactly this and called
+/// from nowhere. That is the shape that left the whole OCR rung dead for a day
+/// in #0171: a well-tested function with no reachable caller is
+/// indistinguishable from a working feature.
+@Suite struct ModelExtraLabelsReachThePlanTests {
+
+    private static func title(_ index: Int, seconds: Int) -> DiscTitle {
+        DiscTitle(index: index, durationSeconds: seconds, chapterCount: 2,
+                  sizeBytes: 0, outputFileName: nil, displayAspect: 1.33)
+    }
+
+    private static func understanding(
+        extras: [(Int, String)] = [], bonus: [(Int, String)] = []
+    ) -> DiscInterrogation.Understanding {
+        var u = DiscInterrogation.Understanding()
+        u.extras = extras.map {
+            DiscInterrogation.Finding(question: .extras, titleIndex: $0.0, label: $0.1)
+        }
+        u.bonusFeatures = bonus.map {
+            DiscInterrogation.Finding(question: .bonusFeature, titleIndex: $0.0, label: $0.1)
+        }
+        return u
+    }
+
+    /// A corroborated extra the model named becomes a label.
+    @Test func acorroboratedModelExtraBecomesALabel() {
+        let labels = ExtrasPlan.labels(from: Self.understanding(extras: [(9, "The Making Of")]))
+        #expect(labels[9] == "The Making Of")
+    }
+
+    /// A film is never filed as another film's extra — the #0034 data-loss
+    /// shape.
+    @Test func afilmFindingNeverBecomesAnExtraLabel() {
+        var u = Self.understanding(extras: [(9, "a featurette")])
+        u.films = [DiscInterrogation.Finding(question: .films, titleIndex: 1, label: "Signs")]
+        let labels = ExtrasPlan.labels(from: u)
+        #expect(labels[1] == nil)
+        #expect(labels[9] == "a featurette")
+    }
+
+    /// An unverified claim carries no name anywhere.
+    @Test func anUnverifiedClaimNeverBecomesALabel() {
+        var u = Self.understanding()
+        u.unverified = [DiscInterrogation.Claim(question: .extras, label: "DREAMSCAPE")]
+        #expect(ExtrasPlan.labels(from: u).isEmpty)
+    }
+
+    /// And a named extra files beside the film rather than in Clips.
+    @Test func amodelNamedExtraFilesAsABonusFeature() {
+        let disc = DiscInfo(volumeName: "Signs", driveName: "d", titles: [
+            Self.title(1, seconds: 6385), Self.title(9, seconds: 375),
+        ])
+        let plan = ExtrasPlan.make(featureIndex: 1, requested: [9], disc: disc,
+                                   labels: [9: "The Making Of"])
+        let item = plan.items.first
+        #expect(item?.isBonusFeature == true)
+        if case .bonusFeature(let kind, let label) = item?.filing {
+            #expect(kind == .behindTheScenes)
+            #expect(label == "The Making Of")
+        } else {
+            Issue.record("a named extra must file beside the film")
+        }
+    }
+
+    /// The disc's own printed page outranks the model. Two independent
+    /// readings agreeing beats one reading checked against the clock.
+    @Test func aprintedNameIsNotOverwrittenByAModelName() {
+        // `labels(printedOn:)` wins for title 9; the model only fills title 10.
+        let titles = [Self.title(9, seconds: 375), Self.title(10, seconds: 485)]
+        let printed = ExtrasPlan.labels(
+            printedOn: ["looking for Signs (6:11)"], titles: titles)
+        #expect(printed[9] == "looking for Signs")
+        #expect(printed[10] == nil, "nothing printed a time for this one")
+
+        var merged = printed
+        for (index, label) in [9: "WRONG", 10: "building Signs"] where merged[index] == nil {
+            merged[index] = label
+        }
+        #expect(merged[9] == "looking for Signs", "the printed name stands")
+        #expect(merged[10] == "building Signs", "and the model fills the gap")
+    }
+}
