@@ -119,12 +119,18 @@ struct ConfirmStepView: View {
                check: flow.libraryCheckForThisEdition,
                acknowledgement: flow.replaceAcknowledgement,
                metadata: MovieMetadata(from: movie),
-               now: Date()
+               now: Date(),
+               // #0186 — the same two values the Start gate is given, so the
+               // panel can never offer an action the gate would refuse, or
+               // withhold one it would permit.
+               extrasOnlyAcknowledgement: flow.extrasOnlyAcknowledgement,
+               tickedExtras: flow.tickedExtraCount(jobs: jobs)
            ) {
             DuplicateNoticeView(
                 notice: notice,
                 onReplace: { flow.acknowledgeReplace() },
-                onRecheck: { Task { await flow.checkLibrary(settings: settings) } }
+                onRecheck: { Task { await flow.checkLibrary(settings: settings) } },
+                onExtrasOnly: { flow.acknowledgeExtrasOnly() }
             )
             .padding(.horizontal)
             .padding(.bottom, 10)
@@ -350,10 +356,17 @@ struct ConfirmStepView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.trailing)
             }
-            Button("Start Ripping") {
+            // #0186 — the label names the job, because for one decision it is
+            // not "rip this movie": the film stays as it is and only the ticked
+            // bonus material is encoded. A button that said "Start Ripping"
+            // over a film the user has just asked us *not* to re-rip is the
+            // mismatch the duplicate notice exists to prevent.
+            Button(startDecision == .readyForExtrasOnly ? "Import the Extras" : "Start Ripping") {
                 flow.startRipping(jobs: jobs, settings: settings)
             }
-            .disabled(startDecision != .ready)
+            // #0186: `permitsStart`, not `== .ready` — there are two enabled
+            // states now and they start different jobs.
+            .disabled(!startDecision.permitsStart)
             // The tooltip stays the detail register: a disabled control still
             // explains itself precisely on hover with Details off.
             .help(startDecision.reason ?? StartDecision.readyHelp)

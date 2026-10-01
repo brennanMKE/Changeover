@@ -59,6 +59,32 @@ nonisolated struct RipRequest: Codable, Hashable, Sendable {
     ///
     /// `extraTitleIndices` must be empty: an upgrade encodes nothing.
     var upgrade: UpgradePlan? = nil
+    /// #0186 — whether this job imports the film or **only** the bonus
+    /// material beside a film the library already holds.
+    ///
+    /// Additive and wire-safe, the same shape `extraTitleIndices`,
+    /// `chapterMarkers` and `upgrade` took: a property with a default gets
+    /// `decodeIfPresent` in the synthesized decoder, so a payload predating
+    /// this ticket decodes as `.film` — an ordinary rip.
+    ///
+    /// The rest of the request is still filled in exactly as a rip's is
+    /// (`featureTitleIndex`, `audioTrackNumbers`), so every one of
+    /// `JobController.start`'s guards — the #0034 disc binding, the #0027
+    /// resolution against the held scan — applies unchanged. The feature title
+    /// is still named because the extras are resolved *against* it
+    /// (`ExtrasPlan.make` drops the feature from the plan), not because
+    /// anything is going to encode it.
+    ///
+    /// `extraTitleIndices` must be non-empty: an extras-only job with nothing
+    /// ticked would encode nothing and file nothing. `upgrade` must be `nil`:
+    /// an upgrade rewrites the library file, which is the one thing this
+    /// promises not to do. Both are refused by `JobController.start` at the
+    /// point of harm.
+    var intent: JobIntent = .film
 
     var isUpgrade: Bool { upgrade != nil }
+
+    /// #0186 — reads better at the call sites than `intent == .extrasOnly`,
+    /// and mirrors `isUpgrade`.
+    var isExtrasOnly: Bool { intent == .extrasOnly }
 }

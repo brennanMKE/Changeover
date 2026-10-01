@@ -74,6 +74,12 @@ final class JobController {
         /// Defaulted so every hand-built context in a test compiles
         /// unchanged.
         var upgrade: UpgradePlan? = nil
+        /// #0186 — whether this job encodes the film or only its extras.
+        /// Resolved by `start` from the request it was handed and passed
+        /// straight through to `DVDPipeline`, which is where it decides
+        /// anything (`JobIntent.featureDestination`). Defaulted to `.film` so
+        /// every hand-built context in a test compiles unchanged.
+        var intent: JobIntent = .film
         let log: @MainActor (String) -> Void
         /// Called as `DVDPipeline` crosses `.encoding`/`.fallback`/
         /// `.organizing`/`.extras` — validated by `Job.advance(to:)` before
@@ -510,6 +516,7 @@ final class JobController {
             jobID:       context.id,
             selection:   context.selection,
             extras:      context.extras,
+            intent:      context.intent,
             log:         context.log,
             reportPhase: context.phase,
             reportProgress: context.progress,
@@ -682,6 +689,26 @@ final class JobController {
             append("⚠︎ \(StartDecision.upgradeNothingSelected.reason!)")
             return false
         }
+        // #0186: the two things an extras-only job must not be, refused here at
+        // the point of harm rather than trusted from the caller — the same
+        // pattern #0034's disc-identity guard and §7.4's empty-upgrade guard
+        // established.
+        //
+        // An upgrade rewrites the library file by remux; an extras-only import
+        // promises not to touch it. One request claiming both is incoherent,
+        // and the safe reading of an incoherent request is to run neither.
+        if request.isExtrasOnly, request.isUpgrade {
+            append("⚠︎ A request cannot both upgrade the file in Plex and import only the extras — refusing to guess which was meant.")
+            return false
+        }
+        // And nothing ticked means nothing to do. `StartGate` already requires
+        // a ticked extra before it will permit this; a job that encodes nothing
+        // and files nothing would still open the drive, write a working folder
+        // and claim success.
+        if request.isExtrasOnly, extrasPlan.items.isEmpty {
+            append("⚠︎ Nothing is ticked to bring in, so there is no extras-only import to run — tick at least one extra on the disc.")
+            return false
+        }
         // #0027 review: `make` accepts an empty track list, which HandBrake
         // would turn into "first track only" while the picker shows nothing
         // checked. Refuse it on a title that has audio.
@@ -784,6 +811,11 @@ final class JobController {
             // whatever the request asked for. Checked here at the point of
             // harm rather than trusted from the caller.
             upgrade: request.upgrade,
+            // #0186: carried, never re-derived. The gate decided whether this
+            // disc's film is being imported or only its extras, the request
+            // records that decision, and `DVDPipeline` acts on it — one fact,
+            // one writer.
+            intent: request.intent,
             log: { [job] line in job.log.append(line) },
             phase: { [job] phase in job.advance(to: phase) },
             // #0142: bound to this job the same way, so a progress line that

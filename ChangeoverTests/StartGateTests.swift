@@ -214,9 +214,9 @@ struct StartGateTests {
             #expect(decision.reason?.isEmpty == false, "\(decision) has no reason")
         }
         // 14 through #0143, plus §7.4's three upgrade cases, #0160's
-        // `.noFeatureChosen`, #0167's `.everyFilmAlreadyInPlex` and #0182's
-        // `.bonusFeatureWithoutFilm`.
-        #expect(StartDecision.allCases.count == 20)
+        // `.noFeatureChosen`, #0167's `.everyFilmAlreadyInPlex`, #0182's
+        // `.bonusFeatureWithoutFilm` and #0186's `.readyForExtrasOnly`.
+        #expect(StartDecision.allCases.count == 21)
     }
 
     // MARK: - #0143: the "already in Plex" check
@@ -307,9 +307,16 @@ struct StartGateTests {
         ))
     }
 
-    /// `canStart` is exactly `decide(...) == .ready` — every existing
+    /// `canStart` is exactly `decide(...).permitsStart` — every existing
     /// `canStart` test above already pins the truth table; this pins the
     /// equivalence itself against a representative sweep of states.
+    ///
+    /// None of these states passes #0186's extras-only acknowledgement, so
+    /// `.readyForExtrasOnly` is unreachable here and `permitsStart` coincides
+    /// with `== .ready` throughout — which is the point: adding a second
+    /// permitting case must not have changed any answer this sweep already
+    /// gave. `ExtrasOnlyStartGateTests.canStartAdmitsBothPermittingDecisions`
+    /// covers the new one.
     @Test func canStartIsExactlyDecideEqualsReady() {
         let states: [(ScanState, Int?)] = [
             (.idle, nil),

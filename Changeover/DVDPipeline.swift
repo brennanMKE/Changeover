@@ -66,6 +66,26 @@ struct DVDPipeline {
     /// included) is unaffected; production always passes the plan
     /// `JobController.start` resolved against the held scan.
     var extras: ExtrasPlan = ExtrasPlan()
+    /// #0186 — whether this run encodes the film or **only** its extras.
+    ///
+    /// Defaulted to `.film` so every existing construction site (tests
+    /// included) is unaffected; production passes what `JobController.start`
+    /// resolved from the request. See `JobIntent.featureDestination` for why
+    /// this is an enum answering a question rather than a `Bool` guarding an
+    /// `if`: in `.extrasOnly` there is no `LibraryDestination.feature` value
+    /// anywhere in this run, so the feature's own file in Plex is not a
+    /// destination the code can name.
+    var intent: JobIntent = .film
+    /// #0186 — is the film's folder already in the library?
+    ///
+    /// The one precondition an extras-only run has, and a seam so a test can
+    /// answer it without a Plex volume. Defaulted to the real `@concurrent`
+    /// probe (`ExtrasOnlyImport.folderExists`) so every existing construction
+    /// site compiles unchanged, and never consulted at all on a `.film` run —
+    /// an ordinary rip creates the folder it needs.
+    var filmFolderExists: @Sendable (String) async -> Bool = { path in
+        await ExtrasOnlyImport.folderExists(path)
+    }
     let log: @MainActor (String) -> Void
 
     /// Where `DiscReliabilityLog.append` writes. Defaulted so existing call
@@ -486,14 +506,47 @@ struct DVDPipeline {
         }
         log("✓ Preflight passed")
 
-        // #0016/#0027: the deinterlace/detelecine decision now travels on
-        // `selection`, resolved by `EncodeSelection.make(request:disc:)`
-        // from the real scanned `frameRate`/`interlaceDetected` — this stage
-        // only logs the resolved filter, the same way it only ever takes
-        // `selection.title` as a plain parameter rather than reading a scan
-        // itself.
-        let deinterlaceFilter = selection.filter
-        log("▶ Deinterlace: filter=\(deinterlaceFilter)")
+        // #0186 — the folder every file belonging to this film lives in or
+        // under. Derived by `LibraryPaths`, never spelled out here, so the
+        // folder this run *checks for* is the folder `PlexOrganizer.move` will
+        // actually file a bonus feature inside (#0172: two places computing one
+        // answer is how they come to disagree, and a disagreement here would
+        // mean checking one folder and writing into another).
+        let filmFolder = LibraryPaths.filmFolder(metadata: metadata, roots: libraryRoots)
+
+        // #0186 — an extras-only run's one precondition, checked here: after
+        // preflight, and *before* this job creates anything at all.
+        //
+        // The folder has to already be there. Creating it would be the app
+        // inventing a film folder out of a TMDB id the user's library does not
+        // use, and Plex would then show a film folder holding extras and no
+        // film — while the copy the user actually has sat untouched under its
+        // own name, with the extras nowhere near it. A refusal is recoverable;
+        // a wrong folder full of featurettes is a mess someone has to clean up
+        // by hand.
+        //
+        // The refusal lands at `stage: .preflight` with
+        // `jobDirectoryCreated == false`, which is the one
+        // `WorkingFiles.disposition` that deletes nothing and keeps nothing —
+        // correct for a run that has touched neither the disc, the library nor
+        // the working folder.
+        if intent == .extrasOnly {
+            let readiness = ExtrasOnlyImport.readiness(
+                filmFolder: filmFolder,
+                exists:     await filmFolderExists(filmFolder),
+                extraCount: extras.items.count
+            )
+            if let failure = ExtrasOnlyImport.refusal(for: readiness) {
+                primaryRecord = DiscReliabilityLog.StageReason(
+                    stage:  failure.stage,
+                    reason: String(describing: failure.reason)
+                )
+                // `finish(_:)` renders the sentence itself (#0009 §4.1), so
+                // there is no second copy of it here.
+                return await finish(.failed(failure))
+            }
+            log("✓ Extras only: \(metadata.folderName) is already in \(libraryRoots.moviesPath). This job encodes \(extras.items.count) extra(s) and does not read, move or replace the film's own file.")
+        }
 
         // #0046 boundary 1: before anything is created for this job. A
         // cancel requested this early (still `.starting`) never launches
@@ -524,227 +577,282 @@ struct DVDPipeline {
             )))
         }
         await advanceMarker(.encoding)
-        reportPhase(.encoding)
 
-        // Menu intelligence: the disc's own chapter names, written beside the
-        // encode's own output so `WorkingFiles` sweeps them with everything
-        // else. Wholly optional and never a failure — a CSV that cannot be
-        // written leaves the encode with the bare `--markers` it has always
-        // had, which is exactly what an unreadable menu produces too.
-        let markerSelection = writeChapterMarkers(in: jobDirectory)
-
-        // Step 1: Encode, straight from the disc's VIDEO_TS — no rip stage
-        // on the happy path.
-        var primaryResult = await EncodeController.encode(
-            source:        discPath,
-            title:         selection.title,
-            output:        mp4Path,
-            handbrakePath: handbrakePath,
-            filter:        deinterlaceFilter,
-            audio:         selection.audio,
-            markers:       markerSelection,
-            progress:      progressReporter(.feature),
-            log:           log
-        )
-
-        // #0037 review: an exit-0 encode that is materially shorter than the
-        // scan (or can't be measured) is a primary encode failure, decided
-        // *before* `FallbackPolicy` sees the result. A disc read error is
-        // exactly what MakeMKV's read recovery exists for, and a manual retry
-        // would only repeat HandBrake's read of the same disc. `.unknown` at
-        // `.encode` is already disc-shaped ("exit 0 with no output" is the
-        // same anomaly, whole rather than partial). The fallback's own output
-        // is checked once more below and never goes back through the policy,
-        // so a short file can neither loop nor be moved.
-        if case .success(let url) = primaryResult,
-           let durationFailure = await featureDurationFailure(url) {
-            primaryResult = .failure(durationFailure)
-        }
-
-        let mp4URL: URL
-        switch primaryResult {
-        case .success(let url):
-            mp4URL = url
-            producedBy = .handbrake
-
-        case .failure(let primaryFailure):
-            primaryRecord = DiscReliabilityLog.StageReason(
-                stage:  primaryFailure.stage,
-                reason: String(describing: primaryFailure.reason)
-            )
-
-            // #0046 boundary 2, moved here by the #0046 review: checked
-            // before `FallbackPolicy` decides anything, not only on
-            // `.attempt`. A cancel can reach the primary result without a
-            // cancelled termination: it lands just as HandBrakeCLI exits 0,
-            // and #0037's duration check (`AVURLAsset.load` honours task
-            // cancellation) then reports "duration could not be read". That
-            // `.unknown` is disc-shaped, so with no makemkvcon installed
-            // (`.unavailable`) or the disc gone (`.notEligible`) the job used
-            // to end `.failed` with a misleading reason. It never starts
-            // ripping with MakeMKV or creates a rip job directory either.
-            if Task.isCancelled {
-                decisionRecord = "cancelled"
-                primaryRecord = DiscReliabilityLog.StageReason(stage: .encode, reason: String(describing: FailureReason.cancelled))
-                return await finish(.failed(primaryFailure.reason == .cancelled ? primaryFailure : cancelledDuringEncode()))
-            }
-
-            let decision = FallbackPolicy.decide(
-                primary:        primaryFailure,
-                makemkvconPath: makemkvconPath,
-                // #0008: a directory (or anything else `isExecutableFile`
-                // alone would misjudge) at `makemkvconPath` now yields
-                // `.notExecutable` → not `.ready`, so the fallback reports
-                // `.unavailable` instead of attempting a launch that would
-                // just fail.
-                isExecutable:   { Preflight.optionalToolState(path: $0) == .ready },
-                discStillPresent: {
-                    FileManager.default.fileExists(
-                        atPath: (discPath as NSString).appendingPathComponent("VIDEO_TS")
-                    )
-                }
-            )
-
-            switch decision {
-            case .notEligible:
-                decisionRecord = "notEligible"
-                // #0009: `finish(_:)` now says this better than a fixed
-                // string ever could — no replacement line needed here.
-                return await finish(.failed(primaryFailure))
-
-            case .unavailable(let path):
-                decisionRecord = "unavailable"
-                log("✗ FALLBACK UNAVAILABLE disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) makemkvcon=\(path) (not installed)")
-                return await finish(.failed(JobFailure(
-                    stage:    primaryFailure.stage,
-                    reason:   primaryFailure.reason,
-                    logTail:  primaryFailure.logTail,
-                    fallback: .unavailable(makemkvconPath: path)
-                )))
-
-            case .attempt:
-                // #0046 boundary 2 is checked above, before the decision.
-                decisionRecord = "attempted"
-                log("⚠︎ FALLBACK disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) makemkvcon=\(makemkvconPath) → ripping with MakeMKV")
-
-                // #0004 §1: the primary's partial `.mp4` is useless — the
-                // second encode overwrites this path anyway — and removing
-                // it now frees about 1 GB before the fallback's 5–8 GB rip.
-                // Refusal or failure only logs a warning; a missing file is
-                // normal (the primary may have failed before writing).
-                switch WorkingFiles.removeFile(
-                    mp4Path,
-                    inJobDirectory: jobDirectory,
-                    under:           workingEncodePath,
-                    forbidding:      plexMoviesPath
-                ) {
-                case .removed, .refused(.missing):
-                    break
-                case .refused, .failed:
-                    log("⚠︎ Could not remove the partial encode at \(mp4Path)")
-                }
-
-                if selection.audio != selection.fallbackAudio {
-                    log("⚠︎ The MakeMKV fallback does not carry over the audio tracks chosen for this disc; it keeps HandBrake's default audio (#0035).")
-                }
-                reportPhase(.fallback)
-                switch await runFallback(
-                    primaryFailure: primaryFailure,
-                    discPath:       discPath,
-                    workingRipPath: workingRipPath,
-                    makemkvconPath: makemkvconPath,
-                    handbrakePath:  handbrakePath,
-                    mp4Path:        mp4Path,
-                    volumeName:     volumeName,
-                    jobID:          jobID,
-                    fallbackAudio:  selection.fallbackAudio,
-                    targetDurationSeconds: selection.featureDurationSeconds
-                ) {
-                case .failure(let runFailure):
-                    fallbackRecord = runFailure.record
-                    return await finish(.failed(runFailure.failure))
-                case .success(let url):
-                    // #0037: the fallback's second encode gets the same
-                    // check, once. A short result here ends the job — it is
-                    // never handed back to `FallbackPolicy` — with the
-                    // original failure as the headline, the same shape as
-                    // `runFallback`'s own failures.
-                    let durationFailure = await featureDurationFailure(url)
-                    // #0046 review: the same cancelled-duration-check hazard
-                    // as boundary 2 above. A cancel here is `.cancelled`,
-                    // never a fallback failure behind the primary reason.
-                    if Task.isCancelled {
-                        fallbackRecord = DiscReliabilityLog.StageReason(stage: .encode, reason: String(describing: FailureReason.cancelled))
-                        return await finish(.failed(cancelledDuringEncode()))
-                    }
-                    if let durationFailure {
-                        log("✗ FALLBACK FAILED disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) fallback=\(durationFailure.stage.rawValue):\(String(describing: durationFailure.reason))")
-                        fallbackRecord = DiscReliabilityLog.StageReason(
-                            stage:  durationFailure.stage,
-                            reason: String(describing: durationFailure.reason)
-                        )
-                        return await finish(.failed(JobFailure(
-                            stage:    primaryFailure.stage,
-                            reason:   primaryFailure.reason,
-                            logTail:  primaryFailure.logTail,
-                            fallback: .failed(stage: durationFailure.stage, reason: durationFailure.reason, logTail: [])
-                        )))
-                    }
-                    mp4URL = url
-                    producedBy = .makemkvFallback
-                }
-            }
-        }
-        log("✓ Encode complete: \(mp4URL.path)")
-
-        // #0046 boundary 3: the encode (primary or fallback) already
-        // returned — nothing is running — so a cancel requested in this gap
-        // would otherwise go unnoticed until the next subprocess, which for
-        // a feature with no extras is never. Still `.encoding` here
-        // (`reportPhase(.organizing)` hasn't run yet), so `encoding →
-        // cancelled` is legal. Never checked past this point: the move
-        // itself must finish once started (#0012, #0041).
-        if Task.isCancelled {
-            return await finish(.failed(cancelledDuringEncode()))
-        }
-
-        // #0004 §3: mark the directory `encoded` before the move, so the
-        // sweep can always tell a complete, unmoved `.mp4` from a stale
-        // partial.
-        await advanceMarker(.encoded)
-        reportPhase(.organizing)
-
-        // Step 2: Move into Plex
+        // #0186 — the feature phase, and the only place in this run that can
+        // name `LibraryDestination.feature`.
+        //
+        // `JobIntent.featureDestination` is `nil` for an extras-only run, so
+        // everything inside this `if let` — the HandBrake pass over the disc,
+        // #0037's duration check, #0015's MakeMKV fallback, #0046's boundary 3,
+        // the `.encoded` marker and `PlexOrganizer.move` — is in a branch the
+        // compiler will not enter. The film's own file in Plex is the one
+        // outcome in this app that cannot be undone (`move` replaces whatever
+        // is at that path, #0012's staged `replaceItemAt`, and the disc the
+        // original came from may be long gone), so what protects it is a
+        // missing value rather than a check someone has to remember to keep.
+        //
+        // The extras loop below is untouched and shared by both runs — the same
+        // one copy of #0046's two cancel boundaries, #0037's duration check,
+        // #0031's delete-the-partial rule and #0041's `extras → succeeded`
+        // edge. A second loop for extras-only would be a second copy of all of
+        // that, free to drift silently on a disc nobody has in the drive, which
+        // is the argument `ExtrasPlan.Filing` already made for one loop over
+        // two.
         let destination: URL
-        do {
-            destination = try await PlexOrganizer.move(
-                encodedFile: mp4URL.path,
-                metadata:    metadata,
-                destination: .feature,
-                roots:       libraryRoots,
-                log:         log
-            )
-        } catch {
-            log("✗ Moving into Plex failed. Aborting.")
+        if let featureDestination = intent.featureDestination {
+            reportPhase(.encoding)
 
-            // #0004 §3/§5: the working `.mp4` is now the only copy (#0012).
-            // Mark the directory `kept` and tell the user where the file is
-            // and what to do with it — twice, if they don't act: the sweep
-            // repeats the reminder at the start of every later job.
-            await advanceMarker(.kept)
-            if FileManager.default.fileExists(atPath: mp4Path) {
-                log("⚠︎ The encoded file was kept at \(mp4Path). Move it into \"\(plexMoviesPath)/\(metadata.folderName)/\" by hand, or delete \(jobDirectory) to discard it.")
-            } else {
-                log("⚠︎ The encoded file is not in the working folder — see PlexOrganizer's log line above for where it was left.")
+            // #0016/#0027: the deinterlace/detelecine decision now travels on
+            // `selection`, resolved by `EncodeSelection.make(request:disc:)`
+            // from the real scanned `frameRate`/`interlaceDetected` — this
+            // stage only logs the resolved filter, the same way it only ever
+            // takes `selection.title` as a plain parameter rather than reading
+            // a scan itself.
+            let deinterlaceFilter = selection.filter
+            log("▶ Deinterlace: filter=\(deinterlaceFilter)")
+
+            // Menu intelligence: the disc's own chapter names, written beside the
+            // encode's own output so `WorkingFiles` sweeps them with everything
+            // else. Wholly optional and never a failure — a CSV that cannot be
+            // written leaves the encode with the bare `--markers` it has always
+            // had, which is exactly what an unreadable menu produces too.
+            //
+            // #0186: inside the feature phase, because these are the *feature's*
+            // chapter names — `EncodeSelection.make` already gated them against the
+            // title being encoded, and an extras-only run encodes no such title.
+            let markerSelection = writeChapterMarkers(in: jobDirectory)
+
+            // Step 1: Encode, straight from the disc's VIDEO_TS — no rip stage
+            // on the happy path.
+            var primaryResult = await EncodeController.encode(
+                source:        discPath,
+                title:         selection.title,
+                output:        mp4Path,
+                handbrakePath: handbrakePath,
+                filter:        deinterlaceFilter,
+                audio:         selection.audio,
+                markers:       markerSelection,
+                progress:      progressReporter(.feature),
+                log:           log
+            )
+
+            // #0037 review: an exit-0 encode that is materially shorter than the
+            // scan (or can't be measured) is a primary encode failure, decided
+            // *before* `FallbackPolicy` sees the result. A disc read error is
+            // exactly what MakeMKV's read recovery exists for, and a manual retry
+            // would only repeat HandBrake's read of the same disc. `.unknown` at
+            // `.encode` is already disc-shaped ("exit 0 with no output" is the
+            // same anomaly, whole rather than partial). The fallback's own output
+            // is checked once more below and never goes back through the policy,
+            // so a short file can neither loop nor be moved.
+            if case .success(let url) = primaryResult,
+               let durationFailure = await featureDurationFailure(url) {
+                primaryResult = .failure(durationFailure)
             }
 
-            return await finish(.failed(error))
-        }
+            let mp4URL: URL
+            switch primaryResult {
+            case .success(let url):
+                mp4URL = url
+                producedBy = .handbrake
 
-        if producedBy == .makemkvFallback {
-            log("✓ Produced by: MakeMKV fallback, then HandBrake")
+            case .failure(let primaryFailure):
+                primaryRecord = DiscReliabilityLog.StageReason(
+                    stage:  primaryFailure.stage,
+                    reason: String(describing: primaryFailure.reason)
+                )
+
+                // #0046 boundary 2, moved here by the #0046 review: checked
+                // before `FallbackPolicy` decides anything, not only on
+                // `.attempt`. A cancel can reach the primary result without a
+                // cancelled termination: it lands just as HandBrakeCLI exits 0,
+                // and #0037's duration check (`AVURLAsset.load` honours task
+                // cancellation) then reports "duration could not be read". That
+                // `.unknown` is disc-shaped, so with no makemkvcon installed
+                // (`.unavailable`) or the disc gone (`.notEligible`) the job used
+                // to end `.failed` with a misleading reason. It never starts
+                // ripping with MakeMKV or creates a rip job directory either.
+                if Task.isCancelled {
+                    decisionRecord = "cancelled"
+                    primaryRecord = DiscReliabilityLog.StageReason(stage: .encode, reason: String(describing: FailureReason.cancelled))
+                    return await finish(.failed(primaryFailure.reason == .cancelled ? primaryFailure : cancelledDuringEncode()))
+                }
+
+                let decision = FallbackPolicy.decide(
+                    primary:        primaryFailure,
+                    makemkvconPath: makemkvconPath,
+                    // #0008: a directory (or anything else `isExecutableFile`
+                    // alone would misjudge) at `makemkvconPath` now yields
+                    // `.notExecutable` → not `.ready`, so the fallback reports
+                    // `.unavailable` instead of attempting a launch that would
+                    // just fail.
+                    isExecutable:   { Preflight.optionalToolState(path: $0) == .ready },
+                    discStillPresent: {
+                        FileManager.default.fileExists(
+                            atPath: (discPath as NSString).appendingPathComponent("VIDEO_TS")
+                        )
+                    }
+                )
+
+                switch decision {
+                case .notEligible:
+                    decisionRecord = "notEligible"
+                    // #0009: `finish(_:)` now says this better than a fixed
+                    // string ever could — no replacement line needed here.
+                    return await finish(.failed(primaryFailure))
+
+                case .unavailable(let path):
+                    decisionRecord = "unavailable"
+                    log("✗ FALLBACK UNAVAILABLE disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) makemkvcon=\(path) (not installed)")
+                    return await finish(.failed(JobFailure(
+                        stage:    primaryFailure.stage,
+                        reason:   primaryFailure.reason,
+                        logTail:  primaryFailure.logTail,
+                        fallback: .unavailable(makemkvconPath: path)
+                    )))
+
+                case .attempt:
+                    // #0046 boundary 2 is checked above, before the decision.
+                    decisionRecord = "attempted"
+                    log("⚠︎ FALLBACK disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) makemkvcon=\(makemkvconPath) → ripping with MakeMKV")
+
+                    // #0004 §1: the primary's partial `.mp4` is useless — the
+                    // second encode overwrites this path anyway — and removing
+                    // it now frees about 1 GB before the fallback's 5–8 GB rip.
+                    // Refusal or failure only logs a warning; a missing file is
+                    // normal (the primary may have failed before writing).
+                    switch WorkingFiles.removeFile(
+                        mp4Path,
+                        inJobDirectory: jobDirectory,
+                        under:           workingEncodePath,
+                        forbidding:      plexMoviesPath
+                    ) {
+                    case .removed, .refused(.missing):
+                        break
+                    case .refused, .failed:
+                        log("⚠︎ Could not remove the partial encode at \(mp4Path)")
+                    }
+
+                    if selection.audio != selection.fallbackAudio {
+                        log("⚠︎ The MakeMKV fallback does not carry over the audio tracks chosen for this disc; it keeps HandBrake's default audio (#0035).")
+                    }
+                    reportPhase(.fallback)
+                    switch await runFallback(
+                        primaryFailure: primaryFailure,
+                        discPath:       discPath,
+                        workingRipPath: workingRipPath,
+                        makemkvconPath: makemkvconPath,
+                        handbrakePath:  handbrakePath,
+                        mp4Path:        mp4Path,
+                        volumeName:     volumeName,
+                        jobID:          jobID,
+                        fallbackAudio:  selection.fallbackAudio,
+                        targetDurationSeconds: selection.featureDurationSeconds
+                    ) {
+                    case .failure(let runFailure):
+                        fallbackRecord = runFailure.record
+                        return await finish(.failed(runFailure.failure))
+                    case .success(let url):
+                        // #0037: the fallback's second encode gets the same
+                        // check, once. A short result here ends the job — it is
+                        // never handed back to `FallbackPolicy` — with the
+                        // original failure as the headline, the same shape as
+                        // `runFallback`'s own failures.
+                        let durationFailure = await featureDurationFailure(url)
+                        // #0046 review: the same cancelled-duration-check hazard
+                        // as boundary 2 above. A cancel here is `.cancelled`,
+                        // never a fallback failure behind the primary reason.
+                        if Task.isCancelled {
+                            fallbackRecord = DiscReliabilityLog.StageReason(stage: .encode, reason: String(describing: FailureReason.cancelled))
+                            return await finish(.failed(cancelledDuringEncode()))
+                        }
+                        if let durationFailure {
+                            log("✗ FALLBACK FAILED disc=\"\(volumeName)\" handbrake=\(String(describing: primaryFailure.reason)) fallback=\(durationFailure.stage.rawValue):\(String(describing: durationFailure.reason))")
+                            fallbackRecord = DiscReliabilityLog.StageReason(
+                                stage:  durationFailure.stage,
+                                reason: String(describing: durationFailure.reason)
+                            )
+                            return await finish(.failed(JobFailure(
+                                stage:    primaryFailure.stage,
+                                reason:   primaryFailure.reason,
+                                logTail:  primaryFailure.logTail,
+                                fallback: .failed(stage: durationFailure.stage, reason: durationFailure.reason, logTail: [])
+                            )))
+                        }
+                        mp4URL = url
+                        producedBy = .makemkvFallback
+                    }
+                }
+            }
+            log("✓ Encode complete: \(mp4URL.path)")
+
+            // #0046 boundary 3: the encode (primary or fallback) already
+            // returned — nothing is running — so a cancel requested in this gap
+            // would otherwise go unnoticed until the next subprocess, which for
+            // a feature with no extras is never. Still `.encoding` here
+            // (`reportPhase(.organizing)` hasn't run yet), so `encoding →
+            // cancelled` is legal. Never checked past this point: the move
+            // itself must finish once started (#0012, #0041).
+            if Task.isCancelled {
+                return await finish(.failed(cancelledDuringEncode()))
+            }
+
+            // #0004 §3: mark the directory `encoded` before the move, so the
+            // sweep can always tell a complete, unmoved `.mp4` from a stale
+            // partial.
+            await advanceMarker(.encoded)
+            reportPhase(.organizing)
+
+            // Step 2: Move into Plex
+            //
+            // #0186: `featureDestination` rather than a literal `.feature`. It is
+            // the same value on this path and always will be — the point is that it
+            // came from `intent`, so there is no `.feature` literal left in this
+            // function for an extras-only run to reach.
+            do {
+                destination = try await PlexOrganizer.move(
+                    encodedFile: mp4URL.path,
+                    metadata:    metadata,
+                    destination: featureDestination,
+                    roots:       libraryRoots,
+                    log:         log
+                )
+            } catch {
+                log("✗ Moving into Plex failed. Aborting.")
+
+                // #0004 §3/§5: the working `.mp4` is now the only copy (#0012).
+                // Mark the directory `kept` and tell the user where the file is
+                // and what to do with it — twice, if they don't act: the sweep
+                // repeats the reminder at the start of every later job.
+                await advanceMarker(.kept)
+                if FileManager.default.fileExists(atPath: mp4Path) {
+                    log("⚠︎ The encoded file was kept at \(mp4Path). Move it into \"\(plexMoviesPath)/\(metadata.folderName)/\" by hand, or delete \(jobDirectory) to discard it.")
+                } else {
+                    log("⚠︎ The encoded file is not in the working folder — see PlexOrganizer's log line above for where it was left.")
+                }
+
+                return await finish(.failed(error))
+            }
+
+            if producedBy == .makemkvFallback {
+                log("✓ Produced by: MakeMKV fallback, then HandBrake")
+            } else {
+                log("✓ Produced by: HandBrake, direct from disc")
+            }
         } else {
-            log("✓ Produced by: HandBrake, direct from disc")
+            // #0186 — the extras-only run. Nothing was encoded for the film and
+            // nothing was filed for it, so the job's destination is the folder
+            // its extras are going into: the film's own folder, which
+            // `ExtrasOnlyImport.readiness` has already proved is there. An
+            // honest answer for `JobOutcome.succeeded(destination:)` — it is
+            // where this job's output actually lands, and it is a folder
+            // "Reveal in Finder" opens on something.
+            //
+            // `producedBy` stays `nil`, which the reliability record already
+            // encodes as "no feature was produced by anything" rather than a
+            // tool that failed to report itself.
+            destination = URL(fileURLWithPath: filmFolder)
+            log("▶ Into: \(filmFolder)")
         }
 
         // Step 2.5: Extras (#0031 Step B, #0178). One by one, after the
@@ -766,6 +874,18 @@ struct DVDPipeline {
         // to HandBrake against the same disc — probably failing the same
         // way, possibly slowly. Skip them entirely, log why, and leave the
         // feature outcome (already `.succeeded`) unchanged.
+        //
+        // #0186 — this loop is now the *whole* job for an extras-only run, and
+        // every rule above still reads true with one substitution: the film
+        // that is already safely in Plex is the one the user ripped months ago
+        // rather than the one this job just filed. That is why
+        // `ExtrasOnlyImport.readiness` refuses before any of this starts —
+        // "a failed extra never changes the outcome" is only an acceptable rule
+        // while something *is* in Plex to be the outcome.
+        //
+        // `producedBy` is `nil` on that run (no feature was produced by
+        // anything), so the #0035 skip below cannot fire and the loop is
+        // reached exactly as it is on the ordinary path.
         if producedBy == .makemkvFallback {
             if !extras.items.isEmpty {
                 log("⚠︎ Skipping \(extras.items.count) extra(s): the feature came from the MakeMKV fallback, and extras still go straight to HandBrake against the same disc HandBrake already failed on (#0035).")
@@ -777,6 +897,11 @@ struct DVDPipeline {
             // the disc. Leaving it at `.encoded` would make the sweep report
             // `encodedNeverMoved` forever for a directory that in fact holds
             // no unmoved feature at all.
+            //
+            // #0186: on an extras-only run the marker is already `.encoding`
+            // and never advanced past it, so this is a no-op write with the
+            // same meaning — the directory holds nothing but re-derivable
+            // working files, and the sweep may delete it.
             await advanceMarker(.encoding)
             // #0041 review: a HandBrake encode per extra is not "moving into
             // Plex" — report its own phase, only when extras actually run.
@@ -1003,7 +1128,15 @@ struct DVDPipeline {
             }
         }
 
-        log("── Done. Scan your Plex Movies library to pick up the new title.")
+        switch intent {
+        case .film:
+            log("── Done. Scan your Plex Movies library to pick up the new title.")
+        case .extrasOnly:
+            // #0186: "the new title" would be a lie here, and the sentence the
+            // user most needs is the reassurance about the file that was
+            // already there.
+            log("── Done. Scan your Plex Movies library to pick up the new extras. The film's own file was not touched.")
+        }
         return await finish(.succeeded(destination: destination))
     }
 

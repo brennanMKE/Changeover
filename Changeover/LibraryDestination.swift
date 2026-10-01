@@ -75,6 +75,20 @@ nonisolated enum LibraryPaths {
         let file: String
     }
 
+    /// `Movies/<Title (Year) {tmdb-ID}>` — the one folder everything belonging
+    /// to this film lives in or under.
+    ///
+    /// Derived in one place because three callers now need the same answer and
+    /// must not each spell it out: `.feature` files the film into it,
+    /// `.bonusFeature` files an extra into a Plex extras subfolder inside it,
+    /// and #0186's extras-only run refuses to start unless it is *already*
+    /// there. That last one is why this is worth a function: the folder the run
+    /// checks for has to be the folder the move will actually use, and a second
+    /// copy of the expression is how those two come to disagree (#0172).
+    static func filmFolder(metadata: MovieMetadata, roots: LibraryRoots) -> String {
+        (roots.moviesPath as NSString).appendingPathComponent(metadata.folderName)
+    }
+
     /// - Parameter sourceExtension: the encoded file's own extension (e.g.
     ///   `"mp4"`, `"mkv"`), never hard-coded — issues/0031.md's "Notes"
     ///   section is explicit that `.extra`'s container is an open question
@@ -89,7 +103,7 @@ nonisolated enum LibraryPaths {
     ) -> Resolved {
         switch destination {
         case .feature:
-            let folder = (roots.moviesPath as NSString).appendingPathComponent(metadata.folderName)
+            let folder = filmFolder(metadata: metadata, roots: roots)
             let file = (folder as NSString).appendingPathComponent(metadata.fileName)
             return Resolved(folder: folder, file: file)
 
@@ -103,7 +117,7 @@ nonisolated enum LibraryPaths {
 
         case .bonusFeature(let titleIndex, let kind, let label):
             // The film's own folder, then Plex's extras subfolder inside it.
-            let movieFolder = (roots.moviesPath as NSString).appendingPathComponent(metadata.folderName)
+            let movieFolder = filmFolder(metadata: metadata, roots: roots)
             let folder = (movieFolder as NSString).appendingPathComponent(kind.folderName)
             let ext = sourceExtension.isEmpty ? "mp4" : sourceExtension
             let name = PlexExtra.fileName(label: label, titleIndex: titleIndex, extension: ext)
