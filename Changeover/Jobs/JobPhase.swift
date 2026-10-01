@@ -36,6 +36,18 @@ import Foundation
 ///   `succeeded` or `cancelled` — is #0046's decision; no `cancelled` edge
 ///   until then. Reported only when extras actually run (not when the
 ///   feature came from the MakeMKV fallback, #0035).
+///
+///   #0186 widened the one edge *into* this phase. It used to be reachable
+///   only from `organizing`, because extras only ever ran after the feature
+///   had been filed — so `extras → succeeded` was safe in the sense that
+///   mattered: something was already in Plex. An extras-only run
+///   (`JobIntent.extrasOnly`) encodes no feature and files none, so it enters
+///   this phase straight out of `starting`, and the thing already in Plex is
+///   the film the user ripped months ago, which this job proved was there
+///   before it would start (`ExtrasOnlyImport.readiness`). The property the
+///   edge rested on — "the job's own success does not depend on anything in
+///   this phase" — is unchanged; the reason for it is a folder the library
+///   already had rather than a file this job just wrote.
 /// - `succeeded`, `failed`, `cancelled` — terminal. Reached only through
 ///   `JobState.finishing(with:)`, never `advancing(to:)` — see `JobState`.
 ///
@@ -71,8 +83,12 @@ nonisolated enum JobPhase: String, Codable, Sendable, CaseIterable, Hashable {
     /// Every non-terminal phase may fail. Only `organizing` and `extras` may
     /// succeed — the feature has to be in Plex first. Neither has an edge to
     /// `cancelled` — see the type doc comment above.
+    ///
+    /// #0186 adds `starting → extras`, the extras-only run's only shape: no
+    /// feature is encoded, so there is no `encoding` to pass through and no
+    /// `organizing` to arrive from.
     static let allowedTransitions: [JobPhase: Set<JobPhase>] = [
-        .starting:   [.encoding, .failed, .cancelled],
+        .starting:   [.encoding, .extras, .failed, .cancelled],
         .encoding:   [.fallback, .organizing, .failed, .cancelled],
         .fallback:   [.organizing, .failed, .cancelled],
         .organizing: [.extras, .succeeded, .failed],

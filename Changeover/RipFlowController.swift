@@ -107,6 +107,17 @@ final class RipFlowController {
     /// another.
     private(set) var replaceAcknowledgement: ReplaceAcknowledgement?
 
+    /// #0186 — the user's "Import Just the Extras", keyed the same way and
+    /// cleared by the same events.
+    ///
+    /// Deliberately a second property rather than a case on the one above: the
+    /// two answers to "this film is already in Plex" have opposite
+    /// consequences, and the destructive one must not be one typo away from the
+    /// harmless one. They are mutually exclusive in *state* as well as in the
+    /// gate — `acknowledgeReplace`/`acknowledgeExtrasOnly` each clear the other
+    /// — so the panel and Start can only ever be describing one of them.
+    private(set) var extrasOnlyAcknowledgement: ExtrasOnlyAcknowledgement?
+
     /// §7.2 — where the `ffprobe` read of the matched library file stands.
     /// Only ever started once `libraryCheck` has found one, and cleared by
     /// everything that clears `libraryCheck`.
@@ -371,6 +382,7 @@ final class RipFlowController {
             // for this movie, and the view's `.task(id:)` key hasn't changed,
             // so nothing would re-run it.
             replaceAcknowledgement = nil
+            extrasOnlyAcknowledgement = nil
         }
         selectedMovieID = movieID
         search.select(movieID: movieID, apiKey: apiKey)
@@ -410,6 +422,7 @@ final class RipFlowController {
         // the confirmation is given on the Confirm step and does not survive
         // leaving it.
         replaceAcknowledgement = nil
+        extrasOnlyAcknowledgement = nil
     }
 
     /// "Next Disc" on the Done step — dismisses that job's outcome card, so
@@ -1319,6 +1332,34 @@ final class RipFlowController {
               let first = entries.first,
               let movieID = Int(tmdbID) else { return }
         replaceAcknowledgement = ReplaceAcknowledgement(movieID: movieID, folderPath: first.folderPath)
+        // #0186: the two answers are exclusive. Pressing Replace after
+        // "Import Just the Extras" means the user changed their mind about the
+        // *film*, and leaving both recorded would leave the panel and the Start
+        // caption describing different jobs.
+        extrasOnlyAcknowledgement = nil
+    }
+
+    /// #0186 — "Import Just the Extras". The same shape as
+    /// `acknowledgeReplace`: a no-op unless there is a completed check with a
+    /// match in it, so the button can never record a confirmation for something
+    /// that is not on screen.
+    /// A no-op too when the library files this film under a *different* folder
+    /// name. That copy carries the same `{tmdb-…}` tag and is a fine duplicate
+    /// to replace, but Plex reads a film's extras from inside the film's own
+    /// folder, and there is no such folder — so the run would refuse
+    /// (`ExtrasOnlyImport.readiness`) rather than invent one beside it. The
+    /// notice withholds the button in that case for the same reason; this is
+    /// the guard behind it, so the gate can never be unlocked for a folder that
+    /// is not there.
+    func acknowledgeExtrasOnly() {
+        guard case .done(let tmdbID, .present(let entries)) = libraryCheck,
+              let first = entries.first,
+              let movieID = Int(tmdbID),
+              let movie = search.selectedMovie,
+              entries.contains(where: { $0.folderName == metadata(for: movie).folderName })
+        else { return }
+        extrasOnlyAcknowledgement = ExtrasOnlyAcknowledgement(movieID: movieID, folderPath: first.folderPath)
+        replaceAcknowledgement = nil
     }
 
     /// Both halves, together: the answer and any confirmation given for it.
@@ -1327,6 +1368,8 @@ final class RipFlowController {
         libraryCheckGeneration += 1
         libraryCheck = .idle
         replaceAcknowledgement = nil
+        // #0186: the other answer to the same question, cleared with it.
+        extrasOnlyAcknowledgement = nil
         // §7: the file probe, its answer and the overwrite permission are all
         // about the file the library check found. When that goes, so do they.
         fileCheckGeneration += 1
@@ -2263,8 +2306,29 @@ final class RipFlowController {
             // this title's. `nil` — the usual case — is today's bare
             // `--markers`, and a read still in flight is simply not waited
             // for.
-            chapterMarkers: jobs.chapterMarkerRows
+            chapterMarkers: jobs.chapterMarkerRows,
+            // #0186 — whether this job imports the film or only its extras.
+            // The gate already decided; this records the decision rather than
+            // taking it again, so there is one answer and not two (#0172).
+            intent: extrasOnlyApplies(to: metadata) ? .extrasOnly : .film
         )
+    }
+
+    /// #0186 — whether the extras-only answer was given for **this** film.
+    ///
+    /// Keyed on the film, not on the disc. The acknowledgement names one movie
+    /// id and one library folder, so on a disc of two films it can only ever
+    /// apply to the one it was given for — the other is an ordinary import.
+    /// That is the same rule "Replace the Existing File" follows
+    /// (`skipFilmsAlreadyInPlex`), and for the same reason: an answer about one
+    /// film must never be spent on another.
+    ///
+    /// The folder half of the key is checked by `StartGate` (against the
+    /// library answer on screen) and again by the pipeline (against the
+    /// filesystem), so a stale folder cannot reach a move either way.
+    private func extrasOnlyApplies(to metadata: MovieMetadata) -> Bool {
+        guard let ack = extrasOnlyAcknowledgement else { return false }
+        return ack.movieID == Int(metadata.tmdbID)
     }
 
     /// The same decision the Start button is gated on, so nothing can start
@@ -2304,8 +2368,27 @@ final class RipFlowController {
             // cross-check reports and no longer refuses. Nothing else in the
             // gate changes: a missing disc, an unticked audio track and an
             // unacknowledged duplicate are not inferences being contradicted.
-            manualOverride:          manualOverride.isActive
+            manualOverride:          manualOverride.isActive,
+            // #0186 — the second answer to a film that is already in Plex.
+            // `tickedExtras` is the same set `ExtrasPlan.make` reads, through
+            // the same accessor #0185's eject decision reads, so the gate, the
+            // notice and the eject cannot disagree about whether this disc has
+            // bonus material waiting on it.
+            extrasOnlyAcknowledgement: extrasOnlyAcknowledgement,
+            tickedExtras:              tickedExtraCount(jobs: jobs)
         )
+    }
+
+    /// #0186 — how many extras are ticked, for the gate and the notice.
+    ///
+    /// Reads `JobController.selectedExtraTitleIndices`, exactly as
+    /// `hasImportableExtras` (#0185) does. Deliberately the raw ticked count
+    /// and not `selectedExtrasPlan.items.count`: this answers "has the person
+    /// asked for anything?", which is a question about what is on screen, and
+    /// the plan's own resolution against the held scan is applied later, at the
+    /// point of harm, by `JobController.start` and the pipeline.
+    func tickedExtraCount(jobs: JobController) -> Int {
+        jobs.selectedExtraTitleIndices.count
     }
 
     // MARK: - Ripping without being asked
@@ -2856,6 +2939,28 @@ final class RipFlowController {
     /// path, so the 24-in-26 case has no branch of its own to regress.
     @discardableResult
     func startRipping(jobs: JobController, settings: AppSettings) -> Bool {
+        // #0186 — an extras-only import is not a film import, so it never
+        // builds a `DiscRipPlan`.
+        //
+        // A plan is a queue of films to rip, and this job rips none: the film
+        // is already in Plex, which is the whole premise. Building one anyway
+        // would hand `skipFilmsAlreadyInPlex` a film it would correctly skip,
+        // leaving `plan.isFinished` and "Nothing to import from this disc" —
+        // Start enabled, and nothing happening. The gate is the one answer
+        // (`startDecision`), the same single source of truth #0172 settled on,
+        // so the branch is taken on its verdict rather than on a second reading
+        // of the acknowledgement.
+        if startDecision(jobs: jobs) == .readyForExtrasOnly {
+            ripPlan = nil
+            // #0163's hold is a statement that a *film* on this disc is still
+            // to be imported, and there is none. Cleared explicitly so the
+            // pipeline's step 3 ejects when the extras are done, like any other
+            // finished job — a hold left over from an earlier plan on the same
+            // disc would leave the drive shut with nothing coming.
+            jobs.discHasMoreWork = false
+            guard let request = ripRequest(jobs: jobs) else { return false }
+            return jobs.start(request: request, settings: settings)
+        }
         if let disc = jobs.insertedDisc,
            var plan = DiscRipPlan.make(disc: disc, films: plannedFilms(jobs: jobs)) {
             skipFilmsAlreadyInPlex(&plan, jobs: jobs)

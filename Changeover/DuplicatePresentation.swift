@@ -70,6 +70,14 @@ nonisolated struct DuplicateNotice: Equatable, Sendable {
     let offersReplace: Bool
     /// `unreachable` — re-runs the probe.
     let offersRecheck: Bool
+    /// #0186 — `present && !acknowledged && something is ticked`: the second,
+    /// non-destructive answer to a film that is already there.
+    ///
+    /// Offered only when there is bonus material ticked, because without it the
+    /// button would unblock a Start that encodes nothing. `var` with a default
+    /// so the four `DuplicateNotice` constructions in this file (and any in a
+    /// test) that have nothing to say about extras compile unchanged.
+    var offersExtrasOnly: Bool = false
     /// The first matched folder, for "Reveal in Finder".
     let revealPath: String?
 }
@@ -82,11 +90,21 @@ nonisolated enum DuplicatePresentation {
     /// movie than the one on screen, and a completed check that found nothing.
     /// The common case (a film that is not in the library) costs the user no
     /// pixels and no clicks at all.
+    /// - Parameters:
+    ///   - extrasOnlyAcknowledgement: #0186 — the user's "Import Just the
+    ///     Extras", if they have given it for this film and folder.
+    ///   - tickedExtras: how many extras are ticked right now. Gates the
+    ///     extras-only offer rather than merely describing it: with nothing
+    ///     ticked there is no such import to offer, and a button that unblocked
+    ///     a Start which then did nothing would be a worse dead end than the
+    ///     refusal it replaced.
     static func notice(
         check: LibraryCheck,
         acknowledgement: ReplaceAcknowledgement?,
         metadata: MovieMetadata,
-        now: Date
+        now: Date,
+        extrasOnlyAcknowledgement: ExtrasOnlyAcknowledgement? = nil,
+        tickedExtras: Int = 0
     ) -> DuplicateNotice? {
         switch check {
         case .idle:
@@ -131,7 +149,14 @@ nonisolated enum DuplicatePresentation {
                 // the disc as one. A different edition is a new file beside
                 // the old, not a replacement for it.
                 guard LibraryMatch.holdsEdition(metadata.edition, in: entries) else { return nil }
-                return presentNotice(entries: entries, acknowledgement: acknowledgement, metadata: metadata, now: now)
+                return presentNotice(
+                    entries: entries,
+                    acknowledgement: acknowledgement,
+                    metadata: metadata,
+                    now: now,
+                    extrasOnlyAcknowledgement: extrasOnlyAcknowledgement,
+                    tickedExtras: tickedExtras
+                )
             }
         }
     }
@@ -142,14 +167,35 @@ nonisolated enum DuplicatePresentation {
         entries: [LibraryEntry],
         acknowledgement: ReplaceAcknowledgement?,
         metadata: MovieMetadata,
-        now: Date
+        now: Date,
+        extrasOnlyAcknowledgement: ExtrasOnlyAcknowledgement? = nil,
+        tickedExtras: Int = 0
     ) -> DuplicateNotice {
         let fileLines = entries.flatMap { entry in entry.files.map { fileLine($0, now: now) } }
         let first = entries[0]
+        let movieID = Int(metadata.tmdbID) ?? -1
         let isAcknowledged = acknowledgement == ReplaceAcknowledgement(
-            movieID: Int(metadata.tmdbID) ?? -1,
+            movieID: movieID,
             folderPath: first.folderPath
         )
+        // #0186 — checked *after* Replace below, matching
+        // `StartGate.libraryDecision`'s order: a disc carrying both answers is
+        // never quietly downgraded from the full re-rip the user asked for.
+        let isExtrasOnlyAcknowledged = tickedExtras > 0
+            && extrasOnlyAcknowledgement == ExtrasOnlyAcknowledgement(
+                movieID: movieID,
+                folderPath: first.folderPath
+            )
+        // #0186 — and only offered when the library files this film under the
+        // folder `LibraryPaths.resolve` would put its extras inside.
+        //
+        // A copy filed under an older or renamed title carries the same
+        // `{tmdb-…}` tag and is a perfectly good duplicate to *replace*, but
+        // there is nowhere in it for an extra to go: the run would refuse
+        // (`ExtrasOnlyImport.readiness`) rather than invent a second folder
+        // beside it. A button that is certain to refuse is worse than no
+        // button, so the offer is withheld and the reason is said instead.
+        let hasTheFilmsOwnFolder = entries.contains { $0.folderName == metadata.folderName }
 
         if isAcknowledged {
             let single = entries.count == 1 && first.files.count == 1
@@ -162,6 +208,25 @@ nonisolated enum DuplicatePresentation {
                 tone: .success,
                 offersReplace: false,
                 offersRecheck: false,
+                revealPath: first.folderPath
+            )
+        }
+
+        // #0186 — the other answer, confirmed. The reassurance is the whole
+        // point of the panel at this moment, so it is what the plain register
+        // says: the file that is already there is not going to change.
+        if isExtrasOnlyAcknowledged {
+            let count = tickedExtras == 1 ? "1 extra" : "\(tickedExtras) extras"
+            return DuplicateNotice(
+                kind: .acknowledged,
+                headline: "Will import \(count) into \(first.folderName) and leave \(metadata.fileName) alone",
+                lines: [first.folderPath],
+                plainHeadline: "OK — only the extras will be brought in.",
+                plainLines: ["The copy of the movie you already have is left exactly as it is."],
+                tone: .success,
+                offersReplace: false,
+                offersRecheck: false,
+                offersExtrasOnly: false,
                 revealPath: first.folderPath
             )
         }
@@ -193,6 +258,21 @@ nonisolated enum DuplicatePresentation {
             plainLines.append("Ripping it again will replace the copy that's there\(when).")
         }
 
+        // #0186 — the second way out, said in the panel rather than only on the
+        // button. Before this, a disc whose film was already in Plex and whose
+        // making-of was not offered one action: replace a file the user did not
+        // want replaced.
+        if tickedExtras > 0 {
+            let count = tickedExtras == 1 ? "1 extra" : "\(tickedExtras) extras"
+            if hasTheFilmsOwnFolder {
+                lines.append("Or bring in just the \(count) ticked on this disc, leaving the film's own file alone.")
+                plainLines.append("Or bring in just the extras and leave the movie you have as it is.")
+            } else {
+                lines.append("The \(count) ticked on this disc can't be filed with it: Plex reads extras from inside \(metadata.folderName), and this copy is in \(first.folderName).")
+                plainLines.append("The extras on this disc can't be added to the copy you have — it's filed under a different name.")
+            }
+        }
+
         return DuplicateNotice(
             kind: .present,
             headline: headline,
@@ -202,6 +282,7 @@ nonisolated enum DuplicatePresentation {
             tone: .warning,
             offersReplace: true,
             offersRecheck: false,
+            offersExtrasOnly: tickedExtras > 0 && hasTheFilmsOwnFolder,
             revealPath: first.folderPath
         )
     }

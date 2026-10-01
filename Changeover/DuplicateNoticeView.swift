@@ -19,6 +19,10 @@ struct DuplicateNoticeView: View {
     let notice: DuplicateNotice
     let onReplace: () -> Void
     let onRecheck: () -> Void
+    /// #0186 — "Import Just the Extras". Defaulted to a no-op so the preview
+    /// and the screenshot harness need not supply one; production passes
+    /// `RipFlowController.acknowledgeExtrasOnly`.
+    var onExtrasOnly: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -47,7 +51,7 @@ struct DuplicateNoticeView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            if notice.offersReplace || notice.offersRecheck {
+            if notice.offersReplace || notice.offersRecheck || notice.offersExtrasOnly {
                 HStack(spacing: 10) {
                     Spacer(minLength: 0)
                     if notice.offersRecheck {
@@ -61,6 +65,16 @@ struct DuplicateNoticeView: View {
                         }
                         .font(.caption)
                     }
+                    // #0186 — the non-destructive answer, and the reason it
+                    // comes first and is not the default action: it is the one
+                    // of the two that cannot lose anything, so it should be the
+                    // easier one to reach, while the irreversible one stays
+                    // where the reflex already expects it.
+                    if notice.offersExtrasOnly {
+                        Button("Import Just the Extras", action: onExtrasOnly)
+                            .font(.caption)
+                            .help("Encode the ticked extras into this film's folder in Plex. The film's own file is not read, moved or replaced.")
+                    }
                     if notice.offersReplace {
                         // The label says exactly what will happen. Start stays
                         // disabled until this is pressed: the step flow was
@@ -68,6 +82,9 @@ struct DuplicateNoticeView: View {
                         // cannot stop a reflex — a disabled button can.
                         Button("Replace the Existing File", action: onReplace)
                             .font(.caption)
+                            // #0186: said plainly, now that there is a button
+                            // beside it that does not.
+                            .help("Rip the whole film again and overwrite the copy already in Plex.")
                     }
                 }
             }

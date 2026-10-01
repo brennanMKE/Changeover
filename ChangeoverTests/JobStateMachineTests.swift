@@ -41,7 +41,9 @@ struct JobPhaseTests {
     /// it is a test failure.
     @Test func exactlyTheSpecifiedEdgesAreLegal() {
         let expected: [JobPhase: Set<JobPhase>] = [
-            .starting:   [.encoding, .failed, .cancelled],
+            // #0186 added `starting → extras`: an extras-only run encodes no
+            // feature, so it has no `encoding` to pass through.
+            .starting:   [.encoding, .extras, .failed, .cancelled],
             .encoding:   [.fallback, .organizing, .failed, .cancelled],
             .fallback:   [.organizing, .failed, .cancelled],
             .organizing: [.extras, .succeeded, .failed],
@@ -63,13 +65,25 @@ struct JobPhaseTests {
     }
 
     /// #0041 review: extras run only after the feature is in Plex, so the
-    /// phase is reachable only from `organizing`, can end the job
-    /// successfully, and has no `cancelled` edge until #0046 decides what a
-    /// cancel mid-extras means.
-    @Test func extrasFollowsOnlyOrganizingAndCannotBeCancelled() {
+    /// phase can end the job successfully and has no `cancelled` edge until
+    /// #0046 decides what a cancel mid-extras means.
+    ///
+    /// #0186 widened the edges *into* it from one to two. `organizing` is still
+    /// the ordinary route — the feature has just been filed. `starting` is the
+    /// extras-only run, which encodes no feature at all and so never enters
+    /// `encoding`; the film it files beside is one the library already had, and
+    /// the pipeline refuses to begin unless that folder is really there
+    /// (`ExtrasOnlyImport.readiness`). Nothing else may reach it: in
+    /// particular `encoding → extras` stays illegal, so a feature that was
+    /// encoded and *not* filed can never fall through into the extras loop and
+    /// end the job `.succeeded`.
+    @Test func extrasFollowsOnlyOrganizingOrStartingAndCannotBeCancelled() {
+        let allowed: Set<JobPhase> = [.organizing, .starting]
         for phase in JobPhase.allCases {
-            #expect(phase.canTransition(to: .extras) == (phase == .organizing), "\(phase.rawValue) → extras")
+            #expect(phase.canTransition(to: .extras) == allowed.contains(phase), "\(phase.rawValue) → extras")
         }
+        #expect(!JobPhase.encoding.canTransition(to: .extras))
+        #expect(!JobPhase.fallback.canTransition(to: .extras))
         #expect(JobPhase.extras.canTransition(to: .succeeded))
         #expect(!JobPhase.extras.canTransition(to: .cancelled))
     }

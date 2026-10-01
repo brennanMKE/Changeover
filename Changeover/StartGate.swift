@@ -73,6 +73,20 @@ nonisolated struct FeatureChoices: Equatable, Sendable {
 /// decision is exactly what has to cross that wire.
 nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterable {
     case ready
+    /// #0186 — the film is already in Plex, the user has ticked bonus material
+    /// and pressed **Import Just the Extras**, so Start will encode and file
+    /// those extras *only* and leave the existing film file exactly as it is.
+    ///
+    /// A second permitting case rather than another `.ready`, for two reasons.
+    /// A caption that read "Rip this movie into Plex." beside a button that is
+    /// about to do nothing of the kind is the kind of quiet mismatch this gate
+    /// exists to prevent — so this case carries its own `reason`/`plainReason`
+    /// saying what will actually happen, which is why it is the only permitting
+    /// case with a non-`nil` one. And everything that used to ask `== .ready`
+    /// now asks `permitsStart`, *except* `AutoStartPolicy`: an extras-only run
+    /// is only ever reached by pressing a button that says so, and starting one
+    /// on a countdown nobody asked for would be the app choosing it.
+    case readyForExtrasOnly
     case jobRunning
     case noDisc
     case discUnavailable
@@ -140,6 +154,10 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
         switch self {
         case .ready:
             return nil
+        case .readyForExtrasOnly:
+            // Not a refusal — Start works. It is the one enabled state whose
+            // behaviour differs from "rip this movie", so it says so.
+            return "Start will bring in the ticked extras only; the film already in Plex is left as it is."
         case .jobRunning:
             return "A job is already running."
         case .noDisc:
@@ -211,6 +229,9 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
         switch self {
         case .ready:
             return nil
+        case .readyForExtrasOnly:
+            // 74 characters, inside the #0140 two-line budget.
+            return "Only the extras will be brought in. Your copy of the movie stays."
         case .jobRunning:
             return "Another disc is still being ripped."
         case .noDisc:
@@ -266,6 +287,33 @@ nonisolated enum StartDecision: String, Equatable, Sendable, Codable, CaseIterab
     /// Start's enabled tooltip. Not diagnostic — nothing has gone wrong when
     /// the button works — so the plain register is simply the better one.
     static let readyHelp = "Rip this movie into Plex."
+
+    /// Whether this decision lets Start run at all.
+    ///
+    /// #0186 — there are now two permitting cases and they start *different*
+    /// jobs: `.ready` imports the film, `.readyForExtrasOnly` imports only the
+    /// ticked bonus material into a film the library already has. Every control
+    /// that used to compare against `.ready` to decide whether the button works
+    /// asks this instead, so adding the second case could not leave one of them
+    /// behind — which is precisely how the #0172 class of bug starts, with two
+    /// places answering one question and one of them not being told.
+    ///
+    /// Exhaustive with no `default`, like `reason` and `plainReason` above: a
+    /// case added later cannot quietly inherit "Start is disabled" — or, far
+    /// worse, "Start is enabled".
+    var permitsStart: Bool {
+        switch self {
+        case .ready, .readyForExtrasOnly:
+            return true
+        case .jobRunning, .noDisc, .discUnavailable, .scanInProgress, .scanFailed,
+             .noTitlesOnDisc, .noMovieSelected, .noFeatureChosen, .bonusFeatureWithoutFilm,
+             .noTitleSelected, .noAudioTrackSelected, .runtimeLookupLoading,
+             .runtimeMismatchUnconfirmed, .libraryCheckInProgress, .duplicateUnacknowledged,
+             .everyFilmAlreadyInPlex, .upgradeNothingSelected, .ffmpegMissing,
+             .fileCheckInProgress:
+            return false
+        }
+    }
 }
 
 /// #0026 — the single decision behind the Start button's enabled state,
@@ -336,7 +384,9 @@ nonisolated enum StartGate {
         libraryCheck: LibraryCheck = .idle,
         replaceAcknowledgement: ReplaceAcknowledgement? = nil,
         featureChoices: FeatureChoices = FeatureChoices(),
-        manualOverride: Bool = false
+        manualOverride: Bool = false,
+        extrasOnlyAcknowledgement: ExtrasOnlyAcknowledgement? = nil,
+        tickedExtras: Int = 0
     ) -> StartDecision {
         guard !isRunning else { return .jobRunning }
         guard !discUnavailable else { return .discUnavailable }
@@ -426,9 +476,31 @@ nonisolated enum StartGate {
                 // Nothing to import, and every film was named — the disc is
                 // genuinely finished with, and says so rather than naming a
                 // button that would only excuse one of its films.
-                if featureChoices.hasChoice { return .everyFilmAlreadyInPlex }
+                if featureChoices.hasChoice {
+                    // #0186 — unless the bonus material on it is still waiting.
+                    // "Every film on this disc is already in Plex" stopped being
+                    // the same statement as "nothing to import" the moment the
+                    // app learned to take a making-of (#0185 made the same
+                    // correction to the automatic eject). The acknowledgement
+                    // names one film and one folder, so this only ever permits
+                    // the extras of the film whose block the user was looking
+                    // at; the others are untouched either way.
+                    let library = libraryDecision(
+                        libraryCheck,
+                        replaceAcknowledgement: replaceAcknowledgement,
+                        extrasOnlyAcknowledgement: extrasOnlyAcknowledgement,
+                        tickedExtras: tickedExtras
+                    )
+                    if library == .readyForExtrasOnly { return .readyForExtrasOnly }
+                    return .everyFilmAlreadyInPlex
+                }
             }
-            return libraryDecision(libraryCheck, replaceAcknowledgement: replaceAcknowledgement)
+            return libraryDecision(
+                libraryCheck,
+                replaceAcknowledgement: replaceAcknowledgement,
+                extrasOnlyAcknowledgement: extrasOnlyAcknowledgement,
+                tickedExtras: tickedExtras
+            )
         }
     }
 
@@ -439,9 +511,24 @@ nonisolated enum StartGate {
     /// turn into a rip that cannot start, for a check that #0012's staged
     /// replace already makes non-destructive-until-success. The Confirm step
     /// keeps the uncertainty on screen with a "Check again" link instead.
+    ///
+    /// #0186 — a film that is already there has two honest answers, not one.
+    /// Replace re-encodes the feature and overwrites the library file; an
+    /// extras-only import leaves that file alone and takes the bonus material
+    /// the disc still has. **Replace is checked first and wins**, so a disc
+    /// carrying both answers is never quietly downgraded from the full re-rip
+    /// the user asked for — and "Replace the Existing File" keeps meaning
+    /// exactly what its label says.
+    ///
+    /// `tickedExtras` gates the extras-only answer rather than merely
+    /// describing it: an acknowledgement with nothing ticked would enable a
+    /// Start that encodes nothing and files nothing, which is a worse dead end
+    /// than the refusal it replaced.
     static func libraryDecision(
         _ libraryCheck: LibraryCheck,
-        replaceAcknowledgement: ReplaceAcknowledgement?
+        replaceAcknowledgement: ReplaceAcknowledgement?,
+        extrasOnlyAcknowledgement: ExtrasOnlyAcknowledgement? = nil,
+        tickedExtras: Int = 0
     ) -> StartDecision {
         switch libraryCheck {
         case .idle:
@@ -450,8 +537,15 @@ nonisolated enum StartGate {
             return .libraryCheckInProgress
         case .done(let tmdbID, .present(let entries)):
             guard let first = entries.first else { return .ready }
-            let expected = ReplaceAcknowledgement(movieID: Int(tmdbID) ?? -1, folderPath: first.folderPath)
-            return replaceAcknowledgement == expected ? .ready : .duplicateUnacknowledged
+            let movieID = Int(tmdbID) ?? -1
+            if replaceAcknowledgement == ReplaceAcknowledgement(movieID: movieID, folderPath: first.folderPath) {
+                return .ready
+            }
+            if tickedExtras > 0,
+               extrasOnlyAcknowledgement == ExtrasOnlyAcknowledgement(movieID: movieID, folderPath: first.folderPath) {
+                return .readyForExtrasOnly
+            }
+            return .duplicateUnacknowledged
         case .done(_, .absent), .done(_, .unreachable):
             return .ready
         }
@@ -506,6 +600,12 @@ nonisolated enum StartGate {
 
         // The same acknowledgement Replace needs, keyed the same way: the
         // library file is being overwritten either way.
+        //
+        // #0186: deliberately passes no `extrasOnlyAcknowledgement`, so this
+        // can never answer `.readyForExtrasOnly`. An upgrade rewrites the
+        // library file by remux, which is the one thing an extras-only import
+        // promises not to do — saying "only the extras" and then rewriting the
+        // film would be the worst possible reading of either button.
         return libraryDecision(libraryCheck, replaceAcknowledgement: replaceAcknowledgement)
     }
 
@@ -513,6 +613,10 @@ nonisolated enum StartGate {
     /// enabled state and its `.reason` can never disagree — both come from
     /// the same switch. Kept with its original signature and behaviour so
     /// every existing call site and test compiles and passes unchanged.
+    ///
+    /// #0186: "can start" is `permitsStart`, not `== .ready`, so the
+    /// extras-only run is a start like any other as far as a caller that only
+    /// wants a `Bool` is concerned.
     static func canStart(
         hasMovieSelected: Bool,
         isRunning: Bool,
@@ -526,7 +630,9 @@ nonisolated enum StartGate {
         libraryCheck: LibraryCheck = .idle,
         replaceAcknowledgement: ReplaceAcknowledgement? = nil,
         featureChoices: FeatureChoices = FeatureChoices(),
-        manualOverride: Bool = false
+        manualOverride: Bool = false,
+        extrasOnlyAcknowledgement: ExtrasOnlyAcknowledgement? = nil,
+        tickedExtras: Int = 0
     ) -> Bool {
         decide(
             hasMovieSelected: hasMovieSelected,
@@ -541,8 +647,10 @@ nonisolated enum StartGate {
             libraryCheck: libraryCheck,
             replaceAcknowledgement: replaceAcknowledgement,
             featureChoices: featureChoices,
-            manualOverride: manualOverride
-        ) == .ready
+            manualOverride: manualOverride,
+            extrasOnlyAcknowledgement: extrasOnlyAcknowledgement,
+            tickedExtras: tickedExtras
+        ).permitsStart
     }
 
     /// Whether `acknowledgement` covers `titleIndex` for the movie
