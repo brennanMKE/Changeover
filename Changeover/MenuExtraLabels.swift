@@ -116,30 +116,55 @@ nonisolated enum MenuExtraLabels {
         //
         // Same rule as `FeatureMatching.assign`, and the same reason it is
         // affordable: a bonus menu lists a handful of items, not hundreds.
-        let ranked = labels.sorted { $0.seconds < $1.seconds }
-        let sortedTitles = titles.sorted { $0.durationSeconds < $1.durationSeconds }
 
-        // Beyond this the permutation search is not worth running, and a menu
-        // listing more than eight extras is past the point where a wrong
-        // pairing matters more than no pairing at all.
+        // #0179 — narrow BOTH sides to what could possibly pair, before any
+        // searching.
+        //
+        // The first version capped the raw counts and refused outright above
+        // eight. A disc with nine short titles therefore got no labels at all
+        // and every extra silently stayed a clip — and most of those titles
+        // were never candidates, being nowhere near a printed runtime. Keeping
+        // only what is within tolerance of something on the other side shrinks
+        // the search to the pairs that were ever possible, and the cap then
+        // falls on a genuinely ambiguous disc rather than on an ordinary one.
+        let ranked = labels
+            .filter { label in titles.contains { abs($0.durationSeconds - label.seconds) <= toleranceSeconds } }
+            .sorted { $0.seconds < $1.seconds }
+        let sortedTitles = titles
+            .filter { title in labels.contains { abs(title.durationSeconds - $0.seconds) <= toleranceSeconds } }
+            .sorted { $0.durationSeconds < $1.durationSeconds }
+        guard !ranked.isEmpty, !sortedTitles.isEmpty else { return [] }
         guard ranked.count <= maximumLabels, sortedTitles.count <= maximumLabels else { return [] }
 
+        // #0179 — choose a subset on WHICHEVER side is larger.
+        //
+        // The first version only ever chose a subset of titles, then paired it
+        // against `ranked.prefix(count)` — the shortest labels. With six
+        // printed labels and one candidate title it tried the shortest label
+        // against that title and gave up if it did not fit, never trying the
+        // other five. Reported by a review of this function, 2026-09-30.
+        let pairs = min(ranked.count, sortedTitles.count)
+        let labelSets = combinations(of: ranked, choose: pairs)
+        let titleSets = combinations(of: sortedTitles, choose: pairs)
+
         var best: (error: Int, matches: [Match])?
-        for chosen in combinations(of: sortedTitles, choose: min(ranked.count, sortedTitles.count)) {
-            for order in permutations(of: Array(chosen.indices)) {
-                var total = 0
-                var matches: [Match] = []
-                var fits = true
-                for (position, label) in ranked.prefix(order.count).enumerated() {
-                    let title = chosen[order[position]]
-                    let error = abs(title.durationSeconds - label.seconds)
-                    guard error <= toleranceSeconds else { fits = false; break }
-                    total += error
-                    matches.append(Match(titleIndex: title.index, label: label.label,
-                                         offBySeconds: error))
+        for chosenLabels in labelSets {
+            for chosenTitles in titleSets {
+                for order in permutations(of: Array(chosenTitles.indices)) {
+                    var total = 0
+                    var matches: [Match] = []
+                    var fits = true
+                    for (position, label) in chosenLabels.enumerated() {
+                        let title = chosenTitles[order[position]]
+                        let error = abs(title.durationSeconds - label.seconds)
+                        guard error <= toleranceSeconds else { fits = false; break }
+                        total += error
+                        matches.append(Match(titleIndex: title.index, label: label.label,
+                                             offBySeconds: error))
+                    }
+                    guard fits, matches.count == pairs else { continue }
+                    if best == nil || total < best!.error { best = (total, matches) }
                 }
-                guard fits, matches.count == min(ranked.count, sortedTitles.count) else { continue }
-                if best == nil || total < best!.error { best = (total, matches) }
             }
         }
         return (best?.matches ?? []).sorted { $0.titleIndex < $1.titleIndex }

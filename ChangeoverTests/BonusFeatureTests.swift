@@ -253,3 +253,86 @@ import Testing
         #expect(matches.isEmpty)
     }
 }
+
+/// #0179 — two faults in `MenuExtraLabels.match`, found by review rather than
+/// by a disc, 2026-09-30.
+@Suite struct MenuExtraLabelMatchingTests {
+
+    private static func title(_ index: Int, seconds: Int) -> DiscTitle {
+        DiscTitle(index: index, durationSeconds: seconds, chapterCount: 2,
+                  sizeBytes: 0, outputFileName: nil, displayAspect: 1.33)
+    }
+
+    /// **More labels than titles.** The first version chose a subset of
+    /// TITLES and paired it against the shortest labels, so with six printed
+    /// labels and one candidate title it tried the shortest label, failed, and
+    /// named nothing — never trying the one that actually fits.
+    @Test func thelabelThatFitsIsFoundEvenWhenItIsNotTheShortest() {
+        let printed = [
+            MenuExtraLabels.Printed(label: "short one", seconds: 100),
+            MenuExtraLabels.Printed(label: "middle one", seconds: 300),
+            MenuExtraLabels.Printed(label: "the long one", seconds: 1357),
+        ]
+        let matches = MenuExtraLabels.match(printed: printed, to: [Self.title(11, seconds: 1360)])
+        #expect(matches.count == 1)
+        #expect(matches.first?.label == "the long one")
+    }
+
+    /// **More titles than labels**, the mirror case, which always worked and
+    /// must keep working.
+    @Test func theTitleThatFitsIsFoundAmongMany() {
+        let matches = MenuExtraLabels.match(
+            printed: [MenuExtraLabels.Printed(label: "only one", seconds: 300)],
+            to: [Self.title(1, seconds: 100), Self.title(2, seconds: 302),
+                 Self.title(3, seconds: 900)])
+        #expect(matches.map(\.titleIndex) == [2])
+    }
+
+    /// **A bonus-heavy disc is no longer refused outright.** The cap used to
+    /// be applied to the raw counts, so nine short titles meant no labels at
+    /// all and every extra silently stayed a clip — even though most of those
+    /// titles were nowhere near a printed runtime. Narrowing both sides to
+    /// what could possibly pair leaves an ordinary disc well inside the cap.
+    @Test func adiscWithManyShortTitlesStillGetsItsLabels() {
+        let titles = (1...14).map { Self.title($0, seconds: $0 * 97) }
+        let printed = [
+            MenuExtraLabels.Printed(label: "first", seconds: 97),
+            MenuExtraLabels.Printed(label: "second", seconds: 1358),
+        ]
+        let matches = MenuExtraLabels.match(printed: printed, to: titles)
+        #expect(matches.count == 2)
+        #expect(matches.first { $0.label == "first" }?.titleIndex == 1)
+        #expect(matches.first { $0.label == "second" }?.titleIndex == 14)
+    }
+
+    /// The Signs result is unchanged by all of this — the reason the optimal
+    /// search exists in the first place.
+    @Test func signsStillPairsExactlyAsItDid() {
+        let titles = [Self.title(9, seconds: 375), Self.title(10, seconds: 485),
+                      Self.title(11, seconds: 1357), Self.title(12, seconds: 516),
+                      Self.title(13, seconds: 510), Self.title(14, seconds: 291)]
+        let printed = [
+            MenuExtraLabels.Printed(label: "looking for Signs", seconds: 371),
+            MenuExtraLabels.Printed(label: "building Signs", seconds: 482),
+            MenuExtraLabels.Printed(label: "a commentary", seconds: 1353),
+            MenuExtraLabels.Printed(label: "the effects of Signs", seconds: 511),
+            MenuExtraLabels.Printed(label: "last voices", seconds: 506),
+            MenuExtraLabels.Printed(label: "full circle", seconds: 288),
+        ]
+        let matches = MenuExtraLabels.match(printed: printed, to: titles)
+        #expect(matches.map(\.titleIndex) == [9, 10, 11, 12, 13, 14])
+        #expect(matches.first { $0.titleIndex == 12 }?.label == "the effects of Signs")
+        #expect(matches.first { $0.titleIndex == 13 }?.label == "last voices")
+        #expect(matches.reduce(0) { $0 + $1.offBySeconds } == 23)
+    }
+
+    /// A genuinely ambiguous disc — many labels AND many titles all plausible
+    /// — is still refused rather than guessed at.
+    @Test func atrulyAmbiguousDiscIsStillRefused() {
+        let titles = (1...12).map { Self.title($0, seconds: 300 + $0) }
+        let printed = (1...12).map {
+            MenuExtraLabels.Printed(label: "thing \($0)", seconds: 300 + $0)
+        }
+        #expect(MenuExtraLabels.match(printed: printed, to: titles).isEmpty)
+    }
+}
