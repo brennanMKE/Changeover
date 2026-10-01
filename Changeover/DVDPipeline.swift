@@ -747,13 +747,18 @@ struct DVDPipeline {
             log("✓ Produced by: HandBrake, direct from disc")
         }
 
-        // Step 2.5: Extras (#0031 Step B). One by one, after the feature has
-        // already moved — the feature is already safely in Plex by this
-        // point, so a failed extra must never change the outcome being
-        // returned, and never reaches `FallbackPolicy` (that only ever sees
-        // the feature's primary failure). The disc stays mounted until every
-        // extra is done; eject moves after this loop for exactly that
+        // Step 2.5: Extras (#0031 Step B, #0178). One by one, after the
+        // feature has already moved — the feature is already safely in Plex
+        // by this point, so a failed extra must never change the outcome
+        // being returned, and never reaches `FallbackPolicy` (that only ever
+        // sees the feature's primary failure). The disc stays mounted until
+        // every extra is done; eject moves after this loop for exactly that
         // reason.
+        //
+        // #0178: each item carries its own `LibraryDestination`, so the same
+        // loop files an unnamed clip into `Clips/` and a title the disc named
+        // into a Plex extras subfolder beside the film. Nothing here chooses
+        // — `ExtrasPlan.make` already did, against the scan.
         //
         // #0035 (orchestrator decision from the #0031 handoff): when the
         // feature was produced by the MakeMKV fallback, HandBrake already
@@ -778,6 +783,11 @@ struct DVDPipeline {
             reportPhase(.extras)
 
             var succeededExtras = 0
+            // #0178 — counted separately so the summary line can say where
+            // the files went. "2 of 2 → Clips" was true of every extra this
+            // app had ever filed; it is a lie the moment one lands beside
+            // the film instead.
+            var succeededBonusFeatures = 0
             extrasLoop: for (index, item) in extras.items.enumerated() {
                 // #0046: a cancel requested between extras — nothing running
                 // for `ProcessRunner`'s own cancellation handling to catch —
@@ -796,11 +806,25 @@ struct DVDPipeline {
                     frameRate:         item.frameRate,
                     interlaceDetected: item.interlaceDetected
                 )
+                // #0178: the *working* name stays index-based even for a
+                // named bonus feature. An index is unique, is already proven
+                // safe as a path component, and is what `WorkingFiles`'
+                // sweep and the #0037 duration measurer both key off. The
+                // label only ever becomes a filename at the move, inside
+                // `LibraryPaths.resolve`, where it is sanitised — so disc
+                // text never reaches the working folder at all.
                 let paddedIndex = String(format: "%02d", item.titleIndex)
                 let extraOutput = (jobDirectory as NSString)
                     .appendingPathComponent("\(metadata.baseName) - t\(paddedIndex).mp4")
 
-                log("▶ Extra: title \(item.titleIndex)")
+                // #0178: say what the disc called it and where it is going.
+                // "title 11" told nobody anything; the thing the user is
+                // waiting for is "making Signs: a commentary".
+                if case .bonusFeature(let kind, let label) = item.filing {
+                    log("▶ Extra: title \(item.titleIndex) — “\(label)” → \(metadata.folderName)/\(kind.folderName)/")
+                } else {
+                    log("▶ Extra: title \(item.titleIndex)")
+                }
 
                 // #0031: extras use `.sourceDefault` audio — the disc's
                 // default track, same encoder settings as the feature — and
@@ -874,20 +898,44 @@ struct DVDPipeline {
                     }
 
                     do {
+                        // #0178: `item.destination` is the whole difference
+                        // between a clip and a bonus feature. One call, one
+                        // organizer, one set of #0031 guards — the item
+                        // already decided, against the scan, which library
+                        // it belongs to (`ExtrasPlan.make`), so there is
+                        // nothing for this loop to choose.
                         _ = try await PlexOrganizer.move(
                             encodedFile: extraURL.path,
                             metadata:    metadata,
-                            destination: .extra(titleIndex: item.titleIndex),
+                            destination: item.destination,
                             roots:       libraryRoots,
                             log:         log
                         )
                         succeededExtras += 1
+                        if item.isBonusFeature { succeededBonusFeatures += 1 }
                     } catch {
-                        log("✗ Extra title \(item.titleIndex) failed to move into \(libraryRoots.clipsPath) — deleting")
+                        // #0178: the organizer has already logged *why* (and
+                        // for a bonus feature, which of its two guards
+                        // refused). This line says which extra and what
+                        // happens to it next, and it names the tree the
+                        // attempt was for so a `Clips` failure and a
+                        // beside-the-film failure are not the same line.
+                        let tree = item.isBonusFeature
+                            ? "\(libraryRoots.moviesPath)/\(metadata.folderName)"
+                            : libraryRoots.clipsPath
+                        log("✗ Extra title \(item.titleIndex) failed to move into \(tree) — deleting")
                         // #0031 decision: an extra whose move failed is
                         // deleted, not kept — the disc remains the source,
                         // unlike the feature (#0012), so there is nothing to
                         // preserve here.
+                        //
+                        // #0178 keeps that unchanged for a bonus feature,
+                        // and keeps the larger rule with it: this `catch`
+                        // logs, deletes and falls out of the `do` into the
+                        // next iteration. It never rethrows and never
+                        // touches `outcome`, so the feature — already in
+                        // Plex — still ends the job `.succeeded`
+                        // (`extras → succeeded` is a legal edge, #0041).
                         switch WorkingFiles.removeFile(
                             extraURL.path,
                             inJobDirectory: jobDirectory,
@@ -902,7 +950,20 @@ struct DVDPipeline {
                     }
                 }
             }
-            log("✓ Extras: \(succeededExtras) of \(extras.items.count) → \(libraryRoots.clipsPath)")
+            // #0178: the prefix "✓ Extras: N of M" is unchanged — it is what
+            // `ExtrasPipelineTests`, `OutputDurationCheckTests` and
+            // `DVDPipelineCancellationTests` all assert on, and it is still
+            // the number the user wants first. Only the destination clause
+            // after it grew, because there are now two places an extra can
+            // land and a single path would misreport one of them.
+            if succeededBonusFeatures > 0 {
+                let clips = succeededExtras - succeededBonusFeatures
+                var destinations = "\(succeededBonusFeatures) beside the film in \(libraryRoots.moviesPath)/\(metadata.folderName)"
+                if clips > 0 { destinations += ", \(clips) → \(libraryRoots.clipsPath)" }
+                log("✓ Extras: \(succeededExtras) of \(extras.items.count) — \(destinations)")
+            } else {
+                log("✓ Extras: \(succeededExtras) of \(extras.items.count) → \(libraryRoots.clipsPath)")
+            }
         }
 
         // Step 3: Eject (#0005). Only ever reached on a typed success — the

@@ -371,10 +371,24 @@ nonisolated enum DiscTitleFormatting {
     /// `DiscTitleListView` so it is pinned rather than merely compiled.
     static func extrasSummaryWording(_ plan: ExtrasPlan) -> Wording {
         let count = plan.items.count
-        return Wording(
-            plain: plainExtrasLine(plan),
-            detail: "\(count) extra\(count == 1 ? "" : "s") selected — \(duration(plan.totalDurationSeconds)) total, filed outside the Plex library"
-        )
+        let stem = "\(count) extra\(count == 1 ? "" : "s") selected — \(duration(plan.totalDurationSeconds)) total"
+        // #0178: "filed outside the Plex library" was true of every extra
+        // this app had ever filed, and is a lie the moment one of them is a
+        // title the disc named — those go *inside* the film's own folder, in
+        // a subfolder Plex reads as extras. The all-clip wording is left
+        // byte-for-byte as it was, because that is still the common case and
+        // still the honest sentence for it.
+        let bonus = plan.bonusFeatureCount
+        guard bonus > 0 else {
+            return Wording(plain: plainExtrasLine(plan),
+                           detail: "\(stem), filed outside the Plex library")
+        }
+        let named = "\(bonus) named by the disc, filed with the movie as extras"
+        let rest = count - bonus
+        let detail = rest > 0
+            ? "\(stem) — \(named); the other \(rest) filed outside the Plex library"
+            : "\(stem) — \(named)"
+        return Wording(plain: plainExtrasLine(plan), detail: detail)
     }
 
     /// "English, Spanish" / "No sound" — the plain sibling of
