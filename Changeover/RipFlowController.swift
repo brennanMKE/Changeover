@@ -255,9 +255,21 @@ final class RipFlowController {
     /// A film that fails its own runtime check is not a film to carry into
     /// Confirm. Start would refuse it there anyway — the point is to refuse it
     /// where the mistake was made and where the fix is one click.
+    ///
+    /// #0176 — unless the user has set this disc up by hand, in which case the
+    /// misfit is reported and Continue still works. The fit check compares a
+    /// TMDB runtime against the title the film sits on; once a person has said
+    /// which title that is, a disagreement is the app's arithmetic against
+    /// their eyes, and it has already cost four days of "the build gets stuck
+    /// with this disc". The warning stays on every row that earns one
+    /// (`misfittingFeatures` is unchanged, and the rows read it) — it simply
+    /// stops being a door.
     var mayContinueFromChoose: Bool {
         guard featureSelection.isMultiFeature else { return chosenMovie != nil }
-        return featureSelection.hasRunnableFilm && misfittingFeatures.isEmpty
+        return ManualOverride.mayContinue(
+            hasRunnableFilm: featureSelection.hasRunnableFilm,
+            misfittingFeatures: misfittingFeatures.count,
+            isOverridden: manualOverride.isActive)
     }
 
     func acknowledgeFeatureRejection() { featureSelection.acknowledgeRejection() }
@@ -426,11 +438,20 @@ final class RipFlowController {
     /// on the list), so this is safe to call as often as everything else in
     /// `reconcile` is.
     private func syncFeatures(jobs: JobController, apiKey: String) {
-        let indices = FeatureSelection.features(in: Self.discOutcome(jobs.scanState))
+        // #0176 — the scan first, unconditionally. The override panel and the
+        // fit check both read the held scan, and before this it was only
+        // written on the branch below, which a single-feature disc never
+        // takes.
+        currentScanState = jobs.scanState
+        // #0176 — what the USER said this disc holds outranks what the scan's
+        // classification makes of it. `features` is `nil` until the override
+        // is complete, so a disc with no override, or one half-answered,
+        // takes exactly the path it always did.
+        let indices = manualOverride.features(amongTitles: scannedTitles.map(\.index))
+            ?? FeatureSelection.features(in: Self.discOutcome(jobs.scanState))
         guard indices != featureSelection.features else { return }
 
         featureSelection.setFeatures(indices)
-        currentScanState = jobs.scanState
         featureLibraryChecks = featureLibraryChecks.filter { indices.contains($0.key) }
         featureLibraryGenerations = featureLibraryGenerations.filter { indices.contains($0.key) }
         featureSearchModels = featureSearchModels.filter { indices.contains($0.key) }
@@ -738,7 +759,170 @@ final class RipFlowController {
 
     /// Set by `syncFeatures`, so the fit check has the scan without needing a
     /// `JobController` handed to every view that asks.
+    ///
+    /// #0176 — written on **every** reconcile, not only when the feature list
+    /// changes. It used to be set inside `syncFeatures`' early-out, so on a
+    /// single-feature disc (the list stays empty, so the guard returns) it
+    /// stayed `.idle` for the whole visit: every question answered from it
+    /// read as "no scan". Nothing noticed while only multi-feature discs
+    /// asked; the override panel asks on every disc, and a panel with no
+    /// titles to pick from is exactly the dead end this ticket is about.
     private(set) var currentScanState: ScanState = .idle
+
+    /// Every title the scan read, in disc order — the raw table, not the
+    /// app's judgement of which rows are features.
+    ///
+    /// #0176's override is a way past that judgement, so it has to be able to
+    /// see what the judgement was made from.
+    var scannedTitles: [DiscTitle] {
+        guard case .scanned(let result) = currentScanState else { return [] }
+        return result.disc.titles
+    }
+
+    // MARK: - The user saying what the disc is (#0176)
+
+    /// What the user has said this disc holds, when they have said anything.
+    ///
+    /// Empty — and consulted by nothing — on every disc the app reads
+    /// correctly, which is the normal case. The decisions all live in the pure
+    /// `ManualOverride`; this class only keeps it bound to the disc in the
+    /// drive and re-states it to the parts of the app that hold the same fact
+    /// twice (`FeatureSelection`, and `JobController.selectedTitleIndex`).
+    private(set) var manualOverride = ManualOverride()
+
+    /// How the override stands against the disc now in the drive.
+    var manualOverrideReadiness: ManualOverride.Readiness {
+        manualOverride.readiness(amongTitles: scannedTitles.map(\.index))
+    }
+
+    /// What the app itself makes of this disc, for the panel's closed state.
+    /// Read from the held scan rather than stored, like every other derived
+    /// answer here.
+    var discReading: DiscTitleHeuristic.Outcome? {
+        Self.discOutcome(currentScanState)
+    }
+
+    /// "This disc holds this many films." `nil` gives it back to the app.
+    func setManualFilmCount(_ count: Int?, jobs: JobController, settings: AppSettings) {
+        manualOverride.setFilmCount(count)
+        applyManualOverride(jobs: jobs, settings: settings)
+    }
+
+    /// "Movie `film` is this title", straight off the raw table.
+    ///
+    /// A pick made with no override yet **starts** one, seeded from what the
+    /// app was already working from. Without the seed, correcting one title on
+    /// a disc the app read as two films would leave the other film unanswered
+    /// and the override imposing nothing — the user having acted, and the
+    /// screen having changed nothing, which is the exact complaint this
+    /// ticket exists to answer. With it, one click is one correction.
+    func assignManualTitle(_ titleIndex: Int?, toFilm film: Int,
+                           jobs: JobController, settings: AppSettings) {
+        if !manualOverride.isActive {
+            let seed = titlesTheAppChose(jobs: jobs)
+            manualOverride.setFilmCount(max(film, max(1, seed.count)))
+            for (position, index) in seed.enumerated() {
+                manualOverride.assign(titleIndex: index, toFilm: position + 1)
+            }
+        }
+        manualOverride.assign(titleIndex: titleIndex, toFilm: film)
+        applyManualOverride(jobs: jobs, settings: settings)
+    }
+
+    /// The titles the app is already working from, in screen order: the
+    /// several features it found, the one it settled on, or — when it could
+    /// not tell — whatever row is picked.
+    ///
+    /// The panel's starting point, so it opens as a view of the current plan
+    /// rather than as an empty form beside it.
+    private func titlesTheAppChose(jobs: JobController) -> [Int] {
+        let features = FeatureSelection.features(in: discReading)
+        if !features.isEmpty { return features }
+        if case .single(let index, _) = discReading { return [index] }
+        return jobs.selectedTitleIndex.map { [$0] } ?? []
+    }
+
+    /// How many films the panel lists: the user's answer, or the app's
+    /// reading — never fewer than one, because a panel with no rows asks
+    /// nothing.
+    func manualFilmCountShown(jobs: JobController) -> Int {
+        manualOverride.filmCount ?? max(1, titlesTheAppChose(jobs: jobs).count)
+    }
+
+    /// The film positions the panel lists.
+    func manualFilmsShown(jobs: JobController) -> [Int] {
+        Array(1...manualFilmCountShown(jobs: jobs))
+    }
+
+    /// What the panel shows for one film: the user's answer once they have
+    /// given one, otherwise what the app chose for that position.
+    func manualTitleShown(forFilm film: Int, jobs: JobController) -> Int? {
+        if manualOverride.isActive { return manualOverride.title(forFilm: film) }
+        let chosen = titlesTheAppChose(jobs: jobs)
+        guard film >= 1, film <= chosen.count else { return nil }
+        return chosen[film - 1]
+    }
+
+    /// "Let the app decide again" — and it decides again immediately, because
+    /// `syncFeatures` re-reads the scan's own outcome the moment the override
+    /// stops imposing one.
+    func clearManualOverride(jobs: JobController, settings: AppSettings) {
+        manualOverride.clear()
+        applyManualOverride(jobs: jobs, settings: settings)
+    }
+
+    /// Push the override into the two places that hold the same fact.
+    ///
+    /// There is no Apply button, by design: every edit takes effect the moment
+    /// it is complete, which is what "a disc the app calls one film that holds
+    /// two must be one action" means. An incomplete override imposes nothing
+    /// at all (`Readiness.features` is `nil` until every film has a distinct
+    /// title), so the step never reshapes around half an answer.
+    ///
+    /// On a disc the user has cut down to **one** film the title has to be
+    /// settled here. `FeatureSelection` is empty for a one-film disc by
+    /// design — that emptiness is what keeps the ordinary path untouched — so
+    /// there is no named film to carry the title to `JobController` the way
+    /// `applyActiveFeature` does on a multi-feature disc.
+    private func applyManualOverride(jobs: JobController, settings: AppSettings) {
+        syncFeatures(jobs: jobs, apiKey: settings.tmdbAPIKey)
+        enforceManualTitle(jobs: jobs, settings: settings)
+    }
+
+    /// Keep `JobController.selectedTitleIndex` on the title a one-film
+    /// override names.
+    ///
+    /// Re-stated on every reconcile because the *scan* re-states its own
+    /// answer: `applyScanOutcome` preselects the title on a `.single` verdict,
+    /// so a Scan Again would otherwise quietly undo the override a minute
+    /// after it was made — the user's answer replaced by the answer they had
+    /// just overruled.
+    ///
+    /// Never while a job is running: the title then belongs to the job, and
+    /// `startNextFilm` is the only thing allowed to move it.
+    private func enforceManualTitle(jobs: JobController, settings: AppSettings) {
+        guard !jobs.isRunning,
+              let title = manualOverride.soleFeature,
+              scannedTitles.contains(where: { $0.index == title }),
+              jobs.selectedTitleIndex != title else { return }
+        jobs.selectTitle(title, settings: settings)
+    }
+
+    /// A row clicked in the raw title table (`DiscTitleListView`).
+    ///
+    /// Routed through the flow rather than straight to `jobs.selectTitle` so
+    /// that on a disc the user has overridden, the table **is** the override:
+    /// the click updates the answer instead of being snapped back by
+    /// `enforceManualTitle` on the next reconcile. Two controls writing the
+    /// same fact and arguing about it is this window's oldest failure shape
+    /// (#0030, #0167, #0172); here the fix is to let the later one win,
+    /// because both of them are the user.
+    func selectTitleByHand(_ index: Int?, jobs: JobController, settings: AppSettings) {
+        if manualOverride.soleFeature != nil, let index {
+            manualOverride.assign(titleIndex: index, toFilm: 1)
+        }
+        jobs.selectTitle(index, settings: settings)
+    }
 
     /// "Rip this one first" — switches which named film this pass will rip.
     /// The other stays named; nothing is thrown away.
@@ -1141,12 +1325,22 @@ final class RipFlowController {
             // `selectionDisc`.
             clearLibraryCheck()
         }
+        // #0176 — the override belongs to one disc, and says so itself.
+        // Before `syncFeatures`, which asks it how many films this disc holds.
+        // The same disc re-reported (a recovered label, #0152; a re-insertion
+        // of the disc it was made for) keeps it; any other disc, or an empty
+        // drive, and it goes.
+        manualOverride.adopt(disc: jobs.insertedDisc)
         // #0160 — before the search ladder below, which must know whether
         // this disc holds one film or several before it offers the volume
         // label as a term for "the" film.
         syncFeatures(jobs: jobs, apiKey: apiKey)
         seedEdition(jobs: jobs)
         if let settings {
+            // #0176 — re-stated here because the scan re-states its own
+            // answer: a Scan Again preselects the title the heuristic likes,
+            // which is the answer the user has already overruled.
+            enforceManualTitle(jobs: jobs, settings: settings)
             resolveDiscSearch(jobs: jobs, settings: settings)
             attemptAutoSelect(jobs: jobs, settings: settings)
         }
@@ -1220,6 +1414,12 @@ final class RipFlowController {
         // boxes all belonged to the disc that just left.
         featureSelection = FeatureSelection()
         featureSearchModels = [:]
+        // #0176: so did what the user said that disc held. `ManualOverride`
+        // refuses another disc on its own (`adopt`), and this is the second,
+        // independent wipe — the pattern #0034 established for a statement
+        // whose survival across a swap would file one disc under another's
+        // answer.
+        manualOverride = ManualOverride()
         editionSeededFor = nil
         edition = ""
         menuTitleTriedFor = nil
@@ -1601,7 +1801,12 @@ final class RipFlowController {
             // #0160 — on a disc holding several films, "no film chosen" has
             // its own refusal, because the screen has one search box per film
             // and "Choose a movie." does not say which.
-            featureChoices:          featureSelection.gateInput(importable: importableFeatureCount)
+            featureChoices:          featureSelection.gateInput(importable: importableFeatureCount),
+            // #0176 — the user has said what this disc is, so the runtime
+            // cross-check reports and no longer refuses. Nothing else in the
+            // gate changes: a missing disc, an unticked audio track and an
+            // unacknowledged duplicate are not inferences being contradicted.
+            manualOverride:          manualOverride.isActive
         )
     }
 

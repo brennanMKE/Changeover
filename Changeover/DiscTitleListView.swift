@@ -355,11 +355,23 @@ struct DiscTitleListView: View {
             }
 
         case .mismatch:
+            // #0176 — the same numbers, and a different standing.
+            //
+            // A mismatch the user has already overruled by setting the disc up
+            // by hand is reported in orange with one line saying so, and no
+            // button: there is nothing left to acknowledge, because Start is
+            // not waiting on it. Keeping the red refusal and a dead "Rip
+            // anyway" beside an enabled Start would be the screen and the gate
+            // disagreeing about the same disc, which is the shape of every one
+            // of this flow's worst bugs.
+            let overridden = flow.manualOverride.isActive
             VStack(alignment: .leading, spacing: 2) {
                 if let wording = DiscTitleFormatting.runtimeVerdictWording(title: title, verdict: verdict) {
-                    WordingText(wording: wording, font: .caption, tint: .red)
+                    WordingText(wording: wording, font: .caption, tint: overridden ? .orange : .red)
                 }
-                if StartGate.isAcknowledged(jobs.mismatchAcknowledgement, titleIndex: title.index, runtimeLookup: runtimeLookup) {
+                if overridden {
+                    WordingText(wording: ManualOverride.mismatchWarning, font: .caption2)
+                } else if StartGate.isAcknowledged(jobs.mismatchAcknowledgement, titleIndex: title.index, runtimeLookup: runtimeLookup) {
                     WordingText(wording: DiscTitleFormatting.acknowledgedWording, font: .caption2)
                 } else if let movieID = loadedMovieID {
                     Button("Rip anyway") {
@@ -401,9 +413,13 @@ struct DiscTitleListView: View {
     /// one-answer cases; passing both is meaningless and never done.
     private func titleTable(_ disc: DiscInfo, badgeIndex: Int?,
                             badgeIndices: Set<Int> = [], badgeLabel: String? = nil) -> some View {
+        // #0176 — through the flow, not straight onto `JobController`. On a
+        // disc the user has set up by hand this table *is* the override, so a
+        // row clicked here has to change the answer rather than be snapped
+        // back to it on the next reconcile.
         let selection = Binding<Int?>(
             get: { jobs.selectedTitleIndex },
-            set: { jobs.selectTitle($0, settings: settings) }
+            set: { flow.selectTitleByHand($0, jobs: jobs, settings: settings) }
         )
         return List(disc.titles, selection: selection) { title in
             titleRow(title, badgeIndex: badgeIndex,

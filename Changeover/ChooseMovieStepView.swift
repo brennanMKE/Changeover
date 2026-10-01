@@ -81,6 +81,11 @@ struct ChooseMovieStepView: View {
 
             Divider()
             StepActionBar {
+                // #0176 — always here, on every disc, whatever the app made
+                // of it. A control that appears only once the app has admitted
+                // to being unsure is no help on the discs it is sure and wrong
+                // about, which are the ones that cost four days.
+                ManualOverrideButton()
                 Spacer()
                 Button("Continue") { flow.continueToConfirm() }
                     .disabled(search.selectedMovie == nil)
@@ -251,7 +256,12 @@ struct ChooseMovieStepView: View {
         if !flow.featureSelection.hasRunnableFilm {
             return "Name at least one of this disc's movies first."
         }
-        if let feature = flow.misfittingFeatures.first,
+        // #0176 — a misfit on a disc the user set up by hand is a warning on
+        // the row, not a reason Continue is dead, so the tooltip must not say
+        // it is. A tooltip explaining a disabled button that is in fact
+        // enabled is how this step spent four days contradicting itself.
+        if !flow.manualOverride.isActive,
+           let feature = flow.misfittingFeatures.first,
            let position = flow.featureSelection.features.firstIndex(of: feature).map({ $0 + 1 }) {
             return "Movie \(position) is not the right length for that part of the disc — fix it first."
         }
@@ -376,6 +386,10 @@ struct ChooseMovieStepView: View {
 
             Divider()
             StepActionBar {
+                // #0176 — the same control on the multi-feature layout, where
+                // the misread disc is most often the problem: here it is also
+                // how the user says "this disc holds one film, not two".
+                ManualOverrideButton()
                 // What Continue will actually do.
                 //
                 // #0170 — this used to read "Ripping X first — put the disc
