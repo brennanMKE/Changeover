@@ -1499,7 +1499,15 @@ final class RipFlowController {
         clearWhatBelongedToTheLastDisc(jobs: jobs)
         switch SelectionReset.reconcile(
             selectionDisc: selectionDisc,
-            hasSelection: selectedMovieID != nil,
+            // #0188 — typed text is state that belongs to a disc too.
+            //
+            // This asked only whether a MOVIE had been chosen, so a disc where
+            // the user typed a term and picked nothing never reset at all: the
+            // reconcile returned `.keep` and the next disc inherited the box.
+            // Alfie was imported and ejected, the next disc went in, and
+            // "Alfie" was still there — and on a disc the user had typed at
+            // but not finished choosing, it would have been too.
+            hasSelection: selectedMovieID != nil || !search.query.isEmpty,
             currentDisc: jobs.insertedDisc,
             isRunning: jobs.isRunning
         ) {

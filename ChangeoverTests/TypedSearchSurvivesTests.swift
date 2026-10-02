@@ -51,16 +51,28 @@ import Testing
 
     // MARK: - Fault 2: the reset wiped typed text
 
-    /// The rule, stated by the user: "It should not remove the text the user
+    /// #0188 — this test used to assert the opposite, and the rule it quoted
+    /// was right about the wrong moment.
+    ///
+    /// The user's words in #0156 were "it should not remove the text the user
     /// enters ever. They will know what disc they put in if they are entering
-    /// search terms."
-    @Test func aNewDiscDoesNotWipeWhatTheUserTyped() {
+    /// search terms." That is a rule about the app overruling someone while
+    /// the SAME disc is being read, and it still holds — at the sites that
+    /// overwrite the box, each of which guards on `queryIsUserEntered`.
+    ///
+    /// `resetForNewDisc` is not one of those moments. It runs only when the
+    /// disc has changed, and the same user reported the consequence on
+    /// 2026-10-01: Alfie imported and ejected, the next disc in, and "Alfie"
+    /// still in the box. They will indeed know what disc they put in — which
+    /// is exactly why last disc's term must not be sitting there.
+    @Test func anewDiscClearsWhatWasTypedForTheOldOne() {
         let search = MovieSearchViewModel()
         search.query = "The Campaign"
         #expect(search.queryIsUserEntered)
 
         search.resetForNewDisc()
-        #expect(search.query == "The Campaign", "the user's own text survives a reset")
+        #expect(search.query.isEmpty, "a term typed for one disc has no standing on the next")
+        #expect(!search.queryIsUserEntered)
     }
 
     /// A term the *app* derived is the app's to clear — that is the whole
@@ -86,15 +98,17 @@ import Testing
     }
 
     /// But once the user edits the box, the text is theirs — even if the app
-    /// had put a guess there first.
+    /// had put a guess there first. That ownership is what the prefill sites
+    /// read, and it survives everything except the disc changing (#0188).
     @Test func editingTheLaddersGuessMakesItTheUsers() {
         let search = MovieSearchViewModel()
         search.present(query: "Enemyatthegates", results: [])
         search.query = "Enemy at the Gates"
-        #expect(search.queryIsUserEntered)
+        #expect(search.queryIsUserEntered,
+                "this is the flag the ladder refuses to write over")
 
         search.resetForNewDisc()
-        #expect(search.query == "Enemy at the Gates")
+        #expect(search.query.isEmpty, "and a new disc clears it anyway")
     }
 
     /// Clearing the box is a deliberate "no", not ownership: an empty field is

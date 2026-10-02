@@ -406,16 +406,30 @@ final class MovieSearchViewModel {
     func resetForNewDisc() {
         cancelSearch()
         select(movieID: nil, apiKey: "")
-        // #0156 — never throw away what the user typed.
+        // #0188 — everything goes, including what the user typed.
         //
-        // On 2026-09-27 a user typed "The Campaign" while the disc was still
-        // being read, and the moment the scan finished the field was empty and
-        // nothing was matched. Their rule, and it is the right one: someone
-        // typing a search term knows which disc they put in, so the app has no
-        // standing to overrule them. A term the *app* derived is ours to clear.
-        if !queryIsUserEntered {
-            storedQuery = ""
-        }
+        // #0156 kept a user-entered term here, and that was the wrong place
+        // for the right rule. Its case was someone typing "The Campaign"
+        // while the disc was still being read, and having the field emptied
+        // when the scan finished: the app overruling a person about the disc
+        // they had just put in. That protection belongs at the sites that
+        // *overwrite* the field — the prefill, `featureQueryChanged`,
+        // `resolveEachFeature`, `applyFilmNamings` — and every one of them
+        // guards on `queryIsUserEntered` in its own right.
+        //
+        // This function is only ever called when the disc has CHANGED, and a
+        // term typed for one disc has no standing on the next. Reported
+        // 2026-10-01: Alfie imported and ejected, the next disc went in, and
+        // "Alfie" was still sitting in the search box waiting to be matched
+        // against a film it has nothing to do with. The user's words — "that
+        // state needs to be cleared the moment the user leaves that search
+        // screen".
+        storedQuery = ""
+        // And the ownership flag with it. Leaving it set would make the next
+        // disc's empty box count as "the user's text", which is what every
+        // prefill site refuses to write over — so the ladder would decline to
+        // fill a field nobody had typed in.
+        queryIsUserEntered = false
         results = []
         errorMessage = nil
         // Without this the empty state keeps naming the *previous* disc:
