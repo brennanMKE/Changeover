@@ -40,7 +40,8 @@ numbers like `7000078778_1` are common and tell you nothing.
 The app is doing its own work the whole time. It scans, reads menus with
 Vision, asks the on-device model questions, searches TMDB, and — unless told
 otherwise — selects a film and starts a job by itself. **An agent that also
-decides will race the app.** That is what `mode agent` exists for.
+decides will race the app.** Holding a `watch` session open is what stops
+that: for as long as one is attached the app makes no decisions of its own.
 
 ## Commands
 
@@ -49,7 +50,7 @@ decides will race the app.** That is what `mode agent` exists for.
 | Command | What it gives you |
 |---|---|
 | `changeoverctl ping` | Broker health. Never involves the app, so it is the first thing to run when anything is wrong. |
-| `changeoverctl status` | The whole current picture: app version and pid, whether a disc is present and its label and id, the flow step and disc phase, the scan state, what film is identified (title, year, TMDB id), job phase and percentage if one is running, and the Start gate's decision **with its reason**. |
+| `changeoverctl status` | The whole current picture: app version and pid, whether a disc is present and its label and id, the flow step and disc phase, the scan state, what film is identified (title, year, TMDB id), job phase and percentage if one is running, the Start gate's decision **with its reason**, whether automation is suspended and by how many sessions, and a `library` block giving this installation's Plex paths and naming conventions. |
 | `changeoverctl watch` | A JSONL event stream. One object per line, flushed as it happens. |
 | `changeoverctl report` | What the last job actually did: each film filed, skipped (with the reason), or failed. |
 
@@ -90,18 +91,72 @@ whether it is commentary, and HandBrake's variant axis, which is how
 minutes to encode is both wasteful and badly behaved; one blocking call with a
 timeout is what a script wants.
 
-### Taking control
+### Taking control — `watch` is the agentic mode
 
-| Command | What it does |
-|---|---|
-| `changeoverctl mode agent` | Suspend the app's own auto-selection and auto-start. |
-| `changeoverctl mode app` | Hand it back. |
+There is no command that switches the app into agent mode, because that would
+be a piece of state an agent can crash while holding. Instead:
 
-**This must be reverted.** If an agent exits while automation is suspended, the
-next disc the user puts in sits there doing nothing and they will not know why.
-The mode reverts automatically when the last CLI session detaches, and `status`
-reports when automation is suspended. Both of those are safety properties, not
-conveniences.
+**For as long as a `watch` session is attached, the app suspends its own
+automation.** It will not auto-select a film and it will not auto-start a job.
+When the last `watch` session detaches — cleanly, or because the process was
+killed, or because the connection dropped — automation resumes by itself.
+
+The thing that suspends the app's decisions is the thing whose death restores
+them. That is the whole design: the failure mode where a user's disc sits idle
+because an agent died holding a flag cannot occur, since there is no flag.
+
+Two watchers attached and one detaches leaves automation still suspended;
+suspension is scoped to the session count, not to a toggle. `status` reports
+whether automation is suspended and how many sessions are holding it, so a user
+looking at an idle disc can see why.
+
+## Where the files go
+
+**These paths are per-installation and an agent must never guess them.** They
+come from `AppSettings`, the user chose them, and they may be a local folder or
+a NAS mount. `status --json` reports them under `library`, and `help` prints
+them for the installation it is running on:
+
+```
+mediaRoot   /Volumes/Media/Media
+movies      /Volumes/Media/Media/Movies
+tvShows     /Volumes/Media/Media/TV Shows
+```
+
+The naming convention is strict and Plex depends on it. A film:
+
+```
+Movies/Garden State (2004) {tmdb-401}/Garden State (2004).mp4
+```
+
+The folder carries the `{tmdb-ID}` tag and the file does not. The tag is what
+lets Plex tell apart films that share a title — four films on TMDB are called
+*Garden State*, and only the number says which one is in the folder. Different
+cuts of one film sit in the same folder as editions rather than in folders of
+their own.
+
+Bonus material goes **inside that folder**, in one of the subfolder names Plex
+recognises as extras:
+
+```
+Movies/Garden State (2004) {tmdb-401}/Behind The Scenes/Making of Garden State.mp4
+```
+
+The recognised names are `Behind The Scenes`, `Deleted Scenes`, `Featurettes`,
+`Interviews`, `Scenes`, `Shorts`, `Trailers` and `Other`, spelled exactly like
+that. The spelling is not cosmetic: Plex excludes these folders from the movie
+scan and reads them as the film's extras, so a near miss — `Behind the Scenes`
+— is an unrecognised folder, which Plex scans as a film and files as a second
+movie with a nonsense name. An agent choosing a subfolder must choose from that
+set.
+
+A video that is **not** a recognised extra of a film goes to a separate `Clips`
+tree outside the Plex libraries entirely, for exactly the same reason.
+
+TV shows use `TV Shows/Show Name (Year)/Season NN/Show Name - sNNeNN.mp4`.
+Changeover does not currently import TV discs — it recognises a season disc and
+refuses it rather than filing episodes wrongly — so the path is reported for
+completeness and nothing writes there yet.
 
 ## Output
 
@@ -151,10 +206,14 @@ changeoverctl status --json
 changeoverctl wait --for disc-inserted --timeout 600
 ```
 
-Take control before the app decides for you, then read what the disc says:
+Hold a `watch` session open for the whole job. That is what suspends the app's
+own decisions, so it has to be attached **before** the disc is identified, and
+has to stay attached until you are finished:
 
 ```sh
-changeoverctl mode agent
+changeoverctl watch --json > events.jsonl &
+WATCHER=$!
+
 changeoverctl wait --for scan-complete --timeout 300
 ASSETS=$(changeoverctl assets --json | jq -r .path)
 ```
@@ -171,12 +230,19 @@ changeoverctl library 401 --json
 Import, watch it, and report:
 
 ```sh
-changeoverctl select --feature-title 1 --movie 401 --extra 8
+changeoverctl select --feature-title 1 --movie 401 \
+                     --extra 8 --extra-kind "Behind The Scenes" \
+                     --extra-label "The Making of Garden State"
 changeoverctl import
-changeoverctl watch --json | while read -r event; do …; done
+changeoverctl wait --for job-done --timeout 7200
 changeoverctl report --json
 changeoverctl eject
-changeoverctl mode app
+```
+
+Then let the watcher go, which hands the app back its own automation:
+
+```sh
+kill $WATCHER
 ```
 
 ## Failure modes to expect
