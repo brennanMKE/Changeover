@@ -17,10 +17,13 @@ import SwiftUI
 /// be #0140 again. One line of `.caption2`, fixed, no wrapping.
 struct DiscPhaseIndicatorView: View {
     let current: DiscPhase
+    /// #0204 — `false` with an empty drive, which lights nothing. Defaulted so
+    /// every existing call site keeps its behaviour.
+    var hasStarted: Bool = true
 
     var body: some View {
         HStack(spacing: 6) {
-            ForEach(Array(DiscPhaseIndicator.steps(current: current).enumerated()), id: \.offset) { index, step in
+            ForEach(Array(DiscPhaseIndicator.steps(current: current, hasStarted: hasStarted).enumerated()), id: \.offset) { index, step in
                 if index > 0 {
                     Rectangle()
                         .fill(Color.secondary.opacity(0.3))

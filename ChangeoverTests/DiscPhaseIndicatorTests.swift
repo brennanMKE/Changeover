@@ -111,4 +111,46 @@ import Testing
             #expect(phase.title.count <= 20, "\(phase.title) is \(phase.title.count) characters")
         }
     }
+
+    // MARK: - #0204: an empty drive lights nothing
+
+    /// Reported by the user with no disc in: the row lit "Reading the disc",
+    /// which says the app is reading a disc that is not there.
+    ///
+    /// The honest picture of an empty drive is the five steps ahead and none
+    /// of them reached — the same row, waiting.
+    @Test func anEmptyDriveLightsNothing() {
+        let marks = DiscPhaseIndicator.steps(current: .discovering, hasStarted: false).map(\.mark)
+        #expect(marks.allSatisfy { $0 == .upcoming })
+        #expect(!marks.contains(.current))
+        #expect(!marks.contains(.done))
+    }
+
+    /// And it is the *row* that changes, not the phase. `phase(step:scanned:)`
+    /// still answers `.discovering` for an empty drive, so `status`'s
+    /// `discPhase` and `discPhaseNumber` are untouched and no agent reading
+    /// them meets a new value — which is the whole reason this is a view-only
+    /// distinction rather than an optional phase.
+    @Test func thePhaseItselfIsUnchanged() {
+        #expect(DiscPhaseIndicator.phase(step: .insertDisc(.noDisc), scanned: false) == .discovering)
+        #expect(DiscPhase.discovering.number == 1)
+    }
+
+    /// Every row is still the full five steps, whether or not anything is lit —
+    /// the strip's height is a constant and #0140 is what a growing one costs.
+    @Test func theRowIsAlwaysTheWholeSequence() {
+        for started in [true, false] {
+            let steps = DiscPhaseIndicator.steps(current: .discovering, hasStarted: started)
+            #expect(steps.map(\.phase) == DiscPhase.allCases)
+        }
+    }
+
+    /// A disc in the drive lights its step again — the default, so no existing
+    /// caller changed behaviour.
+    @Test func aStartedVisitIsUnaffected() {
+        #expect(DiscPhaseIndicator.steps(current: .importing).map(\.mark)
+                == DiscPhaseIndicator.steps(current: .importing, hasStarted: true).map(\.mark))
+        #expect(DiscPhaseIndicator.steps(current: .importing, hasStarted: true).map(\.mark)
+                .contains(.current))
+    }
 }

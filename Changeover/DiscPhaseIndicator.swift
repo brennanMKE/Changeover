@@ -52,10 +52,27 @@ nonisolated enum DiscPhaseIndicator {
     }
 
     /// The whole row, in order, each marked against `current`.
-    static func steps(current: DiscPhase) -> [Step] {
+    ///
+    /// - Parameter hasStarted: #0204 — whether a disc's visit is under way at
+    ///   all. `false` marks every step upcoming, so nothing is lit.
+    ///
+    ///   With an empty drive the row used to light "Reading the disc", which
+    ///   says the app is reading a disc that is not there. The honest picture
+    ///   of an empty drive is the five steps ahead and none of them reached —
+    ///   the same row, waiting.
+    ///
+    ///   Deliberately a view-only distinction: `phase(step:scanned:plan:)` keeps
+    ///   returning `.discovering`, so `status`'s `discPhase` and
+    ///   `discPhaseNumber` are unchanged and no agent reading them sees a new
+    ///   value. Which step is *lit* is a question about a row of dots; which
+    ///   phase the disc is in is a question about the workflow, and only the
+    ///   first one has a sensible "none" answer.
+    static func steps(current: DiscPhase, hasStarted: Bool = true) -> [Step] {
         DiscPhase.allCases.map { phase in
             let mark: Mark
-            if phase == current {
+            if !hasStarted {
+                mark = .upcoming
+            } else if phase == current {
                 mark = .current
             } else if phase.number < current.number {
                 mark = .done

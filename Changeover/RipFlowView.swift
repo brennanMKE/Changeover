@@ -149,8 +149,11 @@ struct RipFlowView: View {
             // one-line height (see `DiscPhaseIndicatorView`): the step title
             // says which screen, and this says which of five it is, which is
             // the part a two-film disc made load-bearing.
-            DiscPhaseIndicatorView(current: DiscPhaseIndicator.phase(
-                step: step, scanned: isScanned))
+            DiscPhaseIndicatorView(
+                current: DiscPhaseIndicator.phase(step: step, scanned: isScanned),
+                // #0204 — nothing is lit while the drive is empty. "Reading the
+                // disc" lit with no disc in says the app is reading one.
+                hasStarted: jobs.insertedDisc != nil)
         }
         .padding(.horizontal)
         // 6, not the 10 this strip used before: the bordered buttons are
