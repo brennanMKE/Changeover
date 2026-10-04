@@ -237,3 +237,61 @@ struct SettingsLayoutTests {
         #expect(SettingsLayout.selectedTabDefaultsKey == "settingsSelectedTab")
     }
 }
+
+/// #0193 — the Settings window crashed the first time it was opened.
+///
+/// Build `20261004033505`, reported by the user immediately after install:
+///
+///     EXC_BREAKPOINT  +[NSApplication _crashOnException:]
+///       -[NSWindow _postWindowNeedsUpdateConstraints]
+///       -[NSView setNeedsUpdateConstraints:]
+///       SwiftUI.NSHostingView.setNeedsUpdate()
+///       SwiftUI.ViewGraph.invalidateTransform()
+///
+/// #0191 hosted the view in an `NSHostingController` with `.preferredContentSize`
+/// so the window would follow the showing pane. SwiftUI reports its new size
+/// from inside its own update, which lands in the display cycle's constraint
+/// pass; asking AppKit to change a window's geometry there is what
+/// `_postWindowNeedsUpdateConstraints` throws on, and AppKit traps rather than
+/// letting the exception unwind.
+///
+/// Nothing here can exercise AppKit — UI tests are forbidden in this project.
+/// What these pin is the arithmetic the fix rests on, so a later edit cannot
+/// reintroduce a window too short for its own content and call it a cap.
+@Suite struct SettingsWindowSizeTests {
+
+    /// The window must fit the tallest pane, or that pane is clipped and the
+    /// cap is a lie.
+    @Test func thewindowFitsTheTallestPane() {
+        let tallest = SettingsLayout.Tab.allCases
+            .map(SettingsLayout.paneMaxHeight(for:))
+            .max() ?? 0
+        #expect(SettingsLayout.windowHeight >= tallest,
+                "a window shorter than its tallest pane clips it")
+        #expect(SettingsLayout.windowHeight == tallest + SettingsLayout.chromeHeight)
+    }
+
+    /// Every pane fits. Stated per pane rather than only for the maximum, so
+    /// adding a fourth taller pane fails here rather than on screen.
+    @Test func everyPaneFitsInTheWindow() {
+        for tab in SettingsLayout.Tab.allCases {
+            #expect(SettingsLayout.paneMaxHeight(for: tab) <= SettingsLayout.windowHeight,
+                    "\(tab.title) does not fit")
+        }
+    }
+
+    /// The chrome is a real allowance, not zero — the tab bar, the headline
+    /// and the Save footer all sit outside every pane, and #0140's rule is
+    /// that Save must never be the thing pushed off the bottom.
+    @Test func thechromeAllowanceIsRealAndBounded() {
+        #expect(SettingsLayout.chromeHeight > 0)
+        #expect(SettingsLayout.chromeHeight < 300,
+                "an allowance this large would be most of the window")
+    }
+
+    /// Width is unchanged, and must stay so: every caption and the 90-point
+    /// label column are wrapped for it.
+    @Test func thewidthIsUnchangedByTheFix() {
+        #expect(SettingsLayout.width == 460)
+    }
+}

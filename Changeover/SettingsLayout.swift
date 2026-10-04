@@ -189,6 +189,28 @@ nonisolated enum SettingsLayout {
         }
     }
 
+    /// #0193 — the window's own content height, a plain value.
+    ///
+    /// The window is a fixed size again. #0191 had AppKit resize it to follow
+    /// the showing pane, via `NSHostingController.sizingOptions`, and that
+    /// crashed the app the first time Settings was opened: SwiftUI reports its
+    /// new size from inside its own update, AppKit was asked to change the
+    /// window's geometry during the display cycle's constraint pass, and
+    /// `_postWindowNeedsUpdateConstraints` threw.
+    ///
+    /// So the window is as tall as the tallest pane plus its chrome — the tab
+    /// bar, the headline and the Save footer — and a shorter pane leaves some
+    /// space below its content. That is the trade, and it is the same lesson
+    /// #0140 recorded in a different place: a height chosen in advance beats a
+    /// measurement that feeds back into the thing being measured.
+    static var windowHeight: CGFloat {
+        (Tab.allCases.map(paneMaxHeight(for:)).max() ?? 560) + chromeHeight
+    }
+
+    /// The tab bar, the headline and the Save footer, which sit outside every
+    /// pane and so are not part of any pane's cap.
+    static let chromeHeight: CGFloat = 150
+
     // MARK: - Readiness
 
     /// The readiness line, decided once so the view does not re-derive it.

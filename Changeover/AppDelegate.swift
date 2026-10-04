@@ -388,34 +388,47 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: SettingsLayout.width, height: 300),
+            contentRect: NSRect(x: 0, y: 0,
+                                width: SettingsLayout.width,
+                                height: SettingsLayout.windowHeight),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.title = "Settings"
 
-        // #0191 — an `NSHostingController` rather than a bare `NSHostingView`,
-        // with `.preferredContentSize` in its `sizingOptions`, so the window
-        // follows the pane that is showing: AppKit resizes a window to its
-        // content view controller's preferred size whenever that changes, and
-        // SwiftUI recomputes it when the selected tab (or the Details register)
-        // changes the pane's height. That is what makes each pane "sized to its
-        // own content" instead of every pane inheriting the tallest one's
-        // height, and it is the opposite of #0140's mistake only because the
-        // cap it is allowed to grow to is a plain value per pane
-        // (`SettingsLayout.paneMaxHeight(for:)`) rather than a measurement of
-        // content, and because `Save` is outside the panes.
+        // #0193 — a plain `NSHostingView` in a fixed window, not an
+        // `NSHostingController` with `.preferredContentSize`.
         //
-        // `.environment(settings)` as well as the explicit `settings:`
-        // argument: `DetailsDisclosure` reads the shared `showsDetails` flag
-        // out of the environment, the same way every step of the rip window
-        // does.
-        let controller = NSHostingController(
+        // #0191 used the controller so the window would follow the pane that
+        // is showing. It crashed the app the first time the user opened
+        // Settings, build 20261004033505:
+        //
+        //     EXC_BREAKPOINT  +[NSApplication _crashOnException:]
+        //       -[NSWindow _postWindowNeedsUpdateConstraints]
+        //       -[NSView setNeedsUpdateConstraints:]
+        //       SwiftUI.NSHostingView.setNeedsUpdate()
+        //       SwiftUI.ViewGraph.invalidateTransform()
+        //
+        // `.preferredContentSize` makes AppKit resize the window whenever
+        // SwiftUI's graph reports a new size — and SwiftUI reports it from
+        // inside its own update, which lands in the middle of the display
+        // cycle's constraint pass. Changing a window's geometry there is what
+        // `_postWindowNeedsUpdateConstraints` throws on, and AppKit turns that
+        // exception into a trap rather than letting it unwind.
+        //
+        // So the window is a fixed size again, and each pane is capped by
+        // `SettingsLayout.paneMaxHeight(for:)` *inside* SwiftUI, where a
+        // height is a layout value rather than a window mutation. A short pane
+        // leaves some empty space below its content. That is the cost, and it
+        // is a far smaller one than a settings window that cannot be opened —
+        // which is also #0140's lesson in its original form: a plain value
+        // chosen in advance beats a measurement that feeds back into the thing
+        // being measured.
+        let hosting = NSHostingView(
             rootView: SettingsView(settings: settings).environment(settings)
         )
-        controller.sizingOptions = [.preferredContentSize]
-        window.contentViewController = controller
+        window.contentView = hosting
         window.center()
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
