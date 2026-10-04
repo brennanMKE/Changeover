@@ -59,11 +59,111 @@ import Testing
         #expect(line == "Started an import · 2m ago")
     }
 
-    @Test func adetailIsAppendedWhenThereIsOne() throws {
+    @Test func theSubjectIsAppendedWhenThereIsOne() throws {
         let now = Date()
         let line = try #require(AgentMode.activityLine(
-            AgentMode.Activity(action: "select", at: now, detail: "Signs (2002)"), now: now))
+            AgentMode.Activity(action: "select", at: now, subject: "Signs (2002)"), now: now))
         #expect(line == "Chose what to import · just now — Signs (2002)")
+    }
+
+    // MARK: - #0204: the banner is not the CLI's output
+
+    /// The reported bug, as the string it produced.
+    ///
+    /// The banner carried `ActionResult.detail` verbatim, and `detail` is
+    /// written for the program on the other end. On joe it read: "Started an
+    /// import · 1m ago — started job-20261004-014421-57CD Wait for it with
+    /// `changeoverctl wait --for job-done --job job-20261004-014421-57CD`."
+    /// A person at the Mac was being told to type a shell command.
+    ///
+    /// The structural fix is that `Activity` has nowhere to put such a string
+    /// any more — there is no free-text field. This pins the sentence the user
+    /// gets instead.
+    @Test func theBannerNamesTheFilmRatherThanTheCommand() throws {
+        let now = Date()
+        let line = try #require(AgentMode.activityLine(
+            AgentMode.Activity(
+                action: "import",
+                at: now.addingTimeInterval(-60),
+                subject: "The Lord of the Rings: The Return of the King (2003)"
+            ),
+            now: now))
+        #expect(line == "Started an import · 1m ago — The Lord of the Rings: The Return of the King (2003)")
+        for leak in ["changeoverctl", "`", "--", "job-"] {
+            #expect(!line.contains(leak), "the banner leaked CLI text: \(leak)")
+        }
+    }
+
+    /// A refusal says so in words, not as the CLI's identifier.
+    @Test func aRefusalIsSaidInWords() throws {
+        let now = Date()
+        let line = try #require(AgentMode.activityLine(
+            AgentMode.Activity(action: "import", at: now, refusedOutcome: "refusedNoDisc"), now: now))
+        #expect(line == "Started an import · just now — refused — no disc in the drive")
+        #expect(!line.contains("refusedNoDisc"))
+    }
+
+    /// An unknown outcome still says the action was turned down. A newer
+    /// `changeoverctl` talking to an older app is when that matters most.
+    @Test func anUnknownRefusalStillSaysRefused() {
+        #expect(AgentMode.refusalPhrase("refusedSomethingNewer") == "refused")
+        #expect(AgentMode.refusalPhrase("") == "refused")
+    }
+
+    /// No refusal phrase may leak an identifier — the whole point is that these
+    /// are English. Swept over every outcome the bridge defines.
+    @Test func noRefusalPhraseLeaksAnIdentifier() {
+        for outcome in [
+            "refusedNoSession", "refusedUnknownSession", "refusedJobRunning", "refusedNoDisc",
+            "refusedAlreadyEjecting", "refusedScanRunning", "refusedDiscSwapped", "refusedNoScan",
+            "refusedUnknownTitle", "refusedUnknownExtrasFolder", "refusedMovieNotFound",
+            "refusedNothingRunning", "refusedNotPermitted", "refusedNotConfigured",
+            "refusedEmptyRequest",
+        ] {
+            let phrase = AgentMode.refusalPhrase(outcome)
+            #expect(phrase.hasPrefix("refused"))
+            #expect(!phrase.contains(outcome), "\(outcome) was shown verbatim")
+        }
+    }
+
+    /// A refusal wins over the subject: "it did not happen" is the thing to
+    /// say, and naming the film alongside would read as though it had.
+    @Test func aRefusalIsSaidInsteadOfTheSubject() throws {
+        let now = Date()
+        let line = try #require(AgentMode.activityLine(
+            AgentMode.Activity(
+                action: "import", at: now,
+                subject: "Signs (2002)", refusedOutcome: "refusedJobRunning"
+            ),
+            now: now))
+        #expect(line.contains("refused"))
+        #expect(!line.contains("Signs"))
+    }
+
+    // MARK: - The subject
+
+    @Test func theFilmIsPreferredAndCarriesItsYear() {
+        #expect(AgentMode.subject(filmTitle: "Signs", filmYear: "2002", discLabel: "SIGNS") == "Signs (2002)")
+    }
+
+    /// The disc only when there is no film — `eject` and `cancel` have none.
+    @Test func theDiscStandsInWhenThereIsNoFilm() {
+        #expect(AgentMode.subject(filmTitle: nil, filmYear: nil, discLabel: "TWO_TOWERS_BONUS")
+                == "TWO_TOWERS_BONUS")
+    }
+
+    /// And nothing at all is a perfectly good answer: "Read the status · just
+    /// now" is already the whole sentence.
+    @Test func nothingToNameIsNil() {
+        #expect(AgentMode.subject(filmTitle: nil, filmYear: nil, discLabel: nil) == nil)
+        #expect(AgentMode.subject(filmTitle: "", filmYear: "", discLabel: "") == nil)
+    }
+
+    /// A film with no year is still named, rather than dropped for want of a
+    /// parenthesis.
+    @Test func aFilmWithoutAYearIsStillNamed() {
+        #expect(AgentMode.subject(filmTitle: "Signs", filmYear: nil, discLabel: "SIGNS") == "Signs")
+        #expect(AgentMode.subject(filmTitle: "Signs", filmYear: "", discLabel: nil) == "Signs")
     }
 
     /// An action this build does not know is shown verbatim rather than

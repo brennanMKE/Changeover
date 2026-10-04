@@ -304,7 +304,11 @@ enum AgentActions {
             // app's own evidence panel tell the person at the machine "You chose
             // X" about a film an agent picked over the bridge.
             flow.select(
-                movieID: movieID, jobs: jobs, apiKey: settings.tmdbAPIKey, origin: .agent)
+                movieID: movieID, jobs: jobs, apiKey: settings.tmdbAPIKey, origin: .agent,
+                // #0204 — the agent's own `--query`, which is not always what
+                // `search.query` holds: a film already among the app's results
+                // needs no search, so the box still shows the label's wording.
+                askedFor: resolved.query)
         }
 
         // Then the extras. The tick goes through `toggleExtra`, which refuses the

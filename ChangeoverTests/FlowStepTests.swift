@@ -207,8 +207,14 @@ struct FlowStepTests {
         let titles = [
             FlowStep.insertDisc(.noDisc), .chooseMovie, .confirm, .ripping(id), .done(id),
         ].map(\.title)
-        #expect(titles == ["Insert a disc", "Choose the movie", "Confirm the rip", "Ripping", "Done"])
+        // #0204 — "Importing", not "Ripping": the header has to agree with the
+        // step bar drawn directly beneath it, which has always said Importing.
+        #expect(titles == ["Insert a disc", "Choose the movie", "Confirm the rip", "Importing", "Done"])
         #expect(Set(titles).count == titles.count)
+        // And it agrees with the phase bar, which is the thing it disagreed
+        // with. Asserted against `DiscPhaseIndicator`'s own title rather than
+        // against a second copy of the string.
+        #expect(FlowStep.ripping(id).title == DiscPhase.importing.title)
         // The three insert-disc variants share one title: they differ in
         // what the body says, not in which step the user is on.
         #expect(FlowStep.insertDisc(.ejecting).title == FlowStep.insertDisc(.noDisc).title)

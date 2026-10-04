@@ -372,8 +372,18 @@ final class RipFlowController {
         case agent
     }
 
+    /// - Parameter askedFor: #0204 — the term the *caller* searched with, when
+    ///   that is not what `search.query` happens to hold.
+    ///
+    ///   Only an agent passes it, and only because the two can differ: an agent
+    ///   that names a film already among the app's own results never triggers a
+    ///   search, so `search.query` still holds whatever the disc label produced.
+    ///   The panel then quoted the label's wording back as the agent's. Reported
+    ///   on The Return of the King — the agent searched for "The Lord of the
+    ///   Rings: The Return of the King" and the panel said it searched for
+    ///   "Return of the King", which is what the label had produced.
     func select(movieID: Int?, jobs: JobController, apiKey: String,
-                origin: SelectionOrigin = .user) {
+                origin: SelectionOrigin = .user, askedFor: String? = nil) {
         if movieID != selectedMovieID {
             movieConfirmed = false
             // #0143: a different film is a different library question. The
@@ -404,10 +414,13 @@ final class RipFlowController {
                 return
             }
             let named = "\(movie.title) (\(movie.yearText))"
+            // #0204 — what the caller asked for, falling back to the box's own
+            // text. A user's choice has no other source; an agent's does.
+            let asked = askedFor ?? search.query
             jobs.noteManualSelection(
                 origin == .agent
-                    ? IdentificationSummary.agentChoiceLine(movie: named, query: search.query)
-                    : IdentificationSummary.userChoiceLine(movie: named, query: search.query))
+                    ? IdentificationSummary.agentChoiceLine(movie: named, query: asked)
+                    : IdentificationSummary.userChoiceLine(movie: named, query: asked))
         }
     }
 

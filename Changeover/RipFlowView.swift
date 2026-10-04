@@ -275,7 +275,17 @@ extension FlowStep {
         case .ejected:     return "Disc ejected"
         case .chooseMovie: return "Choose the movie"
         case .confirm:     return "Confirm the rip"
-        case .ripping:     return "Ripping"
+        // #0204 — "Importing", matching the step bar directly above it.
+        //
+        // The header said "Ripping" while the bar under it said "Importing" and
+        // the body said "Encoding the feature": three names for one thing, on
+        // one screen. "Ripping" is also the oldest of them — there has been no
+        // rip stage since #0014 deleted `RipController` and HandBrake started
+        // reading the disc directly. The button is still "Start Ripping",
+        // because that is the user's own word for setting it going; the
+        // *progress* heading is about what is happening now, and what is
+        // happening is an import.
+        case .ripping:     return "Importing"
         case .done:        return "Done"
         }
     }

@@ -528,10 +528,20 @@ final class AppXPCServer {
     /// favour of a bare failure is what would make "cancel the job first" and
     /// "unlock the screen" indistinguishable.
     private func record(_ result: ActionResult) -> BridgeResponse {
+        // #0204 — the banner gets the film, not `result.detail`.
+        //
+        // `detail` is written for the program on the other end: it names job
+        // ids and tells the caller to run `changeoverctl wait …`. Printed in the
+        // window it told the person at the Mac to type a shell command.
         lastActivity = AgentMode.Activity(
             action: result.verb,
             at: Date(),
-            detail: result.done ? result.detail : "refused — \(result.outcome)"
+            subject: AgentMode.subject(
+                filmTitle: result.film?.title,
+                filmYear: result.film?.year,
+                discLabel: result.disc?.label
+            ),
+            refusedOutcome: result.done ? nil : result.outcome
         )
         FlowDiagnostics.note(
             "agent \(result.verb): \(result.outcome) — \(result.detail)"

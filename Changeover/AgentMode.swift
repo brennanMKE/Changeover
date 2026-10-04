@@ -25,17 +25,36 @@ import Foundation
 nonisolated enum AgentMode {
 
     /// The most recent thing a CLI session asked the app to do.
+    ///
+    /// #0204 — structured, not a sentence handed over from the CLI.
+    ///
+    /// This used to carry `ActionResult.detail` and print it verbatim, and
+    /// `detail` is written for the program on the other end. So the banner read:
+    /// *"Started an import · 1m ago — started job-20261004-014421-57CD Wait for
+    /// it with `changeoverctl wait --for job-done --job
+    /// job-20261004-014421-57CD`."* A person standing at the Mac was being told
+    /// to run a shell command, in backticks, with a job id they have no use for.
+    ///
+    /// The two audiences want different sentences about the same event, which
+    /// is the same split #0200 made for `chosenBy` and #0153 for the eject
+    /// notice. The CLI's `detail` is unchanged and still says how to wait; the
+    /// window gets the film's name and nothing else.
     nonisolated struct Activity: Equatable, Sendable {
         /// The verb, as `BridgeRequest.Action` spells it.
         var action: String
         var at: Date
-        /// What the app made of it, when that is worth saying.
-        var detail: String?
+        /// What the action was about, in the user's terms: a film's title and
+        /// year, or a disc's label. Never an id, a path or a command.
+        var subject: String?
+        /// The outcome identifier when the app refused, so the banner can say
+        /// so. `nil` when it worked.
+        var refusedOutcome: String?
 
-        init(action: String, at: Date, detail: String? = nil) {
+        init(action: String, at: Date, subject: String? = nil, refusedOutcome: String? = nil) {
             self.action = action
             self.at = at
-            self.detail = detail
+            self.subject = subject
+            self.refusedOutcome = refusedOutcome
         }
     }
 
@@ -76,8 +95,68 @@ nonisolated enum AgentMode {
         let verb = phrase(forAction: activity.action)
         let elapsed = max(0, now.timeIntervalSince(activity.at))
         var line = "\(verb) · \(ago(elapsed))"
-        if let detail = activity.detail, !detail.isEmpty { line += " — \(detail)" }
+        if let outcome = activity.refusedOutcome {
+            line += " — \(refusalPhrase(outcome))"
+        } else if let subject = activity.subject, !subject.isEmpty {
+            line += " — \(subject)"
+        }
         return line
+    }
+
+    /// A refused action, in a sentence rather than an identifier.
+    ///
+    /// The identifiers are the CLI's contract and a `case` statement's input;
+    /// they are not English. An unknown one still says "refused", because a
+    /// newer `changeoverctl` talking to an older app is exactly when the user
+    /// most needs to know something was turned down.
+    static func refusalPhrase(_ outcome: String) -> String {
+        switch outcome {
+        case "refusedNoSession", "refusedUnknownSession":
+            return "refused — no watch session"
+        case "refusedJobRunning":
+            return "refused — a job is already running"
+        case "refusedNoDisc":
+            return "refused — no disc in the drive"
+        case "refusedDiscSwapped":
+            return "refused — the disc had been changed"
+        case "refusedAlreadyEjecting":
+            return "refused — the disc is already coming out"
+        case "refusedScanRunning":
+            return "refused — the disc is still being read"
+        case "refusedNoScan":
+            return "refused — the disc has not been read yet"
+        case "refusedUnknownTitle":
+            return "refused — no such title on this disc"
+        case "refusedUnknownExtrasFolder":
+            return "refused — not one of Plex's extras folders"
+        case "refusedMovieNotFound":
+            return "refused — that film could not be found"
+        case "refusedNothingRunning":
+            return "refused — nothing was running"
+        case "refusedNotConfigured":
+            return "refused — Changeover is not set up yet"
+        case "refusedNotPermitted":
+            return "refused — Start is not available"
+        case "refusedEmptyRequest":
+            return "refused — nothing was asked for"
+        default:
+            return "refused"
+        }
+    }
+
+    /// What an action was about, for the banner.
+    ///
+    /// The film when there is one, because that is what the user is watching
+    /// for; otherwise the disc, because `eject` and `cancel` have no film. `nil`
+    /// when neither applies — `status` and `report` are about nothing in
+    /// particular, and "Read the status · just now" is already the whole sentence.
+    static func subject(filmTitle: String?, filmYear: String?, discLabel: String?) -> String? {
+        if let filmTitle, !filmTitle.isEmpty {
+            guard let filmYear, !filmYear.isEmpty else { return filmTitle }
+            return "\(filmTitle) (\(filmYear))"
+        }
+        guard let discLabel, !discLabel.isEmpty else { return nil }
+        return discLabel
     }
 
     /// The CLI's verb, as a sentence a person reads. An action this build does
