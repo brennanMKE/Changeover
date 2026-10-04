@@ -8,7 +8,9 @@ decisions, reachable from a shell, with the app's answers coming back rather
 than disappearing into a window nobody is looking at.
 
 > **Status: being built.** Phase 1 (transport, `ping`, `status`, `watch`,
-> `help`) is in progress. Everything below describes the intended surface; a
+> `help`) shipped in #0189. Phase 2 (#0196) shipped the acting verbs — `eject`,
+> `cancel`, `wait`, `report`, `select`, `import`. Still unbuilt: `assets`,
+> `library` and `search`. Everything below describes the intended surface; a
 > command this document lists is not necessarily shipping yet. `changeoverctl
 > help` on the installed binary is the authority on what exists today, and it
 > is generated from the same command table the tool dispatches on, so it cannot
@@ -82,14 +84,78 @@ whether it is commentary, and HandBrake's variant axis, which is how
 | Command | What it does |
 |---|---|
 | `changeoverctl select …` | Name the feature, and any extras, to import. |
-| `changeoverctl import` | Run it. |
-| `changeoverctl cancel` | Abort a running job. |
-| `changeoverctl eject` | Open the tray. |
+| `changeoverctl import --disc <insertionID>` | Run it. |
+| `changeoverctl cancel [--job <id>]` | Abort a running job. |
+| `changeoverctl eject [--force]` | Open the tray. |
 | `changeoverctl wait --for <condition> --timeout <sec>` | Block until something happens. |
 
 `wait` exists so an agent does not poll. Polling a disc that takes forty
 minutes to encode is both wasteful and badly behaved; one blocking call with a
-timeout is what a script wants.
+timeout is what a script wants. The conditions are `disc-inserted`,
+`disc-ejected`, `scan-complete`, `identified`, `job-done` and `idle`;
+`--timeout` is required and has no default, because a wait with no bound is a
+script that hangs. A condition that is **already true** is met immediately —
+the predicate is evaluated against the app's state, not against the arrival of
+an event, so an agent attaching with the disc already in the drive is told so
+rather than waiting for an event that already happened. Bind `job-done` to one
+job with `--job <id>`, the id `import` reported, or on a two-film disc the first
+film's finished job will satisfy the wait while the second is still queued.
+
+### An acting verb needs an attached `watch` session
+
+**Every one of `eject`, `cancel`, `select` and `import` is refused unless a
+`changeoverctl watch` session is attached.** It is not a formality and there is
+deliberately no flag that waives it.
+
+The endpoint has no authentication: the broker hands it to whoever asks and asks
+nothing of them. That was acceptable while every verb observed. Tying the acting
+verbs to a live session buys two things that matter more here than making the
+call hard. First, **the act is always visible** — the window's agent banner
+(#0195) is drawn from the same session count, so there is no arrangement of
+calls that ejects a disc or starts an encode while the window still looks idle.
+Second, it **closes the race**: the app suspends its own automation only while a
+session is attached, so a verb acting without one would be acting against an app
+that is still choosing films and starting countdowns of its own.
+
+It is a capability, not a secret. There is nothing to leak and nothing to
+rotate, and the thing that authorises is the thing you can kill.
+
+`--session <id>` is optional and checked when given. Supplying it binds your acts
+to *your own* watcher; a stale id is refused rather than silently falling back,
+so an agent whose watcher died learns that from the refusal rather than from a
+disc that came out of the drive during somebody else's job.
+
+What this is **not**: authentication. Nothing proves the process that called
+`eject` is the process holding the session, and a hostile local process can open
+its own `watch` session and then act. Closing that needs peer verification at
+connection-accept time (`SecCodeCopyGuestWithAttributes` against a
+`SecRequirement`), which is Phase 3 and deliberately not on #0196 — an unsigned
+development build satisfies no requirement, and a refusal at accept time is
+silent, which is the worst failure shape this transport has.
+
+### `import` requires `--disc`, and `eject` distinguishes three outcomes
+
+`import` will not run without `--disc <insertionID>`, taken from `status`. An
+agent decides over the course of a scan, an OCR read, a TMDB search and a
+library check — minutes, during which a person can swap the disc. Every index it
+chose then names a title on a disc that is gone, and the app cannot tell from the
+indices, because a different disc's title 1 is also title 1. The insertion token
+is minted once per insertion, so it is the only value that can refuse this.
+
+`eject` reports which of three things happened, and the exit code says which:
+`ejected` (0), an app refusal such as a running job (4), or a **machine refusal**
+(6) — `loginwindow` dissenting the unmount because the screen is locked, the
+drive still holding the disc open, or #0049's half-eject where the volume came
+down and the tray did not. Exit 6 is recoverable and has nothing to do with this
+app; 4 means change what you are asking for.
+
+`--force` on `eject` waives only the running-job refusal, and it waives it by
+cancelling the job first rather than ejecting under a live `HandBrakeCLI`.
+
+`--extra-kind` must be one of Plex's eight folder names, spelled exactly. An
+unrecognised name is **refused, never corrected to the nearest match** — a
+correction would teach an agent that the spelling is forgiving, and the next near
+miss would land in a folder Plex scans as a film.
 
 ### Taking control — `watch` is the agentic mode
 
@@ -174,10 +240,24 @@ Exit codes mean something, following the `RemoteControl` prototype:
 | Code | Meaning |
 |---|---|
 | 0 | The thing happened |
+| 1 | Usage error — nothing was contacted |
 | 2 | Cannot reach the broker — launch agent not registered or not approved |
 | 3 | The app is unavailable |
 | 4 | The request failed; the reason is in the output |
 | 5 | The app ended the session |
+| 6 | The app asked and **macOS refused** — recoverable, e.g. a locked screen |
+| 7 | `wait` reached its timeout with the condition still false |
+
+6 and 7 were added by #0196 and are additive: a script written against Phase 1
+keeps working. Both exist because an agent branches differently on them. 6 says
+"ask again later" where 4 says "change what you are asking for", and collapsing
+them is what sent six rounds of fixes after a missing entitlement when the cause
+was a locked screen. 7 is not a failure of anything — `wait --for job-done
+--timeout 7200` leaving with it means the encode is still going.
+
+Every acting verb also reports a stable `outcome` identifier under `action` in
+its `--json`, which is what a `case` statement should branch on; `detail` is the
+app's own wording and will be reworded.
 
 ## What this tool will not do
 
@@ -233,14 +313,21 @@ changeoverctl library 401 --json
 Import, watch it, and report:
 
 ```sh
-changeoverctl select --feature-title 1 --movie 401 \
+DISC=$(changeoverctl status --json | jq -r .status.disc.insertionID)
+
+changeoverctl select --disc "$DISC" --feature-title 1 --movie 401 \
                      --extra 8 --extra-kind "Behind The Scenes" \
                      --extra-label "The Making of Garden State"
-changeoverctl import
-changeoverctl wait --for job-done --timeout 7200
+
+JOB=$(changeoverctl import --disc "$DISC" --json | jq -r .action.jobID)
+changeoverctl wait --for job-done --job "$JOB" --timeout 7200
 changeoverctl report --json
-changeoverctl eject
+changeoverctl eject --disc "$DISC" || echo "eject returned $? — 6 means macOS refused"
 ```
+
+`--disc "$DISC"` is required on `import` and checked everywhere it is accepted.
+`import` returns as soon as the job starts, with its id, so the `wait` is bound
+to that job and not to whatever finishes next.
 
 Then let the watcher go, which hands the app back its own automation:
 

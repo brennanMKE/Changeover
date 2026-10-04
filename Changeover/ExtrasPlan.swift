@@ -172,11 +172,36 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
     ///    `PlexExtra.fileName` sanitises again at the point the string
     ///    becomes a path component — one sanitiser, at the boundary, the way
     ///    `MovieMetadata` does it (#0010).
+    /// #0196 — `kinds` names the Plex extras subfolder outright for a title,
+    /// instead of letting `kind(forLabel:)` read it off the label.
+    ///
+    /// The window has no control for this and does not need one: the label comes
+    /// off the disc's own menu, and `PlexExtra.kind(forLabel:)`'s keyword rules
+    /// were written against the captured corpus of what menus actually print. An
+    /// **agent** is in a different position. It has read the OCR, the menu
+    /// structure and the model's answer, and may know perfectly well that "full
+    /// circle" is a featurette and "Signs: a commentary" is not a making-of,
+    /// which the keyword rules cannot. So `changeoverctl select --extra-kind`
+    /// exists, and it has to land somewhere.
+    ///
+    /// Additive and defaulted empty, which matters: every existing caller — the
+    /// window's running total, `JobController.start`, and ~15 construction sites
+    /// across the extras tests — passes nothing and gets exactly today's
+    /// behaviour. An override can only ever *narrow* the choice to one of
+    /// `PlexExtra.Kind`'s eight cases, because the parameter is typed as the enum
+    /// and the unrecognised folder name was already refused at the boundary
+    /// (`AgentSelectionPlan`). There is no spelling of a folder name that can
+    /// reach this.
+    ///
+    /// A kind given for a title with no usable label is still honoured: the extra
+    /// goes to the named folder as `Bonus Feature - tNN.mp4`, which is honest
+    /// about being title NN of the disc and is in the right place for Plex.
     nonisolated static func make(
         featureIndex: Int,
         requested: [Int],
         disc: DiscInfo,
-        labels: [Int: String] = [:]
+        labels: [Int: String] = [:],
+        kinds: [Int: PlexExtra.Kind] = [:]
     ) -> ExtrasPlan {
         let titlesByIndex = Dictionary(uniqueKeysWithValues: disc.titles.map { ($0.index, $0) })
 
@@ -193,7 +218,7 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
                 durationSeconds:   title.durationSeconds,
                 frameRate:         title.frameRate,
                 interlaceDetected: title.interlaceDetected,
-                filing:            filing(forLabel: labels[index])
+                filing:            filing(forLabel: labels[index], kind: kinds[index])
             )
         }
         return ExtrasPlan(items: items)
@@ -224,11 +249,15 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
     /// folder, under the name `PlexExtra.fileName` already generates for this
     /// case — `Bonus Feature - t08.mp4`, honest about being title 8 of the
     /// disc and nothing more. Both halves existed; nothing reached for them.
-    nonisolated static func filing(forLabel label: String?) -> Filing {
+    /// #0196 — `kind` overrides the derivation, and nothing else about the rule
+    /// changes. A label that sanitises to nothing is still not a label, so the
+    /// filename still falls back to `Bonus Feature - tNN`; what an override
+    /// changes is only which of Plex's eight folders the file lands in.
+    nonisolated static func filing(forLabel label: String?, kind: PlexExtra.Kind? = nil) -> Filing {
         guard let label, !PlexExtra.sanitize(label).isEmpty else {
-            return .bonusFeature(kind: .other, label: "")
+            return .bonusFeature(kind: kind ?? .other, label: "")
         }
-        return .bonusFeature(kind: PlexExtra.kind(forLabel: label), label: label)
+        return .bonusFeature(kind: kind ?? PlexExtra.kind(forLabel: label), label: label)
     }
 
     // MARK: - Where the labels come from

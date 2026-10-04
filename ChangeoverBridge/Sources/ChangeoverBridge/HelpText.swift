@@ -184,6 +184,346 @@ public enum HelpText {
         ]
     )
 
+    // MARK: - #0196, the acting verbs
+
+    private static let sessionOption = HelpPayload.OptionHelp(
+        flag: "--session <id>",
+        summary: "The watch session this act belongs to. Checked against the app's "
+            + "live sessions and refused if it names none."
+    )
+
+    private static let discOption = HelpPayload.OptionHelp(
+        flag: "--disc <insertionID>",
+        summary: "The disc this decision was made about, from status's disc.insertionID. "
+            + "Refused if a different disc is now in the drive."
+    )
+
+    /// Said once, and attached to every acting verb's discussion, so a reader
+    /// who looks up only one of them still meets the rule.
+    private static let authorisationNote = """
+        Acting verbs are refused unless a `\(ServiceNames.cliName) watch` session \
+        is attached. That is not a formality: a watch session is what suspends the \
+        app's own automation, so acting without one races the app's own decisions; \
+        and it is what puts the agent banner on screen, so nothing can eject a \
+        disc or start an encode without the person at the machine being able to \
+        see that something else is in charge. Attach one first:
+
+            \(ServiceNames.cliName) watch --json > events.jsonl &
+        """
+
+    public static let eject = HelpPayload.CommandHelp(
+        name: "eject",
+        summary: "Open the tray.",
+        usage: "\(ServiceNames.cliName) eject [--force] [--disc <insertionID>] "
+            + "[--session <id>] [--no-launch] [--timeout <seconds>] [--json]",
+        discussion: """
+            Refused while a job is running, unless --force. An eject under a live \
+            HandBrakeCLI either comes back busy or — worse — takes the volume down \
+            under a forty-minute encode. Cancel first, or say --force and mean it.
+
+            \(authorisationNote)
+
+            Three outcomes, and they are not the same thing:
+
+              ejected                 exit 0. The disc is out.
+              refused*                exit 4. The app declined; change what you ask for.
+              machineRefused          exit 6. The app asked and macOS said no.
+              driveBusy               exit 6. Something still has the disc open.
+              unmountedButNotEjected  exit 6. The volume came down, the tray did not open.
+
+            Exit 6 is worth its own code because it is recoverable and has nothing \
+            to do with this app. On a Mac with its screen locked, loginwindow \
+            dissents the unmount with kDAReturnNotPermitted — the disc is fine, the \
+            drive is fine, and the same command works the moment somebody unlocks. \
+            Measured on joe: the last refusal and the unlock were half a second \
+            apart. See docs/eject-and-the-locked-screen.md.
+
+            The default timeout is 120 seconds, because the eject runs a ladder of \
+            methods with waits between them.
+            """,
+        options: [
+            HelpPayload.OptionHelp(
+                flag: "--force",
+                summary: "Eject even though a job is running. The job is cancelled by the removal."
+            ),
+            discOption,
+            sessionOption,
+            HelpPayload.OptionHelp(
+                flag: "--no-launch",
+                summary: "Fail instead of launching Changeover when it is not running."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--timeout <seconds>",
+                summary: "Seconds to wait for the app. Default 120."
+            ),
+            jsonOption,
+        ]
+    )
+
+    public static let cancel = HelpPayload.CommandHelp(
+        name: "cancel",
+        summary: "Abort a running job.",
+        usage: "\(ServiceNames.cliName) cancel [--job <id>] [--session <id>] "
+            + "[--no-launch] [--timeout <seconds>] [--json]",
+        discussion: """
+            Reports `cancelling`, not `cancelled`: the cancel reaches the job's \
+            Task, which sends HandBrakeCLI SIGTERM and escalates to SIGKILL, and \
+            the job then finishes the way every job finishes. Wait for it with \
+            `wait --for job-done`.
+
+            Refused during the organizing phase — the encoded file is already \
+            being moved into the library and stopping halfway is the one thing \
+            worth not doing — and refused when nothing is running.
+
+            Name --job <id> if you have been away. A bare cancel means "whatever \
+            is running now", and on a disc holding two films that may no longer be \
+            the job you were thinking of.
+
+            \(authorisationNote)
+            """,
+        options: [
+            HelpPayload.OptionHelp(
+                flag: "--job <id>",
+                summary: "Cancel only this job. Omitted means whatever is running now."
+            ),
+            sessionOption,
+            HelpPayload.OptionHelp(
+                flag: "--no-launch",
+                summary: "Fail instead of launching Changeover when it is not running."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--timeout <seconds>",
+                summary: "Seconds to wait for the app. Default 10."
+            ),
+            jsonOption,
+        ]
+    )
+
+    public static let wait = HelpPayload.CommandHelp(
+        name: "wait",
+        summary: "Block until something happens.",
+        usage: "\(ServiceNames.cliName) wait --for <condition> --timeout <seconds> "
+            + "[--job <id>] [--no-launch] [--json]",
+        discussion: """
+            This exists so an agent does not poll. A disc takes forty minutes to \
+            encode; `status` once a second is 2,400 round trips to learn one fact, \
+            and it is both wasteful and badly behaved. One blocking call with a \
+            timeout is what a script wants.
+
+            --timeout is required and has no default. A wait with no bound is a \
+            script that hangs.
+
+            The conditions:
+
+            \(WaitCondition.allCases.map { "  \($0.rawValue.padding(toLength: 16, withPad: " ", startingAt: 0))\($0.summary)" }.joined(separator: "\n"))
+
+            A condition that is already true is met immediately. That is \
+            deliberate: the condition is evaluated against the app's state, not \
+            against the arrival of an event, so an agent that attaches with the \
+            disc already in the drive is told so rather than waiting forever for \
+            an event that already happened.
+
+            `scan-complete` means the scan **settled**, scanned or failed. A scan \
+            that fails is an answer, and waiting only for success would sit out the \
+            whole timeout on a disc whose title set is unreadable.
+
+            Bind `job-done` to one job with --job <id> — the id `import` reported. \
+            Without it, a disc holding two films can satisfy the wait with the \
+            first film's finished job while the second is still queued, and the \
+            agent would eject a disc with a film still on it.
+
+            Holding the wait open holds a watch session open, so the app's own \
+            automation stays suspended for its duration.
+
+            Exit 0 when the condition was met, 7 when the timeout was reached with \
+            it still false. 7 is not a failure of anything — `wait --for job-done \
+            --timeout 7200` leaving with it means the encode is still going.
+            """,
+        options: [
+            HelpPayload.OptionHelp(
+                flag: "--for <condition>",
+                summary: "Required. One of: \(WaitCondition.names.joined(separator: ", "))."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--timeout <seconds>",
+                summary: "Required. Seconds to wait before giving up with exit 7."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--job <id>",
+                summary: "Bind job-done to this job id."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--no-launch",
+                summary: "Fail instead of launching Changeover when it is not running."
+            ),
+            jsonOption,
+        ]
+    )
+
+    public static let report = HelpPayload.CommandHelp(
+        name: "report",
+        summary: "What the last job did.",
+        usage: "\(ServiceNames.cliName) report [--no-launch] [--timeout <seconds>] [--json]",
+        discussion: """
+            Three sections, because there are three different questions.
+
+            `films` is the disc's plan: every film named, and what became of it — \
+            filed, failed, skipped, running or waiting. Skipped is not failed. A \
+            film already in Plex that nobody asked to replace is skipped with the \
+            reason beside it, and an agent that treated that as an error would \
+            retry something it should leave alone.
+
+            `jobs` is this launch's history, with the typed failure as the app \
+            itself words it and a `discUnreadable` flag so a program does not have \
+            to match on prose. That failure is common and is not a bug in the app: \
+            one disc failed twice at 49%, thirty minutes in, with no visible \
+            damage.
+
+            `reliability` is the tail of ~/Library/Logs/Changeover/\
+            disc-reliability.jsonl, one line per finished job, which outlives the \
+            process — the only section that can answer anything about last night.
+
+            Read-only, so it needs no watch session.
+            """,
+        options: [
+            HelpPayload.OptionHelp(
+                flag: "--no-launch",
+                summary: "Fail instead of launching Changeover when it is not running."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--timeout <seconds>",
+                summary: "Seconds to wait for the app. Default 10."
+            ),
+            jsonOption,
+        ]
+    )
+
+    public static let select = HelpPayload.CommandHelp(
+        name: "select",
+        summary: "Name the feature, the film and any extras to import.",
+        usage: "\(ServiceNames.cliName) select [--movie <tmdb-id>] [--query <term>] "
+            + "[--feature-title <n>] [--extra <n> [--extra-kind <folder>] "
+            + "[--extra-label <text>]]… [--disc <insertionID>] [--session <id>] [--json]",
+        discussion: """
+            Additive: name the film on one call and tick an extra on the next, the \
+            way a person clicking the window does. An entirely empty select is a \
+            usage error rather than a no-op, because a script that built one has a \
+            bug.
+
+            --movie takes a TMDB id and it must resolve to a film the app is \
+            already holding search results for, or --query must say what to search \
+            for. The CLI never fabricates a release year: a Plex folder is \
+            `Title (Year) {tmdb-ID}`, and a wrong year is a folder Plex reads as a \
+            different film.
+
+            --extra takes a **disc title index**, the integer status reports for \
+            the scan. --extra-kind and --extra-label come after the --extra they \
+            describe.
+
+            --extra-kind must be one of Plex's eight extras folder names, spelled \
+            exactly:
+
+            \(LibraryStatus.knownExtrasFolders.map { "              \($0)" }.joined(separator: "\n"))
+
+            The spelling is not cosmetic and a near miss is not forgiven. Plex \
+            excludes exactly those names from its movie scan; `Behind the Scenes` \
+            is an unrecognised folder, which Plex scans as a film and files as a \
+            second movie with a nonsense name. An unrecognised name is refused, \
+            never corrected to the nearest match. Omit --extra-kind to let the app \
+            derive the folder from the label, which is what the window does. \
+            `status --json` reports the live list under library.extrasFolders.
+
+            Nothing here starts an encode. `import` does that.
+
+            \(authorisationNote)
+            """,
+        options: [
+            HelpPayload.OptionHelp(flag: "--movie <tmdb-id>", summary: "The film, by TMDB id."),
+            HelpPayload.OptionHelp(
+                flag: "--query <term>",
+                summary: "A TMDB search term, run by the app when the id is not already in its results."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--feature-title <n>",
+                summary: "The disc title index to encode as the feature."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--extra <n>",
+                summary: "A disc title index to bring in as an extra. Repeatable."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--extra-kind <folder>",
+                summary: "The Plex extras folder for the preceding --extra. Must be one of the eight."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--extra-label <text>",
+                summary: "The name for the preceding --extra, as the disc's menu printed it."
+            ),
+            discOption,
+            sessionOption,
+            HelpPayload.OptionHelp(
+                flag: "--no-launch",
+                summary: "Fail instead of launching Changeover when it is not running."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--timeout <seconds>",
+                summary: "Seconds to wait for the app, including a TMDB search. Default 30."
+            ),
+            jsonOption,
+        ]
+    )
+
+    public static let importFilm = HelpPayload.CommandHelp(
+        name: "import",
+        summary: "Run it.",
+        usage: "\(ServiceNames.cliName) import --disc <insertionID> [--session <id>] "
+            + "[--no-launch] [--timeout <seconds>] [--json]",
+        discussion: """
+            Presses Start. Exactly that: the same Start gate, the same RipRequest \
+            and the same JobIntent the window uses, with no second path of its own \
+            — because a second path is a second chance to get it wrong.
+
+            That is what carries the no-overwrite guarantee. When the film is \
+            already in Plex and only its extras are wanted, the job runs under the \
+            extrasOnly intent, for which the feature destination is a value that \
+            **does not exist**: the whole feature phase lives inside an `if let`, so \
+            there is no branch the compiler will enter that could file over the \
+            film. The result reports which intent ran, under `intent`.
+
+            --disc is required, and that is the point. An agent decides over the \
+            course of a scan, an OCR read, a TMDB search and a library check — \
+            minutes, during which a person can swap the disc. Every index it chose \
+            then names a title on a disc that is gone, and the app cannot tell from \
+            the indices, because a different disc's title 1 is also title 1. The \
+            insertion token is minted once per insertion and is therefore never \
+            equal across two visits, so it is the only thing that can refuse this.
+
+            Refused when the Start gate refuses; the result carries the gate's own \
+            case name and reason under `startDecision` and `detail`.
+
+            Returns as soon as the job is started, with its id under `jobID`. Wait \
+            for it with `wait --for job-done --job <id> --timeout 7200`.
+
+            \(authorisationNote)
+            """,
+        options: [
+            HelpPayload.OptionHelp(
+                flag: "--disc <insertionID>",
+                summary: "Required. The disc this import was decided for, from status's disc.insertionID."
+            ),
+            sessionOption,
+            HelpPayload.OptionHelp(
+                flag: "--no-launch",
+                summary: "Fail instead of launching Changeover when it is not running."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--timeout <seconds>",
+                summary: "Seconds to wait for the app. Default 30."
+            ),
+            jsonOption,
+        ]
+    )
+
     public static let help = HelpPayload.CommandHelp(
         name: "help",
         summary: "Show this help, or the help for one command.",
@@ -194,7 +534,9 @@ public enum HelpText {
         options: [jsonOption]
     )
 
-    public static let all = [ping, status, watch, help]
+    /// Every command, in the order a session uses them: observe, then wait, then
+    /// act, then read back.
+    public static let all = [ping, status, watch, wait, eject, cancel, select, importFilm, report, help]
 
     private static let exitCodes = [
         HelpPayload.ExitCodeHelp(code: BridgeExitCode.success, meaning: "success"),
@@ -215,6 +557,15 @@ public enum HelpText {
             code: BridgeExitCode.sessionEnded,
             meaning: "the app ended the watch session, or went away while it was attached"
         ),
+        HelpPayload.ExitCodeHelp(
+            code: BridgeExitCode.machineRefused,
+            meaning: "the app asked and macOS refused — recoverable, e.g. a locked screen "
+                + "dissenting an unmount"
+        ),
+        HelpPayload.ExitCodeHelp(
+            code: BridgeExitCode.conditionNotMet,
+            meaning: "wait reached its timeout with the condition still false"
+        ),
     ]
 
     /// The whole payload, or one command's, depending on `topic`.
@@ -228,7 +579,7 @@ public enum HelpText {
         return HelpPayload(
             tool: ServiceNames.cliName,
             summary: "Drive Changeover, the DVD-to-Plex menu bar app, from a script or an agent.",
-            usage: "\(ServiceNames.cliName) <ping|status|watch|help> [options]",
+            usage: "\(ServiceNames.cliName) <\(CLIParse.verbs.joined(separator: "|"))> [options]",
             commands: matched.map { [$0] } ?? all,
             exitCodes: exitCodes,
             topic: matched?.name

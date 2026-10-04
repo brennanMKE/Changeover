@@ -105,11 +105,16 @@ struct CLIParseTests {
 
     // MARK: - Errors
 
+    /// `import` used to be the example here, because it was the obvious verb that
+    /// did not exist yet. #0196 shipped it, so the example is now something that
+    /// genuinely is not a command — and the hint lists what is, from the same table
+    /// the tool dispatches on, so it cannot go stale again.
     @Test func anUnknownCommandIsAUsageErrorNamingIt() throws {
-        let error = try #require(parse("import").failure)
+        let error = try #require(parse("rip").failure)
         #expect(error.code == BridgeExitCode.usage)
-        #expect(error.message.contains("'import'"))
-        #expect(error.hint?.contains("ping, status, watch, help") == true)
+        #expect(error.message.contains("'rip'"))
+        #expect(error.hint?.contains("ping, status, watch") == true)
+        #expect(error.hint?.contains("import") == true)
     }
 
     /// Strict on purpose. A silently dropped `--no-launch` would make a script
@@ -134,7 +139,7 @@ struct CLIParseTests {
     // MARK: - --json
 
     @Test func jsonIsAcceptedOnEveryCommand() throws {
-        for verb in ["ping", "status", "watch", "help"] {
+        for verb in ["ping", "status", "watch", "report", "help"] {
             let invocation = try CLIParse.parse([verb, "--json"]).get()
             #expect(invocation.json, "--json was dropped for \(verb)")
         }

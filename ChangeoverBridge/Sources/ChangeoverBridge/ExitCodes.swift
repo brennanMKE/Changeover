@@ -31,6 +31,28 @@ public enum BridgeExitCode {
     public static let requestFailed: Int32 = 4
     /// The app ended the session, or went away, while `watch` was attached.
     public static let sessionEnded: Int32 = 5
+
+    // #0196 adds two. Both are additive: a script that branched on 0–5 keeps
+    // working, and neither is reachable from a Phase 1 verb.
+
+    /// The app agreed and **the machine refused**.
+    ///
+    /// Separate from 4 because they have opposite remedies. 4 means change what
+    /// you are asking for; this means ask again later. The case that forced it is
+    /// `eject` on a Mac with its screen locked: `loginwindow` dissents the
+    /// unmount with `kDAReturnNotPermitted`, the disc and the drive are both
+    /// fine, and the same command succeeds the moment somebody unlocks
+    /// (`docs/eject-and-the-locked-screen.md` — the last refusal and the unlock
+    /// were half a second apart). Collapsing that into "the request failed" is
+    /// what sent six rounds of fixes after a missing entitlement.
+    public static let machineRefused: Int32 = 6
+
+    /// `wait` reached its timeout with the condition still false.
+    ///
+    /// Not a failure of anything. `wait --for job-done --timeout 7200` leaving
+    /// with this means the encode is still going, which is an answer a script
+    /// branches on differently from every other non-zero code.
+    public static let conditionNotMet: Int32 = 7
 }
 
 /// A failure, in the form the `--json` consumer reads.
@@ -61,6 +83,10 @@ public struct CLIErrorPayload: Codable, Sendable, Equatable, Error {
         public static let timedOut = "timedOut"
         public static let protocolMismatch = "protocolMismatch"
         public static let undecodable = "undecodable"
+        /// #0196 — the app tried and the operating system refused.
+        public static let machineRefused = "machineRefused"
+        /// #0196 — `wait` reached its timeout with the condition still false.
+        public static let conditionNotMet = "conditionNotMet"
     }
 
     /// The exit code each kind maps to.
@@ -78,6 +104,8 @@ public struct CLIErrorPayload: Codable, Sendable, Equatable, Error {
         case Kind.appUnavailable, Kind.appNotInstalled: BridgeExitCode.appUnavailable
         case Kind.requestFailed, Kind.undecodable, Kind.protocolMismatch: BridgeExitCode.requestFailed
         case Kind.sessionEnded: BridgeExitCode.sessionEnded
+        case Kind.machineRefused: BridgeExitCode.machineRefused
+        case Kind.conditionNotMet: BridgeExitCode.conditionNotMet
         default: BridgeExitCode.requestFailed
         }
     }
@@ -114,6 +142,13 @@ public struct CLIEnvelope: Codable, Sendable {
     /// squeezed into `help`, because a consumer checking compatibility should
     /// read one key, not a sentence.
     public var version: String?
+    /// #0196 — what an acting verb did. One field for all four of them; see
+    /// ``ActionResult``.
+    public var action: ActionResult?
+    /// #0196 — what `wait` settled on.
+    public var wait: WaitResult?
+    /// #0196 — what the last job did.
+    public var report: JobReport?
 
     public enum Kind {
         /// The single result line of a request/reply command.
@@ -138,7 +173,10 @@ public struct CLIEnvelope: Codable, Sendable {
         event: BridgeEvent? = nil,
         session: SessionStatus? = nil,
         help: HelpPayload? = nil,
-        version: String? = nil
+        version: String? = nil,
+        action: ActionResult? = nil,
+        wait: WaitResult? = nil,
+        report: JobReport? = nil
     ) {
         self.ok = ok
         self.command = command
@@ -150,6 +188,9 @@ public struct CLIEnvelope: Codable, Sendable {
         self.session = session
         self.help = help
         self.version = version
+        self.action = action
+        self.wait = wait
+        self.report = report
     }
 
     public static func failure(command: String, _ error: CLIErrorPayload) -> CLIEnvelope {

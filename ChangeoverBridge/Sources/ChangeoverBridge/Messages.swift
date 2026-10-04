@@ -23,6 +23,33 @@ public struct BridgeRequest: Codable, Sendable {
         public static let status = "status"
         /// Open a long-lived session and push flow events onto it.
         public static let watch = "watch"
+
+        // #0196 — the acting verbs. Every one of these is refused unless a
+        // `watch` session is attached; see `AgentAuthorization` in the app
+        // target for why that is the authorisation condition and not a flag.
+
+        /// Open the tray. Body: ``EjectRequest``.
+        public static let eject = "eject"
+        /// Abort the running job. Body: ``CancelRequest``.
+        public static let cancel = "cancel"
+        /// Name the feature, the film and the extras. Body: ``SelectionRequest``.
+        public static let select = "select"
+        /// Run it. Body: ``ImportRequest``.
+        ///
+        /// Spelled with a backtick because `import` is a Swift keyword. The wire
+        /// value is the plain word, which is what matters: the CLI's verb, the
+        /// app's dispatch key and `AgentMode.phrase(forAction:)` all use it.
+        public static let `import` = "import"
+        /// What the last job did. Read-only, so no session is required.
+        public static let report = "report"
+
+        /// The verbs that change something, and therefore need authorising.
+        ///
+        /// A set rather than a check written at each call site: a verb added to
+        /// the dispatch table and forgotten here would be an unauthorised verb,
+        /// and the failure would be silent. `AgentAuthorization` reads this, so
+        /// the list is in one place and is the thing the tests assert.
+        public static let acting: Set<String> = [eject, cancel, select, `import`]
     }
 
     public var action: String
@@ -31,6 +58,32 @@ public struct BridgeRequest: Codable, Sendable {
     public init(action: String, params: [String: String] = [:]) {
         self.action = action
         self.params = params
+    }
+
+    /// The key a typed request body travels under.
+    ///
+    /// `params` stays `[String: String]` rather than growing a field per verb:
+    /// the acting verbs each want a different shape, and an envelope that has to
+    /// be edited for every new one is an envelope two processes will disagree
+    /// about. One nested JSON hop inside a message nobody reads by eye.
+    public static let bodyKey = "body"
+
+    public init<Body: Encodable>(action: String, body: Body) {
+        self.action = action
+        let json = String(data: body.bridgeEncoded(), encoding: .utf8) ?? ""
+        self.params = [BridgeRequest.bodyKey: json]
+    }
+
+    /// Decodes the typed body, or `nil` when absent or malformed.
+    ///
+    /// Returns `nil` rather than throwing because the bytes came from another
+    /// process: a body this build cannot read is an expected runtime condition
+    /// to refuse with a named outcome, not an exceptional one.
+    public func body<Body: Decodable>(as type: Body.Type) -> Body? {
+        guard let json = params[BridgeRequest.bodyKey],
+              let data = json.data(using: .utf8)
+        else { return nil }
+        return Body.bridgeDecoded(from: data)
     }
 }
 
@@ -117,6 +170,17 @@ public struct BridgeEvent: Codable, Sendable {
         public static let jobProgress = "job.progress"
         /// The job finished, succeeded or failed.
         public static let jobFinished = "job.finished"
+        /// #0196 — an agent asked the app to do something.
+        ///
+        /// Not a state change, so `BridgeStatusDiff` cannot produce it; the
+        /// server broadcasts it at the moment it acts. It is here because a
+        /// destructive verb has to be visible, and the three places it has to be
+        /// visible are different audiences: the window's agent banner is for the
+        /// person at the machine, `flow.log` is for whoever reads it over SSH
+        /// afterwards, and this is for the **other watcher** — two agents
+        /// attached to one disc, one of which just ejected it. Without this the
+        /// second one sees the disc vanish and no reason why.
+        public static let agentAction = "agent.action"
     }
 
     public var sessionID: String

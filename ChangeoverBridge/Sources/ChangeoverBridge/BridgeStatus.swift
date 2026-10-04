@@ -544,6 +544,33 @@ public struct LibraryStatus: Codable, Sendable, Equatable {
         self.extrasFolders = extrasFolders
     }
 
+    /// Plex's eight extras folder names, for the one caller that cannot ask the
+    /// app: `help`, which has to print them whether or not Changeover is
+    /// running.
+    ///
+    /// **This is deliberately a second copy of `PlexExtra.Kind`, and it is
+    /// deliberately only used for help text.** The app target owns the real
+    /// list; this package cannot see the app, and the alternative — printing
+    /// nothing unless the app answers — makes `help` useless in exactly the
+    /// situation a person is reading it. The drift that a second copy invites is
+    /// closed by a test rather than by discipline: `PlexExtrasFoldersAgreeTests`
+    /// in `ChangeoverTests` asserts this equals
+    /// `PlexExtra.Kind.allCases.map(\.folderName)`, in declaration order, and
+    /// fails the moment a kind is added to one and not the other.
+    ///
+    /// Everything that *acts* on a folder name reads ``extrasFolders`` instead,
+    /// which comes from the running app.
+    public static let knownExtrasFolders = [
+        "Behind The Scenes",
+        "Deleted Scenes",
+        "Featurettes",
+        "Interviews",
+        "Scenes",
+        "Shorts",
+        "Trailers",
+        "Other",
+    ]
+
     public static let defaultFilmPattern = "Movies/Title (Year) {tmdb-ID}/Title (Year).mp4"
     public static let defaultExtraPattern = "Movies/Title (Year) {tmdb-ID}/<Extras Folder>/Label.mp4"
     public static let defaultEpisodePattern = "TV Shows/Show Name (Year)/Season NN/Show Name - sNNeNN.mp4"
