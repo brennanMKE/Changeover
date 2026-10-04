@@ -198,6 +198,14 @@ struct SettingsView: View {
                          : "lsdvd: not installed (optional)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+
+                    // #0190 — the one tool in this box Changeover PROVIDES
+                    // rather than depends on. It sits here because this is
+                    // already where the app talks about command-line tools,
+                    // and because the pattern it came from puts this action in
+                    // a File menu that an LSUIElement app does not have.
+                    Divider()
+                    CLIToolInstallRow()
                 }
                 .padding(6)
             }
