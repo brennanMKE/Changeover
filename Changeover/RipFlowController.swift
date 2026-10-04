@@ -2449,8 +2449,20 @@ final class RipFlowController {
     /// here, so the rule — and the drop-to-zero transition that lifts it — has
     /// one statement and one set of tests.
     var isAutomationSuspended: Bool {
-        AutomationSuspension.isSuspended(attachedSessions: attachedAgentSessions())
+        AutomationSuspension.isSuspended(
+            attachedSessions: attachedAgentSessions(),
+            // #0210 — and for a grace period after a quit that interrupted one.
+            // A restart resets the session count to zero without anything
+            // having finished, which is how the app came back and nearly
+            // started a rip on a disc an agent was still working.
+            interruptedAt: agentInterruptedAt())
     }
+
+    /// When the app last quit with an agent attached. A closure for the same
+    /// reason `attachedAgentSessions` is one: this type must behave identically
+    /// in a test host, where there is no bridge and no `UserDefaults` to
+    /// consult.
+    var agentInterruptedAt: () -> Date? = { nil }
 
     /// The last suspension state written to the diagnostic log, so an attached
     /// agent produces one line rather than one per reconcile.

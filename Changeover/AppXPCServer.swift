@@ -309,6 +309,11 @@ final class AppXPCServer {
                 + " — automation is \(snapshot.automation.suspended ? "suspended" : "running")",
             from: snapshot
         )
+        // #0210 — an agent is back, so the post-quit grace period has done its
+        // job. Cleared on attach rather than left to expire: the whole point of
+        // the grace is to hold the disc until somebody takes it, and once
+        // somebody has, the live session count is the authority again.
+        AgentHandoff.clear()
         startFeedIfNeeded(from: snapshot)
         return id
     }

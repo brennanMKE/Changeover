@@ -79,6 +79,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// quitting app is the failure this feature must never cause.
     func applicationWillTerminate(_ notification: Notification) {
         jobs.releaseDiscHold()
+        // #0210 — record that an agent was in the middle of something, so the
+        // next launch does not come back with automation live on a disc whose
+        // decider was killed rather than having finished.
+        AgentHandoff.noteQuit(attachedSessions: bridge?.sessionCount ?? 0)
         // #0189 — tell attached `changeoverctl watch` sessions before their
         // connections drop, so a clean quit reads as a clean quit rather than as
         // the app having gone away unexpectedly.
@@ -456,6 +460,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let server = AppXPCServer(jobs: jobs, flow: flow, settings: settings)
         bridge = server
         flow.attachedAgentSessions = { [weak server] in server?.sessionCount ?? 0 }
+        // #0210 — the handoff marker, read live rather than captured, so it
+        // stops applying the moment it is cleared.
+        flow.agentInterruptedAt = { AgentHandoff.interruptedAt() }
         // #0199 — the pipeline's post-job eject reads the same count. A disc an
         // agent is still working through must not be taken out from under it.
         jobs.attachedAgentSessions = { [weak server] in server?.sessionCount ?? 0 }

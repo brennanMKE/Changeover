@@ -49,6 +49,61 @@ nonisolated enum AutomationSuspension {
         attachedSessions > 0
     }
 
+    // MARK: - #0210: across a quit
+
+    /// How long automation stays suspended after the app quits with an agent
+    /// attached.
+    ///
+    /// Reported on joe: an install quit the app mid-import, and when it came
+    /// back the session count was zero, so automation was live — on a disc an
+    /// agent had been working forty seconds earlier. Within a minute the app
+    /// had auto-selected a film and run the start gate through
+    /// `runtimeLookupLoading` and `libraryCheckInProgress`. Only the countdown
+    /// not finishing before the agent reattached stopped it starting a rip by
+    /// itself, on a disc whose decider had been killed rather than having
+    /// finished.
+    ///
+    /// Five minutes: long enough for a CLI to notice its connection dropped and
+    /// reattach, short enough that a user whose agent is never coming back is
+    /// not left with an app that refuses to do anything. It is a grace period
+    /// and not a lock, which is the same reasoning as `watch` having no mode
+    /// flag — nothing an agent can crash while holding.
+    static let handoffGrace: TimeInterval = 300
+
+    /// Whether automation is suspended, counting a quit that interrupted an
+    /// agent.
+    ///
+    /// - Parameter interruptedAt: when the app last quit **while** a session
+    ///   was attached, or `nil` if its last exit was clean. A clean detach while
+    ///   the app keeps running is deliberately not recorded: the count drops to
+    ///   zero, automation resumes, and that has always been right. What is being
+    ///   recovered here is specifically the agent that never got to say goodbye.
+    static func isSuspended(
+        attachedSessions: Int,
+        interruptedAt: Date?,
+        now: Date = Date()
+    ) -> Bool {
+        if isSuspended(attachedSessions: attachedSessions) { return true }
+        guard let interruptedAt else { return false }
+        let elapsed = now.timeIntervalSince(interruptedAt)
+        // A marker from the future is a clock change, not a handoff. Treated as
+        // expired rather than trusted: the failure it would otherwise cause is
+        // an app that will not start a job and cannot say why.
+        guard elapsed >= 0 else { return false }
+        return elapsed < handoffGrace
+    }
+
+    /// What to tell a user whose app is holding back after a restart.
+    static func interruptedReason(interruptedAt: Date?, now: Date = Date()) -> String? {
+        guard isSuspended(attachedSessions: 0, interruptedAt: interruptedAt, now: now),
+              let interruptedAt
+        else { return nil }
+        let left = Int((handoffGrace - now.timeIntervalSince(interruptedAt)).rounded())
+        return "Changeover quit while an agent was working this disc, so it is not "
+            + "choosing a film or starting a job by itself for another "
+            + "\(max(1, left / 60)) minute(s) — in case the agent comes back."
+    }
+
     /// What to tell a user looking at an idle disc.
     ///
     /// `nil` when nothing is suspended, so a caller can treat the presence of a
