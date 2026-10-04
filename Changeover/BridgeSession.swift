@@ -14,6 +14,9 @@ import Foundation
 /// lifetime rather than to a mode an agent could crash while holding.
 final class BridgeSession: Identifiable {
     let id: String
+    /// #0203 — what this session was opened for. A `wait` sustains the agent
+    /// count but never adds to it; see `AgentSessionCount`.
+    let purpose: AgentSessionCount.Purpose
     /// The client's pid, captured at accept time.
     ///
     /// Read once here rather than from the invalidation handler: after
@@ -40,7 +43,8 @@ final class BridgeSession: Identifiable {
 
     var uptime: TimeInterval { Date().timeIntervalSince(startedAt) }
 
-    init?(id: String, connection: NSXPCConnection) {
+    init?(id: String, purpose: AgentSessionCount.Purpose = .watching, connection: NSXPCConnection) {
+        self.purpose = purpose
         // `remoteObjectInterface` was configured when the connection was
         // accepted. If it had not been, this cast would fail and the session
         // would be useless — which is the failure mode of setting the interface

@@ -23,6 +23,12 @@ public struct BridgeRequest: Codable, Sendable {
         public static let status = "status"
         /// Open a long-lived session and push flow events onto it.
         public static let watch = "watch"
+        /// #0203 — open a session that reads the event stream only until a
+        /// condition is met. `changeoverctl wait` uses this rather than `watch`
+        /// so the app can tell the two apart: a waiting session sustains the
+        /// agent count but never adds to it. One agent running a watcher and a
+        /// wait is one agent, and the window used to say two.
+        public static let waitSession = "wait"
 
         // #0197 — the read verbs. Each one only observes: none of them starts,
         // cancels, ejects or imports, and the app's dispatch for them is a

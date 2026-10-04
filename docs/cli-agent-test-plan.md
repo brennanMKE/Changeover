@@ -305,6 +305,39 @@ what to do next? The three causes (not filed, filed under a different folder
 name, library unreadable) need different actions, and a refusal that does not
 distinguish them is worth reporting.
 
+### 13. A watcher plus a wait is still one agent
+
+#0203, and the user's own question while a single agent worked a disc: "I still
+see 2 agents." There was one, holding a `watch` and a `wait --for job-done`.
+
+```sh
+"$C" watch --json > /tmp/events.jsonl &
+"$C" status --json | jq '{agents: .status.automation.heldBySessions, open: .status.app.sessions}'
+"$C" wait --for job-done --timeout 60 &
+"$C" status --json | jq '{agents: .status.automation.heldBySessions, open: .status.app.sessions}'
+```
+
+**Expect:** `agents` is 1 both times. `open` goes 1 → 2, which is the honest
+count of connections and is meant to. The window's banner says one agent
+throughout — check the screen, not only the JSON, since the banner is what the
+user sees.
+
+Then with no watcher at all:
+
+```sh
+kill %1 %2
+"$C" wait --for disc-inserted --timeout 60 &
+"$C" status --json | jq '.status.automation | {suspended, heldBySessions}'
+```
+
+**Expect:** `suspended: true` and `heldBySessions: 1`. A lone `wait` still
+counts, because the app must not start a job underneath something that is
+waiting for a different one.
+
+**Judgement call:** does any count the user is shown disagree with how many
+programs are actually driving the app? Report it if so — that is the bug this
+scenario exists to catch, and it was caught by eye rather than by a test.
+
 ## Known gaps — do not report these as bugs
 
 - **No `/usr/local/bin` symlink.** The installer did not port: Changeover is a

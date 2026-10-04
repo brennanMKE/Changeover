@@ -143,8 +143,15 @@ enum ActingCommands {
                 launchTimeout: .seconds(10),
                 note: reporter.note
             )
+            // #0203 — `wait` opens a *waiting* session, not a watch session.
+            //
+            // It needs one for the same reason `watch` does — it reads the
+            // event stream rather than polling `status`, which would race the
+            // event it is waiting for — but it is not a second agent. Naming
+            // the purpose is what lets the app count one agent that is both
+            // watching and waiting as one.
             let sessionID = try await app.startSession(
-                BridgeRequest(action: BridgeRequest.Action.watch),
+                BridgeRequest(action: BridgeRequest.Action.waitSession),
                 timeout: .seconds(10)
             )
             guard !sessionID.isEmpty else {

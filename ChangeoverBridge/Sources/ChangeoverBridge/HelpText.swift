@@ -169,6 +169,11 @@ public enum HelpText {
             Ctrl-C tells the app to close the session and exits 0. If the app \
             ends the session itself — because it is quitting — this exits 5.
 
+            One watcher is the shape to work in: hold this open across discs and \
+            keep every other command brief — connect, act, disconnect. Only \
+            `watch` and `wait` hold a session at all, and a `wait` running \
+            alongside your watcher is not counted as a second agent.
+
             This command only observes.
             """,
         options: [
@@ -451,8 +456,15 @@ public enum HelpText {
             first film's finished job while the second is still queued, and the \
             agent would eject a disc with a film still on it.
 
-            Holding the wait open holds a watch session open, so the app's own \
-            automation stays suspended for its duration.
+            Holding the wait open holds a session open, so the app's own automation \
+            stays suspended for its duration — a job must not start underneath \
+            something waiting for a different one.
+
+            It is **not** counted as a second agent. A wait alongside your own \
+            `watch` leaves the window saying one agent and `status` reporting \
+            `heldBySessions: 1`, because one program watching and waiting is one \
+            agent. The honest number of open connections is still there as \
+            `app.sessions`.
 
             Exit 0 when the condition was met, 7 when the timeout was reached with \
             it still false. 7 is not a failure of anything — `wait --for job-done \

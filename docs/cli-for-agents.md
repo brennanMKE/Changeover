@@ -221,6 +221,25 @@ suspension is scoped to the session count, not to a toggle. `status` reports
 whether automation is suspended and how many sessions are holding it, so a user
 looking at an idle disc can see why.
 
+**One watcher, and everything else brief.** That is the shape to work in: hold
+one `watch` open across discs, and let every other command connect, act and
+disconnect. Only `watch` and `wait` hold a session at all.
+
+A `wait` running alongside your own watcher is **not** a second agent. It holds
+a session — it reads the event stream rather than polling `status`, which would
+race the event it is waiting for — but the app knows what the session was opened
+for, and a waiting session sustains the agent count without adding to it. The
+window says one agent and `automation.heldBySessions` reports 1.
+
+That was a real bug the user caught, not a hypothetical: one agent holding a
+watcher and a `wait --for job-done` made the banner say "2 agents" to someone
+who could see one working disc. A `wait` on its own still counts, because the
+app must not start a job underneath something waiting for a different one.
+
+If you want the literal number of open connections — debugging your own — it is
+`app.sessions`, next to `app.clients`. `automation.heldBySessions` is the number
+the user is shown.
+
 #### The disc is yours until you eject it
 
 Suspension covers ejecting, too. **While any `watch` session is attached, the
@@ -411,6 +430,11 @@ WATCHER=$!
 changeoverctl wait --for scan-complete --timeout 300
 ASSETS=$(changeoverctl assets --json | jq -r .assets.path)
 ```
+
+The `wait` here runs *alongside* the watcher, which is the intended shape and
+not a second agent: the window still says one. Only `watch` and `wait` hold a
+session at all — `assets`, `library`, `search`, `select`, `import` and `eject`
+each connect, act and disconnect.
 
 Decide. The OCR and the model's answers are in `$ASSETS`; the agent is free to
 reason over them in ways the app's own rules do not. Check the library before

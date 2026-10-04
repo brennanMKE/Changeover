@@ -59,7 +59,26 @@ final class AppXPCServer {
     private var feed: BridgeEventFeed?
 
     var clientCount: Int { clients.count }
-    var sessionCount: Int { sessions.count }
+    /// #0203 — how many **agents** are attached, which is not how many
+    /// sessions are open.
+    ///
+    /// This drives the window's banner, `AutomationSuspension`,
+    /// `AgentAuthorization` and `status`'s `heldBySessions`. One agent running
+    /// `watch` and `wait --for job-done` holds two sessions, and the banner
+    /// said "2 agents" to a user who could see one. `AgentSessionCount` holds
+    /// the rule and the reasoning; the honest session total is still reported
+    /// separately as `app.sessions`.
+    var sessionCount: Int {
+        AgentSessionCount.agents(
+            watching: sessions.values.count { $0.purpose == .watching },
+            waiting: sessions.values.count { $0.purpose == .waiting }
+        )
+    }
+
+    /// Every open session, whatever it was opened for. Reported as
+    /// `app.sessions` and used for the log lines, where the literal truth is
+    /// what is wanted.
+    var openSessionCount: Int { sessions.count }
 
     /// #0195 — the most recent thing a CLI session asked for, so the window
     /// can say what the agent is doing rather than only that one exists.
@@ -264,18 +283,20 @@ final class AppXPCServer {
     /// `String`, so there is no room for an error payload, and empty is the
     /// agreed failure value.
     fileprivate func startSession(_ request: BridgeRequest, connection: NSXPCConnection) -> String {
-        guard request.action == BridgeRequest.Action.watch else {
+        guard let purpose = AgentSessionCount.Purpose(action: request.action) else {
             BridgeLog.note("startSession refused — unknown action '\(request.action)'")
             return ""
         }
         let id = "s\(nextSessionNumber)"
-        guard let session = BridgeSession(id: id, connection: connection) else {
+        guard let session = BridgeSession(id: id, purpose: purpose, connection: connection) else {
             BridgeLog.note("startSession refused — the client does not export CLIClientProtocol")
             return ""
         }
         nextSessionNumber += 1
         sessions[id] = session
-        BridgeLog.note("session \(id) attached — pid \(session.pid), \(sessions.count) total")
+        BridgeLog.note(
+            "session \(id) attached for \(purpose.rawValue) — pid \(session.pid), "
+                + "\(sessions.count) open, \(sessionCount) agent(s)")
 
         // The opening event carries the whole snapshot. A watcher that attaches
         // part-way through a disc otherwise starts from nothing and has to
@@ -352,6 +373,9 @@ final class AppXPCServer {
             settings: settings,
             launchDate: launchDate,
             clients: clients.count,
+            // #0203 — the literal number of open sessions, not the agent
+            // count: `automation.heldBySessions` is the one the user sees, and
+            // an agent debugging its own connections wants the truth here.
             sessions: sessions.count,
             brokerRegistered: isRegisteredWithBroker
         )
@@ -375,7 +399,7 @@ final class AppXPCServer {
 
         switch AgentAuthorization.decide(
             action: request.action,
-            attachedSessions: sessions.count,
+            attachedSessions: sessionCount,
             requestedSessionID: requestedSessionID(in: request),
             liveSessionIDs: Set(sessions.keys)
         ) {
@@ -392,7 +416,7 @@ final class AppXPCServer {
                     verb: request.action,
                     outcome: outcome,
                     detail: reason,
-                    sessionsAttached: sessions.count
+                    sessionsAttached: sessionCount
                 )
             )
         }
@@ -413,13 +437,13 @@ final class AppXPCServer {
         case BridgeRequest.Action.eject:
             guard let body = request.body(as: EjectRequest.self) else { return malformed(request) }
             return record(
-                await AgentActions.eject(body, jobs: jobs, sessionsAttached: sessions.count)
+                await AgentActions.eject(body, jobs: jobs, sessionsAttached: sessionCount)
             )
 
         case BridgeRequest.Action.cancel:
             guard let body = request.body(as: CancelRequest.self) else { return malformed(request) }
             return record(
-                AgentActions.cancel(body, jobs: jobs, sessionsAttached: sessions.count)
+                AgentActions.cancel(body, jobs: jobs, sessionsAttached: sessionCount)
             )
 
         case BridgeRequest.Action.select:
@@ -430,7 +454,7 @@ final class AppXPCServer {
                     jobs: jobs,
                     flow: flow,
                     settings: settings,
-                    sessionsAttached: sessions.count
+                    sessionsAttached: sessionCount
                 )
             )
 
@@ -442,7 +466,7 @@ final class AppXPCServer {
                     jobs: jobs,
                     flow: flow,
                     settings: settings,
-                    sessionsAttached: sessions.count
+                    sessionsAttached: sessionCount
                 )
             )
 
@@ -472,7 +496,7 @@ final class AppXPCServer {
                 outcome: ActionOutcome.refusedMalformedRequest,
                 detail: "the body of the '\(request.action)' request could not be read. "
                     + "This copy of changeoverctl and Changeover may be out of sync.",
-                sessionsAttached: sessions.count
+                sessionsAttached: sessionCount
             )
         )
     }
