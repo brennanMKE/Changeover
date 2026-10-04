@@ -113,7 +113,6 @@ extension BridgeStatus {
         rows.append(("media root", library.mediaRoot.isEmpty ? "not set" : library.mediaRoot))
         rows.append(("movies", library.moviesPath))
         rows.append(("tv shows", library.tvShowsPath))
-        rows.append(("clips", library.clipsPath))
         rows.append(("film naming", library.filmPattern))
         rows.append(("extras naming", library.extraPattern))
         rows.append(("extras folders", library.extrasFolders.joined(separator: ", ")))

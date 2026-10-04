@@ -34,10 +34,6 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
     /// properties are exactly the kind that only show up on a disc nobody
     /// has in the drive. One extra case states the difference once.
     nonisolated enum Filing: Equatable, Sendable {
-        /// #0031's default and still the right answer for a title nothing
-        /// named: `Clips/<folder>/<base> - tNN.<ext>`, deliberately not
-        /// Plex-shaped, outside any library Plex scans.
-        case clip
         /// #0174/#0178 — inside the film's own folder, in one of Plex's
         /// recognised extras subfolders, under the name the disc printed:
         /// `Movies/<folder>/Behind The Scenes/looking for Signs.mp4`.
@@ -71,7 +67,11 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
         /// `MakeMKVFallbackTests` and `DiscTitleFormattingTests` compile
         /// unchanged — the same additive shape `DVDPipeline.extras` itself
         /// took.
-        var filing: Filing = .clip
+        /// #0192 — the default is "nothing named it", which now files under
+        /// `Other` beside the film rather than into a folder Plex never
+        /// scans. Every extra ends up with its film; the only question a
+        /// label answers is which subfolder and what the file is called.
+        var filing: Filing = .bonusFeature(kind: .other, label: "")
 
         /// The one `LibraryDestination` the pipeline hands to
         /// `PlexOrganizer.move` for this item.
@@ -84,8 +84,6 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
         /// starts.
         var destination: LibraryDestination {
             switch filing {
-            case .clip:
-                return .extra(titleIndex: titleIndex)
             case .bonusFeature(let kind, let label):
                 return .bonusFeature(titleIndex: titleIndex, kind: kind, label: label)
             }
@@ -94,10 +92,14 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
         /// The name the disc gave this title, for the log. `nil` for a clip
         /// — HandBrake gives an extra no name of its own, which is the whole
         /// reason `.clip`'s filename is an index.
+        /// The name the disc gave this title, for the log. Empty when
+        /// nothing named it — `PlexExtra.fileName` then generates
+        /// `Bonus Feature - tNN`, because HandBrake gives an extra no name of
+        /// its own and a file in an extras folder is shown to a person by its
+        /// filename.
         var label: String? {
             switch filing {
-            case .clip: return nil
-            case .bonusFeature(_, let label): return label
+            case .bonusFeature(_, let label): return label.isEmpty ? nil : label
             }
         }
 
@@ -117,8 +119,23 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
     }
 
     /// #0178 — how many of these land beside the film rather than in `Clips`.
+    ///
+    /// #0192: all of them, now that `Clips` is gone. Kept because callers
+    /// still ask, and because it is the honest answer to "how many extras are
+    /// in this plan" for anything that only cares about the count.
     var bonusFeatureCount: Int {
         items.filter(\.isBonusFeature).count
+    }
+
+    /// #0192 — how many carry a name of their own.
+    ///
+    /// The distinction that still matters to a person reading the Confirm
+    /// step. A named extra becomes `Behind The Scenes/looking for Signs.mp4`;
+    /// an unnamed one becomes `Other/Bonus Feature - t08.mp4`, which is
+    /// honest about being title 8 of the disc and nothing more. Where they go
+    /// no longer varies; what they will be called does.
+    func bonusFeatureCount(withLabel: Bool) -> Int {
+        items.filter { ($0.label != nil) == withLabel }.count
     }
 
     /// Resolves `requested` (`RipRequest.extraTitleIndices`) against `disc`:
@@ -183,8 +200,34 @@ nonisolated struct ExtrasPlan: Equatable, Sendable {
     }
 
     /// Rule 2 above, on its own so it is testable without a `DiscInfo`.
+    /// #0192 — every extra is filed with its film. There is no second place.
+    ///
+    /// This used to send an extra with no usable name to `Clips`, a folder
+    /// deliberately outside the Plex libraries. The user asked what `Clips`
+    /// was for, and the honest answer was: nothing Plex knows about. It is not
+    /// a Plex feature, it was invented here, and its entire purpose was being
+    /// somewhere Plex was not looking.
+    ///
+    /// That workaround was right in September and obsolete by October. #0031
+    /// built `Clips` because at the time *any* video near a film in `Movies/`
+    /// would be scanned as a second film. #0174 adopted Plex's own extras
+    /// convention — the recognised subfolder names Plex excludes from the
+    /// movie scan — which is exactly the exemption that made the workaround
+    /// unnecessary. Nobody went back to retire it, so the app kept two
+    /// destinations for one kind of content and chose between them on whether
+    /// OCR happened to read a menu page. A disc read well put its making-of
+    /// beside the film; the same disc read badly hid it where Plex never
+    /// looks. The thing that varied was the app's luck, not the user's
+    /// content.
+    ///
+    /// So an unnamed extra goes to `Other`, which is a real Plex extras
+    /// folder, under the name `PlexExtra.fileName` already generates for this
+    /// case — `Bonus Feature - t08.mp4`, honest about being title 8 of the
+    /// disc and nothing more. Both halves existed; nothing reached for them.
     nonisolated static func filing(forLabel label: String?) -> Filing {
-        guard let label, !PlexExtra.sanitize(label).isEmpty else { return .clip }
+        guard let label, !PlexExtra.sanitize(label).isEmpty else {
+            return .bonusFeature(kind: .other, label: "")
+        }
         return .bonusFeature(kind: PlexExtra.kind(forLabel: label), label: label)
     }
 

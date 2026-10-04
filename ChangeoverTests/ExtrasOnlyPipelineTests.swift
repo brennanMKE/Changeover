@@ -180,12 +180,12 @@ struct ExtrasOnlyPipelineTests {
 
         // 2. The extras landed where #0174/#0178 put them.
         let folder = URL(fileURLWithPath: LibraryPaths.filmFolder(metadata: metadata, roots: settings.libraryRoots))
-        #expect(try Self.files(directlyIn: folder) == ["Behind The Scenes", metadata.fileName])
+        #expect(try Self.files(directlyIn: folder) == ["Behind The Scenes", "Other", metadata.fileName])
         #expect(try Self.files(directlyIn: folder.appendingPathComponent("Behind The Scenes"))
                 == ["making Signs.mp4"])
-        #expect(try Self.files(directlyIn: URL(fileURLWithPath: settings.clipsPath)
-                                   .appendingPathComponent(metadata.folderName))
-                == ["\(metadata.baseName) - t07.mp4"])
+        #expect(try Self.files(directlyIn: folder.appendingPathComponent("Other"))
+                == ["Bonus Feature - t07.mp4"],
+                "#0192 — the extra nothing named is filed with the film too")
         // And `Movies/` still holds exactly the one folder it held before.
         #expect(try FileManager.default.contentsOfDirectory(atPath: settings.plexMoviesPath)
                 == [metadata.folderName])
@@ -266,7 +266,9 @@ struct ExtrasOnlyPipelineTests {
         // exactly as it was.
         #expect(try FileManager.default.contentsOfDirectory(atPath: settings.plexMoviesPath)
                 == ["Signs (2002) {tmdb-999}"])
-        #expect(FileManager.default.fileExists(atPath: settings.clipsPath) == false)
+        #expect(FileManager.default.fileExists(
+            atPath: (settings.plexMediaRoot as NSString).appendingPathComponent("Clips")) == false,
+            "#0192 — nothing creates a Clips tree any more")
         // Nothing was encoded — the refusal is before HandBrake, not after an
         // hour of it. (The only stub invocation is preflight's `--help`, which
         // the stub answers before the argv log.)
@@ -368,7 +370,8 @@ struct ExtrasOnlyPipelineTests {
         let folder = URL(fileURLWithPath: LibraryPaths.filmFolder(metadata: metadata, roots: settings.libraryRoots))
         #expect(try Self.files(directlyIn: folder.appendingPathComponent("Behind The Scenes"))
                 == ["making Signs.mp4"])
-        #expect(try Self.files(directlyIn: URL(fileURLWithPath: settings.clipsPath)
+        #expect(try Self.files(directlyIn: URL(fileURLWithPath: settings.plexMoviesPath)
+            .appendingPathComponent(metadata.folderName).appendingPathComponent("Other")
                                    .appendingPathComponent(metadata.folderName)).isEmpty)
         // The film is still untouched, which is the part that matters most when
         // something has gone wrong.

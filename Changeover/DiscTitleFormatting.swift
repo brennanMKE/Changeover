@@ -372,26 +372,32 @@ nonisolated enum DiscTitleFormatting {
     static func extrasSummaryWording(_ plan: ExtrasPlan) -> Wording {
         let count = plan.items.count
         let stem = "\(count) extra\(count == 1 ? "" : "s") selected — \(duration(plan.totalDurationSeconds)) total"
-        // #0178: "filed outside the Plex library" was true of every extra
-        // this app had ever filed, and is a lie the moment one of them is a
-        // title the disc named — those go *inside* the film's own folder, in
-        // a subfolder Plex reads as extras. The all-clip wording is left
-        // byte-for-byte as it was, because that is still the common case and
-        // still the honest sentence for it.
-        let bonus = plan.bonusFeatureCount
-        guard bonus > 0 else {
-            return Wording(plain: plainExtrasLine(plan),
-                           detail: "\(stem), filed outside the Plex library")
+        // #0192 — no extra is filed outside the Plex library any more.
+        //
+        // This sentence has been corrected twice and each time it was telling
+        // the truth about the app as it stood. #0178 made "filed outside the
+        // Plex library" false for a named extra, which went inside the film's
+        // folder; #0182 made "named by the disc" false for one the user named.
+        // Now every extra is filed with its film, because `Clips` is gone —
+        // it was never a Plex concept, only a folder this project invented to
+        // keep video away from Plex's movie scanner, and Plex's own extras
+        // convention replaced the need for it.
+        //
+        // So the sentence says where they go, once, and distinguishes only
+        // the thing that still varies: whether an extra has a name of its own
+        // or will be filed under `Other` as `Bonus Feature - tNN`.
+        let named = plan.bonusFeatureCount(withLabel: true)
+        let unnamed = count - named
+        let detail: String
+        switch (named, unnamed) {
+        case (0, _):
+            detail = "\(stem), filed with the movie as extras under Other"
+        case (_, 0):
+            detail = "\(stem), filed with the movie as extras"
+        default:
+            detail = "\(stem) — \(named) named, filed with the movie as extras; "
+                + "the other \(unnamed) under Other"
         }
-        // #0182: "named by the disc" was true while the only name source was
-        // the disc's own menus. A bonus feature the USER named has the same
-        // filing and a different provenance, and the sentence has no business
-        // claiming one.
-        let named = "\(bonus) named, filed with the movie as extras"
-        let rest = count - bonus
-        let detail = rest > 0
-            ? "\(stem) — \(named); the other \(rest) filed outside the Plex library"
-            : "\(stem) — \(named)"
         return Wording(plain: plainExtrasLine(plan), detail: detail)
     }
 

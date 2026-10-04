@@ -366,7 +366,6 @@ nonisolated enum BridgeStatusReader {
             mediaRoot: settings.plexMediaRoot,
             moviesPath: roots.moviesPath,
             tvShowsPath: roots.tvPath,
-            clipsPath: roots.clipsPath,
             // Taken from `PlexExtra.Kind` rather than written out here, so a kind
             // added to the app appears in the CLI's answer without anyone
             // remembering to. The order is the declaration order, which is also

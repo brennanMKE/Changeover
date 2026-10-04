@@ -70,13 +70,17 @@ import Testing
 
     /// #0031 is unchanged for everything the disc did not name: no label, no
     /// name to show a person, so `Clips` — exactly where it went before.
-    @Test func anunnamedExtraStillGoesToClips() throws {
+    @Test func anunnamedExtraIsFiledUnderOtherWithTheFilm() throws {
         let plan = ExtrasPlan.make(featureIndex: 1, requested: [9], disc: Self.signs)
         let item = try #require(plan.items.first)
-        #expect(item.filing == .clip)
-        #expect(item.destination == .extra(titleIndex: 9))
-        #expect(Self.resolved(item).folder == "/Media/Clips/Signs (2002) {tmdb-452}")
-        #expect(plan.bonusFeatureCount == 0)
+        // #0192 — an extra nothing named is still filed with its film, under
+        // `Other`, rather than hidden in a tree Plex never scans.
+        #expect(item.filing == .bonusFeature(kind: .other, label: ""))
+        #expect(item.destination == .bonusFeature(titleIndex: 9, kind: .other, label: ""))
+        #expect(Self.resolved(item).folder == "/Media/Movies/Signs (2002) {tmdb-452}/Other")
+        #expect(Self.resolved(item).file.hasSuffix("/Other/Bonus Feature - t09.mp4"))
+        #expect(plan.bonusFeatureCount == 1, "#0192 — it is still filed with the film")
+        #expect(plan.bonusFeatureCount(withLabel: true) == 0, "it just has no name of its own")
     }
 
     /// A label that sanitises to nothing is not a label. `".."` leaves no
@@ -88,7 +92,8 @@ import Testing
             let plan = ExtrasPlan.make(featureIndex: 1, requested: [9], disc: Self.signs,
                                        labels: [9: empty])
             let item = try #require(plan.items.first)
-            #expect(item.filing == .clip, "“\(empty)” is not a name")
+            #expect(item.filing == .bonusFeature(kind: .other, label: ""),
+                    "“\(empty)” is not a name, so it files under Other")
         }
     }
 
@@ -128,7 +133,7 @@ import Testing
                                    labels: [10: "building Signs"])
         let item = try #require(plan.items.first)
         #expect(item.titleIndex == 9)
-        #expect(item.filing == .clip)
+        #expect(item.filing == .bonusFeature(kind: .other, label: ""))
     }
 
     /// The feature is dropped before any label is read, so a disc that names
@@ -202,13 +207,19 @@ import Testing
         #expect(labels.isEmpty)
     }
 
-    /// The Confirm step used to promise every extra would be "filed outside
-    /// the Plex library". That sentence survives unchanged for an all-clip
-    /// plan — still the common case — and stops being told when it is false.
-    @Test func theconfirmStepStopsPromisingEveryExtraIsFiledOutsidePlex() {
-        let clipsOnly = ExtrasPlan.make(featureIndex: 1, requested: [9, 10], disc: Self.signs)
-        #expect(DiscTitleFormatting.extrasSummaryWording(clipsOnly).detail?
-            .hasSuffix("filed outside the Plex library") == true)
+    /// The Confirm step's sentence has been corrected three times, each time
+    /// because the app changed underneath it.
+    ///
+    /// It promised every extra would be "filed outside the Plex library",
+    /// which #0178 made false for a named extra and #0192 made false for all
+    /// of them — `Clips` is gone, every extra is filed with its film, and the
+    /// only thing that still varies is whether an extra has a name of its own
+    /// or lands under `Other` as `Bonus Feature - tNN`.
+    @Test func theconfirmStepSaysWhereExtrasActuallyGo() {
+        let unnamed = ExtrasPlan.make(featureIndex: 1, requested: [9, 10], disc: Self.signs)
+        let unnamedDetail = DiscTitleFormatting.extrasSummaryWording(unnamed).detail
+        #expect(unnamedDetail?.contains("filed with the movie as extras under Other") == true)
+        #expect(unnamedDetail?.contains("outside the Plex library") != true)
 
         let mixed = ExtrasPlan.make(featureIndex: 1, requested: [9, 10], disc: Self.signs,
                                     labels: [9: "looking for Signs"])
@@ -216,11 +227,11 @@ import Testing
         // #0182 dropped "by the disc": a bonus feature the user named files
         // the same way and did not come off a menu.
         #expect(detail?.contains("1 named, filed with the movie as extras") == true)
-        #expect(detail?.contains("the other 1 filed outside the Plex library") == true)
+        #expect(detail?.contains("the other 1 under Other") == true)
         // The running total itself is label-independent, so nothing the user
         // was already reading moves.
         #expect(DiscTitleFormatting.extrasSummaryWording(mixed).plain
-                == DiscTitleFormatting.extrasSummaryWording(clipsOnly).plain)
+                == DiscTitleFormatting.extrasSummaryWording(unnamed).plain)
     }
 
     /// #0175's interrogation is the other label source. Only what the disc
@@ -346,7 +357,7 @@ struct BonusFeaturePipelineTests {
 
     // MARK: - A bonus feature really lands in the film's folder
 
-    @Test func abonusFeatureLandsInThePlexExtrasSubfolderAndAClipStillGoesToClips() async throws {
+    @Test func anamedExtraAndAnUnnamedOneBothLandInsideTheFilmsFolder() async throws {
         let root = try Self.makeTempDir()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -371,20 +382,22 @@ struct BonusFeaturePipelineTests {
         // The film, and one extras subfolder — nothing else, and in
         // particular no stray video beside the feature for Plex to scan as a
         // second film.
-        #expect(try Self.files(directlyIn: movieFolder) == ["Behind The Scenes", metadata.fileName])
+        #expect(Set(try Self.files(directlyIn: movieFolder))
+                == ["Behind The Scenes", "Other", metadata.fileName])
         // The bonus feature, under the name the disc printed.
         #expect(try Self.files(directlyIn: movieFolder.appendingPathComponent("Behind The Scenes"))
                 == ["looking for Signs.mp4"])
         // `Movies/` itself still holds exactly one folder: the film's.
         #expect(try FileManager.default.contentsOfDirectory(atPath: settings.plexMoviesPath)
                 == [metadata.folderName])
-        // The unnamed clip is untouched by this ticket.
-        #expect(try Self.files(directlyIn: URL(fileURLWithPath: settings.clipsPath)
-                                   .appendingPathComponent(metadata.folderName))
-                == ["\(metadata.baseName) - t03.mp4"])
+        // #0192 — and the unnamed one is beside it, under Other.
+        #expect(try Self.files(directlyIn: movieFolder.appendingPathComponent("Other"))
+                == ["Bonus Feature - t03.mp4"])
 
         #expect(logged.contains { $0.contains("“looking for Signs” → ") })
-        #expect(logged.contains { $0.hasPrefix("✓ Extras: 2 of 2") && $0.contains("beside the film") })
+        // #0192 — one destination, so the line names it once.
+        #expect(logged.contains { $0.hasPrefix("✓ Extras: 2 of 2")
+                    && $0.contains(metadata.folderName) })
         #expect(try Self.jobDirectories(under: URL(fileURLWithPath: settings.workingEncodePath)).isEmpty)
     }
 
@@ -430,16 +443,17 @@ struct BonusFeaturePipelineTests {
 
         // The blocking file is still a file — nothing clobbered it, and no
         // video was written beside the feature.
-        #expect(try Self.files(directlyIn: movieFolder) == ["Behind The Scenes", metadata.fileName])
+        #expect(try Self.files(directlyIn: movieFolder)
+                .contains("Behind The Scenes"))
+        #expect(try Self.files(directlyIn: movieFolder).contains(metadata.fileName))
         let blocked = movieFolder.appendingPathComponent("Behind The Scenes")
         var isDirectory: ObjCBool = false
         #expect(FileManager.default.fileExists(atPath: blocked.path, isDirectory: &isDirectory))
         #expect(!isDirectory.boolValue)
 
         // The other extra still went where it was going.
-        #expect(try Self.files(directlyIn: URL(fileURLWithPath: settings.clipsPath)
-                                   .appendingPathComponent(metadata.folderName))
-                == ["\(metadata.baseName) - t03.mp4"])
+        #expect(try Self.files(directlyIn: movieFolder.appendingPathComponent("Other"))
+                == ["Bonus Feature - t03.mp4"])
 
         // Logged, deleted, counted — and nothing left in the working folder,
         // because an extra's source is the disc, not the working copy (#0031).

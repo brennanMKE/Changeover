@@ -243,7 +243,8 @@ struct DVDPipelineCancellationTests {
         }
         #expect(FileManager.default.fileExists(atPath: destination.path))
 
-        let clipsFolder = URL(fileURLWithPath: settings.clipsPath).appendingPathComponent(metadata.folderName)
+        let clipsFolder = URL(fileURLWithPath: settings.plexMoviesPath)
+            .appendingPathComponent(metadata.folderName).appendingPathComponent("Other")
         let clips = (try? FileManager.default.contentsOfDirectory(atPath: clipsFolder.path)) ?? []
         #expect(clips.filter { $0.hasSuffix(".mp4") }.isEmpty, "no extra may be filed after a cancel: \(clips)")
 

@@ -42,7 +42,7 @@ struct ExtrasOnlyIntentTests {
         let bonus = ExtrasPlan.Item(titleIndex: 8, durationSeconds: 3_534,
                                     frameRate: nil, interlaceDetected: nil,
                                     filing: .bonusFeature(kind: .behindTheScenes, label: "making Signs"))
-        #expect(clip.destination == .extra(titleIndex: 7))
+        #expect(clip.destination == .bonusFeature(titleIndex: 7, kind: .other, label: ""))
         #expect(bonus.destination == .bonusFeature(titleIndex: 8, kind: .behindTheScenes, label: "making Signs"))
         for item in [clip, bonus] {
             #expect(item.destination != .feature)
@@ -131,12 +131,15 @@ struct ExtrasOnlyDestinationTests {
     /// A clip still goes to the non-Plex `Clips` tree, which is outside the
     /// film's folder entirely — so an extras-only run whose only ticked title
     /// is an unnamed clip writes nothing under `Movies/` at all.
-    @Test func anUnnamedClipStillLandsOutsideTheFilmFolder() throws {
+    @Test func anUnnamedExtraLandsUnderOtherInsideTheFilmFolder() throws {
         let metadata = try Self.metadata()
-        let resolved = LibraryPaths.resolve(.extra(titleIndex: 7), metadata: metadata,
+        let resolved = LibraryPaths.resolve(.bonusFeature(titleIndex: 7, kind: .other, label: ""), metadata: metadata,
                                             roots: Self.roots, sourceExtension: "mp4")
-        #expect(resolved.file == "/Volumes/Plex/Clips/Signs (2002) {tmdb-452}/Signs (2002) - t07.mp4")
-        #expect(!resolved.folder.hasPrefix(Self.roots.moviesPath))
+        #expect(resolved.file
+                == "/Volumes/Plex/Movies/Signs (2002) {tmdb-452}/Other/Bonus Feature - t07.mp4",
+                "#0192 — an unnamed extra is filed with its film, not hidden in Clips")
+        #expect(resolved.folder.hasPrefix(Self.roots.moviesPath),
+                "#0192 — every extra is inside the Plex library now, with its film")
     }
 }
 

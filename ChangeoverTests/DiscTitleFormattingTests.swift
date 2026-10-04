@@ -382,7 +382,14 @@ struct DiscTitleFormattingTests {
         // The running total's precise form is untouched.
         #expect(DiscTitleFormatting.extrasStatusLine(plan) == "Extras: 2 · 0:48:10")
         #expect(DiscTitleFormatting.extrasSummaryWording(plan).plain == "Extras: 2 · 48m")
-        #expect(DiscTitleFormatting.extrasSummaryWording(plan).detail?.contains("filed outside the Plex library") == true)
+        // #0192 — nothing is filed outside the Plex library any more. `Clips`
+        // was never a Plex concept, only a folder this project invented to
+        // keep video away from Plex's movie scanner, and Plex's own extras
+        // convention replaced the need.
+        #expect(DiscTitleFormatting.extrasSummaryWording(plan).detail?
+                    .contains("filed with the movie as extras") == true)
+        #expect(DiscTitleFormatting.extrasSummaryWording(plan).detail?
+                    .contains("outside the Plex library") != true)
     }
 
     @Test func plainPlayAllMessageDropsTheClusterArithmetic() {

@@ -152,11 +152,14 @@ import Testing
         #expect(resolved.file == "/Media/Movies/Signs (2002) {tmdb-452}/Signs (2002).mp4")
     }
 
-    /// `.extra` is unchanged: it still goes to the non-Plex Clips tree.
-    @Test func theOldExtraDestinationIsUnchanged() {
+    /// #0192 — there is no Clips tree any more, and an unnamed extra is
+    /// filed with its film rather than somewhere Plex never looks.
+    @Test func anUnnamedExtraIsFiledUnderOtherBesideTheFilm() {
         let resolved = LibraryPaths.resolve(
-            .extra(titleIndex: 9), metadata: Self.signs, roots: Self.roots, sourceExtension: "mp4")
-        #expect(resolved.folder == "/Media/Clips/Signs (2002) {tmdb-452}")
+            .bonusFeature(titleIndex: 9, kind: .other, label: ""),
+            metadata: Self.signs, roots: Self.roots, sourceExtension: "mp4")
+        #expect(resolved.folder == "/Media/Movies/Signs (2002) {tmdb-452}/Other")
+        #expect(resolved.file.hasSuffix("/Other/Bonus Feature - t09.mp4"))
     }
 
     /// A label that tries to climb out of the folder cannot.

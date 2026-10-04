@@ -125,16 +125,21 @@ struct ExtrasPipelineTests {
         #expect(destination.deletingLastPathComponent() == movieFolder)
         #expect(try Self.mp4Files(directlyIn: movieFolder) == [metadata.fileName])
 
-        // Nothing besides the feature's own folder appears under Movies/.
+        // Still exactly one folder under Movies/ — the film's.
         let moviesChildren = try FileManager.default.contentsOfDirectory(atPath: settings.plexMoviesPath)
         #expect(moviesChildren == [metadata.folderName])
 
-        // Both extras, under Clips/<same folder name>.
-        let clipsFolder = URL(fileURLWithPath: settings.clipsPath).appendingPathComponent(metadata.folderName)
-        let clipFiles = try Self.mp4Files(directlyIn: clipsFolder)
-        #expect(clipFiles == [
-            "\(metadata.baseName) - t02.mp4",
-            "\(metadata.baseName) - t03.mp4",
+        // #0192 — and both extras are inside it, under `Other`, which is one
+        // of the subfolder names Plex excludes from its movie scan. They used
+        // to land in `Clips`, a tree outside the Plex libraries that Plex has
+        // never known about; nothing named them, and that was taken as a
+        // reason to hide them rather than to name them plainly.
+        let otherFolder = URL(fileURLWithPath: settings.plexMoviesPath)
+            .appendingPathComponent(metadata.folderName)
+            .appendingPathComponent("Other")
+        #expect(try Self.mp4Files(directlyIn: otherFolder) == [
+            "Bonus Feature - t02.mp4",
+            "Bonus Feature - t03.mp4",
         ])
 
         // The job directory is fully disposed — extras leave nothing behind
@@ -225,9 +230,11 @@ struct ExtrasPipelineTests {
         }
         #expect(FileManager.default.fileExists(atPath: destination.path))
 
-        // Only the surviving extra (title 3) made it to Clips.
-        let clipsFolder = URL(fileURLWithPath: settings.clipsPath).appendingPathComponent(metadata.folderName)
-        #expect(try Self.mp4Files(directlyIn: clipsFolder) == ["\(metadata.baseName) - t03.mp4"])
+        // Only the surviving extra (title 3) was filed, beside the film.
+        let otherFolder = URL(fileURLWithPath: settings.plexMoviesPath)
+            .appendingPathComponent(metadata.folderName)
+            .appendingPathComponent("Other")
+        #expect(try Self.mp4Files(directlyIn: otherFolder) == ["Bonus Feature - t03.mp4"])
 
         // Nothing left behind for the failed extra — the working directory
         // is fully disposed, same as any other succeeded job.
@@ -244,49 +251,13 @@ struct ExtrasPipelineTests {
     /// #0031 review: `Clips` is a symlink into `Movies`. The feature still
     /// lands in `Movies/<folder>/` as the only file; both extras are refused
     /// by the organizer's guard, deleted from the working folder, and never
-    /// appear under `Movies/`; the job still succeeds and is fully disposed.
-    @Test func extrasRefusedByAClipsSymlinkIntoMoviesNeverReachMoviesAndTheFeatureStillSucceeds() async throws {
-        let root = try Self.makeTempDir()
-        defer { try? FileManager.default.removeItem(at: root) }
+    /// #0192 — the `Clips`-aliases-`Movies` symlink test is gone with the
+    /// folder. It probed a real hazard: `Clips` symlinked back into `Movies`
+    /// meant an extra landed where Plex would scan it as a film. Every extra
+    /// now lands inside `Movies` deliberately, and `PlexOrganizer`'s two
+    /// `.bonusFeature` guards replace it with a stricter rule checked on the
+    /// RESOLVED path — the leaf must be a recognised extras folder, directly
+    /// inside a film folder, directly inside `Movies`. `BonusFeatureTests`
+    /// owns those.
 
-        let settings = AppSettings()
-        settings.plexMediaRoot = root.path
-        let stub = try Self.copyStub("stub-HandBrakeCLI.sh", into: root)
-        try Self.writeConf(forStubAt: stub, ["EXIT_DIR_INPUT=0"])
-        settings.handbrakePath = stub
-
-        try FileManager.default.createDirectory(atPath: settings.plexMoviesPath, withIntermediateDirectories: true)
-        try FileManager.default.createSymbolicLink(
-            atPath: settings.clipsPath, withDestinationPath: settings.plexMoviesPath)
-
-        var logged: [String] = []
-        let metadata = try Self.metadata()
-        var pipeline = DVDPipeline(
-            metadata: metadata,
-            settings: settings,
-            disc:     try Self.makeFakeDisc(in: root),
-            selection: EncodeSelection(title: .index(1), audio: .sourceDefault, fallbackAudio: .sourceDefault, filter: .none),
-            extras:   ExtrasPlan(items: Self.extraItems),
-            log:      { logged.append($0) },
-            measureDuration: Self.matchingExtrasMeasurer
-        )
-        pipeline.eject = PipelineTestSupport.fakeEject
-        pipeline.reliabilityLogURL = root.appendingPathComponent("reliability.jsonl")
-
-        let outcome = await pipeline.run()
-
-        guard case .succeeded(let destination) = outcome else {
-            Issue.record("expected success, got \(outcome)")
-            return
-        }
-        let movieFolder = URL(fileURLWithPath: settings.plexMoviesPath).appendingPathComponent(metadata.folderName)
-        #expect(destination.deletingLastPathComponent() == movieFolder)
-        #expect(try FileManager.default.contentsOfDirectory(atPath: movieFolder.path) == [metadata.fileName])
-        #expect(try FileManager.default.contentsOfDirectory(atPath: settings.plexMoviesPath) == [metadata.folderName])
-
-        #expect(try Self.jobDirectories(under: URL(fileURLWithPath: settings.workingEncodePath)).isEmpty)
-        #expect(logged.contains { $0.contains("Extra title 2 failed to move") })
-        #expect(logged.contains { $0.contains("Extra title 3 failed to move") })
-        #expect(logged.contains { $0.hasPrefix("✓ Extras: 0 of 2") })
-    }
 }

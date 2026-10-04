@@ -14,22 +14,16 @@ import Foundation
 /// The three paths derived from `AppSettings.plexMediaRoot`. There is no
 /// memberwise init taking three independent strings — the only constructor
 /// derives all three from one root, so a caller cannot build roots where
-/// `clipsPath` happens to equal `moviesPath`.
+/// a build root happens to equal `moviesPath`.
 nonisolated struct LibraryRoots: Equatable, Sendable {
     /// e.g. `<root>/Movies`
     let moviesPath: String
     /// e.g. `<root>/TV Shows`. Used only by the `.extra` overlap guard today
     /// — nothing in this phase writes a TV destination.
     let tvPath: String
-    /// e.g. `<root>/Clips`. Plex's libraries point at `Movies` and
-    /// `TV Shows`, not at the media root, so this folder is invisible to
-    /// Plex (issues/0031.md's "Decisions (user, 2026-09-15)").
-    let clipsPath: String
-
     init(mediaRoot: String) {
         moviesPath = "\(mediaRoot)/Movies"
         tvPath = "\(mediaRoot)/TV Shows"
-        clipsPath = "\(mediaRoot)/Clips"
     }
 }
 
@@ -38,12 +32,6 @@ nonisolated enum LibraryDestination: Equatable, Sendable {
     /// `<root>/Movies/<Title (Year) {tmdb-ID}>/<Title (Year)>.<ext>` — the
     /// strict Plex naming convention (`CLAUDE.md`).
     case feature
-    /// `<root>/Clips/<Title (Year) {tmdb-ID}>/<Title (Year)> - t<NN>.<ext>` —
-    /// deliberately *not* Plex-shaped, because looking like a Plex movie is
-    /// the thing this type exists to avoid. `titleIndex` is HandBrake's
-    /// title number, carried in the filename because HandBrake gives extras
-    /// no names of their own.
-    case extra(titleIndex: Int)
     /// #0174 — `<root>/Movies/<Title (Year) {tmdb-ID}>/<Kind>/<Label>.<ext>`:
     /// a substantial bonus feature filed **inside the film's own folder**, in
     /// one of Plex's recognised extras subfolders.
@@ -107,13 +95,6 @@ nonisolated enum LibraryPaths {
             let file = (folder as NSString).appendingPathComponent(metadata.fileName)
             return Resolved(folder: folder, file: file)
 
-        case .extra(let titleIndex):
-            let folder = (roots.clipsPath as NSString).appendingPathComponent(metadata.folderName)
-            let paddedIndex = String(format: "%02d", titleIndex)
-            let ext = sourceExtension.isEmpty ? "mp4" : sourceExtension
-            let name = "\(metadata.baseName) - t\(paddedIndex).\(ext)"
-            let file = (folder as NSString).appendingPathComponent(name)
-            return Resolved(folder: folder, file: file)
 
         case .bonusFeature(let titleIndex, let kind, let label):
             // The film's own folder, then Plex's extras subfolder inside it.

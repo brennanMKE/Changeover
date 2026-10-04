@@ -51,53 +51,6 @@ enum PlexOrganizer {
     /// the very first statement in the body, before any `FileManager` call,
     /// so a test can record `Thread.isMainThread` there and prove
     /// `@concurrent` actually moved this work off the caller's actor.
-    /// #0031 — true when an `.extra` folder at `folderPath` would really sit
-    /// inside `Movies/` or `TV Shows/`, whatever the strings say.
-    ///
-    /// Two checks, both before anything is created:
-    /// 1. `Clips` itself canonically equals, contains or sits inside either
-    ///    library (the original guard — e.g. `Clips` → `Movies`).
-    /// 2. The folder's *real* location — its deepest existing ancestor run
-    ///    through `realpath(3)`, plus the components not created yet — is
-    ///    equal to or inside either library. This catches a symlink at any
-    ///    depth (`Clips/<Title (Year) {tmdb-ID}>` → `Movies/…`), which
-    ///    check 1 alone missed. Darwin's `realpath` returns on-disk case, so
-    ///    `Clips` → `movies` on a case-insensitive volume resolves to
-    ///    `…/Movies` and is caught too.
-    ///
-    /// An entry that exists but does not resolve (a dangling symlink) is
-    /// refused outright rather than letting `createDirectory` meet it.
-    nonisolated static func extraFolderAliasesLibrary(_ folderPath: String, roots: LibraryRoots) -> Bool {
-        if let realClips = WorkingFiles.canonicalPath(roots.clipsPath),
-           WorkingFiles.rootsOverlap(realClips, roots.moviesPath)
-               || WorkingFiles.rootsOverlap(realClips, roots.tvPath) {
-            return true
-        }
-
-        var existing = folderPath
-        var missing: [String] = []
-        while true {
-            if let real = WorkingFiles.canonicalPath(existing) {
-                let realFolder = missing.reduce(real) { ($0 as NSString).appendingPathComponent($1) }
-                for library in [roots.moviesPath, roots.tvPath] {
-                    let realLibrary = WorkingFiles.canonicalPath(library) ?? (library as NSString).standardizingPath
-                    if realFolder == realLibrary || realFolder.hasPrefix(realLibrary + "/") {
-                        return true
-                    }
-                }
-                return false
-            }
-            if WorkingFiles.kind(of: existing) != nil {
-                return true
-            }
-            let parent = (existing as NSString).deletingLastPathComponent
-            if parent.isEmpty || parent == existing {
-                return false
-            }
-            missing.insert((existing as NSString).lastPathComponent, at: 0)
-            existing = parent
-        }
-    }
 
     @discardableResult
     @concurrent
@@ -125,17 +78,19 @@ enum PlexOrganizer {
         let destURL = URL(fileURLWithPath: destPath)
         let encodedURL = URL(fileURLWithPath: encodedFile)
 
-        // #0031: an extra must never land inside `Movies/` or `TV Shows/`,
-        // even by way of a symlink pointing into either — checked before any
-        // filesystem mutation (see `extraFolderAliasesLibrary`). `.feature`
-        // never runs this: `roots.moviesPath` is its own destination root,
-        // so "overlaps Movies" is trivially true and meaningless there.
-        if case .extra = destination,
-           extraFolderAliasesLibrary(folderPath, roots: roots) {
-            await log("✗ ERROR moving file: the Clips folder overlaps the Plex library — refusing to move an extra there")
-            throw JobFailure(stage: .organize,
-                             reason: .destinationUnwritable(path: folderPath))
-        }
+        // #0192 — #0031's "an extra must never land inside Movies/" guard is
+        // gone with the folder it protected.
+        //
+        // That rule existed because an extra went to `Clips`, a tree outside
+        // the Plex libraries, and the hazard was a symlink quietly aliasing
+        // `Clips` back into `Movies` so a stray video got scanned as a film.
+        // Every extra now lands inside `Movies/` on purpose, in one of Plex's
+        // own recognised extras subfolders, and the two `.bonusFeature`
+        // guards below are what make that safe: the leaf must be a name Plex
+        // reads as extras, and it must sit directly inside a film folder
+        // directly inside `Movies`. Both check the RESOLVED path, so the
+        // symlink case #0031 feared is covered by the stricter rule that
+        // replaced it.
 
         // #0174 — a bonus feature DOES land under `Movies/`, and may only land
         // in a folder Plex reads as extras.

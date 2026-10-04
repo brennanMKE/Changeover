@@ -133,7 +133,6 @@ enum BridgeFixtures {
             mediaRoot: "/Volumes/Media/Media",
             moviesPath: "/Volumes/Media/Media/Movies",
             tvShowsPath: "/Volumes/Media/Media/TV Shows",
-            clipsPath: "/Volumes/Media/Media/Clips",
             extrasFolders: ["Behind The Scenes", "Other"]
         )
     }

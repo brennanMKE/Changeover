@@ -450,7 +450,6 @@ struct BridgeLibraryStatusTests {
         #expect(library.tvShowsPath == settings.plexTVPath)
         #expect(library.moviesPath == "/Volumes/Media/Media/Movies")
         #expect(library.tvShowsPath == "/Volumes/Media/Media/TV Shows")
-        #expect(library.clipsPath == "/Volumes/Media/Media/Clips")
     }
 
     /// An unconfigured app reports the empty root rather than inventing a

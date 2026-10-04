@@ -1039,15 +1039,12 @@ struct DVDPipeline {
                         succeededExtras += 1
                         if item.isBonusFeature { succeededBonusFeatures += 1 }
                     } catch {
-                        // #0178: the organizer has already logged *why* (and
+                        // #0178: the organizer has already logged *why* —
                         // for a bonus feature, which of its two guards
-                        // refused). This line says which extra and what
-                        // happens to it next, and it names the tree the
-                        // attempt was for so a `Clips` failure and a
-                        // beside-the-film failure are not the same line.
-                        let tree = item.isBonusFeature
-                            ? "\(libraryRoots.moviesPath)/\(metadata.folderName)"
-                            : libraryRoots.clipsPath
+                        // refused. This line says which extra and what happens
+                        // to it next. #0192: there is one tree now, the film's
+                        // own folder, so it no longer has to say which.
+                        let tree = "\(libraryRoots.moviesPath)/\(metadata.folderName)"
                         log("✗ Extra title \(item.titleIndex) failed to move into \(tree) — deleting")
                         // #0031 decision: an extra whose move failed is
                         // deleted, not kept — the disc remains the source,
@@ -1078,17 +1075,13 @@ struct DVDPipeline {
             // #0178: the prefix "✓ Extras: N of M" is unchanged — it is what
             // `ExtrasPipelineTests`, `OutputDurationCheckTests` and
             // `DVDPipelineCancellationTests` all assert on, and it is still
-            // the number the user wants first. Only the destination clause
-            // after it grew, because there are now two places an extra can
-            // land and a single path would misreport one of them.
-            if succeededBonusFeatures > 0 {
-                let clips = succeededExtras - succeededBonusFeatures
-                var destinations = "\(succeededBonusFeatures) beside the film in \(libraryRoots.moviesPath)/\(metadata.folderName)"
-                if clips > 0 { destinations += ", \(clips) → \(libraryRoots.clipsPath)" }
-                log("✓ Extras: \(succeededExtras) of \(extras.items.count) — \(destinations)")
-            } else {
-                log("✓ Extras: \(succeededExtras) of \(extras.items.count) → \(libraryRoots.clipsPath)")
-            }
+            // the number the user wants first.
+            //
+            // #0192: and the clause after it is simple again. There was one
+            // destination, then briefly two, and now one once more — every
+            // extra is filed with its film.
+            log("✓ Extras: \(succeededExtras) of \(extras.items.count) → "
+                + "\(libraryRoots.moviesPath)/\(metadata.folderName)")
         }
 
         // Step 3: Eject (#0005). Only ever reached on a typed success — the

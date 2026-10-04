@@ -516,7 +516,6 @@ public struct LibraryStatus: Codable, Sendable, Equatable {
     public var tvShowsPath: String
     /// `<mediaRoot>/Clips` — outside the Plex libraries entirely, which is
     /// where a video that is not a recognised extra of a film goes.
-    public var clipsPath: String
     /// `Movies/Title (Year) {tmdb-ID}/Title (Year).mp4`
     public var filmPattern: String
     /// `Movies/Title (Year) {tmdb-ID}/<Extras Folder>/Label.mp4`
@@ -531,7 +530,6 @@ public struct LibraryStatus: Codable, Sendable, Equatable {
         mediaRoot: String,
         moviesPath: String,
         tvShowsPath: String,
-        clipsPath: String,
         filmPattern: String = LibraryStatus.defaultFilmPattern,
         extraPattern: String = LibraryStatus.defaultExtraPattern,
         episodePattern: String = LibraryStatus.defaultEpisodePattern,
@@ -540,7 +538,6 @@ public struct LibraryStatus: Codable, Sendable, Equatable {
         self.mediaRoot = mediaRoot
         self.moviesPath = moviesPath
         self.tvShowsPath = tvShowsPath
-        self.clipsPath = clipsPath
         self.filmPattern = filmPattern
         self.extraPattern = extraPattern
         self.episodePattern = episodePattern

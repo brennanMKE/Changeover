@@ -95,7 +95,6 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             pathPreviewRow("Movies",       settings.plexMoviesPath)
                             pathPreviewRow("TV Shows",     settings.plexTVPath)
-                            pathPreviewRow("Clips",        settings.clipsPath)
                             pathPreviewRow("Fallback rip", settings.workingRipPath)
                             pathPreviewRow("Encoding",     settings.workingEncodePath)
                         }

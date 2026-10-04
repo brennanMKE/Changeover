@@ -543,8 +543,9 @@ struct OutputDurationCheckTests {
             return
         }
 
-        let clipsFolder = URL(fileURLWithPath: settings.clipsPath).appendingPathComponent(metadata.folderName)
-        #expect(try Self.mp4Files(directlyIn: clipsFolder) == ["\(metadata.baseName) - t03.mp4"])
+        let clipsFolder = URL(fileURLWithPath: settings.plexMoviesPath)
+            .appendingPathComponent(metadata.folderName).appendingPathComponent("Other")
+        #expect(try Self.mp4Files(directlyIn: clipsFolder) == ["Bonus Feature - t03.mp4"])
         #expect(logged.contains { $0.hasPrefix("✗ Extra title 2:") })
         #expect(logged.contains { $0.hasPrefix("✓ Extra title 3:") })
         #expect(logged.contains { $0.hasPrefix("✓ Extras: 1 of 2") })
