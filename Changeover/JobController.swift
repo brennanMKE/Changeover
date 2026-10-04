@@ -1104,8 +1104,16 @@ final class JobController {
     /// is refused, not silently ignored.
     ///
     /// - Returns: `true` only when `task?.cancel()` was actually called.
+    /// - Parameter by: #0205 — who asked. **Required, with no default.**
+    ///
+    ///   A default is what #0200 got wrong: `flow.select`'s origin defaulted to
+    ///   `.user`, so an agent's choice was reported to the person at the machine
+    ///   as their own. The same default here would attribute an agent's cancel
+    ///   to whoever happened to be standing at the Mac, which is worse — a
+    ///   cancelled encode is forty minutes gone and somebody will want to know
+    ///   who decided that. Making it required means a new call site has to say.
     @discardableResult
-    func cancel(id: JobID) -> Bool {
+    func cancel(id: JobID, by: CancelOrigin) -> Bool {
         switch CancelPolicy.decide(requestedID: id, currentID: current?.id, phase: current?.state.phase) {
         case .refuse(let reason):
             append("⚠︎ Cancel refused: \(reason).")
@@ -1113,9 +1121,30 @@ final class JobController {
         case .cancel:
             task?.cancel()
             cancellingJobID = id
+            lastCancel = CancelRecord(job: id, by: by)
             return true
         }
     }
+
+    /// #0205 — the most recent cancel, and who asked for it.
+    ///
+    /// Kept against the job id rather than on its own, because `lastOutcome`
+    /// outlives the job it describes: a bare origin would hand the *next* job's
+    /// cancel the previous one's decider. `cancelledBy(_:)` is the reader, and
+    /// it refuses to answer for any other job.
+    private(set) var lastCancel: CancelRecord?
+
+    /// Who cancelled `id`, or `nil` if that job was not the one cancelled.
+    func cancelledBy(_ id: JobID?) -> CancelOrigin? {
+        guard let id, let lastCancel, lastCancel.job == id else { return nil }
+        return lastCancel.by
+    }
+
+    /// Who cancelled the job `currentJobID` names — the same `current ??
+    /// history.last` rule, so the CLI reports the decider for the job it is
+    /// already reporting rather than applying a second definition of "the
+    /// current job".
+    var currentJobCancelledBy: CancelOrigin? { cancelledBy((current ?? history.last)?.id) }
 
     // MARK: - Retry (#0048)
 

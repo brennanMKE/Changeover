@@ -134,7 +134,7 @@ struct DiscRemovedDuringJobTests {
         #expect(controller.start(request: Self.request(second), settings: AppSettings()))
         try await waitUntilPhase(controller, .encoding)
         let secondID = try #require(controller.current?.id)
-        #expect(controller.cancel(id: secondID))
+        #expect(controller.cancel(id: secondID, by: .user))
         try await waitUntilIdle(controller)
     }
 

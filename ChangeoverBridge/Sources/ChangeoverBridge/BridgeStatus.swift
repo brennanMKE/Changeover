@@ -400,6 +400,18 @@ public struct JobStatus: Codable, Sendable, Equatable {
     public var outcome: String?
     /// The failure's reason, when it failed.
     public var failureReason: String?
+    /// #0205 — who cancelled, when `outcome == "cancelled"`: `user`, `agent` or
+    /// `app`. `nil` for every other outcome, and for a cancel by a build that
+    /// predates this.
+    ///
+    /// A cancel already reached a watcher as `job.finished`; what was missing
+    /// was the decider. An agent could infer "the user did it" from the absence
+    /// of an `agent.action` event beside it, which is the same indirect
+    /// reasoning #0200 removed for `chosenBy`. It matters more here: a
+    /// cancelled encode is forty minutes thrown away, and an agent that cannot
+    /// tell a person's cancel from its own `--force` will retry something a
+    /// human deliberately stopped.
+    public var cancelledBy: String?
     /// The film this job is for. Repeated here rather than only at the top
     /// level because the top-level `film` follows the *current selection*, which
     /// can move on while a job is still running.
@@ -418,6 +430,7 @@ public struct JobStatus: Codable, Sendable, Equatable {
         averageFPS: Double? = nil,
         outcome: String? = nil,
         failureReason: String? = nil,
+        cancelledBy: String? = nil,
         film: FilmStatus? = nil
     ) {
         self.running = running
@@ -432,12 +445,35 @@ public struct JobStatus: Codable, Sendable, Equatable {
         self.averageFPS = averageFPS
         self.outcome = outcome
         self.failureReason = failureReason
+        self.cancelledBy = cancelledBy
         self.film = film
     }
 
     /// The phases after which nothing more happens to this job.
     public static func isTerminal(_ phase: String) -> Bool {
         phase == "succeeded" || phase == "failed" || phase == "cancelled"
+    }
+
+    /// The values `cancelledBy` takes. Named constants because the CLI prints
+    /// them, the app writes them and an agent branches on them — three places a
+    /// typo would be silent. `CancelOriginNamesAgreeTests` pins them to the
+    /// app's own `CancelOrigin`.
+    public enum CancelledBy {
+        public static let user = "user"
+        public static let agent = "agent"
+        public static let app = "app"
+    }
+
+    /// `cancelledBy` as a phrase, for an event summary and the human output.
+    /// An unrecognised value is named rather than dropped: a newer app telling
+    /// an older CLI something it has no case for is when it matters most.
+    public static func cancelledByPhrase(_ who: String) -> String {
+        switch who {
+        case CancelledBy.user:  return "cancelled by the user"
+        case CancelledBy.agent: return "cancelled by an agent"
+        case CancelledBy.app:   return "cancelled by Changeover itself"
+        default:                return "cancelled by \(who)"
+        }
     }
 }
 

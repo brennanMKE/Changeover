@@ -133,7 +133,7 @@ struct JobCancellationTests {
         try await waitUntilPhase(controller, .encoding)
         let firstID = try #require(controller.current?.id)
 
-        #expect(controller.cancel(id: firstID))
+        #expect(controller.cancel(id: firstID, by: .user))
         try await waitUntilIdle(controller)
 
         #expect(controller.lastOutcome == .failed(JobFailure(stage: .encode, reason: .cancelled)))
@@ -147,7 +147,7 @@ struct JobCancellationTests {
         let secondID = try #require(controller.current?.id)
         #expect(secondID != firstID)
 
-        #expect(controller.cancel(id: secondID))
+        #expect(controller.cancel(id: secondID, by: .user))
         try await waitUntilIdle(controller)
         #expect(controller.lastOutcome?.failure?.reason == .cancelled)
     }
@@ -170,7 +170,7 @@ struct JobCancellationTests {
         #expect(sleepAssertion.endCount == 0)
 
         let id = try #require(controller.current?.id)
-        #expect(controller.cancel(id: id))
+        #expect(controller.cancel(id: id, by: .user))
         try await waitUntilIdle(controller)
 
         #expect(!sleepAssertion.isHeld)
@@ -190,7 +190,7 @@ struct JobCancellationTests {
         controller.start(request: Self.request(try Self.metadata()), settings: AppSettings())
         try await waitUntilPhase(controller, .encoding)
         let id = try #require(controller.current?.id)
-        controller.cancel(id: id)
+        controller.cancel(id: id, by: .user)
         try await waitUntilIdle(controller)
 
         #expect(controller.lastOutcome?.failure?.reason == .cancelled)
@@ -200,7 +200,7 @@ struct JobCancellationTests {
 
     @Test func cancelRefusesWhenNoJobIsRunning() {
         let controller = JobController(runner: { _, _ in .succeeded(destination: Self.destination) })
-        #expect(controller.cancel(id: JobID.make()) == false)
+        #expect(controller.cancel(id: JobID.make(), by: .user) == false)
         #expect(controller.logLines.contains { $0.contains("Cancel refused") })
     }
 
@@ -214,13 +214,13 @@ struct JobCancellationTests {
         try await waitUntilPhase(controller, .encoding)
 
         let wrongID = JobID.make()
-        #expect(controller.cancel(id: wrongID) == false)
+        #expect(controller.cancel(id: wrongID, by: .user) == false)
         #expect(controller.isRunning == true)
         #expect(controller.logLines.contains { $0.contains("Cancel refused") })
 
         // Clean up: cancel for real, so the test doesn't leak a hung Task.
         let realID = try #require(controller.current?.id)
-        #expect(controller.cancel(id: realID) == true)
+        #expect(controller.cancel(id: realID, by: .user) == true)
         try await waitUntilIdle(controller)
         #expect(controller.lastOutcome?.failure?.reason == .cancelled)
     }
@@ -241,7 +241,7 @@ struct JobCancellationTests {
         try await waitUntilPhase(controller, .organizing)
 
         let id = try #require(controller.current?.id)
-        #expect(controller.cancel(id: id) == false)
+        #expect(controller.cancel(id: id, by: .user) == false)
         #expect(controller.isRunning == true)
         #expect(controller.logLines.contains { $0.contains("moved into Plex") })
 
@@ -260,10 +260,10 @@ struct JobCancellationTests {
         try await waitUntilPhase(controller, .encoding)
 
         let id = try #require(controller.current?.id)
-        #expect(controller.cancel(id: id) == true)
+        #expect(controller.cancel(id: id, by: .user) == true)
         try await waitUntilIdle(controller)
 
-        #expect(controller.cancel(id: id) == false)
+        #expect(controller.cancel(id: id, by: .user) == false)
     }
 
     /// A second cancel while the job is *still* running (before the runner
@@ -277,8 +277,8 @@ struct JobCancellationTests {
         try await waitUntilPhase(controller, .encoding)
 
         let id = try #require(controller.current?.id)
-        #expect(controller.cancel(id: id) == true)
-        #expect(controller.cancel(id: id) == true)
+        #expect(controller.cancel(id: id, by: .user) == true)
+        #expect(controller.cancel(id: id, by: .user) == true)
         try await waitUntilIdle(controller)
 
         #expect(controller.lastOutcome?.failure?.reason == .cancelled)

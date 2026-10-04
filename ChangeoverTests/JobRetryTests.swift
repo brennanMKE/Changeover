@@ -193,7 +193,7 @@ struct JobRetryTests {
         #expect(controller.retry(id: firstID, settings: AppSettings()) == false)
 
         let runningID = try #require(controller.current?.id)
-        #expect(controller.cancel(id: runningID))
+        #expect(controller.cancel(id: runningID, by: .user))
         try await waitUntilIdle(controller)
     }
 }

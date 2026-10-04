@@ -286,6 +286,12 @@ nonisolated enum BridgeStatusReader {
             averageFPS: progress?.encode.averageFPS,
             outcome: outcomeName(outcome),
             failureReason: failureReason(outcome),
+            // #0205 — only for the job that was actually cancelled, and only
+            // when it ended that way. `jobs.cancelledBy` is keyed on the id for
+            // the reason `lastOutcome` is not: it outlives its job.
+            cancelledBy: outcomeName(outcome) == "cancelled"
+                ? jobs.currentJobCancelledBy?.rawValue
+                : nil,
             film: filmStatus(
                 jobs.currentMetadata,
                 resolvedBy: nil,

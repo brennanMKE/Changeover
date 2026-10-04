@@ -76,7 +76,7 @@ struct AppDelegateJobActionsTests {
         #expect(controller.isRunning)
         #expect(controller.cancellingJobID == nil)
 
-        #expect(controller.cancel(id: id))
+        #expect(controller.cancel(id: id, by: .user))
         await spin { !controller.isRunning }
         #expect(!controller.isRunning)
     }

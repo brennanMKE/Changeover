@@ -358,6 +358,38 @@ Every acting verb also reports a stable `outcome` identifier under `action` in
 its `--json`, which is what a `case` statement should branch on; `detail` is the
 app's own wording and will be reworded.
 
+### `job.cancelledBy` — who stopped it
+
+When a job's `outcome` is `cancelled`, `job.cancelledBy` says who asked:
+`user`, `agent`, or `app` (the app's own doing — no such path exists today, but
+the value is reserved so the first one has somewhere honest to go). It is absent
+for every other outcome.
+
+The `job.finished` event's summary names the decider too, so a watcher reading
+the human stream gets it without parsing JSON:
+
+```
+job.finished   the job cancelled — cancelled by the user
+```
+
+**The Cancel button is never disabled by agent mode.** `CancelPolicy` takes only
+the job id and the phase, so the person at the Mac can always stop a job an
+agent started. It refuses in exactly two cases, neither about agents: the phase
+is `organizing` (the file is being moved into Plex, and stopping there is what
+corrupts a library), or the job has already finished. There is a confirmation
+dialog first.
+
+Two things that follow, and both have bitten:
+
+- **`wait --for job-done` is satisfied by a cancel**, not left hanging — it
+  checks for a terminal phase, and `cancelled` is one. So the wait exits **0**.
+  An agent branching on the exit code alone will read a cancelled encode as a
+  success; read `outcome` from the payload.
+- **A cancel is not a failure to retry.** `cancelledBy: "user"` means a person
+  deliberately stopped forty minutes of work. Re-importing the same disc is
+  almost certainly not what they wanted, and before this field an agent could
+  only infer it from the *absence* of an `agent.action` event alongside.
+
 ### `film.chosenBy` — who decided
 
 `status`, every acting verb's reply and the `identification.settled` event all

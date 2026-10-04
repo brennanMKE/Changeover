@@ -356,13 +356,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         guard let current = jobs.current, current.id == jobID,
               CancelPolicy.decide(requestedID: jobID, currentID: current.id, phase: current.state.phase) == .cancel,
               jobs.cancellingJobID != jobID else {
-            return jobs.cancellingJobID == jobID ? false : jobs.cancel(id: jobID)
+            return jobs.cancellingJobID == jobID ? false : jobs.cancel(id: jobID, by: .user)
         }
         popover?.performClose(nil)
         guard confirmCancel(JobPresentation.cancelConfirmation(for: current.snapshot)) else {
             return false
         }
-        return jobs.cancel(id: jobID)
+        return jobs.cancel(id: jobID, by: .user)
     }
 
     /// "Keep Going" is the default (Return) button, so a stray Return never

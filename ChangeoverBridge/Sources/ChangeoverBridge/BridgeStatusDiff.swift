@@ -225,7 +225,16 @@ public enum BridgeStatusDiff {
         let phaseChanged = isNewJob || previous?.phase != job.phase
 
         if phaseChanged, JobStatus.isTerminal(job.phase) {
-            let detail = job.failureReason.map { " — \($0)" } ?? ""
+            // #0205 — a cancel says who asked for it.
+            //
+            // The event already fired for a cancel, because `cancelled` is a
+            // terminal phase; what it did not say was the decider. A watcher
+            // could infer "the user did it" from no `agent.action` arriving
+            // beside it, and inference from a missing message is exactly what
+            // #0200 removed for `chosenBy`.
+            let detail = job.failureReason.map { " — \($0)" }
+                ?? job.cancelledBy.map { " — \(JobStatus.cancelledByPhrase($0))" }
+                ?? ""
             return [
                 EventDraft(
                     kind: BridgeEvent.Kind.jobFinished,

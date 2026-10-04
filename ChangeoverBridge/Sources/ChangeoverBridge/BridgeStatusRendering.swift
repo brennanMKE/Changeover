@@ -88,6 +88,10 @@ extension BridgeStatus {
             rows.append(("job", detail))
             if let id = job.id { rows.append(("job id", id)) }
             if let reason = job.failureReason { rows.append(("job failure", reason)) }
+            // #0205 — who stopped it, for the person reading `status` over SSH.
+            if let who = job.cancelledBy {
+                rows.append(("cancelled by", JobStatus.cancelledByPhrase(who)))
+            }
             if let jobFilm = job.film, jobFilm.identity != film?.identity {
                 rows.append(("job film", "\(jobFilm.title) (\(jobFilm.year))"))
             }

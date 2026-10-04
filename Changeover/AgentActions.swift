@@ -86,7 +86,7 @@ enum AgentActions {
 
         var forcedNote: String?
         if request.force, jobs.isRunning, let id = jobs.current?.id {
-            let cancelled = jobs.cancel(id: id)
+            let cancelled = jobs.cancel(id: id, by: .agent)
             forcedNote = cancelled
                 ? "--force cancelled \(id.rawValue) first. "
                 : "--force could not cancel \(id.rawValue). "
@@ -169,7 +169,7 @@ enum AgentActions {
             )
         }
 
-        guard jobs.cancel(id: running.id) else {
+        guard jobs.cancel(id: running.id, by: .agent) else {
             return refusal(
                 verb: BridgeRequest.Action.cancel,
                 outcome: ActionOutcome.refusedPhase,
