@@ -291,6 +291,7 @@ public enum CLIParse {
         var query: String?
         var featureTitle: Int?
         var featureRaw: String?
+        var extrasOnly = false
         var extras: [SelectionRequest.Extra] = []
         var positional: [String] = []
         /// The first thing that was wrong, held rather than returned so that an
@@ -378,6 +379,10 @@ public enum CLIParse {
 
             case "--query":
                 query = takeValue("--query", joined: joined)
+
+            case "--extras-only":
+                // #0202 — a flag with no value, like `--force`.
+                extrasOnly = true
 
             case "--feature-title":
                 guard let raw = takeValue("--feature-title", joined: joined) else { continue }
@@ -496,7 +501,8 @@ public enum CLIParse {
             movieRaw: movieRaw,
             query: query,
             featureRaw: featureRaw,
-            extras: extras
+            extras: extras,
+            extrasOnly: extrasOnly
         ) {
             return .failure(misplaced)
         }
@@ -662,7 +668,8 @@ public enum CLIParse {
                 movieID: movieID,
                 query: query,
                 featureTitle: featureTitle,
-                extras: extras
+                extras: extras,
+                extrasOnly: extrasOnly
             )
             guard !request.isEmpty else {
                 // Refused rather than treated as a no-op: a script that built an
@@ -776,6 +783,7 @@ public enum CLIParse {
         "select": [
             "--no-launch", "--session", "--disc", "--movie", "--query",
             "--feature-title", "--extra", "--extra-kind", "--extra-label",
+            "--extras-only",
         ],
         "import": ["--no-launch", "--session", "--disc"],
     ]
@@ -791,7 +799,8 @@ public enum CLIParse {
         movieRaw: String?,
         query: String?,
         featureRaw: String?,
-        extras: [SelectionRequest.Extra]
+        extras: [SelectionRequest.Extra],
+        extrasOnly: Bool = false
     ) -> CLIErrorPayload? {
         let allowed = accepted[verb] ?? []
         var given: [String] = []
@@ -805,6 +814,7 @@ public enum CLIParse {
         if query != nil { given.append("--query") }
         if featureRaw != nil { given.append("--feature-title") }
         if !extras.isEmpty { given.append("--extra") }
+        if extrasOnly { given.append("--extras-only") }
 
         guard let offender = given.first(where: { !allowed.contains($0) }) else { return nil }
 

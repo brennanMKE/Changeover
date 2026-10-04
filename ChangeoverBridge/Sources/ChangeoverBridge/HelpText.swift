@@ -522,7 +522,8 @@ public enum HelpText {
         summary: "Name the feature, the film and any extras to import.",
         usage: "\(ServiceNames.cliName) select [--movie <tmdb-id>] [--query <term>] "
             + "[--feature-title <n>] [--extra <n> [--extra-kind <folder>] "
-            + "[--extra-label <text>]]… [--disc <insertionID>] [--session <id>] [--json]",
+            + "[--extra-label <text>]]… [--extras-only] [--disc <insertionID>] "
+            + "[--session <id>] [--json]",
         discussion: """
             Additive: name the film on one call and tick an extra on the next, the \
             way a person clicking the window does. An entirely empty select is a \
@@ -552,6 +553,24 @@ public enum HelpText {
             derive the folder from the label, which is what the window does. \
             `status --json` reports the live list under library.extrasFolders.
 
+            --extras-only adds bonus material to a film **already in Plex**, \
+            leaving that film's own file alone. This is the common second pass: \
+            the film came off its own disc, and its bonus disc adds featurettes \
+            to the same folder.
+
+            Use it with --movie and at least one --extra, and without \
+            --feature-title — the film is not re-encoded, so there is no feature \
+            to name. The app checks the library itself and refuses unless a folder \
+            for that film is already there under the name it would write, because \
+            Plex reads a film's extras from inside the film's own folder and \
+            Changeover will not create a second folder beside the one that exists. \
+            The refusal says which of those it was.
+
+            It is the same guarantee as the window's "Import Just the Extras" \
+            button and runs through the same acknowledgement — an extras-only job \
+            has no feature destination at all, so the film in Plex cannot be \
+            overwritten by it.
+
             Nothing here starts an encode. `import` does that.
 
             \(authorisationNote)
@@ -577,6 +596,11 @@ public enum HelpText {
             HelpPayload.OptionHelp(
                 flag: "--extra-label <text>",
                 summary: "The name for the preceding --extra, as the disc's menu printed it."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--extras-only",
+                summary: "Add the extras to a film already in Plex, leaving its own file alone. "
+                    + "Needs --movie and at least one --extra, and no --feature-title."
             ),
             discOption,
             sessionOption,

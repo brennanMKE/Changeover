@@ -48,6 +48,8 @@ nonisolated enum AgentSelectionPlan {
         let movieID: Int?
         let query: String?
         let extras: [ResolvedExtra]
+        /// #0202 — leave a film already in Plex alone and take only the extras.
+        let extrasOnly: Bool
     }
 
     nonisolated enum Decision: Equatable, Sendable {
@@ -132,6 +134,32 @@ nonisolated enum AgentSelectionPlan {
             )
         }
 
+        // #0202 — the two ways an extras-only request can contradict itself,
+        // refused before anything is applied.
+        //
+        // Both would otherwise be applied as something the agent did not ask
+        // for: a feature title alongside `--extras-only` is "re-encode the film
+        // I just said to leave alone", and `--extras-only` with nothing ticked
+        // is a job that encodes nothing and files nothing. The window cannot
+        // reach either — its button only appears on the duplicate notice with
+        // extras ticked — so these refusals are the CLI's equivalent of that
+        // button not being there.
+        if request.extrasOnly, request.featureTitle != nil {
+            return .refuse(
+                outcome: ActionOutcome.refusedUnknownTitle,
+                reason: "--extras-only and --feature-title contradict each other. "
+                    + "--extras-only leaves the film already in Plex untouched and takes only "
+                    + "the extras, so there is no feature to encode. Drop one of them."
+            )
+        }
+        if request.extrasOnly, request.extras.isEmpty {
+            return .refuse(
+                outcome: ActionOutcome.refusedEmptyRequest,
+                reason: "--extras-only needs at least one --extra. On its own it asks for a job "
+                    + "that would encode nothing and file nothing."
+            )
+        }
+
         let known = Set(scannedTitleIndices)
 
         if let feature = request.featureTitle, !known.contains(feature) {
@@ -182,7 +210,8 @@ nonisolated enum AgentSelectionPlan {
                 featureTitle: request.featureTitle,
                 movieID: request.movieID,
                 query: request.query,
-                extras: resolved
+                extras: resolved,
+                extrasOnly: request.extrasOnly
             )
         )
     }

@@ -133,6 +133,51 @@ connection-accept time (`SecCodeCopyGuestWithAttributes` against a
 development build satisfies no requirement, and a refusal at accept time is
 silent, which is the worst failure shape this transport has.
 
+### Adding extras to a film already in Plex
+
+The common second pass, and the user's own words for it: *"We already imported
+this movie. We are just going to be adding special features to it."* A film
+comes off its own disc; its bonus disc later adds featurettes to the same
+`Movies/Title (Year) {tmdb-ID}/` folder.
+
+```sh
+"$C" select --disc "$D" --session "$S" --movie 121 --extras-only \
+    --extra 1  --extra-kind "Behind The Scenes" --extra-label "On the Set" \
+    --extra 2  --extra-kind "Behind The Scenes" --extra-label "Return to Middle-earth" \
+    --extra 33 --extra-kind Trailers           --extra-label "Return of the King Preview"
+"$C" import --disc "$D" --session "$S"      # reports intent "extrasOnly"
+```
+
+`--extras-only` goes with `--movie` and at least one `--extra`, and **without**
+`--feature-title`: no film is being encoded, so there is no feature to name.
+Both contradictions are refused rather than resolved — a `--feature-title`
+alongside it, and `--extras-only` with nothing ticked.
+
+The app checks the library itself and grants this only when a folder for that
+film is already there **under the name it would write**. Plex reads a film's
+extras from inside the film's own folder, so there has to be one, and Changeover
+will not create a second folder beside an existing one with the same `{tmdb-…}`
+tag. The refusal says which case it hit: not filed yet, filed under a different
+folder name, or the library could not be read.
+
+Nothing can overwrite the film's own file on this path. An extras-only job has
+no feature destination at all (`JobIntent.featureDestination` is `nil`), so the
+branch that would write it is one the compiler never enters — the same guarantee
+the window's "Import Just the Extras" button has, through the same
+acknowledgement.
+
+Two things worth knowing about what the app does underneath, because `status`
+shows them:
+
+- A **nominal feature title** is selected, and it is not encoded. The pipeline
+  resolves a feature index either way, so one is chosen — never a title named as
+  an `--extra`, since the extras plan excludes the feature and a collision would
+  silently drop one of them. If every scanned title is wanted as an extra, the
+  call is refused and says to leave one out for a second pass.
+- The **runtime cross-check is skipped**. A bonus title is twelve minutes and
+  the film is three hours; comparing them would refuse a selection that is
+  exactly right. The check still applies to every ordinary import.
+
 ### `import` requires `--disc`, and `eject` distinguishes three outcomes
 
 `import` will not run without `--disc <insertionID>`, taken from `status`. An

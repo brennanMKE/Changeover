@@ -228,11 +228,45 @@ enum AgentActions {
             )
         }
 
-        // The feature first: `selectTitle` recomputes the audio preselection and
-        // drops the new feature from the extras set, so an extra ticked before it
-        // would be silently un-ticked. Order matters and this is the order the
-        // window's own flow uses.
-        if let feature = resolved.featureTitle, jobs.selectedTitleIndex != feature {
+        // #0202 — an extras-only request still needs a nominal feature title.
+        //
+        // Not because anything encodes it: `JobIntent.featureDestination` is
+        // `nil` for this intent, so `DVDPipeline` never enters the feature
+        // branch at all and the film in Plex is untouched. It is because the
+        // plumbing resolves one either way — `EncodeSelection.make` refuses a
+        // request whose `featureTitleIndex` is not a title of the scanned disc,
+        // and `ExtrasPlan.make` takes it as the index to exclude from the extras
+        // set. `RipRequest.featureTitleIndex` is a non-optional `Int`, and
+        // making it optional is a change across the pipeline rather than a
+        // change to this verb.
+        //
+        // So one is chosen here, and the choice has one requirement that
+        // matters: it must not be a title the request asked for as an extra.
+        // `ExtrasPlan.make` drops the feature from the extras, so a nominal
+        // feature that collided with a ticked extra would silently import three
+        // of the four things the agent asked for — on a bonus disc, where every
+        // interesting title is an extra, that is the likely case rather than the
+        // unlikely one.
+        if resolved.extrasOnly {
+            guard let nominal = nominalFeature(for: resolved, jobs: jobs) else {
+                return refusal(
+                    verb: BridgeRequest.Action.select,
+                    outcome: ActionOutcome.refusedUnknownTitle,
+                    detail: "every title on this disc is named as an extra, so there is no title "
+                        + "left to stand in as the feature — and Changeover needs one even for an "
+                        + "extras-only import, which encodes no film. Leave one --extra out of "
+                        + "this call and bring it in with a second one.",
+                    sessionsAttached: sessionsAttached
+                )
+            }
+            if jobs.selectedTitleIndex != nominal {
+                jobs.selectTitle(nominal, settings: settings)
+            }
+        } else if let feature = resolved.featureTitle, jobs.selectedTitleIndex != feature {
+            // The feature first: `selectTitle` recomputes the audio preselection
+            // and drops the new feature from the extras set, so an extra ticked
+            // before it would be silently un-ticked. Order matters and this is
+            // the order the window's own flow uses.
             jobs.selectTitle(feature, settings: settings)
         }
 
@@ -298,6 +332,50 @@ enum AgentActions {
             jobs.selectedExtraTitleIndices.insert(extra.titleIndex)
             if let label = extra.label { jobs.agentExtraLabels[extra.titleIndex] = label }
             if let kind = extra.kind { jobs.agentExtraKinds[extra.titleIndex] = kind }
+        }
+
+        // #0202 — ask the library, then record the extras-only acknowledgement.
+        //
+        // Two separate gaps met here, and either on its own blocked the whole
+        // case the user calls normal: a film is imported from its own disc, and
+        // its bonus disc later adds material to the same folder.
+        //
+        // **The check had to be made to run.** `checkLibrary` was called from a
+        // view's `.task`, so with no window on the Confirm step nothing ever
+        // asked, and `status` reported `libraryStatus: "idle"` indefinitely.
+        // That is the same defect #0187 fixed for the multi-feature path, in
+        // the same words: a question only asked by a view that stops existing
+        // is a question that does not get asked. Choosing the film is the event
+        // that makes it askable, so the ask belongs here.
+        //
+        // **And the acknowledgement had no door.** `StartGate` grants
+        // `.readyForExtrasOnly` only against an `ExtrasOnlyAcknowledgement`, and
+        // the one thing that set it was the window's "Import Just the Extras"
+        // button. So an agent hit `duplicateUnacknowledged` with no way to
+        // answer it. This routes through `flow.acknowledgeExtrasOnly()` rather
+        // than writing the acknowledgement here, because its guards are the
+        // substance: the check must be `.done(present)` and the library's folder
+        // must match this film's own folder name. Plex reads a film's extras
+        // from inside the film's folder, so without that folder the run would
+        // refuse anyway (`ExtrasOnlyImport.readiness`), and inventing one
+        // beside it would file a second film.
+        if resolved.extrasOnly {
+            await flow.checkLibrary(settings: settings)
+            flow.acknowledgeExtrasOnly()
+            guard flow.extrasOnlyAcknowledgement != nil else {
+                return refusal(
+                    verb: BridgeRequest.Action.select,
+                    outcome: ActionOutcome.refusedNotPermitted,
+                    detail: extrasOnlyRefusal(flow: flow, settings: settings),
+                    sessionsAttached: sessionsAttached
+                )
+            }
+        } else if resolved.movieID != nil {
+            // The same ask for an ordinary selection, for the same reason: an
+            // agent that names a film should be told whether it is already
+            // filed, rather than reading `idle` forever and finding out from a
+            // `duplicateUnacknowledged` refusal at `import`.
+            await flow.checkLibrary(settings: settings)
         }
 
         // Reported back from the resolved plan rather than from the request, so an
@@ -462,6 +540,59 @@ enum AgentActions {
             history: facts,
             reliability: DiscReliabilityLog.recentRecords()
         )
+    }
+
+    /// A title to carry as `RipRequest.featureTitleIndex` on an extras-only
+    /// import: one the disc actually has, and one the request did not ask for
+    /// as an extra. `nil` when every scanned title is wanted as an extra.
+    ///
+    /// Prefers the scan's own main feature when it is free, so the value in the
+    /// job's history reads as the disc's own idea of its feature rather than an
+    /// arbitrary index; otherwise the lowest free index, for a stable answer
+    /// that does not change between two identical calls.
+    private static func nominalFeature(
+        for resolved: AgentSelectionPlan.Resolved,
+        jobs: JobController
+    ) -> Int? {
+        let ticked = Set(resolved.extras.map(\.titleIndex))
+        let available = scannedTitleIndices(jobs: jobs).filter { !ticked.contains($0) }
+        guard case .scanned(let scan) = jobs.scanState else { return available.min() }
+        if let main = scan.mainFeatureIndex, available.contains(main) { return main }
+        return available.min()
+    }
+
+    /// Why an `--extras-only` selection could not be granted.
+    ///
+    /// Three different causes, said apart, because the action an agent should
+    /// take differs for each and "not permitted" names none of them.
+    private static func extrasOnlyRefusal(flow: RipFlowController, settings: AppSettings) -> String {
+        guard let movie = flow.search.selectedMovie else {
+            return "--extras-only needs to know which film the extras belong to. "
+                + "Name it with `--movie <tmdb-id>`."
+        }
+        // Built the same way `currentFilm` builds it, so the folder named in
+        // this refusal is the folder the app would actually write.
+        let folder = MovieMetadata(from: movie, edition: flow.edition).folderName
+        switch flow.libraryCheck {
+        case .idle, .checking:
+            return "the library check for tmdb-\(movie.id) did not finish, so whether "
+                + "“\(folder)” is already in Plex is unknown. Try again."
+        case .done(_, .unreachable):
+            return "the Plex library at \(settings.plexMoviesPath) could not be read, so "
+                + "whether “\(folder)” is already there is unknown. Check the volume is "
+                + "mounted and try again."
+        case .done(_, .absent):
+            return "“\(folder)” is not in Plex yet, so there is no film for these extras to "
+                + "belong to. Plex reads a film's extras from inside the film's own folder. "
+                + "Import the film first — select it with `--feature-title <n>` and the extras "
+                + "in the same call — or drop --extras-only."
+        case .done(_, .present(let entries)):
+            let found = entries.map(\.folderName).joined(separator: ", ")
+            return "Plex has tmdb-\(movie.id) filed as “\(found)”, not as “\(folder)”, and a "
+                + "film's extras go inside the film's own folder. Changeover will not create a "
+                + "second folder beside the one that is already there. Rename the existing "
+                + "folder to “\(folder)” if that is the same film."
+        }
     }
 
     // MARK: - Helpers

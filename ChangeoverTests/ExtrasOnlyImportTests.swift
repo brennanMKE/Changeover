@@ -609,3 +609,97 @@ struct ExtrasOnlyStartRefusalTests {
         #expect(controller.currentJobState?.phase == .succeeded)
     }
 }
+
+/// #0202 — reaching an extras-only import from the CLI.
+///
+/// The user, 2026-10-04: "We already imported this movie. We are just going to
+/// be adding special features to it like we have done before." That is now the
+/// ordinary second pass — a film comes off its own disc, and its bonus disc
+/// adds featurettes to the same folder — and an agent could not do it at all.
+/// `select` had no way to record the extras-only acknowledgement, which only
+/// the window's "Import Just the Extras" button set, so `import` answered
+/// `duplicateUnacknowledged` with nothing the CLI could say in reply.
+///
+/// These cover the two pure seams. The wiring they sit behind (running the
+/// library check, calling `acknowledgeExtrasOnly`) lives in `AgentActions` and
+/// needs a flow controller, so it is verified on the disc rather than here.
+struct ExtrasOnlyFromTheCLITests {
+
+    static let ack = ExtrasOnlyAcknowledgement(movieID: 121, folderPath: "/Movies/Two Towers (2002) {tmdb-121}")
+
+    /// A bonus disc's titles are a featurette and a trailer; the film is two
+    /// hours. Twelve minutes against a 179-minute TMDB runtime.
+    static let bonusTitles = [
+        DiscTitle(index: 1, durationSeconds: 735, chapterCount: 1, sizeBytes: 0, outputFileName: nil),
+        DiscTitle(index: 2, durationSeconds: 1_020, chapterCount: 1, sizeBytes: 0, outputFileName: nil),
+        DiscTitle(index: 3, durationSeconds: 300, chapterCount: 1, sizeBytes: 0, outputFileName: nil),
+    ]
+
+    static func decide(
+        selectedTitleIndex: Int? = 1,
+        runtimeLookup: RuntimeLookup = .loaded(movieID: 121, runtimeMinutes: 179),
+        extrasOnlyAcknowledgement: ExtrasOnlyAcknowledgement? = Self.ack,
+        tickedExtras: Int = 2
+    ) -> StartDecision {
+        StartGate.decide(
+            hasMovieSelected: true,
+            isRunning: false,
+            hasDisc: true,
+            scanState: .scanned(DiscScanner.Result(
+                disc: DiscInfo(volumeName: "TWO_TOWERS_BONUS", driveName: "disk4", titles: Self.bonusTitles),
+                mainFeatureIndex: 1,
+                warnings: [])),
+            selectedTitleIndex: selectedTitleIndex,
+            selectedAudioTrackNumbers: [],
+            runtimeLookup: runtimeLookup,
+            mismatchAcknowledgement: nil,
+            libraryCheck: .done(
+                tmdbID: "121",
+                .present([LibraryEntry(
+                    folderName: "Two Towers (2002) {tmdb-121}",
+                    folderPath: "/Movies/Two Towers (2002) {tmdb-121}",
+                    files: [LibraryFile(name: "Two Towers (2002).mp4")])])),
+            extrasOnlyAcknowledgement: extrasOnlyAcknowledgement,
+            tickedExtras: tickedExtras
+        )
+    }
+
+    /// The bug: the gate refused an acknowledged extras-only selection because
+    /// the nominal feature title's runtime disagreed with the film's. Of course
+    /// it does — it is a featurette, and no film is being encoded.
+    @Test func aBonusTitlesRuntimeDoesNotBlockAnAcknowledgedExtrasOnlyImport() {
+        let decision = Self.decide()
+        #expect(decision == .readyForExtrasOnly)
+        #expect(decision.permitsStart)
+    }
+
+    /// And it does not wait for a runtime lookup whose answer it will not read.
+    @Test func anExtrasOnlyImportDoesNotWaitForTheRuntimeLookup() {
+        #expect(Self.decide(runtimeLookup: .idle) == .readyForExtrasOnly)
+        #expect(Self.decide(runtimeLookup: .loading(movieID: 121)) == .readyForExtrasOnly)
+    }
+
+    /// The skip is keyed on the acknowledgement, not on extras being ticked.
+    /// Without it this is an ordinary import of a film whose title disagrees
+    /// with TMDB, and #0032's stop-and-ask must still apply — ripping the wrong
+    /// title costs forty minutes.
+    @Test func anOrdinaryImportStillChecksTheRuntime() {
+        #expect(Self.decide(extrasOnlyAcknowledgement: nil) == .runtimeMismatchUnconfirmed)
+        #expect(Self.decide(extrasOnlyAcknowledgement: nil, tickedExtras: 0) == .runtimeMismatchUnconfirmed)
+    }
+
+    /// Nothing ticked is still not a start, acknowledgement or not: the job
+    /// would encode nothing and file nothing.
+    @Test func nothingTickedIsStillNotAStart() {
+        #expect(Self.decide(tickedExtras: 0) != .readyForExtrasOnly)
+    }
+
+    /// A feature title is still required. It is never encoded — `JobIntent
+    /// .featureDestination` is `nil` — but `EncodeSelection.make` resolves it
+    /// either way and `RipRequest.featureTitleIndex` is not optional, so a
+    /// selection without one cannot produce a job. Permitting Start here would
+    /// be the worst outcome: enabled, then nothing happens.
+    @Test func aFeatureTitleIsStillRequired() {
+        #expect(Self.decide(selectedTitleIndex: nil) == .noTitleSelected)
+    }
+}

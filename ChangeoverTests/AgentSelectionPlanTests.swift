@@ -281,6 +281,75 @@ import Testing
             )?.outcome == ActionOutcome.refusedNotConfigured
         )
     }
+
+    // MARK: - #0202: --extras-only
+
+    /// The contradiction that would have been applied as something else. A
+    /// feature title alongside `--extras-only` says both "leave the film in
+    /// Plex alone" and "re-encode this title as the film", and silently
+    /// honouring either would be a job the agent did not ask for.
+    @Test func extrasOnlyWithAFeatureTitleIsRefused() {
+        let decision = decide(
+            SelectionRequest(
+                movieID: 121,
+                featureTitle: 1,
+                extras: [.init(titleIndex: 8)],
+                extrasOnly: true
+            )
+        )
+        guard case .refuse(_, let reason) = decision else {
+            Issue.record("expected a refusal, got \(decision)")
+            return
+        }
+        #expect(reason.contains("--extras-only"))
+        #expect(reason.contains("--feature-title"))
+    }
+
+    /// And `--extras-only` with nothing ticked asks for a job that encodes
+    /// nothing and files nothing — the same dead end `StartGate` refuses with
+    /// an acknowledgement and no ticked extra.
+    @Test func extrasOnlyWithNoExtrasIsRefused() {
+        let decision = decide(SelectionRequest(movieID: 121, extrasOnly: true))
+        guard case .refuse(let outcome, _) = decision else {
+            Issue.record("expected a refusal, got \(decision)")
+            return
+        }
+        #expect(outcome == ActionOutcome.refusedEmptyRequest)
+    }
+
+    /// The shape that works, and the flag surviving to the resolved plan —
+    /// `AgentActions` reads it there to decide whether to acknowledge.
+    @Test func extrasOnlyWithExtrasAndAFilmIsApplied() {
+        let decision = decide(
+            SelectionRequest(movieID: 121, extras: [.init(titleIndex: 8), .init(titleIndex: 9)], extrasOnly: true)
+        )
+        guard case .apply(let resolved) = decision else {
+            Issue.record("expected it to apply, got \(decision)")
+            return
+        }
+        #expect(resolved.extrasOnly)
+        #expect(resolved.featureTitle == nil)
+        #expect(resolved.extras.map { $0.titleIndex } == [8, 9])
+    }
+
+    /// An ordinary selection is untouched by the new flag.
+    @Test func anOrdinarySelectionIsNotExtrasOnly() {
+        let decision = decide(SelectionRequest(movieID: 121, featureTitle: 1, extras: [.init(titleIndex: 8)]))
+        guard case .apply(let resolved) = decision else {
+            Issue.record("expected it to apply, got \(decision)")
+            return
+        }
+        #expect(!resolved.extrasOnly)
+        #expect(resolved.featureTitle == 1)
+    }
+
+    /// `--extras-only` alone is not an empty request, so it reaches the plan's
+    /// own refusal above rather than the parser's "select needs something to
+    /// select". The two say different things and the specific one is better.
+    @Test func extrasOnlyAloneIsNotAnEmptyRequest() {
+        #expect(!SelectionRequest(extrasOnly: true).isEmpty)
+        #expect(SelectionRequest().isEmpty)
+    }
 }
 
 // MARK: - The two copies of Plex's folder names
@@ -307,4 +376,5 @@ import Testing
             PlexExtra.Kind.allCases.map(\.folderName).count == PlexExtra.recognisedFolderNames.count
         )
     }
+
 }

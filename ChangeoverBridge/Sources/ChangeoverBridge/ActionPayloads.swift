@@ -112,6 +112,20 @@ public struct SelectionRequest: Codable, Sendable, Equatable {
     /// The disc title index to encode as the feature.
     public var featureTitle: Int?
     public var extras: [Extra]
+    /// #0202 — take only the extras, leaving a film already in Plex alone.
+    ///
+    /// This is what the window's "Import Just the Extras" button records, and
+    /// the normal shape of a bonus disc: the film came off its own disc
+    /// earlier, and this one adds material to the same folder.
+    ///
+    /// Explicit rather than inferred from "extras ticked and no feature
+    /// title", even though the Start gate reads that selection the same way.
+    /// The acknowledgement it unlocks is a statement about the **library** —
+    /// that a folder with this film's name is already there and is to be left
+    /// alone — and an agent that merely forgot `--feature-title` has not
+    /// made that statement. The app refuses rather than guessing which was
+    /// meant.
+    public var extrasOnly: Bool
 
     public init(
         discInsertionID: String? = nil,
@@ -119,7 +133,8 @@ public struct SelectionRequest: Codable, Sendable, Equatable {
         movieID: Int? = nil,
         query: String? = nil,
         featureTitle: Int? = nil,
-        extras: [Extra] = []
+        extras: [Extra] = [],
+        extrasOnly: Bool = false
     ) {
         self.discInsertionID = discInsertionID
         self.sessionID = sessionID
@@ -127,11 +142,12 @@ public struct SelectionRequest: Codable, Sendable, Equatable {
         self.query = query
         self.featureTitle = featureTitle
         self.extras = extras
+        self.extrasOnly = extrasOnly
     }
 
     /// Whether this request asks for anything at all.
     public var isEmpty: Bool {
-        movieID == nil && query == nil && featureTitle == nil && extras.isEmpty
+        movieID == nil && query == nil && featureTitle == nil && extras.isEmpty && !extrasOnly
     }
 }
 

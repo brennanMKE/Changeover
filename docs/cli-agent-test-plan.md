@@ -269,6 +269,42 @@ same path that resumes auto-start.
 is the bug this scenario exists to catch, and it is worth reporting even if the
 sequence above passes.
 
+### 12. Extras onto a film already in Plex
+
+The case the user calls normal, and the one that was impossible before #0202:
+a film is already filed, and its bonus disc adds material to the same folder.
+
+With a film in the library and its bonus disc in the drive:
+
+```sh
+"$C" select --disc "$D" --session "$S" --movie <id> --extras-only \
+    --extra <n> --extra-kind "Behind The Scenes" --extra-label "…"
+"$C" import --disc "$D" --session "$S"
+"$C" report --json | jq '.jobs[-1].intent'
+```
+
+**Expect:** `select` succeeds, `import` starts, and the report says
+`extrasOnly`. The film's own file in Plex is untouched — check its modification
+time before and after. The new files land in the named folder inside the film's
+existing folder, not in a new folder beside it.
+
+Then the refusals, which matter more than the success:
+
+```sh
+"$C" select … --extras-only --feature-title <n>   # refused: they contradict
+"$C" select … --extras-only                       # refused: nothing to import
+"$C" select --movie <unfiled-id> --extras-only --extra <n>
+```
+
+**Expect:** the last one is refused because that film is not in Plex, and the
+message says so rather than "not permitted" — Plex reads a film's extras from
+inside the film's folder, and there is none.
+
+**Judgement call:** when `--extras-only` is refused, does the message tell you
+what to do next? The three causes (not filed, filed under a different folder
+name, library unreadable) need different actions, and a refusal that does not
+distinguish them is worth reporting.
+
 ## Known gaps — do not report these as bugs
 
 - **No `/usr/local/bin` symlink.** The installer did not port: Changeover is a

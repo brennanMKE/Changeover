@@ -429,10 +429,34 @@ nonisolated enum StartGate {
                 return .noAudioTrackSelected
             }
 
+            // #0202 — an acknowledged extras-only import skips the runtime
+            // cross-check, because there is no film being encoded to check.
+            //
+            // The checks above still apply: the title has to exist on the disc
+            // and have an audio track, because `EncodeSelection.make` resolves
+            // it either way and `JobController.start` refuses a feature with no
+            // audio. What does not apply is comparing that title's duration
+            // against the film's TMDB runtime. On a bonus disc they disagree by
+            // design — the titles are a 12-minute featurette and a trailer, and
+            // the film is two hours — so the cross-check would refuse
+            // `runtimeMismatchUnconfirmed` for a selection that is exactly
+            // right, with nothing on the screen or in the CLI able to answer it.
+            //
+            // Keyed on the acknowledgement, not on "extras are ticked": the
+            // acknowledgement is the statement that this film is already in
+            // Plex and its file is to be left alone, and it is the same value
+            // `libraryDecision` requires below. A selection that merely has
+            // extras ticked alongside a film still being imported is an
+            // ordinary import, and must keep every check.
+            let isAcknowledgedExtrasOnly = tickedExtras > 0 && extrasOnlyAcknowledgement != nil
+
             switch runtimeLookup {
             case .loaded, .unavailable:
                 break
             case .idle, .loading:
+                // An extras-only import does not wait for a lookup whose answer
+                // it will not read.
+                if isAcknowledgedExtrasOnly { break }
                 return .runtimeLookupLoading
             }
 
@@ -451,7 +475,7 @@ nonisolated enum StartGate {
             // `DiscTitleListView` — alongside `ManualOverride.mismatchWarning`
             // saying why it is no longer stopping anything.
             let verdict = RuntimeCrossCheck.evaluate(discSeconds: title.durationSeconds, lookup: runtimeLookup)
-            if case .mismatch = verdict, !manualOverride,
+            if case .mismatch = verdict, !isAcknowledgedExtrasOnly, !manualOverride,
                !isAcknowledged(mismatchAcknowledgement, titleIndex: index, runtimeLookup: runtimeLookup) {
                 return .runtimeMismatchUnconfirmed
             }
