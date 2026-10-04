@@ -295,7 +295,17 @@ nonisolated enum BridgeStatusReader {
             film: filmStatus(
                 jobs.currentMetadata,
                 resolvedBy: nil,
-                chosenBy: FilmStatus.Chooser.automation,
+                // #0208 — the real chooser, not a hardcoded `automation`.
+                //
+                // #0200 replaced `chosenByUser: false` here mechanically and
+                // left the value a constant, so every `job.progress` event of
+                // an agent's own import reported `chosenBy: "automation"` while
+                // `status` said "identified by an agent" two fields away. Same
+                // shape as #0203: the seam was right and a projection was not.
+                //
+                // Read from the identification story, which is the one record
+                // of who decided and is what `snapshot` reads for `film` too.
+                chosenBy: IdentificationSummary.chooser(jobs.identificationStory).rawValue,
                 libraryCheck: .idle
             )
         )
