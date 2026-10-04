@@ -106,9 +106,13 @@ struct CLIParseTests {
     // MARK: - Errors
 
     /// The hint lists the verbs this build actually has, derived rather than
-    /// written down — a hardcoded list goes stale every time a verb lands, and
-    /// it went stale twice in one evening (#0197's read verbs, #0196's acting
-    /// ones) before this was derived.
+    /// written down.
+    ///
+    /// A hardcoded list goes stale every time a verb lands, and it went stale
+    /// twice in one evening — #0197's read verbs, then #0196's acting ones.
+    /// The example has to be a verb that genuinely is not a command, too:
+    /// `import` was the obvious "does not exist" placeholder until #0196
+    /// shipped it.
     @Test func anUnknownCommandIsAUsageErrorNamingIt() throws {
         let error = try #require(parse("definitelynotaverb").failure)
         #expect(error.code == BridgeExitCode.usage)
@@ -141,7 +145,7 @@ struct CLIParseTests {
     // MARK: - --json
 
     @Test func jsonIsAcceptedOnEveryCommand() throws {
-        for verb in ["ping", "status", "watch", "help"] {
+        for verb in ["ping", "status", "watch", "report", "help"] {
             let invocation = try CLIParse.parse([verb, "--json"]).get()
             #expect(invocation.json, "--json was dropped for \(verb)")
         }

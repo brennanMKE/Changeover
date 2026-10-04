@@ -61,6 +61,56 @@ enum DiscReliabilityLog {
             .appendingPathComponent("disc-reliability.jsonl")
     }()
 
+    /// #0196 — the last `limit` records in a JSONL blob, oldest first.
+    ///
+    /// Reading this back is a reversal of the type's own stance that "nothing
+    /// reads this back", and it is worth saying why the stance still holds.
+    /// Nothing *branches* on it: the app's behaviour is identical whether this
+    /// file exists, is empty, or is full of garbage. It is read only to answer
+    /// `changeoverctl report`, and it is the only thing that can answer it after
+    /// the app has been restarted — `JobController.history` is per-launch, so an
+    /// agent asking "why did last night's disc fail" has nothing else to read.
+    ///
+    /// Total, by construction, because the input is a file any process can have
+    /// truncated mid-write: an unparseable line is skipped, not thrown. A
+    /// half-written final line is the realistic case — this appends without
+    /// locking — and losing it is correct, since the record it describes is the
+    /// one still in flight.
+    nonisolated static func records(inJSONL text: String, limit: Int = 20) -> [Record] {
+        let decoder = JSONDecoder()
+        let decoded = text
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .compactMap { line -> Record? in
+                guard let data = line.data(using: .utf8) else { return nil }
+                return try? decoder.decode(Record.self, from: data)
+            }
+        return Array(decoded.suffix(max(0, limit)))
+    }
+
+    /// The tail of the real log, or an empty array when there is none.
+    ///
+    /// Capped at the last 256 KiB rather than read whole: the file grows one line
+    /// per finished job forever, and `report` has no business loading a year of
+    /// them into memory to print twenty. Reading the tail can split the first
+    /// line in the window, which `records(inJSONL:)` then skips — acceptable,
+    /// because the lines that matter are at the other end.
+    nonisolated static func recentRecords(
+        at url: URL = defaultURL,
+        limit: Int = 20,
+        windowBytes: Int = 256 * 1024
+    ) -> [Record] {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
+        defer { try? handle.close() }
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let size = (attributes?[.size] as? Int) ?? 0
+        let offset = max(0, size - windowBytes)
+        try? handle.seek(toOffset: UInt64(offset))
+        guard let data = try? handle.readToEnd(), let text = String(data: data, encoding: .utf8) else {
+            return []
+        }
+        return records(inJSONL: text, limit: limit)
+    }
+
     /// Appends one JSON line to `url`, creating its parent directory at the
     /// moment of use. Never throws: a write failure is reported through
     /// `log` and never changes the job's outcome.

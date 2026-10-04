@@ -359,11 +359,44 @@ final class AppXPCServer {
 
     /// Handles a decoded request. Always returns a response — never nothing,
     /// because a dropped reply hangs the CLI until its timeout.
+    ///
+    /// #0196 — this is the single place an acting verb is authorised, and it is
+    /// deliberately the *only* place. Putting the check inside each verb would be
+    /// five checks, and the one that mattered would be the one somebody forgot to
+    /// write. `AgentAuthorization.decide` reads
+    /// `BridgeRequest.Action.acting`, so a verb added to this switch and not to
+    /// that set is a verb that acts unauthorised — which is why the set is what
+    /// the tests assert, rather than the switch.
     fileprivate func handle(_ request: BridgeRequest) async -> BridgeResponse {
         // #0195 — recorded for every request, including one this build does
         // not understand: a newer `changeoverctl` talking to an older app is
         // exactly when the user most needs to see what was asked for.
         lastActivity = AgentMode.Activity(action: request.action, at: Date())
+
+        switch AgentAuthorization.decide(
+            action: request.action,
+            attachedSessions: sessions.count,
+            requestedSessionID: requestedSessionID(in: request),
+            liveSessionIDs: Set(sessions.keys)
+        ) {
+        case .allow:
+            break
+        case .refuse(let outcome, let reason):
+            // An unauthorised act is a finding, not a non-event. It goes in the
+            // banner and in the file log exactly as a successful one does: a
+            // script firing `eject` at an app nobody is watching is something the
+            // user wants to see, and a refusal that left no trace is how it stays
+            // mysterious.
+            return record(
+                ActionResult(
+                    verb: request.action,
+                    outcome: outcome,
+                    detail: reason,
+                    sessionsAttached: sessions.count
+                )
+            )
+        }
+
         switch request.action {
         case BridgeRequest.Action.status:
             return .success("ok", body: currentSnapshot())
@@ -373,11 +406,121 @@ final class AppXPCServer {
         // which can.
         case let action where BridgeReadVerbs.actions.contains(action):
             return await BridgeReadVerbs.handle(request, jobs: jobs, settings: settings)
+
+        case BridgeRequest.Action.report:
+            return .success("ok", body: AgentActions.report(jobs: jobs, flow: flow))
+
+        case BridgeRequest.Action.eject:
+            guard let body = request.body(as: EjectRequest.self) else { return malformed(request) }
+            return record(
+                await AgentActions.eject(body, jobs: jobs, sessionsAttached: sessions.count)
+            )
+
+        case BridgeRequest.Action.cancel:
+            guard let body = request.body(as: CancelRequest.self) else { return malformed(request) }
+            return record(
+                AgentActions.cancel(body, jobs: jobs, sessionsAttached: sessions.count)
+            )
+
+        case BridgeRequest.Action.select:
+            guard let body = request.body(as: SelectionRequest.self) else { return malformed(request) }
+            return record(
+                await AgentActions.select(
+                    body,
+                    jobs: jobs,
+                    flow: flow,
+                    settings: settings,
+                    sessionsAttached: sessions.count
+                )
+            )
+
+        case BridgeRequest.Action.import:
+            guard let body = request.body(as: ImportRequest.self) else { return malformed(request) }
+            return record(
+                AgentActions.importFilm(
+                    body,
+                    jobs: jobs,
+                    flow: flow,
+                    settings: settings,
+                    sessionsAttached: sessions.count
+                )
+            )
+
         default:
             // Named rather than generic, so a newer CLI talking to an older app
             // is told which verb is missing instead of "the request failed".
             return .failure("this version of Changeover does not know the action '\(request.action)'")
         }
+    }
+
+    /// `--session`, out of whichever body carries it.
+    ///
+    /// Read generically rather than per verb: the field means the same thing on all
+    /// four, and a per-verb read would be four places to forget it. Decoding only
+    /// the one key tolerates a body this build does not otherwise understand, which
+    /// is the right way round — a newer CLI's extra fields must not stop the
+    /// authorisation check from running.
+    private func requestedSessionID(in request: BridgeRequest) -> String? {
+        struct SessionOnly: Decodable { var sessionID: String? }
+        return request.body(as: SessionOnly.self)?.sessionID
+    }
+
+    private func malformed(_ request: BridgeRequest) -> BridgeResponse {
+        record(
+            ActionResult(
+                verb: request.action,
+                outcome: ActionOutcome.refusedMalformedRequest,
+                detail: "the body of the '\(request.action)' request could not be read. "
+                    + "This copy of changeoverctl and Changeover may be out of sync.",
+                sessionsAttached: sessions.count
+            )
+        )
+    }
+
+    /// Makes an acting verb's outcome visible in all three places, then replies.
+    ///
+    /// Three readers, three different needs, and a verb that reached only one of
+    /// them would be invisible to the other two:
+    ///
+    /// - **`lastActivity`** is the window's agent banner (#0195). The person at the
+    ///   machine sees what was asked for and how long ago, which is the whole
+    ///   complaint that ticket answered — "the Mac app does not reflect what is
+    ///   happening" while an agent imported bonus features from another session.
+    ///   The detail is carried too, so the banner can say what the app *made of*
+    ///   the request and not only that one arrived.
+    /// - **`FlowDiagnostics.note`** is the file in Application Support, readable
+    ///   over SSH with no window server. It is where the trail survives the app
+    ///   quitting, and it already holds the flow's own decisions, so an agent's
+    ///   act lands in the same timeline as the automation it displaced.
+    /// - **the `agent.action` event** is for the *other* watcher. Two sessions on
+    ///   one disc is an ordinary arrangement, and without this the second one sees
+    ///   the disc vanish with nothing to attribute it to.
+    ///
+    /// `ok` on the envelope follows `done`, and the typed result is carried either
+    /// way — a refusal is an answer, and throwing away the outcome identifier in
+    /// favour of a bare failure is what would make "cancel the job first" and
+    /// "unlock the screen" indistinguishable.
+    private func record(_ result: ActionResult) -> BridgeResponse {
+        lastActivity = AgentMode.Activity(
+            action: result.verb,
+            at: Date(),
+            detail: result.done ? result.detail : "refused — \(result.outcome)"
+        )
+        FlowDiagnostics.note(
+            "agent \(result.verb): \(result.outcome) — \(result.detail)"
+                + " [\(result.sessionsAttached) session(s) attached]"
+        )
+        BridgeLog.note("agent \(result.verb) → \(result.outcome)")
+        broadcast([
+            BridgeStatusDiff.EventDraft(
+                kind: BridgeEvent.Kind.agentAction,
+                summary: "\(result.verb): \(result.outcome) — \(result.detail)",
+                disc: result.disc,
+                film: result.film,
+                job: currentSnapshot().job
+            )
+        ])
+        return BridgeResponse(ok: result.done, message: result.detail, payload: result.bridgeEncoded())
     }
 }
 
@@ -486,9 +629,11 @@ private nonisolated final class BridgeServiceEndpoint: NSObject, AppServiceProto
             return
         }
         Task { @MainActor [server] in
-            // `await`: #0197's read verbs wait on file copies, a library listing
-            // and TMDB. The reply is still exactly one per request, which is the
-            // part that matters — a dropped reply hangs the CLI until its timeout.
+            // `handle` is `async` since #0196: `eject --force` has to wait for the
+            // job it cancelled to actually unwind before the drive will let go.
+            // The reply still happens exactly once on every path, which is the
+            // property that matters — a dropped reply hangs the CLI until its own
+            // timeout and looks like a wedged app.
             reply(await server.handle(decoded).bridgeEncoded())
         }
     }

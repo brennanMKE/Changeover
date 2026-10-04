@@ -290,6 +290,22 @@ final class JobController {
     /// gone. Cleared by `removeDisc`, `insertDisc`, or a failed eject.
     private(set) var isEjecting = false
 
+    /// #0196 — what the last `ejectDisc()` call actually did.
+    ///
+    /// `ejectDisc()` returns a `Bool`, which was enough for a menu row and is not
+    /// enough for `changeoverctl eject`: "the app refused" and "macOS refused"
+    /// have opposite remedies and the `Bool` collapses them. On joe, with the
+    /// screen locked, `loginwindow` dissents the unmount and the disc, the drive
+    /// and the app are all fine — a caller told only `false` would retry forever
+    /// or give up wrongly (`docs/eject-and-the-locked-screen.md`).
+    ///
+    /// Recorded here rather than returned so the signature and every existing
+    /// caller stay exactly as they are, and so there is still **one** eject path:
+    /// a second one would be a second place deciding whether to release #0152's
+    /// hold and whether to cancel an in-flight scan first. Set on every return
+    /// path below; read by `AgentActions.eject` immediately after awaiting.
+    private(set) var lastEjectAttempt: EjectAttempt?
+
     /// #0049 — the unmount half of an eject succeeded but the physical
     /// eject then failed (`DiscEjector.Outcome.unmountedButNotEjected`), so
     /// the disc is unmounted but still sitting in the drive. No
@@ -680,7 +696,11 @@ final class JobController {
                               requested:    request.extraTitleIndices,
                               disc:         scan.disc,
                               labels:       extraLabels(for: request.extraTitleIndices,
-                                                        feature: request.featureTitleIndex))
+                                                        feature: request.featureTitleIndex),
+                              // #0196 — an agent may name the Plex folder
+                              // outright. Empty for every other caller, so the
+                              // window's behaviour is bit-for-bit unchanged.
+                              kinds:        agentExtraKinds)
         // §7.4: an upgrade with nothing in its plan is a no-op that would
         // still overwrite a library file. `StartGate.decideUpgrade` disables
         // the button; this is the failsafe at the point of harm, the same
@@ -925,7 +945,9 @@ final class JobController {
             // A removal or a new insertion landed during the wait (both clear
             // `isEjecting`): the disc the user asked to eject is gone.
             guard isEjecting, insertedDisc == requestedDisc else {
-                append("⚠︎ The disc was removed or replaced while its scan was stopping — nothing was ejected.")
+                let swapped = "The disc was removed or replaced while its scan was stopping — nothing was ejected."
+                append("⚠︎ \(swapped)")
+                lastEjectAttempt = .refused(reason: swapped)
                 return false
             }
             isEjecting = false
@@ -940,11 +962,13 @@ final class JobController {
         switch decision {
         case .refuse(let reason):
             append("⚠︎ \(reason)")
+            lastEjectAttempt = .refused(reason: reason)
             return false
         case .cancelScanThenEject:
             // Still scanning after the cancel and the wait — never eject
             // under a scan. Not reachable with a real scan `Task`.
             append("⚠︎ \(EjectPolicy.scanStillRunningReason)")
+            lastEjectAttempt = .refused(reason: EjectPolicy.scanStillRunningReason)
             return false
         case .eject:
             break
@@ -952,7 +976,10 @@ final class JobController {
 
         // `EjectPolicy` already confirmed a disc is mounted; this `guard` is
         // just how Swift extracts it, not a second decision.
-        guard let disc = insertedDisc else { return false }
+        guard let disc = insertedDisc else {
+            lastEjectAttempt = .refused(reason: EjectPolicy.noDiscReason)
+            return false
+        }
 
         // #0152 — let go before asking the drive to let go.
         //
@@ -965,7 +992,9 @@ final class JobController {
         releaseDiscHold()
 
         isEjecting = true
-        switch await ejector(disc.mountURL) {
+        let attempt = await ejector(disc.mountURL)
+        lastEjectAttempt = .ran(attempt)
+        switch attempt {
         case .ejected:
             // `isEjecting` stays set: the disc is out, but `insertedDisc`
             // still names it until `removeDisc()` runs. A successful eject
@@ -1226,6 +1255,11 @@ final class JobController {
         // and `RipFlowController` clears the fact they were projected from at
         // the same moment. Two independent wipes, the #0034 pattern.
         userExtraLabels = [:]
+        // #0196: and the agent's, for the same reason — they named titles on the
+        // disc that has just left, and a title index means nothing across discs.
+        agentExtraLabels = [:]
+        agentExtraKinds = [:]
+        lastEjectAttempt = nil
         mismatchAcknowledgement = nil
     }
 
@@ -1332,7 +1366,8 @@ final class JobController {
             featureIndex: selectedTitleIndex ?? Int.min,
             requested:    requested,
             disc:         scan.disc,
-            labels:       extraLabels(for: requested)
+            labels:       extraLabels(for: requested),
+            kinds:        agentExtraKinds
         )
     }
 
@@ -1603,7 +1638,19 @@ final class JobController {
         // is the app's judgement about which titles are worth *guessing* names
         // for, and it has no business filtering an answer.
         var named: [Int: String] = [:]
-        for (index, label) in userExtraLabels where index != featureIndex {
+
+        // #0196 — the agent's own words, ahead of everything including the
+        // window's, for the reason the user's words come first: it is a statement
+        // and the rest are inferences. Checked against the held scan, never
+        // against `candidates`, on the same grounds — `shortestWorthNaming` is the
+        // app's judgement about which titles are worth *guessing* names for and
+        // has no business filtering an answer it was given.
+        for (index, label) in agentExtraLabels where index != featureIndex {
+            guard scan.disc.titles.contains(where: { $0.index == index }) else { continue }
+            named[index] = label
+        }
+
+        for (index, label) in userExtraLabels where index != featureIndex && named[index] == nil {
             guard scan.disc.titles.contains(where: { $0.index == index }) else { continue }
             named[index] = label
         }
@@ -1675,6 +1722,35 @@ final class JobController {
     /// `enforceManualTitle` uses for `selectedTitleIndex` (#0176). So it can go
     /// stale for at most one event, and a rescan that wipes it has it put back.
     var userExtraLabels: [Int: String] = [:]
+
+    /// #0196 — the names an **agent** gave this disc's extras, keyed by title
+    /// index.
+    ///
+    /// Separate from ``userExtraLabels`` rather than written into it, and the
+    /// reason is mechanical rather than aesthetic: `userExtraLabels` is a
+    /// *projection*. `RipFlowController.applyBonusFeatures` reassigns the whole
+    /// dictionary from `FeatureSelection.bonusImports` on every reconcile, so
+    /// anything else that wrote into it would survive until the next observed
+    /// change and then vanish — an agent's `--extra-label` would be silently lost
+    /// somewhere between `select` and `import`, which is the worst available
+    /// failure shape for a name that becomes a path component.
+    ///
+    /// Read **before** `userExtraLabels` in `extraLabels(for:feature:)`, on the
+    /// same principle that puts the user's own words first: a name typed by
+    /// whoever is driving is a statement, and the printed-menu and model readings
+    /// below it are inferences. An agent and a person cannot both be driving —
+    /// `AgentAuthorization` requires an attached session, and the banner says so —
+    /// so the two never compete for one title in practice.
+    var agentExtraLabels: [Int: String] = [:]
+
+    /// #0196 — the Plex extras folder an agent named outright for a title.
+    ///
+    /// Typed as the enum, so the only values that exist are the eight folders
+    /// Plex excludes from its movie scan. The string an agent actually typed was
+    /// already refused or converted at the boundary (`AgentSelectionPlan`), which
+    /// means no misspelling can reach the pipeline and become a folder Plex files
+    /// as a second movie.
+    var agentExtraKinds: [Int: PlexExtra.Kind] = [:]
 
     /// #0027: the audio-track preselection for `titleIndex` on whatever scan
     /// `scanState` holds — `[]` when `titleIndex` is `nil` or isn't a title

@@ -125,6 +125,104 @@ extension BridgeStatus {
     }
 }
 
+// MARK: - #0196, the acting verbs
+
+extension ActionResult {
+    /// The human form of an acting verb's result.
+    ///
+    /// The outcome identifier is printed beside the sentence rather than instead
+    /// of it. A person reading a terminal wants the sentence; a person
+    /// *debugging a script* wants to see the identifier their `case` statement is
+    /// about to be handed, and having to re-run with `--json` to find out is the
+    /// friction this avoids.
+    public var humanLines: [String] {
+        var lines = [done ? "\(verb): \(detail)" : "\(verb) did not happen: \(detail)"]
+        lines.append("  outcome  \(outcome)")
+        if let jobID { lines.append("  job      \(jobID)") }
+        if let intent { lines.append("  intent   \(intent)") }
+        if let startDecision { lines.append("  start    \(startDecision)") }
+        if let film { lines.append("  film     \(film.title) (\(film.year)) {tmdb-\(film.tmdbID)}") }
+        if let featureTitle { lines.append("  feature  title \(featureTitle)") }
+        for extra in extras ?? [] {
+            let name = extra.label ?? "unnamed"
+            lines.append("  extra    title \(extra.titleIndex) → \(extra.folderName)/\(name)")
+        }
+        if let disc { lines.append("  disc     \(disc.label) [\(disc.insertionID)]") }
+        return lines
+    }
+}
+
+extension WaitResult {
+    public var humanLines: [String] {
+        var lines: [String] = []
+        if met {
+            lines.append(String(format: "%@ after %.1fs — %@", condition, waitedSeconds, detail))
+        } else {
+            lines.append(
+                String(
+                    format: "%@ did not happen within %.0fs — %@",
+                    condition, timeoutSeconds, detail
+                )
+            )
+        }
+        if let boundJobID { lines.append("  job      \(boundJobID)") }
+        lines.append("  events   \(eventCount)")
+        return lines
+    }
+}
+
+extension JobReport {
+    /// The human form of a report.
+    ///
+    /// Films first, because that is the question — what happened to the things I
+    /// asked for — and because the skipped ones are the answer people get wrong.
+    public var humanLines: [String] {
+        var lines: [String] = []
+
+        if let disc {
+            lines.append("disc  \(disc.label) [\(disc.insertionID)]")
+        }
+
+        lines.append(films.isEmpty ? "films  nothing planned for this disc" : "films")
+        for film in films {
+            var line = "  title \(film.feature)  \(film.state.padding(toLength: 8, withPad: " ", startingAt: 0))"
+                + "  \(film.title) (\(film.year)) {tmdb-\(film.tmdbID)}"
+            if let reason = film.reason { line += " — \(reason)" }
+            lines.append(line)
+        }
+
+        lines.append(jobs.isEmpty ? "jobs  none this launch" : "jobs")
+        for job in jobs {
+            var line = "  \(job.id)  \(job.outcome ?? job.phase)  \(job.title) (\(job.year))"
+            if job.intent != "film" { line += " [\(job.intent)]" }
+            if !job.requestedExtras.isEmpty {
+                line += " + \(job.requestedExtras.count) extra(s)"
+            }
+            lines.append(line)
+            if let reason = job.failureReason {
+                lines.append("    failed at \(job.failureStage ?? "an unknown stage"): \(reason)")
+            }
+            if job.discUnreadable {
+                lines.append("    the disc could not be read — this is common and is not an app fault")
+            }
+        }
+
+        if !reliability.isEmpty {
+            lines.append("reliability log (most recent last)")
+            for record in reliability {
+                var line = "  \(record.date)  \(record.outcome)  \(record.movie)"
+                if let produced = record.producedBy { line += "  via \(produced)" }
+                if let reason = record.failureReason {
+                    line += "  — \(record.failureStage ?? "?")/\(reason)"
+                }
+                lines.append(line)
+            }
+        }
+
+        return lines
+    }
+}
+
 extension BridgeEvent {
     /// One line, as `watch` prints it without `--json`.
     ///

@@ -48,6 +48,24 @@ case .success(let invocation):
 
     case .search(let options):
         exit(await Commands.search(options, reporter: reporter))
+    // #0196 — the acting verbs, plus `wait` and `report`.
+    case .eject(let options):
+        exit(await ActingCommands.eject(options, reporter: reporter))
+
+    case .cancel(let options):
+        exit(await ActingCommands.cancel(options, reporter: reporter))
+
+    case .wait(let options):
+        exit(await ActingCommands.wait(options, reporter: reporter))
+
+    case .report(let options):
+        exit(await ActingCommands.report(options, reporter: reporter))
+
+    case .select(let options):
+        exit(await ActingCommands.select(options, reporter: reporter))
+
+    case .import(let options):
+        exit(await ActingCommands.importFilm(options, reporter: reporter))
 
     case .help(let topic, let requested):
         exit(Commands.help(topic: topic, requested: requested, reporter: reporter))

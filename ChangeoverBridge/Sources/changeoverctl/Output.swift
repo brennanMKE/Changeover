@@ -103,6 +103,88 @@ struct Reporter {
         }
     }
 
+    /// #0196 — reports an acting verb's outcome, and returns the exit code.
+    ///
+    /// One function for both the success and the refusal, because an acting verb
+    /// that was refused still has a **result** — the outcome identifier is the
+    /// answer, not the absence of one — and splitting it would let the refusal
+    /// path forget to print the identifier a caller branches on. `error` is set
+    /// alongside under `--json` so a consumer with one decoder still finds the
+    /// code and the message where every other failure puts them.
+    func action(_ result: ActionResult) -> Int32 {
+        let code = result.exitCode
+        if json {
+            Output.json(
+                CLIEnvelope(
+                    ok: result.done,
+                    command: command,
+                    kind: CLIEnvelope.Kind.result,
+                    error: result.done
+                        ? nil
+                        : CLIErrorPayload(
+                            code: code,
+                            kind: code == BridgeExitCode.machineRefused
+                                ? CLIErrorPayload.Kind.machineRefused
+                                : CLIErrorPayload.Kind.requestFailed,
+                            message: result.detail
+                        ),
+                    action: result
+                )
+            )
+        } else if result.done {
+            Output.lines(result.humanLines)
+        } else {
+            // The identifier goes to stdout with the rest of the result and the
+            // sentence goes to stderr, so `changeoverctl eject 2>/dev/null` still
+            // prints something and a shell that only watches stderr still sees
+            // the refusal.
+            Output.error(result.detail)
+            Output.lines(result.humanLines)
+        }
+        return code
+    }
+
+    /// #0196 — reports what `wait` settled on, and returns the exit code.
+    func wait(_ result: WaitResult) -> Int32 {
+        let code = result.exitCode
+        if json {
+            Output.json(
+                CLIEnvelope(
+                    ok: result.met,
+                    command: command,
+                    kind: CLIEnvelope.Kind.result,
+                    error: result.met
+                        ? nil
+                        : CLIErrorPayload(
+                            code: code,
+                            kind: CLIErrorPayload.Kind.conditionNotMet,
+                            message: result.detail
+                        ),
+                    wait: result
+                )
+            )
+        } else {
+            Output.lines(result.humanLines)
+        }
+        return code
+    }
+
+    /// #0196 — reports a job report.
+    func report(_ payload: JobReport) {
+        if json {
+            Output.json(
+                CLIEnvelope(
+                    ok: true,
+                    command: command,
+                    kind: CLIEnvelope.Kind.result,
+                    report: payload
+                )
+            )
+        } else {
+            Output.lines(payload.humanLines)
+        }
+    }
+
     /// A progress note the human form prints and the JSON form suppresses.
     ///
     /// "app not registered — launching it" is useful to a person watching a
