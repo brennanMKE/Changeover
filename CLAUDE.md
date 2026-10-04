@@ -92,6 +92,28 @@ The pipeline is a linear async flow orchestrated by `DVDPipeline.run()`: **encod
 - `MovieMetadata.swift` — built from a selected `TMDBMovie`; produces `folderName` and `fileName`. `tmdbID` is **non-optional**. The title is path-sanitized before it becomes a path component (`/` and `:` become `-`, etc.; #0010).
 - `TMDB/` — `TMDBClient` (search + poster URLs), `TMDBModels`, and `MovieSearchViewModel` (`@Observable`, drives `MetadataEntryView`).
 
+### The `changeoverctl` bridge (#0189)
+
+A command-line tool so a program — in practice Claude Code — can read the app's state and watch it change. The pattern is lifted wholesale from the `RemoteControl` prototype at `../RemoteControl`; its `docs/` folder is the reference and explains every part, including the `@Sendable` callback trap that crashes with **no compiler warning**. Read `docs/swift-concurrency-and-xpc.md` there before writing any XPC callback.
+
+Four pieces, because **a plain app cannot publish a named Mach service** — only launchd can, and only from a job whose plist declares `MachServices`:
+
+| Path | What it is |
+|---|---|
+| `ChangeoverBridge/` | Swift package. The `ChangeoverBridge` library holds everything both sides need (the three `@objc` protocols, the wire payloads, `ServiceNames`, the exit-code table, the argument parser, the help text); the `changeoverctl` executable target is the tool. **No external dependencies**, deliberately — see `Package.swift`. |
+| `BrokerAgent/` | The `ChangeoverBroker` launch-agent target. ~150 lines: answer a ping, hold one endpoint, hand it out. Nothing else belongs in it. |
+| `Support/co.sstools.Changeover.broker.plist` | The agent's launchd plist, copied to `Contents/Library/LaunchAgents/`. Its filename, its `Label`, its `MachServices` key and `ServiceNames.broker` must be the **identical string** — launchd declines silently otherwise. |
+| `Changeover/AppXPCServer.swift` + `Bridge*.swift` | The app's anonymous listener, the session registry, the status projection and the event feed. |
+
+- **The app does not depend on it.** Nothing in the rip flow waits on a client. The only thing fed back is an integer: `RipFlowController.attachedAgentSessions` is a closure defaulted to `{ 0 }`, so a build with no bridge, a test host, and a user with no agent all behave identically.
+- **`watch` is the agentic mode.** While any session is attached, `attemptAutoSelect` and the `AutoStartPolicy` countdown are suspended, and they resume when the last session goes — including when the CLI is `kill -9`ed, because the app reaps the session from the connection's invalidation handler. There is no mode flag an agent could crash while holding. The rule is `AutomationSuspension`.
+- **Events come from diffing snapshots, not from call sites in the flow.** `BridgeStatusDiff.drafts(from:to:)` is a pure function over two `BridgeStatus` values, and `BridgeEventFeed` arms a self-re-arming `withObservationTracking` around `BridgeStatusReader.snapshot` — the shape `AppDelegate.observeRunningState()` already established. A field added to the snapshot becomes watchable for free.
+- **The bridge is off unless the app is installed in `/Applications`.** It shares `LoginItemPolicy.shouldRegister`, for #0019's reason: an app-hosted test run must never register anything with `SMAppService`, and a launch agent whose `BundleProgram` points into DerivedData is worse than a login item that does.
+- Building the app now also runs `swift build` on the package (a Run Script phase embeds `changeoverctl` at `Contents/Resources/bin/`) and builds the `ChangeoverBroker` target. `xcodebuild -target ChangeoverTests build` no longer works on its own — it cannot resolve the package; use the scheme.
+- **`codesign --deep --strict` never mentions the embedded CLI.** A binary under `Contents/Resources/` is sealed as a *resource*, not as nested code, so it can be entirely unsigned and the bundle still verifies. Check it separately with `codesign -v "$APP/Contents/Resources/bin/changeoverctl"` and then actually run it — `release.sh` does not do either yet.
+
+The agent-facing command reference is [`docs/cli-for-agents.md`](docs/cli-for-agents.md); `changeoverctl help` is the authority on what exists today, since it is generated from the same table the tool dispatches on.
+
 ### Plex naming convention (strict — no exceptions)
 
 ```

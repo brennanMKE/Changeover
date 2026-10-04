@@ -15,3 +15,7 @@ website/downloads/*.dmg
 
 # Scratch: disc menu captures taken while debugging
 menu-pictures/
+
+# SwiftPM scratch, when ChangeoverBridge is built by hand rather than by the
+# app target.
+.build/
