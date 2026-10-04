@@ -497,3 +497,62 @@ struct BridgeLibraryStatusTests {
         return defaults
     }
 }
+
+/// #0198 — HandBrake's scan is not the encode's progress.
+///
+/// Reported from an agent session driving joe, build 20261004053501, against
+/// Two Towers. `watch --json` showed `job.percent` climbing 0 → 90 % in ten
+/// seconds, resetting to 0, and only then the real encode starting at 1 %:
+///
+///     05:42:00  0%     05:42:09  20% … 05:42:10  90%
+///     05:42:11  0%     then "1%, feature, eta 3057s, 83.5 fps"
+///
+/// Those were HandBrake's `Scanning title 1 of 1, NN %` lines. An agent
+/// reading `job.percent` would have concluded the encode was nearly finished
+/// after ten seconds and then that it had restarted. Neither happened.
+///
+/// `muxing` was already excluded for the same reason — a stage whose
+/// percentage is not the job's — and `scanning` was simply missed.
+@Suite struct ScanProgressIsNotEncodeProgressTests {
+
+    private static func progress(_ stage: HandBrakeProgress.Stage,
+                                 _ fraction: Double) -> JobProgress {
+        JobProgress(unit: .feature,
+                    encode: HandBrakeProgress(stage: stage, fraction: fraction,
+                                             task: 1, taskCount: 1),
+                    receivedAt: Date())
+    }
+
+    /// The reported case, directly.
+    @Test func ascanReportsNoPercentage() {
+        #expect(BridgeStatusReader.percent(of: Self.progress(.scanning, 0.9)) == nil,
+                "90% through the scan is not 90% through the job")
+    }
+
+    /// `nil`, never zero. A zero reads as a stalled encode, which is a
+    /// different wrong answer rather than no answer.
+    @Test func ascanReportsNilRatherThanZero() {
+        #expect(BridgeStatusReader.percent(of: Self.progress(.scanning, 0)) == nil)
+    }
+
+    /// The encode itself is unchanged — this must not have silenced the
+    /// progress a consumer actually wants.
+    @Test func theEncodeStillReportsItsPercentage() {
+        #expect(BridgeStatusReader.percent(of: Self.progress(.encoding, 0.42)) == 42)
+        #expect(BridgeStatusReader.percent(of: Self.progress(.encoding, 0)) == 0)
+    }
+
+    /// Muxing was already excluded, for the same reason.
+    @Test func muxingStillReportsNoPercentage() {
+        #expect(BridgeStatusReader.percent(of: Self.progress(.muxing, 1)) == nil)
+    }
+
+    /// And the stage is reported, so a consumer can say "scanning" instead of
+    /// inferring it from a number that does not mean what it looks like.
+    @Test func thestageIsReportedSoAConsumerCanTellThemApart() {
+        #expect(BridgeStatusReader.stageName(of: Self.progress(.scanning, 0.9)) == "scanning")
+        #expect(BridgeStatusReader.stageName(of: Self.progress(.encoding, 0.42)) == "encoding")
+        #expect(BridgeStatusReader.stageName(of: Self.progress(.muxing, 1)) == "muxing")
+        #expect(BridgeStatusReader.stageName(of: nil) == nil)
+    }
+}

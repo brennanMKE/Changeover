@@ -64,7 +64,10 @@ Three sources of truth beyond the CLI itself:
 **Expect:** exit 0. `disc` absent from the JSON entirely (not `null`-filled),
 `start.decision == "noDisc"`, `automation.suspended == false`, and a `library`
 block carrying this installation's real paths — `/Volumes/Media/Media` and its
-Movies, TV Shows and Clips folders — plus the eight Plex extras folder names.
+Movies and TV Shows folders — plus the eight Plex extras folder names.
+**There is no Clips path**: #0192 retired that folder, and an extra
+nothing named is now filed under `Other` inside the film's own folder
+rather than in a tree Plex never scans.
 
 **Why it matters:** an agent cannot guess those paths, and they differ per
 installation. If `library` is missing or wrong, nothing downstream can file

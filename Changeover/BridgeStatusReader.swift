@@ -267,6 +267,7 @@ nonisolated enum BridgeStatusReader {
             id: jobs.currentJobID,
             phase: state.phase.rawValue,
             percent: percent(of: progress),
+            stage: stageName(of: progress),
             unit: progress.map { unitName(of: $0.unit) },
             extraIndex: extraIndex(of: progress?.unit),
             extraCount: extraCount(of: progress?.unit),
@@ -291,11 +292,32 @@ nonisolated enum BridgeStatusReader {
     /// encode with no percentage of its own. A consumer must render "working",
     /// not "0 %" — which is why this returns `nil` instead of a zero that looks
     /// like a stalled encode.
+    /// #0198 — and scanning, which was the one that actually misled somebody.
+    ///
+    /// HandBrake prints `Scanning title 1 of 1, NN %` before the encode
+    /// starts, and this returned it as the job's percentage. Observed on joe
+    /// against Two Towers: a watcher saw 0 → 90 % in ten seconds, then a reset
+    /// to 0, then the real encode beginning at 1 %. An agent reading
+    /// `job.percent` would conclude the encode was nearly done and then that
+    /// it had restarted. Neither happened.
+    ///
+    /// `nil` rather than zero, for the reason below: the consumer renders
+    /// "working" instead of a number that looks like a stalled encode. The
+    /// stage is reported separately, so an agent that wants to show "scanning"
+    /// still can.
     static func percent(of progress: JobProgress?) -> Double? {
         guard let progress else { return nil }
         if case .remux = progress.unit { return nil }
         if progress.encode.stage == .muxing { return nil }
+        if progress.encode.stage == .scanning { return nil }
         return progress.encode.fraction * 100
+    }
+
+    /// #0198 — what HandBrake is doing right now, so a consumer can tell a
+    /// scan from an encode rather than inferring it from a percentage that
+    /// does not mean what it appears to.
+    static func stageName(of progress: JobProgress?) -> String? {
+        progress.map { $0.encode.stage.rawValue }
     }
 
     static func unitName(of unit: JobProgress.Unit) -> String {

@@ -356,6 +356,14 @@ public struct JobStatus: Codable, Sendable, Equatable {
     /// disk-bound copy does not need one), and neither does muxing. A consumer
     /// must render "working" rather than "0 %".
     public var percent: Double?
+
+    /// #0198 — `scanning`, `encoding` or `muxing`.
+    ///
+    /// HandBrake scans the title before it encodes it, and that scan has a
+    /// percentage of its own which is not the job's. Reporting it as
+    /// `percent` told a watcher the encode was 90 % done ten seconds in. The
+    /// percentage is now `nil` during a scan and this says why.
+    public var stage: String?
     /// Which encode the percentage belongs to: `feature`, `fallback`, `extra`,
     /// `remux`.
     public var unit: String?
@@ -378,6 +386,7 @@ public struct JobStatus: Codable, Sendable, Equatable {
         id: String? = nil,
         phase: String,
         percent: Double? = nil,
+        stage: String? = nil,
         unit: String? = nil,
         extraIndex: Int? = nil,
         extraCount: Int? = nil,
@@ -391,6 +400,7 @@ public struct JobStatus: Codable, Sendable, Equatable {
         self.id = id
         self.phase = phase
         self.percent = percent
+        self.stage = stage
         self.unit = unit
         self.extraIndex = extraIndex
         self.extraCount = extraCount
