@@ -46,6 +46,12 @@ struct RipFlowView: View {
     var body: some View {
         let step = flow.step(jobs: jobs)
         VStack(spacing: 0) {
+            // #0195 — above everything, including the step header, because it
+            // is about the whole window rather than about this step. Draws
+            // nothing at all when no CLI session is attached, which is the
+            // ordinary case and the one that must look exactly as it always
+            // has.
+            AgentModeBanner()
             header(step)
             Divider()
             content(step)

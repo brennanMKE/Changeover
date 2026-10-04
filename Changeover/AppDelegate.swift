@@ -229,7 +229,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         window.minSize = NSSize(width: WindowSizing.minimum.width, height: WindowSizing.minimum.height)
         window.center()
         window.contentView = NSHostingView(
-            rootView: RipFlowView().environment(settings).environment(jobs).environment(flow)
+            // #0195 — the bridge goes into the environment so the window can
+            // say when an agent is driving. `AppXPCServer` is created in
+            // `startCLIBridge()` before any window opens; the fallback keeps a
+            // build with no bridge (and the test host) rendering normally.
+            rootView: RipFlowView()
+                .environment(settings).environment(jobs).environment(flow)
+                .environment(bridge)
         )
         window.isReleasedWhenClosed = false
         let sizer = RipWindowSizer(window: window, jobs: jobs, flow: flow)

@@ -61,6 +61,14 @@ final class AppXPCServer {
     var clientCount: Int { clients.count }
     var sessionCount: Int { sessions.count }
 
+    /// #0195 — the most recent thing a CLI session asked for, so the window
+    /// can say what the agent is doing rather than only that one exists.
+    ///
+    /// A session count is a light that is on. An agent that asked for
+    /// something twenty minutes ago and an agent working right now look
+    /// identical through it, and only one of those is a problem.
+    private(set) var lastActivity: AgentMode.Activity?
+
     var sessionsByStart: [BridgeSession] {
         sessions.values.sorted { $0.startedAt < $1.startedAt }
     }
@@ -352,6 +360,10 @@ final class AppXPCServer {
     /// Handles a decoded request. Always returns a response — never nothing,
     /// because a dropped reply hangs the CLI until its timeout.
     fileprivate func handle(_ request: BridgeRequest) -> BridgeResponse {
+        // #0195 — recorded for every request, including one this build does
+        // not understand: a newer `changeoverctl` talking to an older app is
+        // exactly when the user most needs to see what was asked for.
+        lastActivity = AgentMode.Activity(action: request.action, at: Date())
         switch request.action {
         case BridgeRequest.Action.status:
             return .success("ok", body: currentSnapshot())
