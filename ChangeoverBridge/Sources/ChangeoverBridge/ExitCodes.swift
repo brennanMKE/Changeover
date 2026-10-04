@@ -110,6 +110,12 @@ public struct CLIEnvelope: Codable, Sendable {
     public var event: BridgeEvent?
     public var session: SessionStatus?
     public var help: HelpPayload?
+    // #0197 — one field per read verb rather than a shared `payload`. A consumer
+    // branching on `command` already knows which to read, and a named field is
+    // self-describing in a captured line in a way a base64 blob is not.
+    public var assets: AssetManifest?
+    public var library: LibraryReport?
+    public var search: SearchReport?
     /// The host app's version, for `--version`. Its own field rather than
     /// squeezed into `help`, because a consumer checking compatibility should
     /// read one key, not a sentence.
@@ -138,7 +144,10 @@ public struct CLIEnvelope: Codable, Sendable {
         event: BridgeEvent? = nil,
         session: SessionStatus? = nil,
         help: HelpPayload? = nil,
-        version: String? = nil
+        version: String? = nil,
+        assets: AssetManifest? = nil,
+        library: LibraryReport? = nil,
+        search: SearchReport? = nil
     ) {
         self.ok = ok
         self.command = command
@@ -150,6 +159,9 @@ public struct CLIEnvelope: Codable, Sendable {
         self.session = session
         self.help = help
         self.version = version
+        self.assets = assets
+        self.library = library
+        self.search = search
     }
 
     public static func failure(command: String, _ error: CLIErrorPayload) -> CLIEnvelope {

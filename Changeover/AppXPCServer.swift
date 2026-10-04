@@ -359,7 +359,7 @@ final class AppXPCServer {
 
     /// Handles a decoded request. Always returns a response — never nothing,
     /// because a dropped reply hangs the CLI until its timeout.
-    fileprivate func handle(_ request: BridgeRequest) -> BridgeResponse {
+    fileprivate func handle(_ request: BridgeRequest) async -> BridgeResponse {
         // #0195 — recorded for every request, including one this build does
         // not understand: a newer `changeoverctl` talking to an older app is
         // exactly when the user most needs to see what was asked for.
@@ -367,6 +367,12 @@ final class AppXPCServer {
         switch request.action {
         case BridgeRequest.Action.status:
             return .success("ok", body: currentSnapshot())
+        // #0197 — the read verbs, in `BridgeReadVerbs`. One case rather than
+        // three so this switch stays shallow, and a separate type so that the
+        // verbs which cannot change anything are not interleaved with the verbs
+        // which can.
+        case let action where BridgeReadVerbs.actions.contains(action):
+            return await BridgeReadVerbs.handle(request, jobs: jobs, settings: settings)
         default:
             // Named rather than generic, so a newer CLI talking to an older app
             // is told which verb is missing instead of "the request failed".
@@ -480,7 +486,10 @@ private nonisolated final class BridgeServiceEndpoint: NSObject, AppServiceProto
             return
         }
         Task { @MainActor [server] in
-            reply(server.handle(decoded).bridgeEncoded())
+            // `await`: #0197's read verbs wait on file copies, a library listing
+            // and TMDB. The reply is still exactly one per request, which is the
+            // part that matters — a dropped reply hangs the CLI until its timeout.
+            reply(await server.handle(decoded).bridgeEncoded())
         }
     }
 

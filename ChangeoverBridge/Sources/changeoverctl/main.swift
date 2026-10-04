@@ -39,6 +39,16 @@ case .success(let invocation):
     case .watch(let options):
         exit(await Commands.watch(options, reporter: reporter))
 
+    // #0197 — the read verbs, in `ReadCommands.swift`.
+    case .assets(let options):
+        exit(await Commands.assets(options, reporter: reporter))
+
+    case .library(let options):
+        exit(await Commands.library(options, reporter: reporter))
+
+    case .search(let options):
+        exit(await Commands.search(options, reporter: reporter))
+
     case .help(let topic, let requested):
         exit(Commands.help(topic: topic, requested: requested, reporter: reporter))
 

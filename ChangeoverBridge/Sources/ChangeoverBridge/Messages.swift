@@ -23,6 +23,29 @@ public struct BridgeRequest: Codable, Sendable {
         public static let status = "status"
         /// Open a long-lived session and push flow events onto it.
         public static let watch = "watch"
+
+        // #0197 — the read verbs. Each one only observes: none of them starts,
+        // cancels, ejects or imports, and the app's dispatch for them is a
+        // separate type precisely so that stays checkable.
+
+        /// Collect everything known about the disc in the drive into a temp
+        /// cache and reply with the manifest. `params` carries nothing.
+        public static let assets = "assets"
+        /// Whether a film is filed, and what extras its folder holds.
+        /// `params["tmdbID"]`.
+        public static let library = "library"
+        /// TMDB results for a term. `params["term"]`.
+        public static let search = "search"
+    }
+
+    /// The `params` keys the read verbs read.
+    ///
+    /// Named constants rather than string literals at four call sites: the CLI
+    /// writes them and the app reads them in two different processes, and a typo
+    /// in one of them is a verb that silently sees an empty argument.
+    public enum Param {
+        public static let tmdbID = "tmdbID"
+        public static let term = "term"
     }
 
     public var action: String

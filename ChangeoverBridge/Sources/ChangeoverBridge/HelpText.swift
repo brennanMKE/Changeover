@@ -184,6 +184,127 @@ public enum HelpText {
         ]
     )
 
+    // MARK: - #0197: the read verbs
+
+    public static let assets = HelpPayload.CommandHelp(
+        name: "assets",
+        summary: "Collect everything known about the disc in the drive into a temp cache.",
+        usage: "\(ServiceNames.cliName) assets [--no-launch] [--timeout <seconds>] [--json]",
+        discussion: """
+            Writes the HandBrake scan, the menu structure, the Vision OCR, the \
+            derived menu intelligence, the menu stills and the per-title audio \
+            and subtitle detail into one directory, and prints its path.
+
+            A manifest.json names every file with its absolute path, so reading \
+            the manifest alone tells you what is there — and, in its notes, what \
+            is not there and why. A disc whose menus did not decode has no \
+            structure.json and no OCR; that is common and it is not an error.
+
+            The directory is under the system temporary directory, keyed on the \
+            disc's identity, so macOS clears it when it needs the space. Treat \
+            the path as a cache that can vanish and re-run this rather than \
+            storing it across a long gap. Re-running is cheap, and a second call \
+            after the menu read has finished holds more than the first.
+
+            The audio detail is richer than it looks. Per track: the codec, the \
+            ISO 639-2 language or null, the channel count, the bitrate, whether \
+            it is forced, whether it is commentary, and HandBrake's variant axis. \
+            A null language means the track is UNTAGGED. It does not mean \
+            English, and defaulting it is how a silent MP4 gets made.
+
+            This command only observes.
+            """,
+        options: [
+            HelpPayload.OptionHelp(
+                flag: "--no-launch",
+                summary: "Fail instead of launching Changeover when it is not running."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--timeout <seconds>",
+                summary: "Seconds to wait for the app, including its launch. Default 30."
+            ),
+            jsonOption,
+        ]
+    )
+
+    public static let library = HelpPayload.CommandHelp(
+        name: "library",
+        summary: "Say whether a film is filed, and what extras its folder holds.",
+        usage: "\(ServiceNames.cliName) library <tmdb-id> [--no-launch] [--timeout <seconds>] [--json]",
+        discussion: """
+            Lists the Movies folder for one carrying the {tmdb-<id>} tag, then \
+            lists that folder and the Plex extras subfolders inside it, \
+            measuring each extra's runtime.
+
+            The extras are matched against the disc's own titles by DURATION, \
+            never by filename. The library copy was named by whatever tool filed \
+            it, possibly by hand and possibly years ago, while the disc's label \
+            comes out of a menu read through OCR: two runtimes agreeing is \
+            evidence, two names agreeing is a coincidence waiting to happen, and \
+            two names disagreeing proves nothing.
+
+            Three states, and the third is not the second. `filed` and `absent` \
+            both follow a successful listing. `unreachable` means the library \
+            could not be read — an unmounted NAS, a timeout — and must never be \
+            read as a clean library, or the next import files a second copy of a \
+            film that is already there.
+
+            An id rather than a title, because a title is not unique: four films \
+            on TMDB are called Garden State. Run `search` to get the id.
+
+            This command only observes.
+            """,
+        options: [
+            HelpPayload.OptionHelp(
+                flag: "--no-launch",
+                summary: "Fail instead of launching Changeover when it is not running."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--timeout <seconds>",
+                summary: "Seconds to wait for the app and the library listing. Default 30."
+            ),
+            jsonOption,
+        ]
+    )
+
+    public static let search = HelpPayload.CommandHelp(
+        name: "search",
+        summary: "Search TMDB through the app, so the id you get is one it accepts.",
+        usage: "\(ServiceNames.cliName) search <term> [--no-launch] [--timeout <seconds>] [--json]",
+        discussion: """
+            The results come back in the order the Choose step would show them: \
+            exact title match first, then prefix matches, newest release first \
+            within each group.
+
+            Runtime is included for the first few results, because runtime is how \
+            every identification in this app is corroborated — it is the one fact \
+            that separates two films sharing a title. TMDB's search endpoint does \
+            not return it, so each one costs a request and the count that were \
+            looked up is reported: a null runtime means either TMDB has none or \
+            that result was past the budget, and those are different answers.
+
+            Each result also carries the folder name this app would file the film \
+            in, tag and all, so nothing has to rebuild the naming convention.
+
+            The request goes through the app rather than straight to TMDB on \
+            purpose: the app holds the API key, and this tool reads no settings \
+            of its own.
+
+            This command only observes.
+            """,
+        options: [
+            HelpPayload.OptionHelp(
+                flag: "--no-launch",
+                summary: "Fail instead of launching Changeover when it is not running."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--timeout <seconds>",
+                summary: "Seconds to wait for the app and the TMDB requests. Default 30."
+            ),
+            jsonOption,
+        ]
+    )
+
     public static let help = HelpPayload.CommandHelp(
         name: "help",
         summary: "Show this help, or the help for one command.",
@@ -194,7 +315,7 @@ public enum HelpText {
         options: [jsonOption]
     )
 
-    public static let all = [ping, status, watch, help]
+    public static let all = [ping, status, watch, assets, library, search, help]
 
     private static let exitCodes = [
         HelpPayload.ExitCodeHelp(code: BridgeExitCode.success, meaning: "success"),
@@ -228,7 +349,7 @@ public enum HelpText {
         return HelpPayload(
             tool: ServiceNames.cliName,
             summary: "Drive Changeover, the DVD-to-Plex menu bar app, from a script or an agent.",
-            usage: "\(ServiceNames.cliName) <ping|status|watch|help> [options]",
+            usage: "\(ServiceNames.cliName) <ping|status|watch|assets|library|search|help> [options]",
             commands: matched.map { [$0] } ?? all,
             exitCodes: exitCodes,
             topic: matched?.name

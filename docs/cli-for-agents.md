@@ -218,7 +218,7 @@ changeoverctl watch --json > events.jsonl &
 WATCHER=$!
 
 changeoverctl wait --for scan-complete --timeout 300
-ASSETS=$(changeoverctl assets --json | jq -r .path)
+ASSETS=$(changeoverctl assets --json | jq -r .assets.path)
 ```
 
 Decide. The OCR and the model's answers are in `$ASSETS`; the agent is free to
