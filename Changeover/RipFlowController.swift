@@ -366,6 +366,10 @@ final class RipFlowController {
     nonisolated enum SelectionOrigin: Equatable, Sendable {
         case user
         case automatic
+        /// #0200 — an agent, over the CLI bridge. Not a flavour of `.user`:
+        /// an agent's `select` arriving with the default origin made the
+        /// panel say "You chose X" to someone who had never seen the film.
+        case agent
     }
 
     func select(movieID: Int?, jobs: JobController, apiKey: String,
@@ -394,14 +398,16 @@ final class RipFlowController {
         case .automatic:
             // The app decided after all, so there is no user choice to show.
             jobs.noteManualSelection(nil)
-        case .user:
+        case .user, .agent:
             guard let movie = search.selectedMovie else {
                 jobs.noteManualSelection(nil)
                 return
             }
-            jobs.noteManualSelection(IdentificationSummary.userChoiceLine(
-                movie: "\(movie.title) (\(movie.yearText))",
-                query: search.query))
+            let named = "\(movie.title) (\(movie.yearText))"
+            jobs.noteManualSelection(
+                origin == .agent
+                    ? IdentificationSummary.agentChoiceLine(movie: named, query: search.query)
+                    : IdentificationSummary.userChoiceLine(movie: named, query: search.query))
         }
     }
 

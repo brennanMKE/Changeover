@@ -67,7 +67,7 @@ nonisolated enum BridgeStatusReader {
             film: filmStatus(
                 flow.chosenMovie.map { MovieMetadata(from: $0, edition: flow.edition) },
                 resolvedBy: flow.resolvedBy,
-                chosenByUser: IdentificationSummary.wasChosenByUser(jobs.identificationNarration),
+                chosenBy: IdentificationSummary.chooser(jobs.identificationStory).rawValue,
                 libraryCheck: flow.libraryCheckForThisEdition
             ),
             job: jobStatus(jobs),
@@ -223,7 +223,7 @@ nonisolated enum BridgeStatusReader {
     static func filmStatus(
         _ metadata: MovieMetadata?,
         resolvedBy: String?,
-        chosenByUser: Bool,
+        chosenBy: String,
         libraryCheck: LibraryCheck
     ) -> FilmStatus? {
         guard let metadata else { return nil }
@@ -236,8 +236,8 @@ nonisolated enum BridgeStatusReader {
             // CLI reports are the names `PlexOrganizer` will actually write.
             folderName: metadata.folderName,
             fileName: metadata.fileName,
-            resolvedBy: chosenByUser ? "user" : resolvedBy,
-            chosenByUser: chosenByUser,
+            resolvedBy: chosenBy == FilmStatus.Chooser.automation ? resolvedBy : chosenBy,
+            chosenBy: chosenBy,
             libraryStatus: describe(libraryCheck)
         )
     }
@@ -278,7 +278,7 @@ nonisolated enum BridgeStatusReader {
             film: filmStatus(
                 jobs.currentMetadata,
                 resolvedBy: nil,
-                chosenByUser: false,
+                chosenBy: FilmStatus.Chooser.automation,
                 libraryCheck: .idle
             )
         )

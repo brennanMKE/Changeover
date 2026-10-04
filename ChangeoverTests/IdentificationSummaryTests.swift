@@ -1,3 +1,4 @@
+import ChangeoverBridge
 import Foundation
 import Testing
 @testable import Changeover
@@ -201,5 +202,112 @@ import Testing
         #expect(IdentificationSummary.heading(for: job.identification)
                 == "What the app guessed, and what you chose")
         #expect(job.identification.last?.hasPrefix("✎") == true)
+    }
+}
+
+/// #0200 — three deciders, told apart.
+///
+/// Reported from a peer session driving `changeoverctl`: `status` said
+/// `chosenByUser: false` for a film the agent had itself just selected, which
+/// is the same thing the app says when it inferred the film unaided. So an
+/// agent could not read its own effect back, and a second watcher could not see
+/// which of them had decided.
+///
+/// Tracing it found the mirror-image bug on the app's side, which was worse.
+/// `AgentActions.select` called `flow.select` without an `origin`, and the
+/// default is `.user` — so the evidence panel the user consults when a wrong
+/// film gets filed was headed "What the app guessed, and what you chose" and
+/// credited a person who had never seen the disc.
+struct AgentChoiceAttributionTests {
+
+    static let guess = "Guessed “SIGNS” from the disc label"
+
+    @Test func anUnaidedAppIsTheDefault() {
+        #expect(IdentificationSummary.chooser([]) == .automation)
+        #expect(IdentificationSummary.chooser([Self.guess]) == .automation)
+    }
+
+    @Test func aUserChoiceIsAttributedToTheUser() {
+        let story = [Self.guess, IdentificationSummary.userChoiceLine(movie: "Signs (2002)")]
+        #expect(IdentificationSummary.chooser(story) == .user)
+        #expect(IdentificationSummary.wasChosenByUser(story))
+        #expect(!IdentificationSummary.wasChosenByAgent(story))
+    }
+
+    /// The bug itself: this used to be indistinguishable from `.automation` on
+    /// the wire and from `.user` in the panel.
+    @Test func anAgentChoiceIsAttributedToTheAgent() {
+        let story = [Self.guess, IdentificationSummary.agentChoiceLine(movie: "Signs (2002)")]
+        #expect(IdentificationSummary.chooser(story) == .agent)
+        #expect(IdentificationSummary.wasChosenByAgent(story))
+        #expect(
+            !IdentificationSummary.wasChosenByUser(story),
+            "an agent's pick must never be reported as the user's")
+    }
+
+    /// The markers have to be distinct, since the whole mechanism is a prefix
+    /// test on one line.
+    @Test func theTwoMarkersAreNotTheSame() {
+        #expect(IdentificationSummary.userMarker != IdentificationSummary.agentMarker)
+    }
+
+    /// A user overriding an agent is the user's choice, and the other way
+    /// round. The story is in the order things happened, so the last marker
+    /// wins — anything else would credit a decision that was superseded.
+    @Test func theLastDeciderWins() {
+        let user = IdentificationSummary.userChoiceLine(movie: "Signs (2002)")
+        let agent = IdentificationSummary.agentChoiceLine(movie: "Unbreakable (2000)")
+        #expect(IdentificationSummary.chooser([Self.guess, agent, user]) == .user)
+        #expect(IdentificationSummary.chooser([Self.guess, user, agent]) == .agent)
+    }
+
+    /// The heading names the right decider, which is the half of this bug the
+    /// person at the machine would actually have seen.
+    @Test func theHeadingNamesTheDecider() {
+        #expect(IdentificationSummary.heading(for: [Self.guess]) == "How this was identified")
+        #expect(
+            IdentificationSummary.heading(
+                for: [IdentificationSummary.userChoiceLine(movie: "Signs (2002)")]
+            ).contains("you chose"))
+        #expect(
+            IdentificationSummary.heading(
+                for: [IdentificationSummary.agentChoiceLine(movie: "Signs (2002)")]
+            ).contains("the agent chose"))
+    }
+
+    /// An agent that searched to find the film says so, the same way the user
+    /// line does — on a disc with a useless label what was typed is the
+    /// interesting part.
+    @Test func theAgentLineKeepsTheQueryWhenItAddsSomething() {
+        let plain = IdentificationSummary.agentChoiceLine(movie: "Signs (2002)", query: "Signs")
+        #expect(!plain.contains("searched"), "a query equal to the title is noise")
+        let typed = IdentificationSummary.agentChoiceLine(
+            movie: "Signs (2002)", query: "mel gibson aliens")
+        #expect(typed.contains("mel gibson aliens"))
+        #expect(typed.hasPrefix(IdentificationSummary.agentMarker))
+    }
+
+    /// The wire field agrees with the story, and `chosenByUser` is derived from
+    /// it rather than stored beside it — two fields that can disagree is the
+    /// shape of the original bug.
+    @Test func theWireFieldAgreesWithTheStory() {
+        for chooser in IdentificationSummary.Chooser.allCases {
+            let film = BridgeFixtures.film(chosenBy: chooser.rawValue)
+            #expect(film.chosenBy == chooser.rawValue)
+            #expect(film.chosenByUser == (chooser == .user))
+            #expect(film.chosenByHand == (chooser != .automation))
+        }
+    }
+
+    /// Every `Chooser` case has a wire name, so a case added later cannot
+    /// serialise as something `FilmStatus.Chooser` has no constant for.
+    @Test func everyChooserHasAWireName() {
+        let named = Set([
+            FilmStatus.Chooser.user, FilmStatus.Chooser.agent, FilmStatus.Chooser.automation,
+        ])
+        for chooser in IdentificationSummary.Chooser.allCases {
+            #expect(named.contains(chooser.rawValue), "\(chooser) has no FilmStatus.Chooser constant")
+        }
+        #expect(named.count == IdentificationSummary.Chooser.allCases.count)
     }
 }

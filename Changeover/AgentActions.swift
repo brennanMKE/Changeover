@@ -266,7 +266,11 @@ enum AgentActions {
                 }
                 flow.search.present(query: query, results: results)
             }
-            flow.select(movieID: movieID, jobs: jobs, apiKey: settings.tmdbAPIKey)
+            // #0200 — `origin: .agent`. The default is `.user`, which made the
+            // app's own evidence panel tell the person at the machine "You chose
+            // X" about a film an agent picked over the bridge.
+            flow.select(
+                movieID: movieID, jobs: jobs, apiKey: settings.tmdbAPIKey, origin: .agent)
         }
 
         // Then the extras. The tick goes through `toggleExtra`, which refuses the
@@ -314,7 +318,7 @@ enum AgentActions {
             outcome: ActionOutcome.selected,
             detail: describe(resolved: resolved, extras: extras, flow: flow),
             sessionsAttached: sessionsAttached,
-            film: currentFilm(flow: flow),
+            film: currentFilm(jobs: jobs, flow: flow),
             featureTitle: jobs.selectedTitleIndex,
             extras: extras
         )
@@ -387,7 +391,7 @@ enum AgentActions {
                 detail: gate.reason ?? gate.plainReason ?? "Start is not available.",
                 sessionsAttached: sessionsAttached,
                 disc: disc,
-                film: currentFilm(flow: flow),
+                film: currentFilm(jobs: jobs, flow: flow),
                 startDecision: gate.rawValue
             )
         }
@@ -405,7 +409,7 @@ enum AgentActions {
                     + "already be in Plex. The job log says which.",
                 sessionsAttached: sessionsAttached,
                 disc: disc,
-                film: currentFilm(flow: flow),
+                film: currentFilm(jobs: jobs, flow: flow),
                 startDecision: gate.rawValue
             )
         }
@@ -428,7 +432,7 @@ enum AgentActions {
             film: BridgeStatusReader.filmStatus(
                 jobs.currentMetadata,
                 resolvedBy: nil,
-                chosenByUser: false,
+                chosenBy: IdentificationSummary.chooser(jobs.identificationStory).rawValue,
                 libraryCheck: .idle
             ),
             intent: intent.rawValue
@@ -532,11 +536,14 @@ enum AgentActions {
         )
     }
 
-    private static func currentFilm(flow: RipFlowController) -> FilmStatus? {
+    /// #0200 — `chosenBy` is read from the identification story, not passed as
+    /// `automation`. An agent that had just selected a film was told by its own
+    /// reply that nothing had chosen it.
+    private static func currentFilm(jobs: JobController, flow: RipFlowController) -> FilmStatus? {
         BridgeStatusReader.filmStatus(
             flow.chosenMovie.map { MovieMetadata(from: $0, edition: flow.edition) },
             resolvedBy: flow.resolvedBy,
-            chosenByUser: false,
+            chosenBy: IdentificationSummary.chooser(jobs.identificationStory).rawValue,
             libraryCheck: flow.libraryCheckForThisEdition
         )
     }

@@ -31,9 +31,54 @@ nonisolated enum IdentificationSummary {
     /// is a contract and not decoration.
     static let userMarker = "✎"
 
+    /// #0200 — marks a line describing something an **agent** did over the
+    /// CLI bridge. A separate marker rather than reusing `userMarker`,
+    /// because the two are different claims about the world and the panel's
+    /// heading turns on which one it is.
+    ///
+    /// An agent's `select` used to arrive with the default `origin: .user`,
+    /// so the panel told the person at the machine "You chose X" about a
+    /// film they had never seen. That is not a cosmetic slip: the panel is
+    /// the record consulted when a wrong film gets filed, and it was naming
+    /// the wrong decider.
+    static let agentMarker = "⌁"
+
     /// Whether the final choice was the user's rather than the app's.
     static func wasChosenByUser(_ lines: [String]) -> Bool {
         lines.contains { $0.hasPrefix(userMarker) }
+    }
+
+    /// Whether an agent made the final choice.
+    static func wasChosenByAgent(_ lines: [String]) -> Bool {
+        lines.contains { $0.hasPrefix(agentMarker) }
+    }
+
+    /// Who settled on the film, as one answer rather than two booleans that
+    /// can both be true. The last marker in the story wins, because the
+    /// story is in the order things happened and the final choice is the one
+    /// that gets ripped.
+    static func chooser(_ lines: [String]) -> Chooser {
+        for line in lines.reversed() {
+            if line.hasPrefix(userMarker) { return .user }
+            if line.hasPrefix(agentMarker) { return .agent }
+        }
+        return .automation
+    }
+
+    /// The three things that can choose a film.
+    nonisolated enum Chooser: String, Equatable, Sendable, CaseIterable {
+        case user
+        case agent
+        case automation
+    }
+
+    /// The line recording an agent's choice.
+    static func agentChoiceLine(movie: String, query: String? = nil) -> String {
+        let typed = (query ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty, !isSameText(typed, movie) else {
+            return "\(agentMarker) An agent chose \(movie)"
+        }
+        return "\(agentMarker) An agent searched for “\(typed)” and chose \(movie)"
     }
 
     /// The panel's heading.
@@ -42,9 +87,11 @@ nonisolated enum IdentificationSummary {
     /// identifying. When the user overrode it, the panel is a record of two
     /// different things and says so.
     static func heading(for lines: [String]) -> String {
-        wasChosenByUser(lines)
-            ? "What the app guessed, and what you chose"
-            : "How this was identified"
+        switch chooser(lines) {
+        case .user:  return "What the app guessed, and what you chose"
+        case .agent: return "What the app guessed, and what the agent chose"
+        case .automation: return "How this was identified"
+        }
     }
 
     /// The line recording the user's own choice. Always last in the panel, so

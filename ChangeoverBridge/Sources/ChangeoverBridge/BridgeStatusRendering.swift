@@ -64,10 +64,13 @@ extension BridgeStatus {
             rows.append(("film", "\(film.title) (\(film.year)) {tmdb-\(film.tmdbID)}"))
             rows.append(("film folder", film.folderName))
             rows.append(("film file", film.fileName))
-            rows.append((
-                "identified by",
-                film.chosenByUser ? "the user" : (film.resolvedBy ?? "nothing recorded")
-            ))
+            let decider: String
+            switch film.chosenBy {
+            case FilmStatus.Chooser.user:  decider = "the user"
+            case FilmStatus.Chooser.agent: decider = "an agent"
+            default: decider = film.resolvedBy ?? "nothing recorded"
+            }
+            rows.append(("identified by", decider))
             rows.append(("in library", film.libraryStatus))
         } else {
             rows.append(("film", "not identified"))

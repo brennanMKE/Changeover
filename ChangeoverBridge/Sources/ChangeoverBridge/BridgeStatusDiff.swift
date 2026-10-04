@@ -136,7 +136,15 @@ public enum BridgeStatusDiff {
         //    an agent would have to learn to ignore.
         if !discChanged, old.film?.identity != new.film?.identity {
             if let film = new.film {
-                let how = film.chosenByUser ? "chosen by hand" : (film.resolvedBy ?? "inferred")
+                // #0200 — name the actual decider. "chosen by hand" covered an
+                // agent's pick too, which is the one case a watching agent most
+                // needs told apart from the app's own guess.
+                let how: String
+                switch film.chosenBy {
+                case FilmStatus.Chooser.user:  how = "chosen by the user"
+                case FilmStatus.Chooser.agent: how = "chosen by an agent"
+                default: how = film.resolvedBy ?? "inferred"
+                }
                 drafts.append(
                     EventDraft(
                         kind: BridgeEvent.Kind.identificationSettled,

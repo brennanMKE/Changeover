@@ -159,16 +159,39 @@ struct BridgeStatusDiffTests {
         #expect(event.film?.tmdbID == "401")
     }
 
-    @Test func aFilmChosenByHandSaysSo() throws {
+    /// #0200 — the summary names the decider, rather than lumping the user and
+    /// an agent together as "chosen by hand". The agent case is the one a
+    /// second watcher most needs told apart from the app's own guess.
+    @Test(arguments: [
+        (FilmStatus.Chooser.user, "chosen by the user"),
+        (FilmStatus.Chooser.agent, "chosen by an agent"),
+    ])
+    func anIdentificationSaysWhoChoseIt(chooser: String, expected: String) throws {
         let drafts = BridgeStatusDiff.drafts(
             from: BridgeFixtures.status(disc: BridgeFixtures.disc()),
             to: BridgeFixtures.status(
                 disc: BridgeFixtures.disc(),
-                film: BridgeFixtures.film(chosenByUser: true)
+                film: BridgeFixtures.film(chosenBy: chooser)
             )
         )
         let event = try #require(drafts.first { $0.kind == BridgeEvent.Kind.identificationSettled })
-        #expect(event.summary.contains("chosen by hand"))
+        #expect(event.summary.contains(expected))
+    }
+
+    /// And an unaided identification still reports how it got there, rather
+    /// than naming a decider that was not involved.
+    @Test func anInferredIdentificationNamesTheEvidence() throws {
+        let drafts = BridgeStatusDiff.drafts(
+            from: BridgeFixtures.status(disc: BridgeFixtures.disc()),
+            to: BridgeFixtures.status(
+                disc: BridgeFixtures.disc(),
+                film: BridgeFixtures.film(
+                    resolvedBy: "menuTitle", chosenBy: FilmStatus.Chooser.automation)
+            )
+        )
+        let event = try #require(drafts.first { $0.kind == BridgeEvent.Kind.identificationSettled })
+        #expect(event.summary.contains("menuTitle"))
+        #expect(!event.summary.contains("chosen by"))
     }
 
     /// A library check completing changes `FilmStatus` without changing which

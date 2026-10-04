@@ -78,7 +78,7 @@ enum BridgeFixtures {
         tmdbID: String = "401",
         edition: String? = nil,
         resolvedBy: String? = "label",
-        chosenByUser: Bool = false,
+        chosenBy: String = FilmStatus.Chooser.automation,
         libraryStatus: String = "absent"
     ) -> FilmStatus {
         FilmStatus(
@@ -89,7 +89,7 @@ enum BridgeFixtures {
             folderName: "\(title) (\(year)) {tmdb-\(tmdbID)}",
             fileName: "\(title) (\(year)).mp4",
             resolvedBy: resolvedBy,
-            chosenByUser: chosenByUser,
+            chosenBy: chosenBy,
             libraryStatus: libraryStatus
         )
     }

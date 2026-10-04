@@ -237,7 +237,7 @@ struct BridgeStatusReaderTests {
 
     @Test func noMetadataProjectsToNothing() {
         #expect(
-            BridgeStatusReader.filmStatus(nil, resolvedBy: "label", chosenByUser: false, libraryCheck: .idle)
+            BridgeStatusReader.filmStatus(nil, resolvedBy: "label", chosenBy: FilmStatus.Chooser.automation, libraryCheck: .idle)
                 == nil
         )
     }
@@ -252,7 +252,7 @@ struct BridgeStatusReaderTests {
             BridgeStatusReader.filmStatus(
                 metadata,
                 resolvedBy: "label",
-                chosenByUser: false,
+                chosenBy: FilmStatus.Chooser.automation,
                 libraryCheck: .idle
             )
         )
@@ -270,7 +270,7 @@ struct BridgeStatusReaderTests {
             BridgeStatusReader.filmStatus(
                 MovieMetadata(title: "T", year: "2000", tmdbID: "1"),
                 resolvedBy: "menuTitle",
-                chosenByUser: true,
+                chosenBy: FilmStatus.Chooser.user,
                 libraryCheck: .idle
             )
         )

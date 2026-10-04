@@ -302,8 +302,15 @@ public struct FilmStatus: Codable, Sendable, Equatable {
     /// How the app arrived here: `label`, `menuTitle`, `inference`, `user`, or
     /// `nil` when nothing recorded it.
     public var resolvedBy: String?
-    /// Whether a person picked this rather than the app inferring it.
-    public var chosenByUser: Bool
+    /// #0200 — who settled on this film: `user`, `agent` or `automation`.
+    ///
+    /// Three answers rather than the one boolean this used to be. An agent
+    /// driving `select` over the bridge reported `chosenByUser: false`, which
+    /// is the same thing the app says when it inferred the film by itself — so
+    /// an agent reading its own effect back could not tell its choice from a
+    /// guess, and neither could a second watcher. Worse, the app's evidence
+    /// panel went the other way and credited the person at the machine.
+    public var chosenBy: String
     /// Where the library check got to: `idle`, `checking`, `absent`, `present`,
     /// `unreachable`. A `present` is why `start.decision` may be
     /// `duplicateUnacknowledged` or `everyFilmAlreadyInPlex`.
@@ -317,7 +324,7 @@ public struct FilmStatus: Codable, Sendable, Equatable {
         folderName: String,
         fileName: String,
         resolvedBy: String? = nil,
-        chosenByUser: Bool = false,
+        chosenBy: String = Chooser.automation,
         libraryStatus: String = "idle"
     ) {
         self.title = title
@@ -327,9 +334,26 @@ public struct FilmStatus: Codable, Sendable, Equatable {
         self.folderName = folderName
         self.fileName = fileName
         self.resolvedBy = resolvedBy
-        self.chosenByUser = chosenByUser
+        self.chosenBy = chosenBy
         self.libraryStatus = libraryStatus
     }
+
+    /// The values `chosenBy` takes. Named constants because the CLI prints
+    /// them, the app writes them and an agent branches on them — three places
+    /// a typo would be silent.
+    public enum Chooser {
+        public static let user = "user"
+        public static let agent = "agent"
+        public static let automation = "automation"
+    }
+
+    /// Kept so the callers that only ask "did a person do this" still read
+    /// well. Computed, not stored: two fields that can disagree is the bug
+    /// this ticket is fixing, not a shape to preserve.
+    public var chosenByUser: Bool { chosenBy == Chooser.user }
+
+    /// True for either decider that is not the app itself.
+    public var chosenByHand: Bool { chosenBy != Chooser.automation }
 
     /// Identity only — what makes two reports "the same film".
     ///

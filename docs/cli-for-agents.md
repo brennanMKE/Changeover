@@ -294,6 +294,37 @@ Every acting verb also reports a stable `outcome` identifier under `action` in
 its `--json`, which is what a `case` statement should branch on; `detail` is the
 app's own wording and will be reworded.
 
+### `film.chosenBy` — who decided
+
+`status`, every acting verb's reply and the `identification.settled` event all
+carry `film.chosenBy`, one of three values:
+
+| Value | Meaning |
+|---|---|
+| `automation` | The app worked the film out by itself. `film.resolvedBy` says from what — `label`, `menuTitle` or `inference`. |
+| `user` | The person at the Mac picked it from the search results. |
+| `agent` | A `changeoverctl select` picked it. |
+
+This replaced a boolean `chosenByUser`, which could not express the third case:
+an agent's own `select` reported `chosenByUser: false` — exactly what the app
+says when it guessed unaided — so an agent could not read its own effect back,
+and with two watchers attached neither could tell which of them had chosen.
+
+The same trace found the app side had it backwards and worse. An agent's
+`select` reached the flow with the default origin, which is "a person clicked a
+row", so the evidence panel a user consults when a wrong film gets filed was
+headed *"What the app guessed, and what you chose"* and credited someone who had
+never seen the disc. The panel now says *"what the agent chose"*, and marks the
+agent's line `⌁` rather than the user's `✎`.
+
+Two related things that tripped this up, worth knowing when reading a snapshot:
+
+- A film's chooser is **final-answer-wins**. A user overriding an agent's pick
+  reports `user`, and an agent overriding the user reports `agent`.
+- `chosenBy` is correct **before** a job starts. It used to read `automation`
+  right up to the moment the rip began, for a user's pick and an agent's alike,
+  because the choice was only folded into the identification story at job start.
+
 ## What this tool will not do
 
 **It cannot change settings.** There is no `settings set`. An agent that can

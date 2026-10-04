@@ -808,10 +808,7 @@ final class JobController {
         // the panel showed only the machine's attempt — typically ending on
         // "Not choosing for you — …. Pick one below." — under a heading
         // claiming to explain the film that was actually being ripped.
-        var story = identificationNarration
-        if let manualSelectionNote {
-            story.append(manualSelectionNote)
-        }
+        let story = identificationStory
         for line in story {
             job.log.append(line)
         }
@@ -1891,6 +1888,20 @@ final class JobController {
     /// Cleared with the disc, so one disc's reasoning never appears under
     /// another's rip.
     private(set) var identificationNarration: [String] = []
+
+    /// #0200 — the whole identification story, including who chose the film.
+    ///
+    /// The same sequence `start` folds into the job's log, lifted out so a
+    /// reader before the job exists gets the same answer as the panel after it
+    /// does. That split was a live bug: `BridgeStatusReader` asked
+    /// `wasChosenByUser(identificationNarration)`, and the choice line lives in
+    /// `manualSelectionNote` until a job starts — so `status` reported nobody
+    /// had chosen the film right up to the moment the rip began, for an agent's
+    /// pick and a user's alike.
+    var identificationStory: [String] {
+        guard let manualSelectionNote else { return identificationNarration }
+        return identificationNarration + [manualSelectionNote]
+    }
 
     private func append(_ line: String) {
         if let current {
