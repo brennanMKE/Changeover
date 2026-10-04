@@ -378,3 +378,28 @@ import Testing
     }
 
 }
+
+/// #0202 — the bridge package's copy of `JobIntent`'s raw values.
+///
+/// Same hazard as `PlexExtrasFoldersAgreeTests` above, and the same answer: the
+/// bridge has no dependency on the app target, so it carries its own copy of
+/// two strings the app writes and the CLI branches on. A drift would make the
+/// human output label a nominal feature as a real one — silently, because both
+/// sides would still compile.
+@Suite struct JobIntentNamesAgreeTests {
+
+    @Test func theBridgesCopyMatchesTheAppsIntents() {
+        #expect(ActionResult.JobIntentNames.film == JobIntent.film.rawValue)
+        #expect(ActionResult.JobIntentNames.extrasOnly == JobIntent.extrasOnly.rawValue)
+    }
+
+    /// And every case has a name, so a third intent cannot be added to the app
+    /// without this file failing.
+    @Test func everyIntentHasAName() {
+        let named = Set([ActionResult.JobIntentNames.film, ActionResult.JobIntentNames.extrasOnly])
+        for intent in JobIntent.allCases {
+            #expect(named.contains(intent.rawValue), "\(intent) has no JobIntentNames constant")
+        }
+        #expect(named.count == JobIntent.allCases.count)
+    }
+}

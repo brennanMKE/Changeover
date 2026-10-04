@@ -311,6 +311,17 @@ public struct ActionResult: Codable, Sendable, Equatable {
     public var disc: DiscStatus?
     /// The film the selection or the import settled on.
     public var film: FilmStatus?
+    /// The two values `intent` takes, as the bridge's own copy of the app's
+    /// `JobIntent` raw values. The bridge package has no dependency on the app
+    /// target, and `intent` is a plain `String` on the wire for the reason every
+    /// identifier here is: an unknown value from a newer app must degrade to "I
+    /// do not recognise this" rather than fail the decode of the whole reply.
+    /// `JobIntentNamesAgreeTests` fails the moment these drift from `JobIntent`.
+    public enum JobIntentNames {
+        public static let film = "film"
+        public static let extrasOnly = "extrasOnly"
+    }
+
     /// `film` or `extrasOnly` — which `JobIntent` an `import` ran under.
     ///
     /// Worth reporting because the two have different consequences and an agent

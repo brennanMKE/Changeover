@@ -145,7 +145,17 @@ extension ActionResult {
         if let intent { lines.append("  intent   \(intent)") }
         if let startDecision { lines.append("  start    \(startDecision)") }
         if let film { lines.append("  film     \(film.title) (\(film.year)) {tmdb-\(film.tmdbID)}") }
-        if let featureTitle { lines.append("  feature  title \(featureTitle)") }
+        if let featureTitle {
+            // #0202 — on an extras-only job this index is nominal: the pipeline
+            // resolves a feature either way, but `JobIntent.featureDestination`
+            // is `nil`, so nothing encodes it and nothing files it. Labelled,
+            // because "feature  title 4" reads as the one thing that is not
+            // happening.
+            lines.append(
+                intent == JobIntentNames.extrasOnly
+                    ? "  feature  title \(featureTitle) — nominal, not encoded"
+                    : "  feature  title \(featureTitle)")
+        }
         for extra in extras ?? [] {
             let name = extra.label ?? "unnamed"
             lines.append("  extra    title \(extra.titleIndex) → \(extra.folderName)/\(name)")

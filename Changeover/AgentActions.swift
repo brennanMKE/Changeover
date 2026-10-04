@@ -396,7 +396,16 @@ enum AgentActions {
             outcome: ActionOutcome.selected,
             detail: describe(resolved: resolved, extras: extras, flow: flow),
             sessionsAttached: sessionsAttached,
+            // #0202 — `select` reports the intent too, not just `import`.
+            //
+            // `featureTitle` on an extras-only selection is a nominal index
+            // that nothing encodes, and without the intent beside it the reply
+            // reads as "title 4 will be the film" — which is the opposite of
+            // what this selection means. Reported from a peer session the first
+            // time it used the flag. `nil` for an ordinary selection, so that
+            // reply is unchanged.
             film: currentFilm(jobs: jobs, flow: flow),
+            intent: resolved.extrasOnly ? JobIntent.extrasOnly.rawValue : nil,
             featureTitle: jobs.selectedTitleIndex,
             extras: extras
         )
