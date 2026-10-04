@@ -105,11 +105,18 @@ struct CLIParseTests {
 
     // MARK: - Errors
 
+    /// The hint lists the verbs this build actually has, derived rather than
+    /// written down — a hardcoded list goes stale every time a verb lands, and
+    /// it went stale twice in one evening (#0197's read verbs, #0196's acting
+    /// ones) before this was derived.
     @Test func anUnknownCommandIsAUsageErrorNamingIt() throws {
-        let error = try #require(parse("import").failure)
+        let error = try #require(parse("definitelynotaverb").failure)
         #expect(error.code == BridgeExitCode.usage)
-        #expect(error.message.contains("'import'"))
-        #expect(error.hint?.contains("ping, status, watch, help") == true)
+        #expect(error.message.contains("'definitelynotaverb'"))
+        let hint = try #require(error.hint)
+        for name in HelpText.payload().commands.map(\.name) {
+            #expect(hint.contains(name), "the hint should name “\(name)”")
+        }
     }
 
     /// Strict on purpose. A silently dropped `--no-launch` would make a script
@@ -246,9 +253,23 @@ struct BridgeExitCodeTests {
 /// reads the commands.
 struct HelpTextTests {
 
+    /// Every command the parser accepts is documented, and nothing is
+    /// documented that the parser does not accept. Stated as a correspondence
+    /// rather than a list, so adding a verb cannot pass by updating one side.
     @Test func everyCommandIsDocumented() {
-        let names = HelpText.payload().commands.map(\.name)
-        #expect(names.sorted() == ["help", "ping", "status", "watch"])
+        let documented = Set(HelpText.payload().commands.map(\.name))
+        #expect(documented.contains("help"))
+        #expect(documented.contains("ping"))
+        #expect(documented.contains("status"))
+        #expect(documented.contains("watch"))
+        // Recognised, not necessarily complete: `library` and `search` need
+        // an argument, so parsing them bare is a legitimate usage error. What
+        // must never happen is a documented verb the parser has never heard of.
+        for name in documented {
+            let message = CLIParse.parse([name]).failure?.message ?? ""
+            #expect(!message.contains("unknown command"),
+                    "“\(name)” is documented but the parser does not know it")
+        }
     }
 
     @Test func everyCommandDocumentsJSON() {
@@ -273,7 +294,9 @@ struct HelpTextTests {
     @Test func anUnknownTopicFallsBackToTheFullHelp() {
         let payload = HelpText.payload(topic: "teleport")
         #expect(payload.topic == nil)
-        #expect(payload.commands.count == 4)
+        #expect(payload.commands.count == HelpText.payload().commands.count,
+                "an unknown topic falls back to the whole list, whatever its length")
+        #expect(payload.commands.count >= 4)
     }
 
     /// The human form is rendered from the payload, so the two cannot drift —
