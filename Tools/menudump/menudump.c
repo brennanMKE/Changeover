@@ -63,6 +63,8 @@
  *     0  structure.json written (with or without cells)
  *     2  bad arguments
  *     3  no readable VIDEO_TS at --disc
+ *     5  no readable VIDEO_TS *and* no libdvdread, so the raw device of a
+ *        disc held unmounted cannot be read either (#0206)
  *     4  could not write the output directory
  */
 
@@ -482,6 +484,47 @@ static int resolve_video_ts(const char *disc, char *out, size_t out_size) {
     return 0;
 }
 
+/* #0206 — read an IFO straight off the device with libdvdread.
+ *
+ * A disc the app is holding unmounted (#0152) has no filesystem path: the app
+ * passes /dev/rdiskN, resolve_video_ts() stat()s nothing that exists, and this
+ * helper exited 3 — "no readable VIDEO_TS" — on a disc that was perfectly fine.
+ * It failed on three of six discs in one session, and the cost was the whole
+ * menu read: no chapter names, no OCR, so an agent naming a bonus disc's
+ * featurettes had only runtimes to go on and was guessing.
+ *
+ * HandBrake reads the same disc because libdvdread opens a raw device directly.
+ * So does this helper, already, for the menu VOB cells further down — only the
+ * IFOs went through the filesystem. This is the same call with domain 0.
+ *
+ * DVDFileSize returns a count of 2048-byte blocks, not bytes. */
+#define DVD_READ_INFO_FILE 0
+#define DVD_BLOCK_SIZE 2048
+
+static int open_ifo_dvdread(const dvdread_t *lib, void *dvd, int title_set, blob_t *blob) {
+    if (!lib || !dvd || !lib->open_file || !lib->read_blocks || !lib->file_size) return 0;
+    void *file = lib->open_file(dvd, title_set, DVD_READ_INFO_FILE);
+    if (!file) return 0;
+
+    ssize_t blocks = lib->file_size(file);
+    if (blocks <= 0) { lib->close_file(file); return 0; }
+    /* An IFO is small — a few hundred KB at most. A wild size here means a
+     * misread rather than a real file, and allocating on it would be the bug. */
+    if (blocks > 4096) { lib->close_file(file); return 0; }
+
+    size_t size = (size_t)blocks * DVD_BLOCK_SIZE;
+    uint8_t *buf = malloc(size);
+    if (!buf) { lib->close_file(file); return 0; }
+
+    ssize_t got = lib->read_blocks(file, 0, (size_t)blocks, buf);
+    lib->close_file(file);
+    if (got != blocks) { free(buf); return 0; }
+
+    blob->data = buf;
+    blob->size = size;
+    return 1;
+}
+
 static int open_ifo(const char *video_ts, int title_set, blob_t *blob) {
     char path[2048];
     if (title_set == 0) {
@@ -494,6 +537,17 @@ static int open_ifo(const char *video_ts, int title_set, blob_t *blob) {
     if (read_file(path, blob)) return 1;
     snprintf(path, sizeof path, "%s/vts_%02d_0.ifo", video_ts, title_set);
     return read_file(path, blob);
+}
+
+/* #0206 — whichever way in this disc offered. `video_ts` is NULL for a disc
+ * being read off the raw device. Deliberately not a fallback *chain*: a disc
+ * with a mounted VIDEO_TS is read through the filesystem exactly as before, so
+ * the common path is untouched and this cannot change what a mounted disc
+ * produces. */
+static int open_ifo_any(const char *video_ts, const dvdread_t *lib, void *dvd,
+                        int title_set, blob_t *blob) {
+    if (video_ts) return open_ifo(video_ts, title_set, blob);
+    return open_ifo_dvdread(lib, dvd, title_set, blob);
 }
 
 static int open_menu_vob(const char *video_ts, int title_set, FILE **out) {
@@ -633,12 +687,33 @@ int main(int argc, char **argv) {
     }
     if (!options.disc || !options.out_dir) { usage(); return 2; }
 
+    /* #0206 — two ways in, and only both failing is a failure.
+     *
+     * A mounted disc has a VIDEO_TS directory to stat(). One the app is holding
+     * unmounted does not: it passes /dev/rdiskN, and this used to exit 3 saying
+     * "no readable VIDEO_TS" about a disc that reads perfectly. libdvdread
+     * opens the raw device, which is why HandBrake never had the problem. */
     char video_ts[2048];
-    if (!resolve_video_ts(options.disc, video_ts, sizeof video_ts)) {
-        fprintf(stderr, "menudump: no readable VIDEO_TS under %s\n", options.disc);
-        fprintf(stdout, "{\"format\":\"changeover-menu-structure/1\",\"error\":\"noVideoTS\",\"disc\":");
+    int have_video_ts = resolve_video_ts(options.disc, video_ts, sizeof video_ts);
+    void *ifo_dvd = NULL;
+    if (!have_video_ts && have_dvdread) ifo_dvd = lib.open(options.disc);
+
+    if (!have_video_ts && !ifo_dvd) {
+        /* Said apart, because the actions differ: a disc with neither is
+         * unreadable, but no VIDEO_TS *and* no libdvdread is a missing
+         * dependency on the host and nothing to do with this disc. */
+        const char *why = have_dvdread ? "noVideoTS" : "noVideoTSAndNoDvdread";
+        fprintf(stderr, "menudump: no readable VIDEO_TS under %s%s\n", options.disc,
+                have_dvdread ? "" : " (and libdvdread is not installed, so the raw device cannot be read)");
+        fprintf(stdout, "{\"format\":\"changeover-menu-structure/1\",\"error\":\"%s\",\"disc\":", why);
         out_file = stdout; jstring(options.disc); fputc('}', stdout); fputc('\n', stdout);
-        return 3;
+        /* A separate code rather than a word in stderr, so the app can say
+         * which of these it was without sniffing text: 3 is a disc problem,
+         * 5 is a missing dependency on this Mac and nothing to do with the
+         * disc. The app told the user "no readable VIDEO_TS on the disc" for
+         * both, which reads like a bad disc and sent a real diagnosis the
+         * wrong way. */
+        return have_dvdread ? 3 : 5;
     }
 
     mkdir(options.out_dir, 0755);
@@ -655,7 +730,7 @@ int main(int argc, char **argv) {
     }
 
     blob_t vmgi = { NULL, 0 };
-    if (!open_ifo(video_ts, 0, &vmgi)) {
+    if (!open_ifo_any(have_video_ts ? video_ts : NULL, &lib, ifo_dvd, 0, &vmgi)) {
         fprintf(stderr, "menudump: cannot read VIDEO_TS.IFO\n");
         fclose(out_file);
         return 3;
@@ -739,7 +814,7 @@ int main(int argc, char **argv) {
             ifo = vmgi;
             pgci_ut_sector = vmgm_pgci_ut_sector;
         } else {
-            if (!open_ifo(video_ts, ts, &ifo)) continue;
+            if (!open_ifo_any(have_video_ts ? video_ts : NULL, &lib, ifo_dvd, ts, &ifo)) continue;
             domain = "VTSM";
             if (ifo.size >= 0xD4 && memcmp(ifo.data, "DVDVIDEO-VTS", 12) == 0) {
                 pgci_ut_sector = be32(ifo.data + 0xD0);
@@ -752,12 +827,20 @@ int main(int argc, char **argv) {
         if (!ut) { if (ts != 0) free(ifo.data); continue; }
         int lu_count = be16(ut);
 
+        /* #0206 — `video_ts` holds nothing when the disc is being read off the
+         * raw device, so the filesystem VOB is not even attempted there. The
+         * cells path below is the one that works for both, and it is the one
+         * that was already opening the device directly. */
         FILE *vob = NULL;
-        int have_vob = open_menu_vob(video_ts, ts, &vob);
+        int have_vob = have_video_ts ? open_menu_vob(video_ts, ts, &vob) : 0;
 
         void *dvd = NULL, *dvd_file = NULL;
+        int own_dvd = 0;
         if (options.dump_cells && have_dvdread) {
-            dvd = lib.open(options.disc);
+            /* Reuse the handle the IFO read already opened rather than opening
+             * the device a second time per title set. */
+            dvd = ifo_dvd;
+            if (!dvd) { dvd = lib.open(options.disc); own_dvd = 1; }
             if (dvd) dvd_file = lib.open_file(dvd, ts, 2 /* DVD_READ_MENU_VOBS */);
         }
 
@@ -1016,12 +1099,16 @@ int main(int argc, char **argv) {
         }
 
         if (dvd_file) lib.close_file(dvd_file);
-        if (dvd) lib.close(dvd);
+        /* #0206 — only close what this loop opened. `ifo_dvd` is still being
+         * read from for the next title set's IFO, and closing it here would
+         * have been a use-after-close. */
+        if (dvd && own_dvd) lib.close(dvd);
         if (vob) fclose(vob);
         if (ts != 0) free(ifo.data);
     }
 
     jprintf("%s]\n}\n", menu_index ? "\n  " : "");
+    if (ifo_dvd) lib.close(ifo_dvd);
     fclose(out_file);
     free(vmgi.data);
 

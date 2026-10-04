@@ -160,6 +160,20 @@ nonisolated enum MenuHelper {
         case 2: return "the helper rejected its arguments"
         case 3: return "no readable VIDEO_TS on the disc"
         case 4: return "the helper could not write its output directory"
+        // #0206 — a missing dependency on this Mac, not a bad disc.
+        //
+        // Both used to be exit 3, so a disc the app was holding unmounted
+        // reported "no readable VIDEO_TS on the disc" — which reads as "this
+        // disc is damaged" and sent a real diagnosis the wrong way for three
+        // discs in one session. The helper reads a held disc off the raw
+        // device now, and that needs libdvdread; this is what it says when it
+        // is not there.
+        case 5:
+            return "libdvdread is not installed, so the menus of a disc held "
+                + "unmounted cannot be read (brew install libdvdread)"
+        // #0206 — SIGTERM. Something stopped the read rather than it failing.
+        case 15:
+            return "the menu read was stopped before it finished"
         default:
             let last = tail.last.map { ": \($0)" } ?? ""
             return "the helper exited \(status)\(last)"

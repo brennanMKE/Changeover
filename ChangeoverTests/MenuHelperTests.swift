@@ -89,6 +89,32 @@ struct MenuHelperTests {
         #expect(reason.contains("read error at sector 128"))
     }
 
+    // MARK: - #0206: a held disc is not a bad disc
+
+    /// Exit 5 is a missing dependency on this Mac, not a damaged disc.
+    ///
+    /// Both used to be exit 3, so a disc the app was holding unmounted (#0152)
+    /// reported "no readable VIDEO_TS on the disc". That reads as "this disc is
+    /// damaged", and it sent a real diagnosis the wrong way for three discs in
+    /// one session — the discs were fine, and HandBrake read every one of them.
+    @Test func aMissingLibdvdreadIsNotADiscProblem() {
+        let reason = MenuHelper.helperExitReason(5, tail: [])
+        #expect(reason.contains("libdvdread"))
+        #expect(reason.contains("brew install libdvdread"), "say what to do about it")
+        #expect(!reason.contains("VIDEO_TS"), "a dependency problem must not read as a disc problem")
+        #expect(reason != MenuHelper.helperExitReason(3, tail: []))
+    }
+
+    /// SIGTERM means something stopped the read, not that it failed. Seen once
+    /// when an import started while the menus were still being read: the user
+    /// was shown "the helper exited 15: libdvdread: Elapsed time 0", which says
+    /// nothing a person or an agent can act on.
+    @Test func aStoppedReadSaysItWasStopped() {
+        let reason = MenuHelper.helperExitReason(15, tail: ["libdvdread: Elapsed time 0"])
+        #expect(reason.contains("stopped"))
+        #expect(!reason.contains("Elapsed time"), "the helper's last gasp is not the explanation")
+    }
+
     // MARK: - The work directory
 
     /// Menu cells are up to 64 MB per disc and are wanted only until the text
