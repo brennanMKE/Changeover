@@ -388,20 +388,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 300),
+            contentRect: NSRect(x: 0, y: 0, width: SettingsLayout.width, height: 300),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.title = "Settings"
-        window.center()
-        window.contentView = NSHostingView(
-            // `.environment(settings)` as well as the explicit `settings:`
-            // argument: `DetailsDisclosure` reads the shared
-            // `showsDetails` flag out of the environment, the same way every
-            // step of the rip window does.
+
+        // #0191 — an `NSHostingController` rather than a bare `NSHostingView`,
+        // with `.preferredContentSize` in its `sizingOptions`, so the window
+        // follows the pane that is showing: AppKit resizes a window to its
+        // content view controller's preferred size whenever that changes, and
+        // SwiftUI recomputes it when the selected tab (or the Details register)
+        // changes the pane's height. That is what makes each pane "sized to its
+        // own content" instead of every pane inheriting the tallest one's
+        // height, and it is the opposite of #0140's mistake only because the
+        // cap it is allowed to grow to is a plain value per pane
+        // (`SettingsLayout.paneMaxHeight(for:)`) rather than a measurement of
+        // content, and because `Save` is outside the panes.
+        //
+        // `.environment(settings)` as well as the explicit `settings:`
+        // argument: `DetailsDisclosure` reads the shared `showsDetails` flag
+        // out of the environment, the same way every step of the rip window
+        // does.
+        let controller = NSHostingController(
             rootView: SettingsView(settings: settings).environment(settings)
         )
+        controller.sizingOptions = [.preferredContentSize]
+        window.contentViewController = controller
+        window.center()
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

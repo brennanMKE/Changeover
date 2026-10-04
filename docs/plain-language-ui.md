@@ -914,6 +914,25 @@ hand-built window (`docs/settings-screen.md` §2 and §4 already argue for
 apply-immediately and content-driven size). `showsDetails` persists on
 toggle regardless of Save, as `choosePlexRoot()` does.
 
+**Updated by #0191 (2026-10-03):** the single scroll above became three panes
+in a tab bar — General, Discs, Tools — and the ordering in this section is now
+General's ordering, not the window's. Nothing was deleted or reworded; the
+mapping lives in `SettingsLayout`, which is where to read it. Two of this
+section's decisions were kept deliberately and one was narrowed:
+
+- The three things a person has to set are still unhidden: the Plex folder and
+  the lookup key on General, the surround-sound toggle plain on Discs.
+- The readiness line stays on General, the pane that opens, with one added
+  pointer sentence ("That command is on the Tools tab.") because the
+  dependency table it refers to is now one pane away. `plainSummary`'s own
+  sentence is untouched.
+- `showsDetails` no longer hides whole groups except one. The **pane** decides
+  where something is — reaching Tools is already the ask, so the tool paths
+  and `brew` lines are not hidden there — while `showsDetails` still decides
+  how much is said: every `DetailOnlyText` caption, the derived-path preview,
+  and the Languages group, which stays behind the disclosure for the reason
+  above (a plain version needs a name→code mapping the app does not have).
+
 ### 3.17 `JobLogView.swift`, `JobHistoryView.swift`, `MenuReader.swift` log lines — unchanged
 
 The History window is the Record tier. `HistoryDetail` (facts "Title 1 ·
@@ -1025,6 +1044,7 @@ reliability log or the corpus fixtures.
 | `FailurePresenter` | `static func plainHeadline(for failure: JobFailure) -> String` (takes the whole failure so it can apply the same CSS/signal refinements `message(for:)` does) |
 | `CancelPolicy.Decision` | `var plainRefusalReason: String?` |
 | `DependencyPanel` | `plainSummary(_ rows:) -> String?` |
+| `SettingsLayout` | `readiness(summary:) -> Readiness?`, `static let readinessPointer` (#0191: carries `plainSummary`'s sentence verbatim and adds which pane the install command is on) |
 | `TMDBClient` / `MovieSearchViewModel` | `plainErrorMessage` beside `errorMessage` |
 
 Every new function is `nonisolated static` on a `nonisolated enum` or a

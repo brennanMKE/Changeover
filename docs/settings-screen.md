@@ -345,6 +345,24 @@ Keep it short. A settings pane is not documentation.
 One pane is correct until it isn't. The current three sections fit
 comfortably in one.
 
+**It outgrew that in #0191 (2026-10-03.)** Settings is now three panes —
+General, Discs, Tools — in a `TabView` with a `.tabItem` `Label` each, selected
+tab remembered in `UserDefaults` through `@AppStorage`. The split itself is a
+plain value in `SettingsLayout`, tested by `SettingsLayoutTests`, because this
+project cannot test a window. Two things the advice below did not cover, and
+this app decided:
+
+- **Save stayed.** Apply-immediately is still the right end state and still
+  wants the `didSet`-per-property change described above; what a tab bar
+  forced was only that Save must not belong to a pane. It is a footer *outside*
+  the `TabView`, so it is under every pane and cannot be scrolled away
+  (#0140's rule).
+- **Each pane is capped by a plain value**, `SettingsLayout.paneMaxHeight(for:)`,
+  and the window follows the showing pane because `AppDelegate` hosts the view
+  in an `NSHostingController` with `.preferredContentSize` in its
+  `sizingOptions`. That is "let the content drive the size" without measuring
+  content, which is what #0140 punished.
+
 When it outgrows that, the conventional structure is a `TabView` with
 `.tabViewStyle(.grouped)`, each tab carrying a `Label` with an SF Symbol:
 
