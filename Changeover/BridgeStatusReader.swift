@@ -38,6 +38,7 @@ nonisolated enum BridgeStatusReader {
         launchDate: Date,
         clients: Int,
         sessions: Int,
+        agents: Int,
         brokerRegistered: Bool
     ) -> BridgeStatus {
         let step = flow.step(jobs: jobs)
@@ -75,7 +76,17 @@ nonisolated enum BridgeStatusReader {
                 flow.startDecision(jobs: jobs),
                 autoStartSecondsRemaining: flow.autoStartRemaining
             ),
-            automation: automationStatus(attachedSessions: sessions),
+            // #0203 — `agents`, not `sessions`.
+            //
+            // These were one parameter, and that was the whole bug. The
+            // registry's agent count was right and the window's banner read it
+            // correctly, but `status` derived `automation.heldBySessions` from
+            // the same integer that feeds `app.sessions` — so one agent running
+            // a watcher and a `wait` reported "2 … watch sessions are attached"
+            // to the one consumer most likely to act on it. Two numbers that
+            // mean different things need two parameters; sharing one is how a
+            // half-fix looks from the outside.
+            automation: automationStatus(attachedSessions: agents),
             library: libraryStatus(settings: settings)
         )
     }

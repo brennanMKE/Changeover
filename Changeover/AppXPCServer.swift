@@ -373,10 +373,13 @@ final class AppXPCServer {
             settings: settings,
             launchDate: launchDate,
             clients: clients.count,
-            // #0203 — the literal number of open sessions, not the agent
-            // count: `automation.heldBySessions` is the one the user sees, and
-            // an agent debugging its own connections wants the truth here.
+            // #0203 — both numbers, because they mean different things.
+            // `sessions` is the literal count of open sessions, for an agent
+            // debugging its own connections; `agents` is how many programs are
+            // driving the app, which is what the user is shown and what
+            // suspends automation.
             sessions: sessions.count,
+            agents: sessionCount,
             brokerRegistered: isRegisteredWithBroker
         )
     }
