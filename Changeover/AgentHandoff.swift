@@ -35,30 +35,39 @@ nonisolated enum AgentHandoff {
     /// endorses for a standalone value.
     static let defaultsKey = "agentInterruptedAt"
 
-    /// Records that the app is quitting while `attachedSessions` agents were
-    /// attached. A no-op at zero, which is the ordinary quit.
-    static func noteQuit(attachedSessions: Int, at date: Date = Date(),
-                         defaults: UserDefaults = .standard) {
-        guard attachedSessions > 0 else {
-            // An ordinary quit clears any stale marker, so a restart after a
-            // normal session cannot inherit a suspension from an earlier one.
-            defaults.removeObject(forKey: defaultsKey)
-            return
-        }
-        defaults.set(date, forKey: defaultsKey)
-    }
-
-    /// When the app last quit with an agent attached, or `nil`.
-    static func interruptedAt(defaults: UserDefaults = .standard) -> Date? {
-        defaults.object(forKey: defaultsKey) as? Date
-    }
-
-    /// Forgets the marker.
+    /// Records that an agent is attached **now**.
     ///
-    /// Called when an agent reattaches — the handoff has happened, so the grace
-    /// period has done its job and must not outlive it — and when the grace
-    /// expires, so the key does not sit in defaults forever.
-    static func clear(defaults: UserDefaults = .standard) {
+    /// Called when a session opens, not when the app quits. #0210 first wrote
+    /// this at `applicationWillTerminate`, which covers a graceful quit and
+    /// nothing else: a `kill`, a crash, or the install script's own `pkill`
+    /// fallback all skip it, and those are exactly the endings an agent is most
+    /// likely to be attached for. A flag that is *set while true* survives any
+    /// of them, because its absence is what has to be earned.
+    static func noteAttached(defaults: UserDefaults = .standard) {
+        defaults.set(true, forKey: defaultsKey)
+    }
+
+    /// Records that the last session detached cleanly, so the next launch has
+    /// nothing to recover. This is the only thing that clears the flag during a
+    /// run, and it is why a clean goodbye costs the user no grace period.
+    static func noteAllDetached(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: defaultsKey)
+    }
+
+    /// Whether the previous run ended with an agent still attached — read once
+    /// at launch, and cleared in the same breath.
+    ///
+    /// Cleared on read so the flag cannot outlive the launch it describes. Each
+    /// launch gets its own grace period or none; a stale flag must never make
+    /// an app that is working normally look wedged.
+    ///
+    /// The grace is measured from **launch**, not from when the flag was
+    /// written. An app that ran for two hours with an agent attached and was
+    /// then killed would otherwise come back with a two-hour-old timestamp and
+    /// no grace at all, which is the case that most needs one.
+    static func takeInterruption(defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.object(forKey: defaultsKey) != nil else { return false }
+        defaults.removeObject(forKey: defaultsKey)
+        return true
     }
 }

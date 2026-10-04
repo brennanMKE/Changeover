@@ -309,11 +309,11 @@ final class AppXPCServer {
                 + " — automation is \(snapshot.automation.suspended ? "suspended" : "running")",
             from: snapshot
         )
-        // #0210 — an agent is back, so the post-quit grace period has done its
-        // job. Cleared on attach rather than left to expire: the whole point of
-        // the grace is to hold the disc until somebody takes it, and once
-        // somebody has, the live session count is the authority again.
-        AgentHandoff.clear()
+        // #0210 — an agent is attached, so a launch after this one must know
+        // that, however this process ends. Set here rather than at termination:
+        // a crash or a kill never reaches `applicationWillTerminate`, and those
+        // are the endings an agent is most likely to be attached for.
+        AgentHandoff.noteAttached()
         startFeedIfNeeded(from: snapshot)
         return id
     }
@@ -350,6 +350,9 @@ final class AppXPCServer {
         guard sessions.isEmpty, feed != nil else { return }
         feed?.stop()
         feed = nil
+        // #0210 — a clean goodbye, so the next launch has nothing to recover
+        // and the user is charged no grace period for it.
+        AgentHandoff.noteAllDetached()
         BridgeLog.note("event feed stopped — no sessions attached, automation resumes")
         // Nudge the flow so a countdown that was suppressed can begin now that
         // nothing is watching. The app would otherwise wait for its next

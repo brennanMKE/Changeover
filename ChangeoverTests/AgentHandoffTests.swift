@@ -80,36 +80,62 @@ struct AgentHandoffTests {
         return try #require(UserDefaults(suiteName: suite))
     }
 
-    /// Written only when the app quits *with* an agent attached.
-    @Test func quittingWithAnAgentAttachedIsRecorded() throws {
+    /// Set while a session is attached — not at termination.
+    ///
+    /// #0210 first wrote this from `applicationWillTerminate`, which covers a
+    /// graceful quit and nothing else. A crash, a `kill`, and the install
+    /// script's own `pkill` fallback all skip that callback, and those are
+    /// exactly the endings an agent is most likely to be attached for. A flag
+    /// that is set *while true* survives all of them, because its absence is
+    /// what has to be earned.
+    @Test func attachingRecordsIt() throws {
         let store = try defaults()
-        AgentHandoff.noteQuit(attachedSessions: 1, at: Self.quitAt, defaults: store)
-        #expect(AgentHandoff.interruptedAt(defaults: store) == Self.quitAt)
+        AgentHandoff.noteAttached(defaults: store)
+        #expect(AgentHandoff.takeInterruption(defaults: store))
     }
 
-    /// An ordinary quit records nothing — and clears any earlier marker, so a
-    /// restart after a normal session cannot inherit a suspension from one
-    /// before it.
-    @Test func anOrdinaryQuitClearsTheMarker() throws {
+    /// A clean goodbye leaves nothing to recover, so the user is charged no
+    /// grace period for it.
+    @Test func acleanDetachClearsIt() throws {
         let store = try defaults()
-        AgentHandoff.noteQuit(attachedSessions: 2, at: Self.quitAt, defaults: store)
-        AgentHandoff.noteQuit(attachedSessions: 0, at: Self.quitAt, defaults: store)
-        #expect(AgentHandoff.interruptedAt(defaults: store) == nil)
+        AgentHandoff.noteAttached(defaults: store)
+        AgentHandoff.noteAllDetached(defaults: store)
+        #expect(!AgentHandoff.takeInterruption(defaults: store))
     }
 
-    /// Clearing is what an agent reattaching does: the handoff has happened, so
-    /// the grace must not outlive it.
-    @Test func clearingForgetsIt() throws {
+    /// Read once and cleared in the same breath, so a flag cannot outlive the
+    /// launch it describes. Each launch earns its own grace period or none.
+    @Test func theFlagIsClearedAsItIsRead() throws {
         let store = try defaults()
-        AgentHandoff.noteQuit(attachedSessions: 1, at: Self.quitAt, defaults: store)
-        AgentHandoff.clear(defaults: store)
-        #expect(AgentHandoff.interruptedAt(defaults: store) == nil)
+        AgentHandoff.noteAttached(defaults: store)
+        #expect(AgentHandoff.takeInterruption(defaults: store))
+        #expect(!AgentHandoff.takeInterruption(defaults: store), "it must not persist")
+    }
+
+    /// A fresh profile has nothing to recover, so a first launch is never
+    /// suspended.
+    @Test func afreshProfileRecoversNothing() throws {
+        #expect(!AgentHandoff.takeInterruption(defaults: try defaults()))
+    }
+
+    /// The whole sequence the install does: an agent attaches, the app is
+    /// killed without ever reaching its terminate callback, and the next launch
+    /// holds automation back from the moment it starts.
+    @Test func akilledAppStillHandsOverOnTheNextLaunch() throws {
+        let store = try defaults()
+        AgentHandoff.noteAttached(defaults: store)
+        // No clean detach, no terminate callback — the process simply ends.
+
+        let launchedAt = Date()
+        let recovered = AgentHandoff.takeInterruption(defaults: store)
+        #expect(recovered)
+        let interruptedAt = recovered ? launchedAt : nil
+        #expect(AutomationSuspension.isSuspended(
+            attachedSessions: 0, interruptedAt: interruptedAt,
+            now: launchedAt.addingTimeInterval(39)),
+            "39 seconds after launch is inside the window that nearly started a rip")
         #expect(!AutomationSuspension.isSuspended(
-            attachedSessions: 0, interruptedAt: AgentHandoff.interruptedAt(defaults: store)))
-    }
-
-    /// A fresh profile has no marker, so a first launch is never suspended.
-    @Test func afreshProfileHasNoMarker() throws {
-        #expect(AgentHandoff.interruptedAt(defaults: try defaults()) == nil)
+            attachedSessions: 0, interruptedAt: interruptedAt,
+            now: launchedAt.addingTimeInterval(AutomationSuspension.handoffGrace + 1)))
     }
 }

@@ -67,6 +67,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// Internal rather than private so a test can assert the window is *reused*
     /// across a close/reopen instead of being rebuilt (#0011).
     private(set) var settingsWindow: NSWindow?
+
+    /// #0210 — set at launch when the previous run ended with an agent still
+    /// attached, and `nil` otherwise. Dated at launch rather than at the
+    /// interruption: the grace period is about giving the agent time to come
+    /// back from *here*, and a timestamp from when it attached could already be
+    /// hours old.
+    private var agentInterruptedAt: Date?
     /// Internal rather than private so a test can assert the window is *reused*
     /// across a close/reopen instead of being rebuilt (#0048, following #0011).
     private(set) var historyWindow: NSWindow?
@@ -79,10 +86,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// quitting app is the failure this feature must never cause.
     func applicationWillTerminate(_ notification: Notification) {
         jobs.releaseDiscHold()
-        // #0210 — record that an agent was in the middle of something, so the
-        // next launch does not come back with automation live on a disc whose
-        // decider was killed rather than having finished.
-        AgentHandoff.noteQuit(attachedSessions: bridge?.sessionCount ?? 0)
         // #0189 — tell attached `changeoverctl watch` sessions before their
         // connections drop, so a clean quit reads as a clean quit rather than as
         // the app having gone away unexpectedly.
@@ -92,6 +95,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
         LaunchAttribution.note()
+        // #0210 — read before anything can attach, and cleared as it is read.
+        if AgentHandoff.takeInterruption() {
+            agentInterruptedAt = Date()
+            FlowDiagnostics.note(
+                "automation suspended: the last run ended with an agent attached")
+        }
         setupMenuBarIcon()
         setupPopover()
         startDVDMonitor()
@@ -462,7 +471,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         flow.attachedAgentSessions = { [weak server] in server?.sessionCount ?? 0 }
         // #0210 — the handoff marker, read live rather than captured, so it
         // stops applying the moment it is cleared.
-        flow.agentInterruptedAt = { AgentHandoff.interruptedAt() }
+        flow.agentInterruptedAt = { [weak self] in self?.agentInterruptedAt }
         // #0199 — the pipeline's post-job eject reads the same count. A disc an
         // agent is still working through must not be taken out from under it.
         jobs.attachedAgentSessions = { [weak server] in server?.sessionCount ?? 0 }
