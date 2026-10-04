@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXContainerItemProxy section */
+		0189AA000000000000000016 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 265E2B8C2F51801C00FF97DF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0189AA000000000000000010;
+			remoteInfo = ChangeoverBroker;
+		};
 		265E2BA22F51801E00FF97DF /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 265E2B8C2F51801C00FF97DF /* Project object */;
@@ -24,10 +31,42 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXBuildFile section */
+		0189AA000000000000000005 /* ChangeoverBridge in Frameworks */ = {isa = PBXBuildFile; productRef = 0189AA000000000000000002 /* ChangeoverBridge */; };
+		0189AA000000000000000006 /* ChangeoverBridge in Frameworks */ = {isa = PBXBuildFile; productRef = 0189AA000000000000000003 /* ChangeoverBridge */; };
+		0189AA000000000000000007 /* ChangeoverBridge in Frameworks */ = {isa = PBXBuildFile; productRef = 0189AA000000000000000004 /* ChangeoverBridge */; };
+		0189AA00000000000000000B /* ChangeoverBroker in Embed Broker Agent Executable */ = {isa = PBXBuildFile; fileRef = 0189AA000000000000000008 /* ChangeoverBroker */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		0189AA00000000000000000C /* co.sstools.Changeover.broker.plist in Embed Broker Agent Plist */ = {isa = PBXBuildFile; fileRef = 0189AA00000000000000000A /* co.sstools.Changeover.broker.plist */; };
 		C0A0000000000000000000C1 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C0A0000000000000000000C2 /* Sparkle */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		0189AA00000000000000000D /* Embed Broker Agent Executable */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 6;
+			files = (
+				0189AA00000000000000000B /* ChangeoverBroker in Embed Broker Agent Executable */,
+			);
+			name = "Embed Broker Agent Executable";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		0189AA00000000000000000E /* Embed Broker Agent Plist */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Library/LaunchAgents;
+			dstSubfolderSpec = 1;
+			files = (
+				0189AA00000000000000000C /* co.sstools.Changeover.broker.plist in Embed Broker Agent Plist */,
+			);
+			name = "Embed Broker Agent Plist";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		0189AA000000000000000008 /* ChangeoverBroker */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ChangeoverBroker; sourceTree = BUILT_PRODUCTS_DIR; };
+		0189AA00000000000000000A /* co.sstools.Changeover.broker.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = co.sstools.Changeover.broker.plist; path = Support/co.sstools.Changeover.broker.plist; sourceTree = "<group>"; };
 		265E2B942F51801C00FF97DF /* Changeover.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Changeover.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		265E2BA12F51801E00FF97DF /* ChangeoverTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChangeoverTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		265E2BAB2F51801E00FF97DF /* ChangeoverUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChangeoverUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -36,6 +75,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		0189AA000000000000000009 /* BrokerAgent */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = BrokerAgent;
+			sourceTree = "<group>";
+		};
 		265E2B962F51801C00FF97DF /* Changeover */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Changeover;
@@ -216,11 +260,20 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		0189AA000000000000000015 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0189AA000000000000000006 /* ChangeoverBridge in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		265E2B912F51801C00FF97DF /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				C0A0000000000000000000C1 /* Sparkle in Frameworks */,
+				0189AA000000000000000005 /* ChangeoverBridge in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -228,6 +281,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0189AA000000000000000007 /* ChangeoverBridge in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -241,12 +295,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0189AA000000000000000018 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				0189AA00000000000000000A /* co.sstools.Changeover.broker.plist */,
+			);
+			name = Support;
+			sourceTree = "<group>";
+		};
 		265E2B8B2F51801C00FF97DF = {
 			isa = PBXGroup;
 			children = (
 				265E2B962F51801C00FF97DF /* Changeover */,
 				265E2BA42F51801E00FF97DF /* ChangeoverTests */,
 				265E2BAE2F51801E00FF97DF /* ChangeoverUITests */,
+				0189AA000000000000000009 /* BrokerAgent */,
+				0189AA000000000000000018 /* Support */,
 				265E2B952F51801C00FF97DF /* Products */,
 				265E2BBE2F51802000FF97E0 /* App.xcconfig */,
 				265E2BBE2F51802000FF97DF /* Secrets.xcconfig */,
@@ -259,6 +323,7 @@
 				265E2B942F51801C00FF97DF /* Changeover.app */,
 				265E2BA12F51801E00FF97DF /* ChangeoverTests.xctest */,
 				265E2BAB2F51801E00FF97DF /* ChangeoverUITests.xctest */,
+				0189AA000000000000000008 /* ChangeoverBroker */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -266,6 +331,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0189AA000000000000000010 /* ChangeoverBroker */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0189AA000000000000000011 /* Build configuration list for PBXNativeTarget "ChangeoverBroker" */;
+			buildPhases = (
+				0189AA000000000000000014 /* Sources */,
+				0189AA000000000000000015 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				0189AA000000000000000009 /* BrokerAgent */,
+			);
+			name = ChangeoverBroker;
+			packageProductDependencies = (
+				0189AA000000000000000003 /* ChangeoverBridge */,
+			);
+			productName = ChangeoverBroker;
+			productReference = 0189AA000000000000000008 /* ChangeoverBroker */;
+			productType = "com.apple.product-type.tool";
+		};
 		265E2B932F51801C00FF97DF /* Changeover */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 265E2BB52F51801E00FF97DF /* Build configuration list for PBXNativeTarget "Changeover" */;
@@ -274,10 +361,14 @@
 				265E2B912F51801C00FF97DF /* Frameworks */,
 				265E2B922F51801C00FF97DF /* Resources */,
 				265E2BD02F51801C00FF97DF /* Embed menudump helper */,
+				0189AA00000000000000000D /* Embed Broker Agent Executable */,
+				0189AA00000000000000000E /* Embed Broker Agent Plist */,
+				0189AA00000000000000000F /* Embed changeoverctl CLI */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				0189AA000000000000000017 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				265E2B962F51801C00FF97DF /* Changeover */,
@@ -285,6 +376,7 @@
 			name = Changeover;
 			packageProductDependencies = (
 				C0A0000000000000000000C2 /* Sparkle */,
+				0189AA000000000000000002 /* ChangeoverBridge */,
 			);
 			productName = Changeover;
 			productReference = 265E2B942F51801C00FF97DF /* Changeover.app */;
@@ -308,6 +400,7 @@
 			);
 			name = ChangeoverTests;
 			packageProductDependencies = (
+				0189AA000000000000000004 /* ChangeoverBridge */,
 			);
 			productName = ChangeoverTests;
 			productReference = 265E2BA12F51801E00FF97DF /* ChangeoverTests.xctest */;
@@ -372,11 +465,13 @@
 			productRefGroup = 265E2B952F51801C00FF97DF /* Products */;
 			packageReferences = (
 				C0A0000000000000000000C3 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				0189AA000000000000000001 /* XCLocalSwiftPackageReference "ChangeoverBridge" */,
 			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				265E2B932F51801C00FF97DF /* Changeover */,
+				0189AA000000000000000010 /* ChangeoverBroker */,
 				265E2BA02F51801E00FF97DF /* ChangeoverTests */,
 				265E2BAA2F51801E00FF97DF /* ChangeoverUITests */,
 			);
@@ -408,6 +503,26 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		0189AA00000000000000000F /* Embed changeoverctl CLI */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed changeoverctl CLI";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/bin/changeoverctl",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# #0189 — build changeoverctl from the ChangeoverBridge package and embed it at\n# Contents/Resources/bin/changeoverctl.\n#\n# The package's *executable* product is deliberately NOT an Xcode package product\n# dependency on this target. Wiring a package executable onto an app target pulls\n# it into the scheme's build graph, after which the xcodebuild test runner can no\n# longer resolve a library's Bundle.module resource bundle and every test in that\n# bundle crashes on launch. Building here with `swift build` keeps Xcode's package\n# graph limited to the ChangeoverBridge library.\nset -euo pipefail\n\n# SwiftUI preview builds re-run script phases; nothing here is needed for one.\nif [ \"${ENABLE_PREVIEWS:-NO}\" = \"YES\" ] && [ -n \"${PREVIEW_FRAMEWORK_PATHS:-}\" ]; then\n    echo \"note: skipping changeoverctl embed for a preview build\"\n    exit 0\nfi\n\nPACKAGE_DIR=\"$SRCROOT/ChangeoverBridge\"\n\ncase \"$CONFIGURATION\" in\n    Release) SWIFT_CONFIG=release ;;\n    *)       SWIFT_CONFIG=debug ;;\nesac\n\n# One --arch per Xcode arch, so a universal app gets a universal CLI.\nARCH_FLAGS=\"\"\nfor arch in $ARCHS; do\n    ARCH_FLAGS=\"$ARCH_FLAGS --arch $arch\"\ndone\n\n# Scratch path under DERIVED_FILE_DIR rather than ChangeoverBridge/.build, so an\n# Xcode build does not fight a `swift build` running in a terminal — they would\n# otherwise invalidate each other's work at random.\nSCRATCH=\"$DERIVED_FILE_DIR/changeoverbridge\"\n\nBUILD_ARGS=\"--package-path $PACKAGE_DIR --scratch-path $SCRATCH --configuration $SWIFT_CONFIG $ARCH_FLAGS --product changeoverctl\"\n\nxcrun swift build $BUILD_ARGS\n# Asked for rather than constructed: SwiftPM's output directory depends on the\n# configuration and the arch flags, and asking is what keeps Debug, Release and\n# universal builds all working.\nBIN_DIR=\"$(xcrun swift build $BUILD_ARGS --show-bin-path)\"\n\nDEST_DIR=\"$BUILT_PRODUCTS_DIR/$CONTENTS_FOLDER_PATH/Resources/bin\"\nmkdir -p \"$DEST_DIR\"\ncp -f \"$BIN_DIR/changeoverctl\" \"$DEST_DIR/changeoverctl\"\n\n# Xcode does not sign a Mach-O that a script phase drops into the bundle, and an\n# unsigned nested binary breaks the bundle seal. Note that `codesign --deep\n# --strict` on the app will never mention this file: a binary under\n# Contents/Resources is sealed as a *resource*, not as nested code, so it can be\n# entirely unsigned and the bundle still verifies. Check it separately, and then\n# actually run it — signature validity is not the same as runnability.\nif [ \"${CODE_SIGNING_REQUIRED:-YES}\" != \"NO\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    codesign --force --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" \\\n        --options runtime --timestamp=none \"$DEST_DIR/changeoverctl\"\n    echo \"note: signed the embedded changeoverctl\"\nelse\n    echo \"note: code signing disabled; the embedded changeoverctl is left unsigned\"\nfi\n";
+		};
 		265E2BD02F51801C00FF97DF /* Embed menudump helper */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 0;
@@ -429,6 +544,13 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0189AA000000000000000014 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		265E2B902F51801C00FF97DF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -453,6 +575,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		0189AA000000000000000017 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0189AA000000000000000010 /* ChangeoverBroker */;
+			targetProxy = 0189AA000000000000000016 /* PBXContainerItemProxy */;
+		};
 		265E2BA32F51801E00FF97DF /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 265E2B932F51801C00FF97DF /* Changeover */;
@@ -466,6 +593,36 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		0189AA000000000000000012 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = co.sstools.Changeover.broker;
+				PRODUCT_NAME = ChangeoverBroker;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		0189AA000000000000000013 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = co.sstools.Changeover.broker;
+				PRODUCT_NAME = ChangeoverBroker;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		265E2BB32F51801E00FF97DF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 265E2BBE2F51802000FF97E0 /* App.xcconfig */;
@@ -711,6 +868,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0189AA000000000000000011 /* Build configuration list for PBXNativeTarget "ChangeoverBroker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0189AA000000000000000012 /* Debug */,
+				0189AA000000000000000013 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		265E2B8F2F51801C00FF97DF /* Build configuration list for PBXProject "Changeover" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -760,7 +926,26 @@
 		};
 /* End XCRemoteSwiftPackageReference section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		0189AA000000000000000001 /* XCLocalSwiftPackageReference "ChangeoverBridge" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ChangeoverBridge;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		0189AA000000000000000002 /* ChangeoverBridge */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ChangeoverBridge;
+		};
+		0189AA000000000000000003 /* ChangeoverBridge */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ChangeoverBridge;
+		};
+		0189AA000000000000000004 /* ChangeoverBridge */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ChangeoverBridge;
+		};
 		C0A0000000000000000000C2 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C0A0000000000000000000C3 /* XCRemoteSwiftPackageReference "Sparkle" */;

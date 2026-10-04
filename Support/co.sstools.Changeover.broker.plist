@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  #0189 — the broker launch agent, registered by the app through
+	  SMAppService.agent(plistName:) and copied into the bundle at
+	  Contents/Library/LaunchAgents/.
+
+	  FOUR STRINGS MUST BE IDENTICAL, and this is the single most expensive
+	  thing to get wrong here because launchd fails quietly — no error at
+	  install, no warning at registration, nothing in the log. It surfaces much
+	  later as an unexplained "connection invalid" in changeoverctl, by which
+	  point you are debugging the wrong layer:
+
+	    1. this file's NAME        co.sstools.Changeover.broker.plist
+	    2. the Label below         co.sstools.Changeover.broker
+	    3. the MachServices key    co.sstools.Changeover.broker
+	    4. ServiceNames.broker     co.sstools.Changeover.broker
+
+	  ServiceNames.agentLabel and .agentPlistName are derived from
+	  ServiceNames.broker in Swift, so 2 to 4 can only drift by editing this
+	  file. Do not edit it without changing ServiceNames.broker to match.
+	-->
+	<key>Label</key>
+	<string>co.sstools.Changeover.broker</string>
+
+	<!--
+	  Relative to the app bundle root, NOT an absolute path. `Program` with an
+	  absolute path breaks the moment the app moves, and during development the
+	  app lives in DerivedData.
+
+	  Must match ServiceNames.agentBundleProgram.
+	-->
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/ChangeoverBroker</string>
+
+	<!--
+	  The key that makes any of this possible: it tells launchd to reserve the
+	  mach service name and hand this process the receive right. An app cannot
+	  do this for itself, which is the entire reason a separate agent exists.
+	-->
+	<key>MachServices</key>
+	<dict>
+		<key>co.sstools.Changeover.broker</key>
+		<true/>
+	</dict>
+
+	<!--
+	  On-demand only, and deliberately so. launchd starts the agent when
+	  something connects to the mach service above, which is exactly what lets
+	  `changeoverctl ping` succeed with Changeover never having been launched
+	  this boot. RunAtLoad would start it eagerly and mask that.
+	-->
+	<key>RunAtLoad</key>
+	<false/>
+
+	<key>ProcessType</key>
+	<string>Interactive</string>
+</dict>
+</plist>

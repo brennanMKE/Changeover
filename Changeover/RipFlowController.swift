@@ -2149,6 +2149,15 @@ final class RipFlowController {
         // answer. Two films 9 to 15 minutes apart are exactly the case where
         // a runtime match feels convincing and names the wrong one.
         guard !featureSelection.isMultiFeature else { return }
+        // #0189 — an attached agent chooses the film. Auto-select is a
+        // *pre*-selection, so leaving it on would look harmless; it is not. The
+        // agent reads the scan, thinks, and answers — and by then the app has
+        // put a different film in the box, which is both the wrong answer and
+        // one nobody can see was overwritten.
+        guard !isAutomationSuspended else {
+            FlowDiagnostics.note("autoselect skipped: a changeoverctl watch session is attached")
+            return
+        }
         guard settings.autoSelectSearchResult,
               jobs.insertedDisc != nil,
               search.selectedMovie == nil,
@@ -2400,6 +2409,33 @@ final class RipFlowController {
     }
 
     // MARK: - Ripping without being asked
+
+    /// #0189 — how many `changeoverctl watch` sessions are attached.
+    ///
+    /// A closure rather than a stored count, and defaulted to zero, so this
+    /// type knows nothing about XPC and every existing construction site —
+    /// including every test — keeps today's behaviour exactly. `AppDelegate`
+    /// points it at the XPC server's session registry; nothing else does.
+    ///
+    /// This is the only thing an attached agent changes about the flow, and the
+    /// direction is deliberate: the flow *asks*, and never waits on an answer.
+    /// A reply of zero is both the default and the honest answer when no server
+    /// is running, so a build with the bridge disabled, a unit test, and a user
+    /// with no agent all behave identically.
+    var attachedAgentSessions: () -> Int = { 0 }
+
+    /// Whether the app should be deciding things for itself right now.
+    ///
+    /// Read through ``AutomationSuspension`` rather than comparing the count
+    /// here, so the rule — and the drop-to-zero transition that lifts it — has
+    /// one statement and one set of tests.
+    var isAutomationSuspended: Bool {
+        AutomationSuspension.isSuspended(attachedSessions: attachedAgentSessions())
+    }
+
+    /// The last suspension state written to the diagnostic log, so an attached
+    /// agent produces one line rather than one per reconcile.
+    private var lastSuspensionNoted: Bool?
 
     /// Seconds left before this disc starts on its own, or `nil` when no
     /// countdown is running.
@@ -2856,6 +2892,36 @@ final class RipFlowController {
         evaluatePostJobEject(jobs: jobs, settings: settings)
         evaluateNothingToImport(jobs: jobs, settings: settings)
         evaluateAutoEject(jobs: jobs, settings: settings)
+
+        // #0189 — an attached agent is the decider, so the app must not also be
+        // one. Placed after the evaluate* calls above and before the countdown,
+        // because the suspension is narrow on purpose: it covers the two things
+        // that would race an agent's judgement — choosing a film and starting a
+        // job — and nothing else. Ejecting a disc whose films are all already in
+        // Plex is housekeeping with no decision in it, and leaving a disc
+        // trapped in the drive because something was watching would be a worse
+        // bug than the one this prevents.
+        //
+        // Any countdown already running is cancelled, which is what makes this
+        // safe to reach mid-count: a watcher attaching one second before the
+        // rip would otherwise start a job the agent never asked for.
+        if isAutomationSuspended {
+            if autoStartRemaining != nil { cancelAutoStart() }
+            if lastSuspensionNoted != true {
+                lastSuspensionNoted = true
+                FlowDiagnostics.note(
+                    "automation suspended: "
+                        + (AutomationSuspension.reason(attachedSessions: attachedAgentSessions())
+                            ?? "a watch session is attached")
+                )
+            }
+            return
+        }
+        if lastSuspensionNoted == true {
+            lastSuspensionNoted = false
+            FlowDiagnostics.note("automation resumed: no watch session is attached")
+        }
+
         let decision = AutoStartPolicy.decide(
             enabled: settings.autoStartRipping,
             start: startDecision(jobs: jobs),
@@ -2915,7 +2981,16 @@ final class RipFlowController {
                     recommendedMovieID: self.recommendedMovieID,
                     alreadyRipped: self.autoStartedDiscs.contains(Self.discIdentity(disc))
                 )
-                guard still.startsCountdown, jobs.insertedDisc == disc else {
+                // #0189 — re-checked inside the loop as well as in
+                // `evaluateAutoStart`, because a watcher can attach at any point
+                // during the countdown and nothing guarantees a reconcile
+                // happens before the next tick. Getting this wrong would start a
+                // job a second after an agent took control, which is exactly the
+                // race the suspension exists to prevent.
+                guard still.startsCountdown,
+                      jobs.insertedDisc == disc,
+                      !self.isAutomationSuspended
+                else {
                     self.cancelAutoStart()
                     return
                 }

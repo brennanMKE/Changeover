@@ -17,6 +17,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// away mid-job, and Phase 4 drives this with no window at all.
     let flow = RipFlowController()
 
+    /// #0189 — the `changeoverctl` bridge: an anonymous XPC listener whose
+    /// endpoint is handed to the embedded broker launch agent, so a command line
+    /// tool can read the app's state and watch it change.
+    ///
+    /// Owned here for the same reason `jobs` and `flow` are: an attached session
+    /// must outlive every window, and the thing it is reporting on is these two
+    /// controllers. Created lazily in `applicationDidFinishLaunching` rather than
+    /// as a stored initialiser, because it reads `jobs` and `flow` and nothing
+    /// should touch launchd during `init()`.
+    ///
+    /// `nil` on a build that is not installed in `/Applications`, including every
+    /// app-hosted test run — see `BridgeAgentRegistrar` for the #0019 incident
+    /// that makes that the right default.
+    private(set) var bridge: AppXPCServer?
+
     /// #0048 review — asks the user to confirm a cancel. Production runs an
     /// app-modal `NSAlert` (`runCancelAlert`); tests inject a closure so the
     /// decision in `requestCancel(jobID:)` is unit-testable with no alert.
@@ -64,6 +79,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// quitting app is the failure this feature must never cause.
     func applicationWillTerminate(_ notification: Notification) {
         jobs.releaseDiscHold()
+        // #0189 — tell attached `changeoverctl watch` sessions before their
+        // connections drop, so a clean quit reads as a clean quit rather than as
+        // the app having gone away unexpectedly.
+        bridge?.stop()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -73,6 +92,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         setupPopover()
         startDVDMonitor()
         registerLoginItem()
+        startCLIBridge()
         // Lets a session with no access to the window server ask this app to
         // photograph its own windows. See WindowCapture.
         WindowCapture.startWatching()
@@ -386,6 +406,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow = window
+    }
+
+    // MARK: - changeoverctl bridge (#0189)
+
+    /// Brings up the XPC bridge and wires the one thing it feeds back.
+    ///
+    /// The direction of that wire matters. `RipFlowController` holds a closure
+    /// that *asks* how many sessions are attached, defaulted to returning zero.
+    /// It never waits on an answer, and zero is both the default and the honest
+    /// answer when there is no bridge — so an app with the bridge down, a
+    /// unit-test host, and a user with no agent all behave identically. That is
+    /// the whole of the app's dependency on this feature, and it is one integer.
+    private func startCLIBridge() {
+        let server = AppXPCServer(jobs: jobs, flow: flow, settings: settings)
+        bridge = server
+        flow.attachedAgentSessions = { [weak server] in server?.sessionCount ?? 0 }
+        server.start()
     }
 
     // MARK: - Login item
