@@ -1370,7 +1370,13 @@ final class JobController {
         mismatchAcknowledgement = nil
 
         let scan = scanRunner
-        let discPath = disc.mountURL.path
+        // #0211 — ask where the disc is *now*, rather than trusting a mount
+        // state decided when it was classified. The app's own hold is what
+        // stops a disc mounting, so that classification races the thing it
+        // classifies: I_AM_LEGEND was recorded unmounted and then mounted 17
+        // seconds later, and every tool kept getting /dev/rdisk4 for a disc
+        // with a perfectly readable /Volumes/I_AM_LEGEND/VIDEO_TS.
+        let discPath = DiscSource.current(mountURL: disc.mountURL, label: disc.label).path
         let handbrakePath = settings.handbrakePath
         let volumeName = disc.label
         let driveName = disc.deviceNode ?? ""
@@ -1535,7 +1541,13 @@ final class JobController {
                 volumeName: disc.label
             )
         )
-        let discPath = disc.mountURL.path
+        // #0211 — ask where the disc is *now*, rather than trusting a mount
+        // state decided when it was classified. The app's own hold is what
+        // stops a disc mounting, so that classification races the thing it
+        // classifies: I_AM_LEGEND was recorded unmounted and then mounted 17
+        // seconds later, and every tool kept getting /dev/rdisk4 for a disc
+        // with a perfectly readable /Volumes/I_AM_LEGEND/VIDEO_TS.
+        let discPath = DiscSource.current(mountURL: disc.mountURL, label: disc.label).path
         let chapterCount = selectedTitleIndex.flatMap { index in
             scan.disc.titles.first { $0.index == index }?.chapterCount
         }
