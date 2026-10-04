@@ -146,8 +146,10 @@ enum Commands {
                     )
                 )
             }
-            client.adopt(sessionID: sessionID)
-
+            // #0201 — announce the session, *then* adopt. `adopt` is what
+            // releases any event that arrived while this was being set up, so
+            // this order is what guarantees `session.opened` is the first line.
+            // The reverse order let `session.attached` print above it.
             if reporter.json {
                 Output.json(
                     CLIEnvelope(
@@ -160,6 +162,7 @@ enum Commands {
             } else {
                 Output.line("session \(sessionID) — waiting for events (Ctrl-C to detach)")
             }
+            client.adopt(sessionID: sessionID)
 
             // SIGINT must go through a DispatchSourceSignal rather than a
             // `signal()` handler: only async-signal-safe calls are legal in the
@@ -250,6 +253,8 @@ final class WatchClient: NSObject, CLIClientProtocol {
     private let lock = NSLock()
     private var seen = 0
     private var sessionID: String?
+    /// Events that arrived before `session.opened` was printed. See `adopt`.
+    private var pending: [BridgeEvent] = []
 
     var eventCount: Int { lock.withLock { seen } }
 
@@ -259,8 +264,25 @@ final class WatchClient: NSObject, CLIClientProtocol {
         super.init()
     }
 
+    /// #0201 — opens the gate, and flushes whatever arrived before it opened.
+    ///
+    /// The app sends `session.attached` from inside `startSession`, so it can
+    /// reach this object before `startSession` has even returned to the caller
+    /// — let alone before the caller has printed `session.opened`. A watcher
+    /// therefore saw its first event above the line announcing the session it
+    /// belonged to, which is a stream a program cannot read in order.
+    ///
+    /// Fixed on this side rather than by delaying the app's send, because only
+    /// this process can make it deterministic: an app that sent the event after
+    /// returning would still be racing the CLI's own print across a process
+    /// boundary. Here the ordering is a lock, not a hope.
     func adopt(sessionID: String) {
-        lock.withLock { self.sessionID = sessionID }
+        let queued: [BridgeEvent] = lock.withLock {
+            self.sessionID = sessionID
+            defer { pending = [] }
+            return pending
+        }
+        for event in queued { emit(event) }
     }
 
     func event(_ payload: Data) {
@@ -271,8 +293,19 @@ final class WatchClient: NSObject, CLIClientProtocol {
             Output.error("received something that is not a BridgeEvent")
             return
         }
-        lock.withLock { seen += 1 }
+        let held = lock.withLock { () -> Bool in
+            seen += 1
+            // Counted either way: `eventCount` is "how many the app sent us",
+            // and an event held for a few milliseconds was still received.
+            guard sessionID == nil else { return false }
+            pending.append(event)
+            return true
+        }
+        guard !held else { return }
+        emit(event)
+    }
 
+    private func emit(_ event: BridgeEvent) {
         if reporter.json {
             Output.json(
                 CLIEnvelope(

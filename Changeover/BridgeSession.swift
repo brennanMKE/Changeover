@@ -57,6 +57,13 @@ final class BridgeSession: Identifiable {
     }
 
     /// Pushes one event. One-way: no reply, no delivery confirmation.
+    /// Sends an event carrying a **whole** snapshot.
+    ///
+    /// #0201 — `app`, `automation` and `library` are included here and nowhere
+    /// else. This is the opening `session.attached`, which is documented as
+    /// letting a watcher that attaches mid-flow start from a known state; it
+    /// carried six of the nine sections, and `changeoverctl wait` invented the
+    /// other three rather than leave them out.
     func send(kind: String, summary: String, from status: BridgeStatus) {
         send(
             BridgeEvent(
@@ -69,7 +76,10 @@ final class BridgeSession: Identifiable {
                 film: status.film,
                 job: status.job,
                 flow: status.flow,
-                start: status.start
+                start: status.start,
+                app: status.app,
+                automation: status.automation,
+                library: status.library
             )
         )
     }

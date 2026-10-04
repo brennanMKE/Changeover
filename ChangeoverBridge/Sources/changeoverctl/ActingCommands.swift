@@ -343,23 +343,33 @@ final class WaitWatcher: NSObject, CLIClientProtocol, @unchecked Sendable {
 
     /// Takes the opening event's fields as the baseline snapshot.
     ///
-    /// Reconstructed rather than carried as a `BridgeStatus`: `BridgeEvent` sends
-    /// the six interesting sections and not the `app`/`automation`/`library`
-    /// blocks, and no condition reads those. The three it does not carry are
-    /// filled with values that mean "not asked", which is honest — a `wait` is
-    /// about the disc, not about the installation.
+    /// #0201 — the three sections `wait` does not get from an event are taken
+    /// from the event, now that `session.attached` carries them.
+    ///
+    /// This used to invent them, under a comment claiming the invented values
+    /// meant "not asked" and that no condition read them. They did not mean
+    /// that: `isConfigured: true` is the opposite of what an unconfigured Mac
+    /// would have said, and `automation(suspended: true, heldBySessions: 1)`
+    /// asserted a fact about other watchers. A value nothing reads today is a
+    /// value something reads after the next condition is added, and it would
+    /// have been wrong without ever looking wrong.
+    ///
+    /// The fallbacks below are kept only for an event from an older app that
+    /// does not carry them — and they now say "unknown" where they used to
+    /// claim something.
     private func adoptOpening(_ event: BridgeEvent) {
         let status = BridgeStatus(
-            app: AppStatus(
-                pid: 0,
-                version: "unknown",
-                build: "unknown",
-                uptimeSeconds: 0,
-                isConfigured: true,
-                clients: 1,
-                sessions: 1,
-                brokerRegistered: true
-            ),
+            app: event.app
+                ?? AppStatus(
+                    pid: 0,
+                    version: "unknown",
+                    build: "unknown",
+                    uptimeSeconds: 0,
+                    isConfigured: false,
+                    clients: 1,
+                    sessions: 1,
+                    brokerRegistered: true
+                ),
             disc: event.disc,
             flow: event.flow
                 ?? FlowStatus(
@@ -373,13 +383,15 @@ final class WaitWatcher: NSObject, CLIClientProtocol, @unchecked Sendable {
             film: event.film,
             job: event.job,
             start: event.start ?? StartStatus(permitted: false, decision: "unknown"),
-            automation: AutomationStatus(suspended: true, heldBySessions: 1),
-            library: LibraryStatus(
-                mediaRoot: "",
-                moviesPath: "",
-                tvShowsPath: "",
-                extrasFolders: LibraryStatus.knownExtrasFolders
-            )
+            automation: event.automation
+                ?? AutomationStatus(suspended: true, heldBySessions: 1),
+            library: event.library
+                ?? LibraryStatus(
+                    mediaRoot: "",
+                    moviesPath: "",
+                    tvShowsPath: "",
+                    extrasFolders: LibraryStatus.knownExtrasFolders
+                )
         )
         lock.withLock { latest = status }
     }

@@ -231,6 +231,26 @@ public struct BridgeEvent: Codable, Sendable {
     public var flow: FlowStatus?
     public var start: StartStatus?
 
+    // #0201 — the three sections an opening event could not carry.
+    //
+    // `session.attached` is documented as carrying "the full snapshot, so a
+    // watcher that attaches mid-flow starts from a known state instead of an
+    // empty one". It did not: `BridgeEvent` had six of `BridgeStatus`'s nine
+    // sections, and these were the missing three. `changeoverctl wait` then
+    // reconstructed a `BridgeStatus` from the event and **invented** them —
+    // `pid: 0`, `version: "unknown"`, `isConfigured: true`,
+    // `automation(suspended: true, heldBySessions: 1)`. An invented
+    // `isConfigured: true` is the dangerous one, because it is the opposite of
+    // what an unconfigured Mac would have said.
+    //
+    // Set on `session.attached` and left `nil` on every other event, for the
+    // same reason the six above are: an event carries the parts of the snapshot
+    // its kind makes relevant, and these three change too rarely to repeat on
+    // each `job.progress`.
+    public var app: AppStatus?
+    public var automation: AutomationStatus?
+    public var library: LibraryStatus?
+
     public init(
         sessionID: String,
         sequence: Int,
@@ -242,7 +262,10 @@ public struct BridgeEvent: Codable, Sendable {
         film: FilmStatus? = nil,
         job: JobStatus? = nil,
         flow: FlowStatus? = nil,
-        start: StartStatus? = nil
+        start: StartStatus? = nil,
+        app: AppStatus? = nil,
+        automation: AutomationStatus? = nil,
+        library: LibraryStatus? = nil
     ) {
         self.sessionID = sessionID
         self.sequence = sequence
@@ -255,6 +278,15 @@ public struct BridgeEvent: Codable, Sendable {
         self.job = job
         self.flow = flow
         self.start = start
+        self.app = app
+        self.automation = automation
+        self.library = library
+    }
+
+    /// Whether this event carries the three sections a consumer would otherwise
+    /// have to invent, and so can stand in for a `BridgeStatus`.
+    public var carriesWholeSnapshot: Bool {
+        app != nil && automation != nil && library != nil
     }
 
     /// The timestamp format every event carries.
