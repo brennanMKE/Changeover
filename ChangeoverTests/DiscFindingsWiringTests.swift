@@ -284,9 +284,16 @@ struct DiscFindingsWiringTests {
                 "the job log carries it too, so the record is not only in flow.log")
     }
 
-    /// A model that invents throughout changes nothing on the disc. Measured
-    /// answers: pressed for more than it could read, the real model produced
-    /// DREAMSCAPE and DREAMLAND.
+    /// A model that invents throughout changes nothing on the disc, and since
+    /// #0209 is not reported either. Measured answers: pressed for more than it
+    /// could read, the real model produced DREAMSCAPE and DREAMLAND.
+    ///
+    /// "And it is still reported" was the old expectation here, and a real disc
+    /// retired it. On a disc labelled NEXT the model answered with the prompt's
+    /// own example and category list, and the panel told the user the menus
+    /// suggested "The Making of Signs" — on a disc that had never held it.
+    /// Reporting a claim the disc's menus do not contain is not withholding
+    /// judgement; it is passing on a fabrication in the app's own voice.
     @Test func inventedAnswersTickNothingAndNameNothing() async throws {
         let jobs = Self.controller(scan: Self.signsScan(), ocr: Self.signsOCR())
         let flow = RipFlowController()
@@ -299,7 +306,8 @@ struct DiscFindingsWiringTests {
 
         #expect(jobs.selectedExtraTitleIndices.isEmpty, "nothing invented reaches the library")
         #expect(flow.discLabel(forTitle: 8) == nil)
-        #expect(!flow.unconfirmedDiscClaims.isEmpty, "and it is still reported")
+        #expect(flow.unconfirmedDiscClaims.isEmpty,
+                "neither word is in this disc's menus, so neither is a claim about it")
     }
 
     /// One interrogation per disc. The model is pinned to greedy sampling

@@ -195,13 +195,30 @@ import Testing
         #expect(understanding.isEmpty)
     }
 
-    /// A model that invents throughout produces no findings at all.
+    /// A model that invents throughout produces no findings at all — and,
+    /// since #0209, says nothing about the invention either.
+    ///
+    /// This used to assert the opposite of that last part: invented claims
+    /// reached `unverified` and the evidence panel showed them as "the menus
+    /// suggest X — no title on this disc runs that long". That was the design,
+    /// and a real disc proved it wrong. On a disc labelled NEXT the model
+    /// answered with this file's own prompt — the format example and the
+    /// category list — and the user was shown a confident sentence about "The
+    /// Making of Signs", a film that was never in the drive.
+    ///
+    /// The distinction that matters is not invented-versus-real but *on this
+    /// disc versus not*. A label the menus print but no title matches is worth
+    /// showing as unconfirmed: the disc said it and the runtimes disagree, and
+    /// that is a fact about the disc. A label the menus never printed is not
+    /// evidence about this disc at all, whatever produced it, and belongs
+    /// nowhere near the panel a person reads when a wrong film gets filed.
     @Test func inventionThroughoutProducesNoFindings() async {
         let understanding = await DiscInterrogation.run(evidence: Self.signs) { _, _ in
             "DREAMSCAPE (1:11:11)\nDREAMLAND (2:22:22)"
         }
         #expect(understanding.allFindings.isEmpty)
-        #expect(!understanding.unverified.isEmpty)
+        #expect(understanding.unverified.isEmpty,
+                "neither word is anywhere in this disc's menus, so neither is a claim about it")
     }
 
     /// A title is never named twice across questions — the sequence narrows.
@@ -209,7 +226,11 @@ import Testing
         let understanding = await DiscInterrogation.run(evidence: Self.signs) { instructions, _ in
             // Both passes try to claim the 58:54 reel.
             if instructions.contains("FEATURE FILMS") { return "NONE" }
-            return "The bonus reel (58:54)"
+            // #0209 — a label the disc's own menus support ("bonus" and
+            // "scenes" are both on its entry menu). The claim has to survive
+            // corroboration for this test to reach the thing it is about,
+            // which is that two questions cannot both take title 8.
+            return "The bonus scenes (58:54)"
         }
         let indices = understanding.allFindings.map(\.titleIndex)
         #expect(Set(indices).count == indices.count)

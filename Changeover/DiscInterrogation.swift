@@ -149,12 +149,16 @@ nonisolated enum DiscInterrogation {
             feature film.
 
             Name each one, one per line, and put its running time in brackets
-            after it if the menu printed one, like this:
+            after it if the menu printed one, in this shape:
 
-                The Making of Signs (58:54)
+                <the name the menu prints> (58:54)
 
             Give only pieces that run longer than about forty minutes. Shorter
             ones are asked about separately.
+
+            Use the names the menu prints, corrected for OCR damage. Do not
+            invent a piece the menu does not name, and never answer with the
+            example above — it shows the shape of a line, not a title.
             """
         case .extras:
             return framing + "\n\n" + """
@@ -162,10 +166,11 @@ nonisolated enum DiscInterrogation {
             interviews, trailers, short documentaries — one per line, with the
             running time in brackets after each one if the menu printed it:
 
-                looking for Signs (6:11)
+                <the name the menu prints> (6:11)
 
             Use the names the menu prints, corrected for OCR damage. Do not
-            invent an extra that the menu does not name.
+            invent an extra that the menu does not name, and never answer with
+            the example above — it shows the shape of a line, not a title.
             """
         }
     }
@@ -225,6 +230,8 @@ nonisolated enum DiscInterrogation {
                 seconds = printed.seconds
             }
             guard let title = DiscTitleInference.sanitize(label) else { continue }
+            // #0209 — never accept the prompt's own example back as an answer.
+            guard !isPromptEcho(title) else { continue }
             guard seen.insert(title.lowercased()).inserted else { continue }
             found.append(Claim(question: question, label: title, seconds: seconds))
             if found.count == maximumClaimsPerQuestion { break }
@@ -235,6 +242,120 @@ nonisolated enum DiscInterrogation {
     /// A reply longer than this is a malfunction, not an answer — a model that
     /// has started listing the menu rather than reading it.
     static let maximumClaimsPerQuestion = 12
+
+    /// #0209 — drop every claim the disc's own menu text does not support.
+    ///
+    /// The model answered a disc labelled NEXT with five pieces of bonus
+    /// material: "The Making of Signs", "Behind the Scenes", "A Concert",
+    /// "A Retrospective" and "LOOKING FOR SIGNS". None of them is on that disc,
+    /// and all five are **this file's own prompt read back**: two are the
+    /// format examples, and the other three are the category list — "a
+    /// making-of documentary, a behind-the-scenes film, a concert, a
+    /// retrospective". They were shown to the user on the evidence panel, which
+    /// is the one screen a person consults when a wrong film gets filed.
+    ///
+    /// It was first read as stale data from an earlier disc leaking through,
+    /// which would have sent a real diagnosis hunting a cache that does not
+    /// exist: `RipFlowController` clears `discUnderstanding` on every disc
+    /// change, and this appeared on a fresh launch.
+    ///
+    /// Rewording the prompt is the first fix and this is the one that holds.
+    /// Any wording can be echoed, and a model asked to name things will
+    /// sometimes name the things it was just shown. The disc is the authority
+    /// on what is printed on the disc: a claim whose words appear nowhere in
+    /// the OCR is not a claim about this disc, whatever produced it.
+    ///
+    /// Deliberately generous about *how* the words appear. OCR damage is the
+    /// norm — `MenuExtraLabels` exists because of it — so this asks only that
+    /// most of a claim's words are somewhere in the menu text, not that the
+    /// label matches a line. A real label mangled by Vision keeps its words;
+    /// an invented one has none of them.
+    static func corroborated(_ claims: [Claim], by evidence: DiscEvidence) -> [Claim] {
+        let haystack = evidence.menuPages
+            .flatMap { $0 }
+            .joined(separator: " ")
+        guard !haystack.trimmingCharacters(in: .whitespaces).isEmpty else { return claims }
+        return claims.filter { isSupported($0.label, by: haystack) }
+    }
+
+    /// Whether most of `label`'s words appear in the disc's menu text.
+    ///
+    /// Words of three letters or fewer are ignored: "the", "of" and "a" are on
+    /// every menu ever printed and would corroborate anything.
+    ///
+    /// Matching is per word and tolerant of one wrong character, because OCR
+    /// damage is the normal case rather than the exception — Vision read NEXT's
+    /// own menu as "MAKIMG THE BEST NEXT THIMG" on one pass. Requiring exact
+    /// words would make a bad scan look like an invented title, which is the
+    /// failure this whole check exists to avoid making in the other direction.
+    static func isSupported(_ label: String, by haystack: String) -> Bool {
+        let words = tokens(label)
+        guard !words.isEmpty else {
+            // A label of nothing but short words. There is nothing here to
+            // check, so let the runtime cross-check downstream be the judge
+            // rather than guessing from two letters.
+            return true
+        }
+        let printed = tokens(haystack)
+        guard !printed.isEmpty else { return true }
+
+        let hits = words.filter { word in
+            printed.contains { isNearlyEqual(word, $0) }
+        }.count
+        // A strict majority. One word in common is a coincidence — "The Making
+        // of Signs" shares "making" with this very disc, and that is how it got
+        // on screen — while most of them is the same phrase badly read.
+        return hits * 2 > words.count
+    }
+
+    /// The words worth matching on, folded.
+    private static func tokens(_ text: String) -> [String] {
+        text.lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .filter { $0.count > 3 }
+            .map(String.init)
+    }
+
+    /// Equal, or one edit apart. Bounded on purpose: two edits starts matching
+    /// genuinely different words, and this is deciding whether to believe a
+    /// sentence the user will read as fact.
+    static func isNearlyEqual(_ a: String, _ b: String) -> Bool {
+        if a == b { return true }
+        let x = Array(a), y = Array(b)
+        if abs(x.count - y.count) > 1 { return false }
+        // Short words have too little left after one edit to mean anything:
+        // "sign" and "sing" are one apart and unrelated.
+        if min(x.count, y.count) < 5 { return false }
+
+        var i = 0, j = 0, edits = 0
+        while i < x.count, j < y.count {
+            if x[i] == y[j] { i += 1; j += 1; continue }
+            edits += 1
+            if edits > 1 { return false }
+            if x.count == y.count { i += 1; j += 1 }      // substitution
+            else if x.count > y.count { i += 1 }          // deletion from a
+            else { j += 1 }                               // insertion into a
+        }
+        return edits + (x.count - i) + (y.count - j) <= 1
+    }
+
+    /// #0209 — a placeholder read back as an answer.
+    ///
+    /// The prompts illustrate their line format with `<the name the menu
+    /// prints>`, and a model can echo a placeholder as readily as a title.
+    /// Angle brackets never appear in a real menu label, so this is a cheap
+    /// certainty rather than a judgement.
+    ///
+    /// There is deliberately **no list of banned titles** here. An earlier cut
+    /// of this fix refused "The Making of Signs" by name, because that was the
+    /// example the model echoed onto a disc labelled NEXT — and it broke the
+    /// Signs disc, where the very same words are a real label its own menus
+    /// print. The echo is not a property of the words; it is a property of
+    /// words that are not on the disc in hand. `corroborated(_:by:)` is the
+    /// check that knows the difference.
+    static func isPromptEcho(_ title: String) -> Bool {
+        title.contains("<") || title.contains(">")
+    }
 
     // MARK: - Checking it against the disc
 
@@ -305,7 +426,9 @@ extension DiscInterrogation {
                   !reply.isEmpty
             else { continue }
 
-            let claims = claims(from: reply, question: question)
+            // #0209 — only claims the disc's own menus support.
+            let claims = corroborated(
+                claims(from: reply, question: question), by: evidence)
             guard !claims.isEmpty else { continue }
 
             // Only titles nothing has claimed yet, and only the ones this
