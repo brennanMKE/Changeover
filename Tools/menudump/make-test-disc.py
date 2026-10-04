@@ -225,7 +225,12 @@ def main(root):
     entry[15] = 1                                   # vts title number
 
     vmgm_title_menu = pgc([(0, 9)], 0x82)
-    vmgm_ut = pgci_ut([vmgm_title_menu])
+    # #0212 — the VMGM language unit carries an UNSET code (0xFFFF), which is
+    # what I_AM_LEGEND has and what broke the whole file. The old guard tested
+    # `>= 'a'` only, so 0xFF passed it and two raw bytes went into a JSON
+    # string; JSONDecoder then rejected 20 KB of perfectly good structure. The
+    # VTSM unit below keeps a real "en", so one run covers both.
+    vmgm_ut = pgci_ut([vmgm_title_menu], lang=b"\xff\xff")
 
     with open(os.path.join(video_ts, "VIDEO_TS.IFO"), "wb") as f:
         f.write(sector(bytes(vmgi_mat)))

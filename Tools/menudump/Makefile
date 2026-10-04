@@ -41,7 +41,15 @@ test: $(TARGET)
 	  assert m['vtsm-01-lu1-pgc1']['buttons'][0]['rect']==[388,148,550,178]; \
 	  assert m['vtsm-01-lu1-pgc2']['entryType']=='chapter'; \
 	  assert len(m['vtsm-01-lu1-pgc2']['buttons'])==6; \
+	  assert m['vmgm-lu1-pgc1']['languageCode'] is None, m['vmgm-lu1-pgc1']; \
+	  assert m['vtsm-01-lu1-pgc1']['languageCode']=='en', m['vtsm-01-lu1-pgc1']; \
 	  print('menudump self-test OK:', len(d['menus']), 'menu PGCs')"
+	@# #0212 — the file must be valid UTF-8 end to end. json.load above would
+	@# already have failed, but this says *why* when it does: one raw byte
+	@# from an unset language code cost a complete 20 KB structure.json on
+	@# I_AM_LEGEND, reported to the user as "structure.json did not decode".
+	python3 -c "open('$(BUILD)/test-out/structure.json', encoding='utf-8').read(); \
+	  print('menudump self-test OK: structure.json is valid UTF-8')"
 	python3 check-nav-offsets.py $(BUILD)/test-disc
 
 clean:

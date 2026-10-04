@@ -148,12 +148,53 @@ static void jprintf(const char *fmt, ...) {
     va_end(args);
 }
 
+/* #0212 — an ISO 639-1 language code byte: a lowercase ASCII letter.
+ *
+ * Its own function because the test is easy to write as a one-sided
+ * comparison and be wrong, which is exactly what happened. */
+static int is_language_byte(unsigned int c) {
+    return c >= 'a' && c <= 'z';
+}
+
+/* Writes a JSON string, and never writes a byte that would make the file
+ * undecodable.
+ *
+ * #0212 — the escaping used to pass every byte above 0x1F through untouched.
+ * One field emitting a raw 0xFF cost the whole 20 KB file, because invalid
+ * UTF-8 anywhere makes a JSON document unreadable everywhere. The language code
+ * was the field that did it and is fixed at its source; this is the guard that
+ * means the next such field costs nothing.
+ *
+ * Valid UTF-8 is passed through unchanged, because menu text genuinely contains
+ * it. Anything that is not a well-formed sequence becomes U+FFFD. */
 static void jstring(const char *s) {
     fputc('"', out_file);
-    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
-        if (*p == '"' || *p == '\\') fprintf(out_file, "\\%c", *p);
-        else if (*p < 0x20) fprintf(out_file, "\\u%04x", *p);
-        else fputc(*p, out_file);
+    const unsigned char *p = (const unsigned char *)s;
+    while (*p) {
+        unsigned char c = *p;
+        if (c == '"' || c == '\\') { fprintf(out_file, "\\%c", c); p++; continue; }
+        if (c < 0x20) { fprintf(out_file, "\\u%04x", c); p++; continue; }
+        if (c < 0x80) { fputc(c, out_file); p++; continue; }
+
+        /* A multi-byte sequence: how many continuation bytes should follow. */
+        int extra = 0;
+        if ((c & 0xE0) == 0xC0) extra = 1;
+        else if ((c & 0xF0) == 0xE0) extra = 2;
+        else if ((c & 0xF8) == 0xF0) extra = 3;
+
+        int ok = extra > 0;
+        for (int i = 1; ok && i <= extra; i++) {
+            if ((p[i] & 0xC0) != 0x80) ok = 0;
+        }
+        if (!ok) {
+            /* Not UTF-8. One replacement character, one byte consumed — so a
+             * run of bad bytes cannot swallow the good ones after it. */
+            fputs("\\ufffd", out_file);
+            p++;
+            continue;
+        }
+        for (int i = 0; i <= extra; i++) fputc(p[i], out_file);
+        p += extra + 1;
     }
     fputc('"', out_file);
 }
@@ -948,7 +989,22 @@ int main(int argc, char **argv) {
                 jprintf("      \"domain\": \"%s\",", domain);
                 if (ts == 0) jprintf(" \"vts\": null,"); else jprintf(" \"vts\": %d,", ts);
                 jprintf(" \"languageUnit\": %d,", lu + 1);
-                if (lang >> 8 >= 'a' && (lang & 0xFF) >= 'a')
+                /* #0212 — both halves must be lowercase ASCII letters.
+                 *
+                 * This used to test `>= 'a'` and nothing else, which is true of
+                 * every byte from 'a' up to 0xFF. A VMGM language unit with an
+                 * unset code — 0xFFFF, and common on discs that do not label
+                 * their menu LU — therefore emitted two raw 0xFF bytes straight
+                 * into a JSON string. That is invalid UTF-8, so JSONDecoder
+                 * rejected the *whole file*: 20 KB of perfectly good menu
+                 * structure thrown away for two bytes, reported to the user as
+                 * "structure.json did not decode".
+                 *
+                 * Found on I_AM_LEGEND. Nothing to do with the disc being read
+                 * off the raw device (#0206) — the same line runs on the
+                 * filesystem path, and any disc with an unset code would have
+                 * hit it. */
+                if (is_language_byte(lang >> 8) && is_language_byte(lang & 0xFF))
                     jprintf(" \"languageCode\": \"%c%c\",", lang >> 8, lang & 0xFF);
                 else
                     jprintf(" \"languageCode\": null,");
