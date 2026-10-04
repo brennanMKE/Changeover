@@ -132,6 +132,38 @@ fi
 print "==> Verifying app signature"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
+# #0189 — and the embedded command-line tool, which the line above does NOT
+# cover.
+#
+# `changeoverctl` lives under `Contents/Resources/bin/`, and a binary there is
+# sealed as a *resource* rather than as nested code. `--deep --strict` walks
+# nested code; it never looks inside Resources. So an unsigned, or a broken,
+# or an entirely absent CLI leaves the bundle verifying perfectly — which is
+# exactly how a sibling project shipped a tool that crashed on launch for every
+# user who tried it.
+#
+# Running it is the half that matters. A signature check would not have caught
+# that crash: the binary was correctly signed and still unusable, because it
+# carried an @rpath load command pointing at a build directory that does not
+# exist on anyone else's Mac. Asking it for its version is cheap and is the
+# only check that proves the thing actually runs.
+CLI_PATH="$APP_PATH/Contents/Resources/bin/changeoverctl"
+BROKER_PATH="$APP_PATH/Contents/MacOS/ChangeoverBroker"
+for embedded in "$CLI_PATH" "$BROKER_PATH"; do
+    if [[ ! -x "$embedded" ]]; then
+        print -u2 "error: embedded executable missing or not executable: $embedded"
+        exit 1
+    fi
+    print "==> Verifying $(basename "$embedded")"
+    codesign --verify --strict --verbose=2 "$embedded"
+done
+if ! "$CLI_PATH" --version >/dev/null 2>&1; then
+    print -u2 "error: the embedded changeoverctl does not run — refusing to ship it"
+    "$CLI_PATH" --version || true
+    exit 1
+fi
+print "==> changeoverctl runs: $("$CLI_PATH" --version)"
+
 # The marketing version, read before anything needs it — the consistency check
 # below uses it, and it used to be read thirty lines further down, in the DMG
 # section. That ordering made the check I added unrunnable: "MARKETING_VERSION:

@@ -114,8 +114,11 @@ looking at an idle disc can see why.
 
 **These paths are per-installation and an agent must never guess them.** They
 come from `AppSettings`, the user chose them, and they may be a local folder or
-a NAS mount. `status --json` reports them under `library`, and `help` prints
-them for the installation it is running on:
+a NAS mount. `status --json` reports them under `library`, read from the
+running app. `help` prints the conventions and asks the app for the paths when
+it can reach it, falling back to the patterns alone when it cannot — the CLI
+never reads `UserDefaults` itself, because a second copy of the settings keys
+is a second thing that can disagree with the app:
 
 ```
 mediaRoot   /Volumes/Media/Media
