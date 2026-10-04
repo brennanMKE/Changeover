@@ -224,10 +224,53 @@ their kind makes relevant.
 the failures. A command that errors without parseable output is a bug — the
 tool's contract is that `--json` is total.
 
+### 11. The disc stays in while you are holding it
+
+#0199, and the scenario that produced it: an agent imported a film, the app
+ejected the disc on its own, and the extras-only pass the agent had planned off
+that same disc found its `insertionID` stale.
+
+With a disc in the drive whose film the library already has — the easiest way
+to reach an eject the app decides on by itself — and no watcher attached, the
+app ejects it. Now do it with one attached:
+
+```sh
+"$C" watch --json | jq -r '[.event.kind, .event.summary] | @tsv' &
+# … insert that same disc, or run an import to completion
+"$C" status --json | jq '{ejecting: .disc.isEjecting, disc: .disc.insertionID}'
+```
+
+**Expect:** the disc stays mounted. No `disc.ejected` event, and `status` keeps
+reporting the same `insertionID` — which is the thing that has to hold, because
+it is what a follow-up `import` is keyed on. This covers all three of the app's
+own eject paths: after a job, every-film-already-in-Plex, and duplicate edition.
+
+Then ask for it:
+
+```sh
+"$C" eject --disc "$(…)"
+```
+
+**Expect:** the tray opens, an `agent.action` event names the eject, and
+`disc.ejected` follows.
+
+Finally the backstop — kill the watcher with the disc still in, without
+ejecting:
+
+```sh
+kill -9 %1
+```
+
+**Expect:** the disc comes out by itself within a few seconds. An agent that
+dies mid-plan must not leave a disc trapped, so the hold is released by the
+same path that resumes auto-start.
+
+**Judgement call:** did anything eject a disc you had not finished with? That
+is the bug this scenario exists to catch, and it is worth reporting even if the
+sequence above passes.
+
 ## Known gaps — do not report these as bugs
 
-- **No acting verbs.** No `select`, `import`, `cancel`, `eject`, `wait`,
-  `assets`, `library`, `search` or `report`. Phase 2 and 3.
 - **No `/usr/local/bin` symlink.** The installer did not port: Changeover is a
   menu-bar app with no menu bar to hang a File ▸ Install action on. Open design
   question.

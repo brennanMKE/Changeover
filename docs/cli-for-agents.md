@@ -176,6 +176,41 @@ suspension is scoped to the session count, not to a toggle. `status` reports
 whether automation is suspended and how many sessions are holding it, so a user
 looking at an idle disc can see why.
 
+#### The disc is yours until you eject it
+
+Suspension covers ejecting, too. **While any `watch` session is attached, the
+app will not open the tray** — not after a job succeeds, not when it works out
+that every film on the disc is already in Plex, and not on the duplicate-edition
+path. So the shape of an agent's work on one disc is:
+
+```
+changeoverctl watch &                 # attach first, before the disc matters
+changeoverctl assets                  # … decide what to take
+changeoverctl select … && changeoverctl import …
+changeoverctl import … --extras-only  # a second pass off the same disc
+changeoverctl eject --disc <id>       # say you are finished with it
+```
+
+`eject` is how an agent says it is done. Nothing else will say it on the agent's
+behalf while it is attached.
+
+This was decided the other way at first, on the reasoning that opening a tray is
+housekeeping with no judgement in it. A session proved otherwise: it imported
+The Two Towers, the disc came out the instant the encode finished, and the
+extras-only import it had already planned from that same disc had nothing left
+to read — the `insertionID` it was holding had gone stale with the disc. Taking
+a disc out is a decision whenever something else is mid-plan.
+
+An agent that forgets to eject does not strand the disc. Every eject the guards
+held back is reconsidered the moment the last session detaches, by the same
+path that resumes auto-start — so a disc whose job finished and whose films are
+all in Plex comes out then. And because the session ends when the connection
+dies, that includes the case where the agent crashed rather than exited.
+
+An agent that needs the tray open *and* wants to keep watching should call
+`eject` explicitly rather than detaching to trigger it: the detach path is a
+backstop, and it ejects on the app's reasoning rather than on the agent's.
+
 ## Where the files go
 
 **These paths are per-installation and an agent must never guess them.** They

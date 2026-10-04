@@ -2585,7 +2585,9 @@ final class RipFlowController {
                   outcome: jobs.lastOutcome,
                   // A plan with every film settled — ripped, failed or skipped
                   // — is a disc that is finished with, whatever that plan held.
-                  planIncomplete: ripPlan.map { !$0.isFinished } ?? false
+                  planIncomplete: ripPlan.map { !$0.isFinished } ?? false,
+                  // #0199 — not while an agent is working this disc.
+                  agentSessions: attachedAgentSessions()
               )
         else { return }
 
@@ -2690,6 +2692,10 @@ final class RipFlowController {
               // And every one of them is held, not merely unchecked — a check
               // still in flight is not an answer.
               featureSelection.features.allSatisfy(isHeldInPlex),
+              // #0199 — and no agent is holding this disc. Same reason as
+              // `shouldEjectAfterJob`'s `agentSessions`: an attached session
+              // may be part-way through a plan this disc is the only copy of.
+              !isAutomationSuspended,
               // #0185 — and nothing else on the disc is waiting to be taken.
               //
               // "Nothing to import" meant "no film to import", which stopped
@@ -2739,6 +2745,8 @@ final class RipFlowController {
               !autoEjectedDiscs.contains(Self.discIdentity(disc)),
               !jobs.isRunning,
               !jobs.isEjecting,
+              // #0199 — not while an agent is holding this disc.
+              !isAutomationSuspended,
               AutoStartPolicy.shouldEjectDuplicate(
                   enabled: settings.autoStartRipping,
                   libraryCheck: libraryCheckForThisEdition,
@@ -2894,13 +2902,26 @@ final class RipFlowController {
         evaluateAutoEject(jobs: jobs, settings: settings)
 
         // #0189 — an attached agent is the decider, so the app must not also be
-        // one. Placed after the evaluate* calls above and before the countdown,
-        // because the suspension is narrow on purpose: it covers the two things
-        // that would race an agent's judgement — choosing a film and starting a
-        // job — and nothing else. Ejecting a disc whose films are all already in
-        // Plex is housekeeping with no decision in it, and leaving a disc
-        // trapped in the drive because something was watching would be a worse
-        // bug than the one this prevents.
+        // one. The suspension covers choosing a film and starting a job; the
+        // three `evaluate*` calls above now carry it themselves, each at its
+        // own guard.
+        //
+        // #0199 corrected what this comment used to claim. It read: "Ejecting a
+        // disc whose films are all already in Plex is housekeeping with no
+        // decision in it, and leaving a disc trapped in the drive because
+        // something was watching would be a worse bug than the one this
+        // prevents." A real session falsified the first half. An agent imported
+        // The Two Towers, the disc came out the instant the job succeeded, and
+        // the extras-only import it had planned from that same disc had nothing
+        // to read — the insertionID it held was already stale. Taking a disc out
+        // IS a decision when something else is mid-plan.
+        //
+        // The second half was a fair worry and is answered by where the resume
+        // lives rather than by letting the eject through: `stopFeedIfIdle` calls
+        // this method the moment the last session detaches, with the count back
+        // at zero, so every eject the guards held back is reconsidered then. A
+        // disc cannot outlast the session that was holding it — not even if the
+        // agent crashes, because the connection dying is what ends the session.
         //
         // Any countdown already running is cancelled, which is what makes this
         // safe to reach mid-count: a watcher attaching one second before the

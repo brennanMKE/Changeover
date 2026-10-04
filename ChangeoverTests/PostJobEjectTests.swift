@@ -25,13 +25,52 @@ struct PostJobEjectTests {
         current: DiscInsertion? = PostJobEjectTests.disc,
         ranFor: DiscInsertion? = PostJobEjectTests.disc,
         alreadyAsked: Bool = false,
-        outcome: JobOutcome? = PostJobEjectTests.success
+        outcome: JobOutcome? = PostJobEjectTests.success,
+        agentSessions: Int = 0
     ) -> Bool {
         AutoStartPolicy.shouldEjectAfterJob(
             isRunning: isRunning, isEjecting: isEjecting,
             currentDisc: current, ranJobForDisc: ranFor,
-            alreadyAsked: alreadyAsked, outcome: outcome
+            alreadyAsked: alreadyAsked, outcome: outcome,
+            agentSessions: agentSessions
         )
+    }
+
+    // MARK: - #0199: an agent holding the disc
+
+    /// The disc stays in while a `watch` session is attached.
+    ///
+    /// Reported from a peer session driving `changeoverctl`: it imported The
+    /// Two Towers, the tray opened the instant the job succeeded, and the
+    /// extras-only import it had planned from that same disc then had nothing
+    /// to read — the insertionID it was holding was already stale.
+    ///
+    /// This is the case #0189 explicitly decided the other way, in a comment
+    /// that read "ejecting a disc is housekeeping with no decision in it". It
+    /// is not, when something else is mid-plan. An agent says it is finished
+    /// with a disc by calling `eject`, and until then the disc is its.
+    @Test func aWatchedDiscIsNotEjectedAfterItsJob() {
+        #expect(Self.should(), "the unwatched case is unchanged")
+        #expect(!Self.should(agentSessions: 1))
+        #expect(!Self.should(agentSessions: 3), "any session is enough to hold it")
+    }
+
+    /// And the hold is only a hold. The moment the last session detaches the
+    /// answer goes back to yes, with nothing needing to be reset — which is
+    /// what makes `AppXPCServer.stopFeedIfIdle` calling `evaluateAutoStart`
+    /// sufficient as the resume path, and what means a crashed agent cannot
+    /// strand a disc: the connection dying is what ends the session.
+    @Test func theDiscComesOutWhenTheLastSessionDetaches() {
+        #expect(!Self.should(agentSessions: 1))
+        #expect(Self.should(agentSessions: 0))
+    }
+
+    /// A session does not resurrect an eject that was refused for another
+    /// reason. The guard is one more way to say no, never a way to say yes.
+    @Test func aSessionDoesNotOverrideTheOtherGuards() {
+        #expect(!Self.should(isRunning: true, agentSessions: 1))
+        #expect(!Self.should(outcome: Self.failure, agentSessions: 1))
+        #expect(!Self.should(current: Self.next, agentSessions: 1))
     }
 
     @Test func aSuccessfulJobLeavesNoDiscBehind() {

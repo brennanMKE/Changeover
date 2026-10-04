@@ -409,6 +409,14 @@ final class JobController {
     private let historyLimit: Int
     private let runner: Runner
     private let scanRunner: ScanRunner
+    /// #0199 — how many `changeoverctl watch` sessions are attached.
+    ///
+    /// The same closure `RipFlowController` holds, defaulted to zero for the
+    /// same reason: a build with no bridge, a test host and a user with no
+    /// agent must all behave identically, and zero is the honest answer for
+    /// every one of them.
+    var attachedAgentSessions: () -> Int = { 0 }
+
     private let menuRunner: MenuRunner
     private let judgeRunner: JudgeRunner
     /// The in-flight menu read, cancelled by a disc swap, a removal or a
@@ -862,7 +870,28 @@ final class JobController {
             // whose remaining film turns out to be already in Plex should
             // come out on this job's own eject rather than wait for the
             // post-job sweep.
-            keepDisc: { [weak self] in self?.discHasMoreWork ?? false },
+            // #0199 — and a disc an agent is still working on stays in too.
+            //
+            // `AutomationSuspension` paused auto-select and the auto-start
+            // countdown while a `watch` session is attached, and deliberately
+            // left this eject running, on the reasoning that it is
+            // "housekeeping with no decision in it". That was wrong, and a
+            // real session falsified it: an agent imported Two Towers and the
+            // disc came out the moment the job succeeded, so the extras-only
+            // import it had planned from the same disc had nowhere to read
+            // from — the insertionID it held was stale and job 2 could not
+            // run. The user, reasonably, asked the agent why it had ejected
+            // the disc. It had not; nothing had asked.
+            //
+            // Taking a disc out IS a decision when something else is mid-way
+            // through a plan for it. `changeoverctl eject` exists, reports an
+            // `agent.action` event, and is how an agent says it is finished —
+            // so the honest default while one is attached is to leave the
+            // disc where it is.
+            keepDisc: { [weak self] in
+                guard let self else { return false }
+                return discHasMoreWork || attachedAgentSessions() > 0
+            },
             discRemoved: { [job] in job.discRemovedDuringJob }
         )
 

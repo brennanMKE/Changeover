@@ -456,6 +456,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let server = AppXPCServer(jobs: jobs, flow: flow, settings: settings)
         bridge = server
         flow.attachedAgentSessions = { [weak server] in server?.sessionCount ?? 0 }
+        // #0199 — the pipeline's post-job eject reads the same count. A disc an
+        // agent is still working through must not be taken out from under it.
+        jobs.attachedAgentSessions = { [weak server] in server?.sessionCount ?? 0 }
         server.start()
     }
 

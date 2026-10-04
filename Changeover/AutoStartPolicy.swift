@@ -140,6 +140,17 @@ nonisolated enum AutoStartPolicy {
     ///     ejected with the second still on it. Defaulted to `false` so the
     ///     single-film disc — a plan of one, finished the moment its job
     ///     settles — asks exactly the question it always did.
+    ///   - agentSessions: #0199 — how many `changeoverctl watch` sessions are
+    ///     attached. A disc an agent is working through must not be taken out
+    ///     from under it. `AutomationSuspension` paused auto-select and the
+    ///     countdown and left this running, on the reasoning that an eject is
+    ///     housekeeping with no decision in it; a real session falsified that.
+    ///     An agent imported Two Towers, the disc came out the instant the job
+    ///     succeeded, and the extras-only import it had planned from the same
+    ///     disc had nothing to read — the insertionID it held was already
+    ///     stale. Taking a disc out IS a decision when something else is
+    ///     mid-plan. `changeoverctl eject` is how an agent says it is done,
+    ///     and this resumes the moment the last session detaches.
     static func shouldEjectAfterJob(
         isRunning: Bool,
         isEjecting: Bool,
@@ -147,9 +158,11 @@ nonisolated enum AutoStartPolicy {
         ranJobForDisc: DiscInsertion?,
         alreadyAsked: Bool,
         outcome: JobOutcome?,
-        planIncomplete: Bool = false
+        planIncomplete: Bool = false,
+        agentSessions: Int = 0
     ) -> Bool {
         guard !isRunning, !isEjecting, !alreadyAsked else { return false }
+        guard agentSessions == 0 else { return false }
         // #0163: the disc is not finished with. Checked before the outcome,
         // because a *successful* job is exactly the case that would otherwise
         // take the disc out from under the film still waiting on it.
