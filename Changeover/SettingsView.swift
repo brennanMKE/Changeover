@@ -30,22 +30,28 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Changeover Settings")
-                .font(.headline)
-                .padding(.horizontal)
-                .padding(.top)
-                .padding(.bottom, 12)
+            // #0194 — a toolbar of icons, built by hand.
+            //
+            // `TabView` already carried `Label(tab.title, systemImage:)`, and
+            // on macOS it drew text-only pills anyway: the icon-over-label
+            // toolbar Safari's Settings uses belongs to SwiftUI's `Settings`
+            // scene, and this window is a hand-built `NSWindow` (#0011), so it
+            // never gets that treatment. The user asked for the icons they
+            // could see in Safari, so the row is drawn rather than asked for.
+            //
+            // `SettingsLayout.Tab` already owned the symbol names; nothing
+            // about which icon means which pane moved into the view.
+            settingsToolbar
+            Divider()
 
-            // #0191 — one pane per subject, each sized by its own content
-            // (`SettingsLayout.paneMaxHeight(for:)`), rather than one scroll
-            // holding everything. The window follows the pane that is showing
-            // because `AppDelegate` hosts this view in an `NSHostingController`
-            // whose `sizingOptions` include `.preferredContentSize`.
-            TabView(selection: selectedTab) {
+            // #0191 — one pane per subject, each capped by
+            // `SettingsLayout.paneMaxHeight(for:)` rather than one scroll
+            // holding everything. #0193: the cap is applied inside SwiftUI and
+            // the window is a fixed size, because having AppKit resize the
+            // window to follow the pane crashed the app on open.
+            ZStack {
                 ForEach(SettingsLayout.Tab.allCases, id: \.self) { tab in
-                    pane(tab)
-                        .tabItem { Label(tab.title, systemImage: tab.systemImage) }
-                        .tag(tab)
+                    if selectedTab.wrappedValue == tab { pane(tab) }
                 }
             }
             .padding(.horizontal, 12)
@@ -122,6 +128,47 @@ struct SettingsView: View {
     /// Mac missing several programs grows the dependency table, and on a screen
     /// too short for the cap.
     @ViewBuilder
+    /// The icon row across the top, one item per pane.
+    ///
+    /// Shaped like Safari's: the symbol above its one-word label, the selected
+    /// item tinted and sitting on a rounded fill. `accessibilityLabel` is the
+    /// title rather than the symbol name, because the symbol is decoration and
+    /// the word is the control.
+    private var settingsToolbar: some View {
+        HStack(spacing: 4) {
+            ForEach(SettingsLayout.Tab.allCases, id: \.self) { tab in
+                let isSelected = selectedTab.wrappedValue == tab
+                Button {
+                    selectedTab.wrappedValue = tab
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: tab.systemImage)
+                            .font(.system(size: 20, weight: .regular))
+                            .frame(height: 22)
+                        Text(tab.title)
+                            .font(.caption)
+                    }
+                    .frame(width: 74)
+                    .padding(.vertical, 6)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(isSelected ? Color.primary.opacity(0.1) : .clear)
+                    )
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tab.title)
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                .help(tab.title)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+    }
+
     private func pane(_ tab: SettingsLayout.Tab) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {

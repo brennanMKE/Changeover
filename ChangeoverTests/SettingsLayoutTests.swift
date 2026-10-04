@@ -1,4 +1,5 @@
 import CoreGraphics
+import AppKit
 import Foundation
 import Testing
 @testable import Changeover
@@ -293,5 +294,42 @@ struct SettingsLayoutTests {
     /// label column are wrapped for it.
     @Test func thewidthIsUnchangedByTheFix() {
         #expect(SettingsLayout.width == 460)
+    }
+}
+
+/// #0194 — the tab icons the user asked for, after seeing Safari's Settings.
+///
+/// `TabView` already carried `Label(title, systemImage:)` and macOS drew
+/// text-only pills anyway: the icon-over-label toolbar belongs to SwiftUI's
+/// `Settings` scene, and this is a hand-built `NSWindow` (#0011). The row is
+/// drawn by hand instead.
+///
+/// The failure worth catching here is a symbol name that does not exist. SF
+/// Symbols resolve at runtime, so a typo is not a build error — it renders as
+/// nothing at all, and a settings toolbar of blank squares looks like a broken
+/// app rather than a misspelling.
+@Suite struct SettingsTabIconTests {
+
+    @Test func everyTabsSymbolActuallyResolves() {
+        for tab in SettingsLayout.Tab.allCases {
+            #expect(NSImage(systemSymbolName: tab.systemImage, accessibilityDescription: nil) != nil,
+                    "“\(tab.systemImage)” is not an SF Symbol on this OS — \(tab.title) would be blank")
+        }
+    }
+
+    /// Two panes sharing an icon would make the row unreadable at a glance,
+    /// which is the only reason to have icons at all.
+    @Test func noTwoTabsShareAnIcon() {
+        let symbols = SettingsLayout.Tab.allCases.map(\.systemImage)
+        #expect(Set(symbols).count == symbols.count)
+    }
+
+    /// And the label beside each icon is still the one-word pane name, which
+    /// is what `accessibilityLabel` announces — the symbol is decoration.
+    @Test func thelabelIsTheOneWordPaneName() {
+        for tab in SettingsLayout.Tab.allCases {
+            #expect(!tab.title.contains(" "), "“\(tab.title)” is not one word")
+            #expect(!tab.title.isEmpty)
+        }
     }
 }
