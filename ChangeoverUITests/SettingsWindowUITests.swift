@@ -141,6 +141,21 @@ final class SettingsWindowUITests: XCTestCase {
             initial.height, Expected.contentHeight + Expected.maximumChrome,
             "Settings is taller than its tallest pane plus a title bar — #0140's shape")
 
+        // Measured, then asserted. Three attempts at "making the window fixed"
+        // changed nothing, so this records what every pane actually does before
+        // claiming to know why.
+        var measured: [String: CGFloat] = [:]
+        for title in Expected.tabs {
+            let tab = window.descendants(matching: .any)[title]
+            guard tab.waitForExistence(timeout: 10), tab.isHittable else { continue }
+            tab.click()
+            measured[title] = window.frame.height
+        }
+        XCTContext.runActivity(named: "pane heights") { activity in
+            activity.add(XCTAttachment(string: "opened at \(initial.height); \(measured)"))
+        }
+        print("PANE-HEIGHTS opened=\(initial.height) \(measured)")
+
         for title in Expected.tabs {
             let tab = window.descendants(matching: .any)[title]
             guard tab.waitForExistence(timeout: 10), tab.isHittable else { continue }
