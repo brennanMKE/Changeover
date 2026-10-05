@@ -463,46 +463,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             rootView: SettingsView(settings: settings).environment(settings)
         )
         window.contentView = hosting
-
-        // #0218 — and the window is *actually* fixed, which it was not.
-        //
-        // #0193 removed `NSHostingController.sizingOptions` and said the window
-        // was a fixed size again. It was not: `NSHostingView` publishes Auto
-        // Layout constraints for its content, and AppKit resizes a window to
-        // honour them. The first UI test to measure this caught it — opening
-        // Settings gave 726 points, clicking General gave 606, which is
-        // `paneMaxHeight(.general)` plus chrome to the point. The window was
-        // still following the pane by a second route.
-        //
-        // That is not merely cosmetic. Following the pane is the behaviour
-        // #0193 removed because of what it does during a layout pass, and
-        // leaving it in place through a different mechanism would be the same
-        // hazard with the explanation filed under "fixed".
-        //
-        // Clamped rather than constrained, because this is the one place that
-        // gets to decide: a min and a max that agree are a size AppKit cannot
-        // negotiate away, whatever the content view asks for. Each pane is
-        // already capped inside SwiftUI by `paneMaxHeight(for:)` and scrolls
-        // within its cap, so nothing is clipped by this — a short pane simply
-        // leaves space below its content, which is #0193's stated trade and now
-        // actually the one being made.
-        let fixed = NSSize(width: SettingsLayout.width, height: SettingsLayout.windowHeight)
-        // Autoresizing, not Auto Layout. This is the line that actually does it.
-        //
-        // `contentMinSize`/`contentMaxSize` alone did **not** hold — they bound
-        // what a *user* can drag the window to, and AppKit still re-derived the
-        // size from the hosting view's intrinsic content. Taking the view out of
-        // the constraint system is what stops the content being allowed an
-        // opinion about the window at all. Set after `contentView` is assigned,
-        // because assigning it resets this.
-        hosting.translatesAutoresizingMaskIntoConstraints = true
-        hosting.frame = NSRect(origin: .zero, size: fixed)
-        hosting.autoresizingMask = [.width, .height]
-
-        window.contentMinSize = fixed
-        window.contentMaxSize = fixed
-        window.setContentSize(fixed)
-
         window.center()
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
