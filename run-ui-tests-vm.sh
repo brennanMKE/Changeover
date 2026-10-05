@@ -235,8 +235,20 @@ tart exec "$CLONE" /bin/zsh -lc "cp -R '/Volumes/My Shared Files/run/src' $GUEST
 
 log "Running UI tests in the guest (this runs XCUITest inside the VM only)"
 set +e
+# `set -o pipefail` in the GUEST shell, and it is load-bearing.
+#
+# Without it `test_rc=$?` captured the exit status of `tee`, which is always 0,
+# so this script reported "RESULT: TEST SUCCEEDED (exit 0)" no matter what the
+# tests did — and exited 0 with it. Caught 2026-10-04 on a run that failed one
+# assertion and was reported as a pass. Every green run before that date proved
+# only that the VM booted; the three template tests assert nothing, so nothing
+# had ever been in a position to fail and show the fault.
+#
+# This is the exact trap the project's xcode-build guidance names: piping to
+# `tee` hides the real status. The pipeline runs inside the guest, so the option
+# has to be set inside the guest's shell rather than this one.
 tart exec "$CLONE" /bin/zsh -lc \
-  "cd $GUEST_SRC && xcodebuild -project Changeover.xcodeproj -scheme 'Changeover UI Tests' \
+  "set -o pipefail; cd $GUEST_SRC && xcodebuild -project Changeover.xcodeproj -scheme 'Changeover UI Tests' \
      -destination 'platform=macOS' -resultBundlePath $GUEST_RESULTS/UITests.xcresult test 2>&1 | tee $GUEST_RESULTS/xcodebuild.log"
 test_rc=$?
 set -e

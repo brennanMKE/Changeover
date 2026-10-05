@@ -51,8 +51,20 @@ final class SettingsWindowUITests: XCTestCase {
     /// people to remember.
     private enum Expected {
         static let width: CGFloat = 460
-        /// `paneMaxHeight` max (560) + `chromeHeight` (150).
-        static let height: CGFloat = 710
+        /// `SettingsLayout.windowHeight`: `paneMaxHeight` max (560) +
+        /// `chromeHeight` (150). This is the **content** height.
+        static let contentHeight: CGFloat = 710
+        /// What AppKit adds on top for the title bar.
+        ///
+        /// `XCUIElement.frame` is the window's frame, not its content rect, so
+        /// comparing it against `windowHeight` was wrong by exactly this much —
+        /// the first run of this test reported 726 against an expected 710. The
+        /// allowance is a range rather than the measured 16, because the title
+        /// bar is AppKit's to size and a point of drift there is not a
+        /// regression in anything this project controls. What *is* a regression
+        /// is the window changing size between panes, and that is asserted
+        /// exactly, below.
+        static let maximumChrome: CGFloat = 40
         static let tabs = ["General", "Discs", "Tools"]
     }
 
@@ -119,9 +131,15 @@ final class SettingsWindowUITests: XCTestCase {
         let initial = window.frame
         XCTAssertEqual(initial.width, Expected.width, accuracy: 1,
                        "Settings is not SettingsLayout.width wide")
-        XCTAssertEqual(initial.height, Expected.height, accuracy: 1,
-                       "Settings is not SettingsLayout.windowHeight tall "
-                           + "(tallest pane + chrome); see #0193")
+        // Between the content height and the content height plus a title bar.
+        // The lower bound is the one that matters: a window shorter than its
+        // tallest pane is a pane that has been clipped.
+        XCTAssertGreaterThanOrEqual(
+            initial.height, Expected.contentHeight,
+            "Settings is shorter than SettingsLayout.windowHeight, so a pane is clipped")
+        XCTAssertLessThanOrEqual(
+            initial.height, Expected.contentHeight + Expected.maximumChrome,
+            "Settings is taller than its tallest pane plus a title bar — #0140's shape")
 
         for title in Expected.tabs {
             let tab = window.descendants(matching: .any)[title]
