@@ -630,7 +630,56 @@ typedef struct {
  * has an empty table until it does, so keep looking a bounded way in rather
  * than reporting "no buttons", which is the one answer a reader must never
  * give when it simply has not looked yet. */
-static void scan_cell_nav(FILE *vob, uint32_t first_sector, uint32_t last_sector,
+/* #0219 — where a menu VOB's sectors come from.
+ *
+ * Buttons live in NAV packs inside the menu VOBs, not in the IFOs, and this
+ * read them only through a filesystem `FILE *`. #0206 taught the helper to read
+ * IFOs off the raw device and left this behind, so a disc held unmounted parsed
+ * its menus and reported **zero buttons** — 30 stills and no title links at all,
+ * which means nothing can be mapped to a title except by runtime. Found on
+ * SPLIT, where the disc genuinely never mounts.
+ *
+ * libdvdread's menu-VOB domain is already open for the cell dump a few lines
+ * down, and its block offsets are the same sector numbers this walks. So the
+ * two sources differ by one read call and nothing else. */
+typedef struct {
+    FILE *vob;              /* the filesystem menu VOB, or NULL */
+    const dvdread_t *lib;   /* libdvdread, when reading the raw device */
+    void *dvd_file;         /* its DVD_READ_MENU_VOBS handle, or NULL */
+} sector_source_t;
+
+static int source_is_readable(const sector_source_t *src) {
+    return src && (src->vob || (src->lib && src->dvd_file && src->lib->read_blocks));
+}
+
+/* 1 on success. `out_error` is set only on failure, and says which source
+ * failed so a diagnosis does not have to guess which path the disc took. */
+static int read_menu_sector(const sector_source_t *src, uint32_t sector,
+                            uint8_t *buf, const char **out_error) {
+    if (src->vob) {
+        if (fseek(src->vob, (long)sector * DVD_BLOCK, SEEK_SET) != 0) {
+            *out_error = "seek past the end of the menu VOB";
+            return 0;
+        }
+        if (fread(buf, 1, DVD_BLOCK, src->vob) != DVD_BLOCK) {
+            *out_error = "short read from the menu VOB";
+            return 0;
+        }
+        return 1;
+    }
+    if (src->lib && src->dvd_file) {
+        if (src->lib->read_blocks(src->dvd_file, (int)sector, 1, buf) != 1) {
+            *out_error = "short read from the menu VOB on the raw device";
+            return 0;
+        }
+        return 1;
+    }
+    *out_error = "no menu VOB to read";
+    return 0;
+}
+
+static void scan_cell_nav(const sector_source_t *src,
+                          uint32_t first_sector, uint32_t last_sector,
                           int frame_w, int frame_h, nav_t *out_nav,
                           uint32_t *out_sector, int *out_lbn_matches,
                           const char **out_error) {
@@ -646,14 +695,7 @@ static void scan_cell_nav(FILE *vob, uint32_t first_sector, uint32_t last_sector
     if (limit > first_sector + 64) limit = first_sector + 64;
     for (uint32_t s = first_sector; s <= limit; s++) {
         uint8_t sector[DVD_BLOCK];
-        if (fseek(vob, (long)s * DVD_BLOCK, SEEK_SET) != 0) {
-            *out_error = "seek past the end of the menu VOB";
-            break;
-        }
-        if (fread(sector, 1, DVD_BLOCK, vob) != DVD_BLOCK) {
-            *out_error = "short read from the menu VOB";
-            break;
-        }
+        if (!read_menu_sector(src, s, sector, out_error)) break;
         nav_t candidate;
         parse_nav_pack(sector, frame_w, frame_h, &candidate);
         if (!candidate.found) continue;
@@ -874,6 +916,7 @@ int main(int argc, char **argv) {
          * that was already opening the device directly. */
         FILE *vob = NULL;
         int have_vob = have_video_ts ? open_menu_vob(video_ts, ts, &vob) : 0;
+        sector_source_t menu_source = { have_vob ? vob : NULL, NULL, NULL };
 
         void *dvd = NULL, *dvd_file = NULL;
         int own_dvd = 0;
@@ -883,6 +926,14 @@ int main(int argc, char **argv) {
             dvd = ifo_dvd;
             if (!dvd) { dvd = lib.open(options.disc); own_dvd = 1; }
             if (dvd) dvd_file = lib.open_file(dvd, ts, 2 /* DVD_READ_MENU_VOBS */);
+        }
+        // #0219 — with no filesystem VOB, read NAV packs off the raw device.
+        // The filesystem is preferred when it is there: it is the path that has
+        // always been exercised, and this must not change what a mounted disc
+        // produces.
+        if (!have_vob && dvd_file) {
+            menu_source.lib = &lib;
+            menu_source.dvd_file = dvd_file;
         }
 
         for (int lu = 0; lu < lu_count; lu++) {
@@ -926,10 +977,10 @@ int main(int argc, char **argv) {
                 if (cells && cell_count > 0) {
                     first_sector = be32(cells + 0x08);
                     last_sector = be32(cells + 0x14);
-                    if (!have_vob) {
+                    if (!source_is_readable(&menu_source)) {
                         nav_error = "could not open the menu VOB";
                     } else {
-                        scan_cell_nav(vob, first_sector, last_sector, frame_w, frame_h,
+                        scan_cell_nav(&menu_source, first_sector, last_sector, frame_w, frame_h,
                                       &nav, &nav_sector, &nav_lbn_matches, &nav_error);
                     }
                 }
@@ -1114,7 +1165,7 @@ int main(int argc, char **argv) {
                  * a menu that has no pages worth speaking of. */
                 jprintf("      \"pages\": [");
                 int page_index = 0;
-                for (int c = 0; c < cell_count && c < 256 && cells && have_vob; c++) {
+                for (int c = 0; c < cell_count && c < 256 && cells && source_is_readable(&menu_source); c++) {
                     const uint8_t *cell = cells + (size_t)c * 24;
                     uint32_t cell_first = be32(cell + 0x08), cell_last = be32(cell + 0x14);
                     if (cell_last < cell_first) continue;
@@ -1123,7 +1174,7 @@ int main(int argc, char **argv) {
                     uint32_t page_sector = 0;
                     int page_lbn_matches = 0;
                     const char *page_error = NULL;
-                    scan_cell_nav(vob, cell_first, cell_last, frame_w, frame_h,
+                    scan_cell_nav(&menu_source, cell_first, cell_last, frame_w, frame_h,
                                   &page_nav, &page_sector, &page_lbn_matches, &page_error);
                     if (page_nav.count == 0) continue;
 
