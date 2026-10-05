@@ -219,6 +219,15 @@ public struct LibraryExtraVerdict: Codable, Sendable, Equatable {
     public var existingFolder: String?
     public var existingName: String?
     public var existingDurationSeconds: Int?
+    /// #0216 — true when the match is the **film's own file**, not an extra.
+    ///
+    /// Reported separately because the two mean opposite things to an agent
+    /// deciding what to import, and because without it this report contradicted
+    /// itself: `library 1738` listed "Next (2007).mp4 — 565.1 MB" and, three
+    /// lines down, "title 1 (1:36:07) is not filed". Both were true of the
+    /// question each was answering — the film is filed, and the feature title is
+    /// not among the extras — and together they said the film was missing.
+    public var existingIsFeature: Bool
 
     public init(
         titleIndex: Int,
@@ -226,7 +235,8 @@ public struct LibraryExtraVerdict: Codable, Sendable, Equatable {
         held: Bool,
         existingFolder: String? = nil,
         existingName: String? = nil,
-        existingDurationSeconds: Int? = nil
+        existingDurationSeconds: Int? = nil,
+        existingIsFeature: Bool = false
     ) {
         self.titleIndex = titleIndex
         self.durationSeconds = durationSeconds
@@ -234,12 +244,23 @@ public struct LibraryExtraVerdict: Codable, Sendable, Equatable {
         self.existingFolder = existingFolder
         self.existingName = existingName
         self.existingDurationSeconds = existingDurationSeconds
+        self.existingIsFeature = existingIsFeature
     }
 
     public var summary: String {
         let runtime = BridgeDurationText.render(durationSeconds)
-        guard held, let existingFolder, let existingName else {
-            return "title \(titleIndex) (\(runtime)) is not filed"
+        guard held, let existingName else {
+            // #0216 — "is not filed" was the whole problem. This verdict only
+            // ever looked in the extras subfolders, so it said "not filed"
+            // about a feature whose film was filed three lines above. Say which
+            // question was asked.
+            return "title \(titleIndex) (\(runtime)) is not among this film's extras"
+        }
+        if existingIsFeature {
+            return "title \(titleIndex) (\(runtime)) is the film itself, already filed as \(existingName)"
+        }
+        guard let existingFolder else {
+            return "title \(titleIndex) (\(runtime)) is already filed as \(existingName)"
         }
         return "title \(titleIndex) (\(runtime)) is already in \(existingFolder)/\(existingName)"
     }

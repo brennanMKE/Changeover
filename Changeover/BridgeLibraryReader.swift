@@ -75,7 +75,12 @@ nonisolated enum BridgeLibraryReader {
                 folders: entries.map(folder(_:)),
                 discTitles: discTitles.isEmpty
                     ? nil
-                    : verdicts(forTitles: discTitles, against: extras)
+                    // #0216 — the film's own files too, so the feature title
+                    // gets a true answer instead of "not filed".
+                    : verdicts(
+                        forTitles: discTitles,
+                        against: extras,
+                        films: entries.flatMap(\.files))
             )
         }
     }
@@ -120,23 +125,56 @@ nonisolated enum BridgeLibraryReader {
     /// nothing in an extras folder and that is itself worth saying out loud: a
     /// report that silently omitted it would leave an agent wondering whether the
     /// title had been considered.
+    /// - Parameter films: the film's own files, at the root of its folder.
+    ///   Without them a feature title could only ever be reported as "not
+    ///   filed", which is what made this report contradict itself (#0216).
     static func verdicts(
         forTitles titles: [DiscTitle],
-        against extras: [LibraryExtraFile]
+        against extras: [LibraryExtraFile],
+        films: [LibraryFile] = []
     ) -> [LibraryExtraVerdict] {
         let byIndex = Dictionary(
             titles.map { ($0.index, $0) },
             uniquingKeysWith: { first, _ in first }
         )
         return LibraryExtras.verdicts(forTitles: titles, against: extras).map { verdict in
-            LibraryExtraVerdict(
+            let seconds = byIndex[verdict.titleIndex]?.durationSeconds ?? 0
+            // #0216 — an extras match wins when there is one; otherwise ask
+            // whether this title is the film itself. Matched on duration, the
+            // same way extras are and for the same reason: the library copy was
+            // named by whatever filed it, possibly years ago and possibly by
+            // hand, and two names agreeing is a coincidence waiting to happen.
+            if !verdict.isHeld, let film = matchingFilm(seconds: seconds, among: films) {
+                return LibraryExtraVerdict(
+                    titleIndex: verdict.titleIndex,
+                    durationSeconds: seconds,
+                    held: true,
+                    existingName: film.name,
+                    existingDurationSeconds: film.durationSeconds,
+                    existingIsFeature: true
+                )
+            }
+            return LibraryExtraVerdict(
                 titleIndex: verdict.titleIndex,
-                durationSeconds: byIndex[verdict.titleIndex]?.durationSeconds ?? 0,
+                durationSeconds: seconds,
                 held: verdict.isHeld,
                 existingFolder: verdict.existing?.folderName,
                 existingName: verdict.existing?.file.name,
                 existingDurationSeconds: verdict.existing?.file.durationSeconds
             )
+        }
+    }
+
+    /// The film file whose runtime matches this title, if any.
+    ///
+    /// Reuses `LibraryExtras`' own tolerance rather than inventing a second
+    /// one — a feature and an extra are the same kind of comparison, and two
+    /// answers to "do these runtimes match" is how reports start disagreeing.
+    static func matchingFilm(seconds: Int, among films: [LibraryFile]) -> LibraryFile? {
+        guard seconds > 0 else { return nil }
+        return films.first { file in
+            guard let filed = file.durationSeconds, filed > 0 else { return false }
+            return LibraryExtras.isSameRuntime(filed, seconds)
         }
     }
 }

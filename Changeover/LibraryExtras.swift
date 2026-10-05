@@ -31,6 +31,15 @@ nonisolated enum LibraryExtras {
     /// enormous and the tolerance is nowhere near it.
     static let toleranceSeconds = 12
 
+    /// Whether two runtimes are the same film, within `toleranceSeconds`.
+    ///
+    /// #0216 — lifted out so the feature match and the extras match ask the
+    /// identical question. Two answers to "do these runtimes agree" is how one
+    /// report starts contradicting another.
+    static func isSameRuntime(_ a: Int, _ b: Int) -> Bool {
+        abs(a - b) <= toleranceSeconds
+    }
+
     /// A disc title judged against what the library already holds.
     nonisolated struct Verdict: Equatable, Sendable {
         var titleIndex: Int
