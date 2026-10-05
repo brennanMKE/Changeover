@@ -487,6 +487,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // leaves space below its content, which is #0193's stated trade and now
         // actually the one being made.
         let fixed = NSSize(width: SettingsLayout.width, height: SettingsLayout.windowHeight)
+        // Autoresizing, not Auto Layout. This is the line that actually does it.
+        //
+        // `contentMinSize`/`contentMaxSize` alone did **not** hold — they bound
+        // what a *user* can drag the window to, and AppKit still re-derived the
+        // size from the hosting view's intrinsic content. Taking the view out of
+        // the constraint system is what stops the content being allowed an
+        // opinion about the window at all. Set after `contentView` is assigned,
+        // because assigning it resets this.
+        hosting.translatesAutoresizingMaskIntoConstraints = true
+        hosting.frame = NSRect(origin: .zero, size: fixed)
+        hosting.autoresizingMask = [.width, .height]
+
         window.contentMinSize = fixed
         window.contentMaxSize = fixed
         window.setContentSize(fixed)
