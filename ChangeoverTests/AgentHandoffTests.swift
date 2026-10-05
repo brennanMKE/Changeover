@@ -118,6 +118,38 @@ struct AgentHandoffTests {
         #expect(!AgentHandoff.takeInterruption(defaults: try defaults()))
     }
 
+    /// The quit must not read as a clean goodbye.
+    ///
+    /// Third attempt at #0210, and this is what defeated the second. The app's
+    /// `applicationWillTerminate` calls `bridge.stop()`, which discards every
+    /// session so each `watch` gets a proper "Changeover is quitting" rather
+    /// than a dropped connection. Each discard reaches `stopFeedIfIdle`, and
+    /// that clears the flag as a clean detach — which it is not. The agent did
+    /// not let go; the app told it to. So the quit erased the very protection
+    /// meant to survive it, and automation came back live on joe with an
+    /// agent's disc in the drive, twice.
+    ///
+    /// The sequence below is exactly that, in order.
+    @Test func aquitDoesNotCountAsTheAgentLettingGo() throws {
+        let store = try defaults()
+        AgentHandoff.noteAttached(defaults: store)          // a watch session attaches
+
+        // applicationWillTerminate: read the count, then stop the bridge —
+        // which discards the session and clears the flag.
+        let attachedAtQuit = 1
+        AgentHandoff.noteAllDetached(defaults: store)
+        #expect(!AgentHandoff.takeInterruption(defaults: store),
+                "this is the state the second attempt shipped in")
+
+        // …so the flag is re-asserted after the stop.
+        AgentHandoff.noteAttached(defaults: store)
+        AgentHandoff.noteAttached(defaults: store)          // idempotent
+        _ = attachedAtQuit
+
+        #expect(AgentHandoff.takeInterruption(defaults: store),
+                "the next launch has to know an agent was attached")
+    }
+
     /// The whole sequence the install does: an agent attaches, the app is
     /// killed without ever reaching its terminate callback, and the next launch
     /// holds automation back from the moment it starts.

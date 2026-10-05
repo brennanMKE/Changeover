@@ -86,10 +86,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     /// quitting app is the failure this feature must never cause.
     func applicationWillTerminate(_ notification: Notification) {
         jobs.releaseDiscHold()
+        // #0210 — read the count *before* stopping, because stopping destroys
+        // the evidence.
+        let attachedAtQuit = bridge?.sessionCount ?? 0
         // #0189 — tell attached `changeoverctl watch` sessions before their
         // connections drop, so a clean quit reads as a clean quit rather than as
         // the app having gone away unexpectedly.
         bridge?.stop()
+        // #0210 — and put the handoff flag back.
+        //
+        // `stop()` discards every session, each discard reaches
+        // `stopFeedIfIdle`, and that clears the flag as a clean goodbye. Which
+        // it is not: the agent did not let go, the app told it to. So a quit
+        // erased the very thing meant to survive it, and automation came back
+        // live on joe twice with an agent's disc in the drive.
+        //
+        // Re-asserted here rather than by teaching `stopFeedIfIdle` about
+        // termination: this is the only place that knows the difference, and a
+        // mode flag on the server would be one more thing to leave set.
+        if attachedAtQuit > 0 { AgentHandoff.noteAttached() }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
