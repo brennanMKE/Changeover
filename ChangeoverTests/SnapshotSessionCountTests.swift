@@ -68,6 +68,45 @@ struct SnapshotSessionCountTests {
         #expect(status.app.sessions == 3)
     }
 
+    /// #0213 — a suspended app says so, even with nothing attached.
+    ///
+    /// #0210 taught the Start gate to stay suspended after a launch that
+    /// inherited an agent, and left this projection reading the session count
+    /// alone — so the app held back while `status` reported `suspended: false`.
+    /// Caught on joe: `agents 0 | suspended False` on a build that was meant to
+    /// be holding the disc.
+    ///
+    /// Third time for this exact mistake. #0203 had the agent count right in
+    /// the registry and wrong in the snapshot; #0208 had `chosenBy` right at
+    /// the seam and hardcoded in `job.film`. Every one of them was a rule fixed
+    /// and a view of the rule forgotten, and every one was found by someone
+    /// reading the output rather than by a test.
+    @Test func anInheritedAgentSuspendsTheReportedAutomation() {
+        let launched = Date()
+        let status = BridgeStatusReader.automationStatus(
+            attachedSessions: 0, interruptedAt: launched)
+        #expect(status.suspended, "this reported false while the gate was refusing")
+        #expect(status.heldBySessions == 0, "nothing is attached, and that is the honest count")
+        #expect(status.reason?.contains("agent") == true, "and it says why")
+    }
+
+    /// An ordinary launch reports exactly what it always did.
+    @Test func noInheritedAgentIsNotSuspended() {
+        let status = BridgeStatusReader.automationStatus(attachedSessions: 0, interruptedAt: nil)
+        #expect(!status.suspended)
+        #expect(status.reason == nil)
+    }
+
+    /// An attached session still wins the sentence: that is the one the user
+    /// can act on, by stopping the thing that is watching.
+    @Test func anAttachedSessionGivesTheSessionReason() throws {
+        let status = BridgeStatusReader.automationStatus(
+            attachedSessions: 1, interruptedAt: Date())
+        #expect(status.suspended)
+        let reason = try #require(status.reason)
+        #expect(reason.contains("changeoverctl watch"))
+    }
+
     /// The property that failed: the agent-facing count never comes from the
     /// open-session count. Swept across the pairs the app can actually produce
     /// — `agents` is never above `sessions`, since every agent holds at least

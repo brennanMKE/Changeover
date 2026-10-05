@@ -75,12 +75,12 @@ struct AutomationSuspensionTests {
     // MARK: - The wire shape
 
     @Test func theStatusProjectionAgrees() {
-        let idle = BridgeStatusReader.automationStatus(attachedSessions: 0)
+        let idle = BridgeStatusReader.automationStatus(attachedSessions: 0, interruptedAt: nil)
         #expect(!idle.suspended)
         #expect(idle.heldBySessions == 0)
         #expect(idle.reason == nil)
 
-        let held = BridgeStatusReader.automationStatus(attachedSessions: 2)
+        let held = BridgeStatusReader.automationStatus(attachedSessions: 2, interruptedAt: nil)
         #expect(held.suspended)
         #expect(held.heldBySessions == 2)
         #expect(held.reason != nil)
@@ -89,7 +89,7 @@ struct AutomationSuspensionTests {
     /// A nonsensical count must not be reported as a negative number of sessions
     /// holding a suspension that is not in force.
     @Test func theStatusProjectionClampsANonsensicalCount() {
-        let status = BridgeStatusReader.automationStatus(attachedSessions: -3)
+        let status = BridgeStatusReader.automationStatus(attachedSessions: -3, interruptedAt: nil)
         #expect(!status.suspended)
         #expect(status.heldBySessions == 0)
     }

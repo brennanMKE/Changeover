@@ -86,7 +86,10 @@ nonisolated enum BridgeStatusReader {
             // to the one consumer most likely to act on it. Two numbers that
             // mean different things need two parameters; sharing one is how a
             // half-fix looks from the outside.
-            automation: automationStatus(attachedSessions: agents),
+            automation: automationStatus(
+                attachedSessions: agents,
+                // #0210 — read from the flow, which is the one place that knows.
+                interruptedAt: flow.agentInterruptedAt()),
             library: libraryStatus(settings: settings)
         )
     }
@@ -400,11 +403,28 @@ nonisolated enum BridgeStatusReader {
         )
     }
 
-    static func automationStatus(attachedSessions: Int) -> AutomationStatus {
-        AutomationStatus(
-            suspended: AutomationSuspension.isSuspended(attachedSessions: attachedSessions),
+    /// - Parameter interruptedAt: #0210's handoff — when this launch inherited
+    ///   an agent that never let go. **Not optional with a default**, because
+    ///   leaving it out is exactly the bug this parameter exists to fix.
+    ///
+    ///   #0210 taught the Start gate to stay suspended after a launch that
+    ///   inherited an agent, and left this projection reading the session count
+    ///   alone. So the app would hold back and `status` would report
+    ///   `suspended: false` — the gate right, the thing an agent reads wrong.
+    ///   That is #0203 exactly, and #0208, both of which were the same mistake:
+    ///   fix the rule, forget the view of it. A required argument is the only
+    ///   version of this that a future reader cannot repeat by omission.
+    static func automationStatus(attachedSessions: Int, interruptedAt: Date?) -> AutomationStatus {
+        let suspended = AutomationSuspension.isSuspended(
+            attachedSessions: attachedSessions, interruptedAt: interruptedAt)
+        return AutomationStatus(
+            suspended: suspended,
             heldBySessions: max(0, attachedSessions),
+            // The session reason when sessions hold it, the handoff reason when
+            // nothing is attached and the app is still standing back. A user
+            // looking at an idle disc gets the true sentence either way.
             reason: AutomationSuspension.reason(attachedSessions: attachedSessions)
+                ?? AutomationSuspension.interruptedReason(interruptedAt: interruptedAt)
         )
     }
 
