@@ -123,6 +123,7 @@ nonisolated enum BridgeStatusReader {
         hasMoreWork: Bool
     ) -> DiscStatus? {
         guard let disc else { return nil }
+        let resolvedPath = DiscSource.current(mountURL: disc.mountURL, label: disc.label)
         return DiscStatus(
             label: disc.label,
             discID: disc.discID,
@@ -130,9 +131,23 @@ nonisolated enum BridgeStatusReader {
             // visits by discs that share a path, a device node and an unknown
             // identity — the case `SelectionReset.sameDisc` exists for.
             insertionID: disc.insertionID.uuidString,
-            mountPath: disc.mountURL.path,
+            // #0214 — the path the app would actually read this disc from, and
+            // whether it is really mounted, both asked *now*.
+            //
+            // #0211 taught the scan and the menu read to resolve the path at
+            // the point of use, and left this reporting `disc.isMounted` and
+            // `disc.mountURL` — the values decided when the disc was
+            // classified. So UNBREAKABLE read perfectly from
+            // /Volumes/UNBREAKABLE while `status` told an agent it was "never
+            // mounted" at /dev/rdisk4. The behaviour was right and the report
+            // of it was wrong, which is the same fault as #0213 and #0203 in a
+            // third place.
+            //
+            // Resolved through the same `DiscSource` the readers use, so the
+            // report cannot disagree with what the tools get.
+            mountPath: resolvedPath.path,
             deviceNode: disc.deviceNode,
-            isMounted: disc.isMounted,
+            isMounted: !DiscSource.isRawDevice(resolvedPath),
             isEjecting: isEjecting,
             unavailable: unavailable,
             hasMoreWork: hasMoreWork

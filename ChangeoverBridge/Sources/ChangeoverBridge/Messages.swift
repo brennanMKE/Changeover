@@ -79,6 +79,9 @@ public struct BridgeRequest: Codable, Sendable {
     public enum Param {
         public static let tmdbID = "tmdbID"
         public static let term = "term"
+        /// #0215 — a four-digit release year for `search`, to rank the right
+        /// film to the top so it is one of the few that gets a runtime.
+        public static let year = "year"
     }
 
     public var action: String

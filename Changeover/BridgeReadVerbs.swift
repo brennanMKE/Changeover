@@ -227,7 +227,19 @@ enum BridgeReadVerbs {
             // first within each group — so the order an agent sees is the order
             // the Choose step would show. A second ordering here would make the
             // CLI's "first result" mean something different from the window's.
-            let ordered = MovieSearchViewModel.sorted(found, for: term)
+            var ordered = MovieSearchViewModel.sorted(found, for: term)
+            // #0215 — then the asked-for year to the top, if one was given.
+            //
+            // Applied after the app's own ranking and as a stable partition, so
+            // with no --year the order is bit-for-bit what the Choose step
+            // shows. It matters more than ordering usually does: only the first
+            // few results get a runtime looked up, and the runtime is the fact
+            // that settles which Unbreakable fits a 106-minute disc.
+            let askedYear = SearchYearRanking.year(
+                fromArgument: request.params[BridgeRequest.Param.year])
+            ordered = SearchYearRanking.ranked(ordered, preferring: askedYear) {
+                Int($0.yearText)
+            }
 
             var hits: [SearchHit] = []
             var detailed = 0

@@ -90,12 +90,20 @@ public enum CLICommand: Equatable, Sendable {
         /// The whole remaining command line, joined with single spaces, so
         /// `search Garden State` and `search "Garden State"` are the same search.
         public var term: String
+        /// #0215 — a release year to rank to the top. `nil` leaves the order
+        /// exactly as the Choose step would show it.
+        ///
+        /// Not part of the term: TMDB reads "Unbreakable 2000" as a title and
+        /// returns nothing, which is what sent an agent looking for a film the
+        /// search could not find.
+        public var year: Int?
         public var noLaunch: Bool = false
         /// The app makes one search request plus up to `detailBudget` runtime
         /// lookups, each over the network.
         public var timeout: Double = 30
-        public init(term: String, noLaunch: Bool = false, timeout: Double = 30) {
+        public init(term: String, year: Int? = nil, noLaunch: Bool = false, timeout: Double = 30) {
             self.term = term
+            self.year = year
             self.noLaunch = noLaunch
             self.timeout = timeout
         }
@@ -292,6 +300,8 @@ public enum CLIParse {
         var featureTitle: Int?
         var featureRaw: String?
         var extrasOnly = false
+        var year: Int?
+        var yearRaw: String?
         var extras: [SelectionRequest.Extra] = []
         var positional: [String] = []
         /// The first thing that was wrong, held rather than returned so that an
@@ -379,6 +389,17 @@ public enum CLIParse {
 
             case "--query":
                 query = takeValue("--query", joined: joined)
+
+            case "--year":
+                guard let raw = takeValue("--year", joined: joined) else { continue }
+                yearRaw = raw
+                year = SearchYearRanking.year(fromArgument: raw)
+                if year == nil {
+                    deferredFailure = deferredFailure ?? usage(
+                        "--year needs a four-digit year, got '\(raw)'",
+                        hint: "for example `--year 2000` for Unbreakable"
+                    )
+                }
 
             case "--extras-only":
                 // #0202 — a flag with no value, like `--force`.
@@ -502,7 +523,8 @@ public enum CLIParse {
             query: query,
             featureRaw: featureRaw,
             extras: extras,
-            extrasOnly: extrasOnly
+            extrasOnly: extrasOnly,
+            yearRaw: yearRaw
         ) {
             return .failure(misplaced)
         }
@@ -580,7 +602,8 @@ public enum CLIParse {
             }
             return .success(
                 CLIInvocation(
-                    command: .search(.init(term: term, noLaunch: noLaunch, timeout: timeout ?? 30)),
+                    command: .search(
+                        .init(term: term, year: year, noLaunch: noLaunch, timeout: timeout ?? 30)),
                     json: json
                 )
             )
@@ -775,7 +798,7 @@ public enum CLIParse {
         // whose flags are all refused.
         "assets": ["--no-launch"],
         "library": ["--no-launch"],
-        "search": ["--no-launch"],
+        "search": ["--no-launch", "--year"],
         "eject": ["--no-launch", "--force", "--session", "--disc"],
         "cancel": ["--no-launch", "--session", "--job"],
         "wait": ["--no-launch", "--for", "--job"],
@@ -800,7 +823,8 @@ public enum CLIParse {
         query: String?,
         featureRaw: String?,
         extras: [SelectionRequest.Extra],
-        extrasOnly: Bool = false
+        extrasOnly: Bool = false,
+        yearRaw: String? = nil
     ) -> CLIErrorPayload? {
         let allowed = accepted[verb] ?? []
         var given: [String] = []
@@ -815,6 +839,7 @@ public enum CLIParse {
         if featureRaw != nil { given.append("--feature-title") }
         if !extras.isEmpty { given.append("--extra") }
         if extrasOnly { given.append("--extras-only") }
+        if yearRaw != nil { given.append("--year") }
 
         guard let offender = given.first(where: { !allowed.contains($0) }) else { return nil }
 

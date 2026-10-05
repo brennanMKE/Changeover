@@ -78,7 +78,15 @@ extension Commands {
         await read(
             BridgeRequest(
                 action: BridgeRequest.Action.search,
-                params: [BridgeRequest.Param.term: options.term]
+                params: {
+                    var params = [BridgeRequest.Param.term: options.term]
+                    // #0215 — only when given, so an unversioned search sends
+                    // exactly what it always did.
+                    if let year = options.year {
+                        params[BridgeRequest.Param.year] = String(year)
+                    }
+                    return params
+                }()
             ),
             noLaunch: options.noLaunch,
             timeout: options.timeout,

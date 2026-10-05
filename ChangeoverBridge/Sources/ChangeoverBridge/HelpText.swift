@@ -300,7 +300,7 @@ public enum HelpText {
     public static let search = HelpPayload.CommandHelp(
         name: "search",
         summary: "Search TMDB through the app, so the id you get is one it accepts.",
-        usage: "\(ServiceNames.cliName) search <term> [--no-launch] [--timeout <seconds>] [--json]",
+        usage: "\(ServiceNames.cliName) search <term> [--year <yyyy>] [--no-launch] [--timeout <seconds>] [--json]",
         discussion: """
             The results come back in the order the Choose step would show them: \
             exact title match first, then prefix matches, newest release first \
@@ -313,6 +313,22 @@ public enum HelpText {
             looked up is reported: a null runtime means either TMDB has none or \
             that result was past the budget, and those are different answers.
 
+            --year puts a release year at the top of the list. **Do not put the \
+            year in the term**: TMDB reads "Unbreakable 2000" as a title and \
+            returns nothing.
+
+            It ranks rather than filters, and that matters more than ordering \
+            usually does, because only the first few results get a runtime. On a \
+            search for "Unbreakable" the 2025, 2023 and 2021 films come first and \
+            the 2000 one — the only one that fits a 106-minute disc — arrives \
+            with no runtime to judge it by. `--year 2000` brings it into the \
+            budget.
+
+            Films a year either side are ranked next, because a TMDB release date \
+            is the first release anywhere: a festival run in December and a \
+            general release in January are the same film with two years. Nothing \
+            is dropped, so a wrong guess costs only the ordering.
+
             Each result also carries the folder name this app would file the film \
             in, tag and all, so nothing has to rebuild the naming convention.
 
@@ -323,6 +339,11 @@ public enum HelpText {
             This command only observes.
             """,
         options: [
+            HelpPayload.OptionHelp(
+                flag: "--year <yyyy>",
+                summary: "Rank this release year to the top, so it gets a runtime. "
+                    + "Never put the year in the term."
+            ),
             HelpPayload.OptionHelp(
                 flag: "--no-launch",
                 summary: "Fail instead of launching Changeover when it is not running."
