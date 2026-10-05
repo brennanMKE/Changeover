@@ -112,8 +112,15 @@ extension BridgeStatus {
         // automation looks like a different bug from one that says why.
         rows.append((
             "automation",
+            // #0220 — the reason when there is one, and the count only as a
+            // fallback. #0210 can suspend automation with *nothing* attached,
+            // and this line then read "suspended — 0 watch session(s)
+            // attached", which looks like a contradiction rather than an
+            // explanation. The JSON has carried the real sentence since #0213;
+            // only this text line was still deriving its own.
             automation.suspended
-                ? "suspended — \(automation.heldBySessions) watch session(s) attached"
+                ? (automation.reason
+                    ?? "suspended — \(automation.heldBySessions) watch session(s) attached")
                 : "running normally"
         ))
 

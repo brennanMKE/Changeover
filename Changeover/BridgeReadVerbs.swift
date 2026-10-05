@@ -177,12 +177,19 @@ enum BridgeReadVerbs {
             if case .scanned(let result) = jobs.scanState { return result.disc.titles }
             return []
         }()
+        // #0221 — the scan's own main feature, so the library report can say
+        // which title is the film without needing a runtime for it.
+        let mainFeature: Int? = {
+            if case .scanned(let result) = jobs.scanState { return result.mainFeatureIndex }
+            return nil
+        }()
 
         let report = BridgeLibraryReader.report(
             tmdbID: tmdbID,
             moviesPath: moviesPath,
             lookup: lookup,
-            discTitles: titles
+            discTitles: titles,
+            mainFeatureIndex: mainFeature
         )
         // `ok: true` for all three states, `unreachable` included: the request
         // succeeded and "I could not read the library" is the answer. Reporting it

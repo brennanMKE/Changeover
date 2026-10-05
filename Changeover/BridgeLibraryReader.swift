@@ -39,7 +39,18 @@ nonisolated enum BridgeLibraryReader {
         tmdbID: String,
         moviesPath: String,
         lookup: LibraryLookup,
-        discTitles: [DiscTitle]
+        discTitles: [DiscTitle],
+        /// #0221 — which title the scan called the main feature.
+        ///
+        /// The feature is identified by **index**, not by runtime. #0216
+        /// matched it against the film file's duration, and `LibraryProbe`
+        /// deliberately never reads one: "measuring a 1–2 GB library copy over
+        /// SMB is a seek to its tail for a number the file size already
+        /// implies." So that match could not fire in production, and the tests
+        /// passed only because their fixtures supplied a duration the real
+        /// probe does not. Caught on SPLIT, where title 3 still reported "not
+        /// among this film's extras".
+        mainFeatureIndex: Int? = nil
     ) -> LibraryReport {
         let tag = LibraryMatch.tag(for: tmdbID)
 
@@ -80,7 +91,8 @@ nonisolated enum BridgeLibraryReader {
                     : verdicts(
                         forTitles: discTitles,
                         against: extras,
-                        films: entries.flatMap(\.files))
+                        films: entries.flatMap(\.files),
+                        mainFeatureIndex: mainFeatureIndex)
             )
         }
     }
@@ -131,7 +143,8 @@ nonisolated enum BridgeLibraryReader {
     static func verdicts(
         forTitles titles: [DiscTitle],
         against extras: [LibraryExtraFile],
-        films: [LibraryFile] = []
+        films: [LibraryFile] = [],
+        mainFeatureIndex: Int? = nil
     ) -> [LibraryExtraVerdict] {
         let byIndex = Dictionary(
             titles.map { ($0.index, $0) },
@@ -144,6 +157,23 @@ nonisolated enum BridgeLibraryReader {
             // same way extras are and for the same reason: the library copy was
             // named by whatever filed it, possibly years ago and possibly by
             // hand, and two names agreeing is a coincidence waiting to happen.
+            // #0221 — the feature is the title the scan named, and the film is
+            // whatever sits at the root of the folder. No runtime involved on
+            // either side, because neither side has one: the probe does not
+            // measure library films, and asking it to would cost a seek to the
+            // tail of a 1–2 GB file over SMB for a fact already in hand.
+            if !verdict.isHeld,
+               let mainFeatureIndex, verdict.titleIndex == mainFeatureIndex,
+               let film = films.first {
+                return LibraryExtraVerdict(
+                    titleIndex: verdict.titleIndex,
+                    durationSeconds: seconds,
+                    held: true,
+                    existingName: film.name,
+                    existingDurationSeconds: film.durationSeconds,
+                    existingIsFeature: true
+                )
+            }
             if !verdict.isHeld, let film = matchingFilm(seconds: seconds, among: films) {
                 return LibraryExtraVerdict(
                     titleIndex: verdict.titleIndex,
@@ -166,6 +196,11 @@ nonisolated enum BridgeLibraryReader {
     }
 
     /// The film file whose runtime matches this title, if any.
+    ///
+    /// #0221 — kept as a second chance, not the main one. `LibraryProbe` does
+    /// not measure library films, so in production this finds nothing; it still
+    /// earns its place for a caller that *has* durations (the corpus tests do)
+    /// and for a disc whose scan named no main feature.
     ///
     /// Reuses `LibraryExtras`' own tolerance rather than inventing a second
     /// one — a feature and an extra are the same kind of comparison, and two
