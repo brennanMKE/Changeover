@@ -445,6 +445,26 @@ extension DiscInterrogation {
             }
             understanding.unverified += unverified
         }
+        // #0217 — a claim another question answered is not unverified.
+        //
+        // The questions run films → bonusFeature → extras, and each files its
+        // unbound claims before the next one runs. On the NEXT disc the model
+        // offered "Making the Best Next Thing" as bonus material; at 18 minutes
+        // it is under `BonusFeature.minimumSeconds`, so `inScope` correctly
+        // refused to bind it — and it was filed as unverified. The extras pass
+        // then bound the very same label to title 5, correctly.
+        //
+        // The user saw both: the piece listed as an extra, and listed again as
+        // "The menus suggest bonus material called 'Making the Best Next Thing'
+        // — no title on this disc runs that long". Every word of that is true
+        // and the whole of it is wrong, because the disc does hold it and the
+        // app did find it. Three of the disc's four extras read that way.
+        //
+        // Matched on the label rather than the title index: the point is that
+        // the *same named thing* was resolved elsewhere, and the index it was
+        // resolved to is what differs between the two passes.
+        let answered = Set(understanding.allFindings.map { $0.label.lowercased() })
+        understanding.unverified.removeAll { answered.contains($0.label.lowercased()) }
         return understanding
     }
 

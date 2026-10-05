@@ -187,3 +187,61 @@ struct PromptEchoTests {
                 "the example should be an obvious placeholder")
     }
 }
+
+/// #0217 — a claim one question answered is not "unconfirmed" from another.
+///
+/// On the NEXT disc the user saw three of the disc's four extras listed twice:
+/// once correctly as extras, and again as "The menus suggest bonus material
+/// called 'Making the Best Next Thing' — no title on this disc runs that long".
+///
+/// Every word of that sentence is true. The bonus-feature question has a
+/// ~40-minute floor (`BonusFeature.minimumSeconds`), 18 minutes is under it, and
+/// `inScope` correctly refused to bind — so the claim was filed unverified. The
+/// extras pass then bound the same label to title 5, correctly. The whole of it
+/// is still wrong: the disc does hold that piece, the app did find it, and the
+/// panel said otherwise beside the entry proving it.
+struct CrossQuestionClaimTests {
+
+    private static let evidence = DiscEvidence(
+        volumeName: "NEXT",
+        menuPages: [["MAKING THE BEST NEXT THING", "VISUALIZING THE NEXT MOVE", "PREVIEWS"]],
+        titles: [
+            DiscTitle(index: 1, durationSeconds: 5_767, chapterCount: 20,
+                      sizeBytes: 0, outputFileName: nil),
+            DiscTitle(index: 5, durationSeconds: 1_096, chapterCount: 1,
+                      sizeBytes: 0, outputFileName: nil),
+        ],
+        mainFeatureIndex: 1
+    )
+
+    /// The bug, with the disc and the answers that produced it: both passes
+    /// name the same 18-minute piece.
+    @Test func apieceTheExtrasPassBoundIsNotAlsoUnconfirmed() async {
+        let understanding = await DiscInterrogation.run(evidence: Self.evidence) { instructions, _ in
+            if instructions.contains("FEATURE FILMS") { return "NONE" }
+            // Both the bonus pass and the extras pass offer it.
+            return "Making the Best Next Thing (18:16)"
+        }
+
+        #expect(understanding.extras.map(\.titleIndex) == [5], "it is an extra, and it bound")
+        let stillUnverified = understanding.unverified.map(\.label)
+        #expect(stillUnverified.isEmpty,
+                "it must not also be reported as unconfirmed bonus material")
+        #expect(stillUnverified.count == 0, "\(stillUnverified)")
+    }
+
+    /// And a claim nothing resolved is still reported, which is the behaviour
+    /// this must not throw away: the disc's menus printed it, no title matches,
+    /// and that disagreement is a fact about the disc worth showing.
+    @Test func aclaimNothingResolvedIsStillReported() async {
+        let understanding = await DiscInterrogation.run(evidence: Self.evidence) { instructions, _ in
+            if instructions.contains("FEATURE FILMS") { return "NONE" }
+            // Printed on the menu, but no title runs anywhere near 90 minutes
+            // other than the feature, which is off limits to both passes.
+            return "Visualizing the Next Move (1:30:00)"
+        }
+        #expect(understanding.allFindings.isEmpty)
+        #expect(!understanding.unverified.isEmpty,
+                "a label the menus print and no title matches is still worth saying")
+    }
+}
