@@ -104,6 +104,16 @@ if [[ "${1:-}" == "--remote" ]]; then
 
     echo "== $RESULT in ${ELAPSED}s on $(hostname -s)"
     [[ -n "$COUNTS" ]] && echo "$COUNTS"
+    # #0224 — say whether the disc corpus was there.
+    #
+    # Asset-backed tests skip when it is absent, which is correct: a public
+    # repository must not carry studio artwork, so a clean clone has no corpus.
+    # The danger is that skipping is invisible — the same shape as a selector
+    # matching nothing, which this script already guards above. A thin run has
+    # to look thin, so `DiscAssetAvailabilityTests` prints one ASSETS line every
+    # run and it is lifted into the summary here.
+    ASSETS=$(grep -a '^ASSETS ' "$LOG" | head -n 2 | cut_line || true)
+    [[ -n "$ASSETS" ]] && echo "$ASSETS"
 
     # Swift Testing issues, XCTest failures, compiler errors and test-host
     # crashes. Plain "error:" is too broad: the test host logs benign
