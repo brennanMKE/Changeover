@@ -630,3 +630,86 @@ struct DiscTitleHeuristicTests {
         #expect(DiscTitleHeuristic.widescreenPreferred(titles).map(\.index) == [1, 3])
     }
 }
+
+/// #0222 — a feature-length documentary is not a second feature.
+///
+/// Its own suite with its own fixtures, because the numbers are the argument:
+/// every disc below carries the chapter counts measured off the real capture,
+/// not a placeholder.
+struct SecondFeatureChapterRuleTests {
+
+    private static func title(_ index: Int, _ seconds: Int, chapters: Int) -> DiscTitle {
+        DiscTitle(index: index, durationSeconds: seconds, chapterCount: chapters,
+                  sizeBytes: 0, outputFileName: nil)
+    }
+
+    private static func disc(_ titles: [DiscTitle]) -> DiscInfo {
+        DiscInfo(volumeName: "TEST", driveName: "disk6", titles: titles)
+    }
+
+// MARK: - #0222: a feature-length documentary is not a second feature
+
+/// 12 Monkeys, 2026-10-05, with its real numbers.
+///
+/// Title 1 is the film at 2:09:27 with 45 chapters; title 5 is a 1:27:30
+/// making-of with **two**. Their runtime ratio is 0.676 against #0173's
+/// floor of 0.667 — it clears by nine thousandths — so the disc was offered
+/// as a double feature and an agent was blocked being told to "name at
+/// least one" of two films when the disc holds one.
+@Test func afeatureLengthDocumentaryIsNotASecondFeature() {
+    let disc = Self.disc([
+        Self.title(1, 7_767, chapters: 45),
+        Self.title(5, 5_250, chapters: 2),
+    ])
+    #expect(DiscTitleHeuristic.severalFeatures(disc) == nil,
+            "a 2-chapter making-of is not a feature film")
+}
+
+/// And the runtime ratio alone does not save it — which is why the chapter
+/// rule had to exist. Stated as its own expectation so a later edit cannot
+/// quietly make this test pass for the wrong reason.
+@Test func theRuntimeRatioAloneWouldHaveAcceptedIt() {
+    let ratio = 5_250.0 / 7_767.0
+    #expect(ratio > DiscTitleHeuristic.minimumSecondFeatureRatio,
+            "0.676 clears 0.667; runtime cannot separate these two titles")
+}
+
+/// The two real double features in the corpus are untouched. These are the
+/// discs the rule must not break, and their chapter counts are the measured
+/// ones — Uncle Buck's two films both carry 17, which is exactly the shape
+/// that defeated #0157's removed "counts agree" test.
+@Test func realDoubleFeaturesSurviveTheChapterRule() {
+    let uncleBuck = Self.disc([
+        Self.title(2, 5_978, chapters: 17),
+        Self.title(1, 5_425, chapters: 17),
+    ])
+    #expect(DiscTitleHeuristic.severalFeatures(uncleBuck)?.count == 2)
+
+    let getHard = Self.disc([
+        Self.title(5, 6_012, chapters: 14),
+        Self.title(4, 5_122, chapters: 11),
+    ])
+    #expect(DiscTitleHeuristic.severalFeatures(getHard)?.count == 2)
+}
+
+/// Signs is rejected twice over — by runtime and now by chapters — which is
+/// fine, and worth pinning so a change to either rule still leaves it a
+/// single-feature disc.
+@Test func signsStaysOneFilmAndADocumentary() {
+    let signs = Self.disc([
+        Self.title(1, 6_385, chapters: 22),
+        Self.title(8, 3_534, chapters: 7),
+    ])
+    #expect(DiscTitleHeuristic.severalFeatures(signs) == nil)
+}
+
+/// A disc reporting no chapter counts at all must not be rejected on a
+/// ratio computed from zeros. Unknown is not evidence.
+@Test func adiscWithNoChapterCountsIsNotRejectedOnThem() {
+    let disc = Self.disc([
+        Self.title(1, 6_000, chapters: 0),
+        Self.title(2, 5_400, chapters: 0),
+    ])
+    #expect(DiscTitleHeuristic.severalFeatures(disc)?.count == 2)
+}
+}

@@ -293,6 +293,55 @@ nonisolated enum DiscTitleHeuristic {
             guard ratio >= minimumSecondFeatureRatio else { return nil }
         }
 
+        // #0222 — and a second feature is chaptered like a feature.
+        //
+        // 12 Monkeys, 2026-10-05: title 1 is the film at 2:09:27 with 45
+        // chapters, title 5 a 1:27:30 making-of ("The Hamster Factor") with
+        // **two**. The ratio test above gives 0.676 against a floor of 0.667 —
+        // it clears by nine thousandths — so the disc was offered as a double
+        // feature and an agent was blocked being asked to name a second film
+        // that does not exist. #0173's comment anticipated exactly this and
+        // accepted it: "a genuine double feature pairing a 90-minute film with
+        // a 60-minute B-picture (0.67) is deliberately kept on the
+        // multi-feature side." Runtime alone cannot separate them.
+        //
+        // Chapters can, measured over every archived disc with two or more
+        // candidates — fewest chapters against most:
+        //
+        //     Uncle Buck / Great Outdoors   17 / 17   1.00   two films
+        //     Get Hard / The Campaign       11 / 14   0.79   two films
+        //     Signs                          7 / 22   0.32   one film + a doc
+        //     12 Monkeys                     2 / 45   0.04   one film + a doc
+        //
+        // A half sits 29 points below the nearest real double feature and 18
+        // above the nearest documentary — the widest gap on offer. A feature is
+        // chaptered for navigation because people stop watching films and come
+        // back to them; a making-of is one sitting, and is authored as one.
+        //
+        // **Proportional, not absolute**, and that is what makes it safe. An
+        // absolute floor of nine chapters separates these four discs just as
+        // well and fails three existing tests whose synthetic discs carry one
+        // or seven chapters as a placeholder — it would have meant editing
+        // tests to fit the rule, which is the wrong way round. This rule needed
+        // no test changed, which is the better evidence for it.
+        //
+        // **Not the chapter test #0157 removed.** That one rejected when two
+        // titles' counts *agreed*, which killed Uncle Buck, whose two genuine
+        // films both have 17 because an authoring house uses a house style.
+        // This rejects only when they disagree by an order of magnitude, and
+        // Uncle Buck's 1.00 is the safest value it can take.
+        //
+        // #0173's asymmetry applies unchanged: a false positive blocks the disc
+        // and demands a film that does not exist, while a false negative falls
+        // back to the scanner's MainFeature and silently leaves a second film.
+        // So the bar is set where a sparsely chaptered real double feature
+        // stays on the multi-feature side.
+        let chapterCounts = groups.compactMap { $0.map(\.chapterCount).max() }
+        if let most = chapterCounts.max(), let fewest = chapterCounts.min(), most > 0 {
+            let chapterRatio = Double(fewest) / Double(most)
+            guard chapterRatio >= minimumSecondFeatureChapterRatio else { return nil }
+        }
+
         // One title per film: the longest in each group, which for a
         // theatrical/extended pair is the fuller cut.
         return groups
@@ -304,6 +353,12 @@ nonisolated enum DiscTitleHeuristic {
     /// a disc claimed to hold several films. See `severalFeatures` for the
     /// measured table this comes from.
     static let minimumSecondFeatureRatio = 2.0 / 3.0
+
+    /// #0222 — how sparsely chaptered the shorter feature may be against the
+    /// longer, on a disc claimed to hold several films. See `severalFeatures`
+    /// for the measured table: real double features score 0.79 and 1.00, a film
+    /// with a documentary beside it 0.32 and 0.04.
+    static let minimumSecondFeatureChapterRatio = 0.5
 
     /// How far apart two runtimes must be to be different films rather than
     /// two cuts of one. Five minutes: longer than the front-matter and
