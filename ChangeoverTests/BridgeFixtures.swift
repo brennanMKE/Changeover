@@ -105,7 +105,8 @@ enum BridgeFixtures {
         outcome: String? = nil,
         failureReason: String? = nil,
         cancelledBy: String? = nil,
-        film: FilmStatus? = nil
+        film: FilmStatus? = nil,
+        extras: [PlannedExtra]? = nil
     ) -> JobStatus {
         JobStatus(
             running: running,
@@ -118,7 +119,8 @@ enum BridgeFixtures {
             outcome: outcome,
             failureReason: failureReason,
             cancelledBy: cancelledBy,
-            film: film
+            film: film,
+            extras: extras
         )
     }
 

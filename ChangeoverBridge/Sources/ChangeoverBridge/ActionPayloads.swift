@@ -376,13 +376,43 @@ public struct PlannedExtra: Codable, Sendable, Equatable {
     public var label: String?
     public var folderName: String
     public var durationSeconds: Int?
+    /// #0229 — where this extra got to: `waiting`, `running`, `done`,
+    /// `failed` or `skipped`. `nil` when the question does not apply — a
+    /// `select` reply describes a plan that has not started.
+    ///
+    /// Without it a job reports `succeeded` whether it produced four extras or
+    /// one, because a failed extra does not fail its job (#0031). An agent had
+    /// to run `library` afterwards to find out, which is a second round trip to
+    /// learn something the app knew all along.
+    public var state: String?
+    /// Why, for the two states that have a reason. `nil` otherwise.
+    public var stateReason: String?
+
+    /// The values `state` takes. Named constants because the app writes them,
+    /// the CLI prints them and an agent branches on them.
+    /// `ExtraOutcomeNamesAgreeTests` pins them to the app's own `ExtraOutcome`.
+    public enum State {
+        public static let waiting = "waiting"
+        public static let running = "running"
+        public static let done = "done"
+        public static let failed = "failed"
+        public static let skipped = "skipped"
+
+        /// The states meaning "this produced nothing", so a caller counting
+        /// what a disc actually yielded does not match on two strings.
+        public static let unproduced: Set<String> = [failed, skipped]
+    }
 
     public init(
         titleIndex: Int,
         label: String? = nil,
         folderName: String,
-        durationSeconds: Int? = nil
+        durationSeconds: Int? = nil,
+        state: String? = nil,
+        stateReason: String? = nil
     ) {
+        self.state = state
+        self.stateReason = stateReason
         self.titleIndex = titleIndex
         self.label = label
         self.folderName = folderName

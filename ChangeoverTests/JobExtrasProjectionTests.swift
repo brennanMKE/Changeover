@@ -108,4 +108,92 @@ struct JobExtrasProjectionTests {
         #expect(rendered.contains("title 5"))
         #expect(rendered.contains("Behind The Scenes"))
     }
+
+    // MARK: - #0229: and where each one got to
+
+    /// The gap this closes: a job reports `succeeded` whether it produced four
+    /// extras or one, because a failed extra does not fail its job (#0031). An
+    /// agent had to run `library` afterwards to find out — a second round trip
+    /// to learn something the app knew all along.
+    @Test func eachExtraCarriesItsState() throws {
+        let jobs = try start(extras: [5])
+        let job = try #require(jobs.current)
+        job.reportExtra(.failed(reason: "bad sector"), titleIndex: 5)
+
+        let status = try #require(BridgeStatusReader.jobStatus(jobs))
+        let extra = try #require(status.extras?.first)
+        #expect(extra.state == PlannedExtra.State.failed)
+        #expect(extra.stateReason == "bad sector")
+    }
+
+    /// Planned but not yet reached reads `waiting`, so an agent can tell "not
+    /// started" from "lost".
+    @Test func aplannedExtraStartsWaiting() throws {
+        let jobs = try start(extras: [5])
+        let status = try #require(BridgeStatusReader.jobStatus(jobs))
+        #expect(status.extras?.first?.state == PlannedExtra.State.waiting)
+        #expect(status.extras?.first?.stateReason == nil)
+    }
+
+    /// Every `ExtraOutcome` has a wire name, so a case added later cannot
+    /// serialise as something the CLI has no constant for.
+    @Test func everyOutcomeHasAWireName() {
+        let named: Set<String> = [
+            PlannedExtra.State.waiting, PlannedExtra.State.running,
+            PlannedExtra.State.done, PlannedExtra.State.failed,
+            PlannedExtra.State.skipped,
+        ]
+        let outcomes: [ExtraOutcome] = [
+            .waiting, .running, .done, .failed(reason: "x"), .skipped(reason: "y"),
+        ]
+        for outcome in outcomes {
+            #expect(named.contains(outcome.name), "\(outcome) has no PlannedExtra.State constant")
+        }
+        #expect(named.count == outcomes.count)
+    }
+
+    /// Only the two states that mean "produced nothing" count as lost.
+    @Test func onlyFailedAndSkippedAreUnproduced() {
+        #expect(PlannedExtra.State.unproduced == [PlannedExtra.State.failed,
+                                                  PlannedExtra.State.skipped])
+        #expect(!PlannedExtra.State.unproduced.contains(PlannedExtra.State.done))
+        #expect(!PlannedExtra.State.unproduced.contains(PlannedExtra.State.waiting))
+    }
+
+    /// And `job.finished` says it in the summary, not only in a field an agent
+    /// has to go and look at. "succeeded" reads as a complete import and is not
+    /// one when a featurette was dropped.
+    @Test func thefinishedEventNamesLostExtras() throws {
+        let before = BridgeFixtures.status(
+            job: BridgeFixtures.job(running: true, phase: "encoding"))
+        let after = BridgeFixtures.status(
+            job: BridgeFixtures.job(
+                running: false, phase: "succeeded", outcome: "succeeded",
+                extras: [
+                    PlannedExtra(titleIndex: 5, folderName: "Featurettes",
+                                 state: PlannedExtra.State.done),
+                    PlannedExtra(titleIndex: 7, folderName: "Trailers",
+                                 state: PlannedExtra.State.failed, stateReason: "bad sector"),
+                ]))
+        let event = try #require(
+            BridgeStatusDiff.drafts(from: before, to: after)
+                .first { $0.kind == BridgeEvent.Kind.jobFinished })
+        #expect(event.summary.contains("did not make it"), "got: \(event.summary)")
+    }
+
+    /// A job that produced everything says nothing extra — the note is a
+    /// warning, and a warning that fires on success is noise.
+    @Test func acompleteJobGetsNoNote() throws {
+        let before = BridgeFixtures.status(
+            job: BridgeFixtures.job(running: true, phase: "encoding"))
+        let after = BridgeFixtures.status(
+            job: BridgeFixtures.job(
+                running: false, phase: "succeeded", outcome: "succeeded",
+                extras: [PlannedExtra(titleIndex: 5, folderName: "Featurettes",
+                                      state: PlannedExtra.State.done)]))
+        let event = try #require(
+            BridgeStatusDiff.drafts(from: before, to: after)
+                .first { $0.kind == BridgeEvent.Kind.jobFinished })
+        #expect(!event.summary.contains("did not make it"))
+    }
 }

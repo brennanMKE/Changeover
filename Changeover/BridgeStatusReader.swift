@@ -331,11 +331,18 @@ nonisolated enum BridgeStatusReader {
             // a forty-minute encode runs.
             extras: (jobs.current ?? jobs.history.last).map { job in
                 job.extras.items.map { item in
-                    PlannedExtra(
+                    // #0229 — and where each one got to. A failed extra does
+                    // not fail its job (#0031), so without this a `succeeded`
+                    // job reports the same whether it produced four extras or
+                    // one, and an agent had to run `library` to find out.
+                    let outcome = job.outcome(ofExtra: item.titleIndex)
+                    return PlannedExtra(
                         titleIndex: item.titleIndex,
                         label: item.label,
                         folderName: AgentActions.folderName(of: item),
-                        durationSeconds: item.durationSeconds
+                        durationSeconds: item.durationSeconds,
+                        state: outcome.name,
+                        stateReason: outcome.reason
                     )
                 }
             }

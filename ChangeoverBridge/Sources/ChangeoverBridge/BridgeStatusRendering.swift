@@ -93,7 +93,13 @@ extension BridgeStatus {
             // without anyone reading the app's flow log over SSH.
             for extra in job.extras ?? [] {
                 let name = extra.label ?? "unnamed"
-                rows.append(("job extra", "title \(extra.titleIndex) → \(extra.folderName)/\(name)"))
+                // #0229 — and where it got to, with the reason when there is one.
+                let state = extra.state.map { state -> String in
+                    extra.stateReason.map { " [\(state): \($0)]" } ?? " [\(state)]"
+                } ?? ""
+                rows.append((
+                    "job extra",
+                    "title \(extra.titleIndex) → \(extra.folderName)/\(name)\(state)"))
             }
             if let who = job.cancelledBy {
                 rows.append(("cancelled by", JobStatus.cancelledByPhrase(who)))

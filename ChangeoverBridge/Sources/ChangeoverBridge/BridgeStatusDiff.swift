@@ -232,9 +232,19 @@ public enum BridgeStatusDiff {
             // could infer "the user did it" from no `agent.action` arriving
             // beside it, and inference from a missing message is exactly what
             // #0200 removed for `chosenBy`.
+            // #0229 — a job that lost extras says so in the line an agent
+            // reads, rather than only in a field it has to go and look at.
+            // "succeeded" reads as a complete import and is not one when a
+            // featurette was dropped along the way.
+            let lost = (job.extras ?? []).filter {
+                $0.state.map(PlannedExtra.State.unproduced.contains) ?? false
+            }.count
+            let extrasNote = lost > 0
+                ? " — \(lost) extra(s) did not make it"
+                : ""
             let detail = job.failureReason.map { " — \($0)" }
                 ?? job.cancelledBy.map { " — \(JobStatus.cancelledByPhrase($0))" }
-                ?? ""
+                ?? extrasNote
             return [
                 EventDraft(
                     kind: BridgeEvent.Kind.jobFinished,
