@@ -275,7 +275,79 @@ enum AgentActions {
         // `TMDBMovie` carries the release date, `TMDBMovieDetails` does not, and a
         // Plex folder with the wrong year is a folder Plex reads as a different
         // film. Rather than invent a year, the app goes and searches.
-        if let movieID = resolved.movieID {
+        // #0223 — a multi-feature disc's film belongs to one feature's block.
+        //
+        // The Start gate on such a disc reads `featureSelection.choices`, which
+        // nothing in the CLI could set: `select --feature-title 1` moved
+        // `jobs.selectedTitleIndex` and the mirrored singular selection, so the
+        // gate went on refusing `noFeatureChosen` — "name at least one of them"
+        // — with no way for an agent to name one. Reported on 12 Monkeys, which
+        // was not really a double feature (#0222), but Uncle Buck / The Great
+        // Outdoors genuinely is and would block the same way.
+        //
+        // Setting `choices` alone would have been worse than the bug. The plan
+        // is built by `plannedFilms`, which reads each film from **that
+        // feature's own search model** and requires the model to hold a
+        // selected movie whose id agrees with the choice. A choice with no
+        // model behind it passes the gate and then plans nothing: a disc that
+        // starts and imports no films. So this does what the window does —
+        // search inside the feature's own box, then record the pick — rather
+        // than reaching for the state the gate happens to read.
+        if resolved.extrasOnly == false,
+           flow.featureSelection.isMultiFeature,
+           let movieID = resolved.movieID,
+           let feature = resolved.featureTitle ?? jobs.selectedTitleIndex {
+            guard let model = flow.featureSearch(feature) else {
+                return refusal(
+                    verb: BridgeRequest.Action.select,
+                    outcome: ActionOutcome.refusedUnknownTitle,
+                    detail: "title \(feature) is not one of this disc's features. "
+                        + "`status --json` lists them under flow; name one of those with "
+                        + "--feature-title.",
+                    sessionsAttached: sessionsAttached
+                )
+            }
+            // The feature's own box, not the shared one. Each block searches
+            // separately, and a film resolved in one is not in another's results.
+            if model.results.contains(where: { $0.id == movieID }) == false {
+                guard let query = resolved.query else {
+                    return refusal(
+                        verb: BridgeRequest.Action.select,
+                        outcome: ActionOutcome.refusedMovieNotFound,
+                        detail: "tmdb-\(movieID) is not among the results held for feature "
+                            + "\(feature), and no --query was given to find it. On a disc with "
+                            + "several films each feature searches separately, so add "
+                            + "`--query \"<title>\"`.",
+                        sessionsAttached: sessionsAttached
+                    )
+                }
+                let results = await model.probe(query, apiKey: settings.tmdbAPIKey)
+                guard results.contains(where: { $0.id == movieID }) else {
+                    return refusal(
+                        verb: BridgeRequest.Action.select,
+                        outcome: ActionOutcome.refusedMovieNotFound,
+                        detail: "searching TMDB for \"\(query)\" returned "
+                            + "\(results.isEmpty ? "nothing" : "\(results.count) film(s)")"
+                            + ", none of them tmdb-\(movieID). Nothing was selected.",
+                        sessionsAttached: sessionsAttached
+                    )
+                }
+                model.present(query: query, results: results)
+            }
+            // The same call the window's results row makes, so the choice, the
+            // model and the gate cannot disagree.
+            flow.selectFeature(movieID: movieID, feature: feature, jobs: jobs, settings: settings)
+            guard flow.featureSelection.movieID(for: feature) == movieID else {
+                return refusal(
+                    verb: BridgeRequest.Action.select,
+                    outcome: ActionOutcome.refusedMovieNotFound,
+                    detail: "tmdb-\(movieID) is already chosen for another feature on this disc. "
+                        + "#0172 refuses to move a film between features rather than stealing it; "
+                        + "clear the other one first if that is what you meant.",
+                    sessionsAttached: sessionsAttached
+                )
+            }
+        } else if let movieID = resolved.movieID {
             if flow.search.results.contains(where: { $0.id == movieID }) == false {
                 guard let query = resolved.query else {
                     return refusal(
