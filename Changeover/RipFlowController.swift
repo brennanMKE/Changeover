@@ -876,6 +876,12 @@ final class RipFlowController {
     ///
     /// A single-feature disc has no feature slots to reason about and gets the
     /// set exactly as it is passed today.
+    /// #0226 — the per-film extras, for tests. Same call `ripRequest` makes, so
+    /// a test cannot be answered by a second derivation.
+    func extraTitleIndices(forFilmForTesting film: Int, jobs: JobController) -> [Int] {
+        extraTitleIndices(forFilm: film, jobs: jobs)
+    }
+
     private func extraTitleIndices(forFilm film: Int, jobs: JobController) -> [Int] {
         guard featureSelection.isMultiFeature else { return jobs.selectedExtraTitleIndices.sorted() }
         return jobs.selectedExtraTitleIndices

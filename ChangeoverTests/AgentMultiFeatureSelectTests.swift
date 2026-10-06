@@ -172,4 +172,65 @@ struct AgentMultiFeatureSelectTests {
         #expect(flow.featureSelection.movieID(for: features[0]) == film.id,
                 "and the first feature keeps it")
     }
+
+    // MARK: - #0226: both films, plus extras
+
+    /// The CLI can name **both** films on a double feature, one call each.
+    ///
+    /// Asked directly: "if we do have 2 movies on a disc can the CLI select
+    /// both plus extras?" This is the answer, measured on the real Uncle Buck /
+    /// The Great Outdoors capture rather than reasoned from the code.
+    @Test func bothFilmsCanBeNamedOneCallEach() async throws {
+        let (jobs, flow, settings) = try makeFlow()
+        let features = flow.featureSelection.features
+        try #require(features.count == 2)
+        let buck = try Self.movie(id: 11_395, title: "Uncle Buck")
+        let outdoors = try Self.movie(id: 11_396, title: "The Great Outdoors")
+        try #require(flow.featureSearch(features[0])).results = [buck]
+        try #require(flow.featureSearch(features[1])).results = [outdoors]
+
+        for (feature, film) in zip(features, [buck, outdoors]) {
+            let result = await AgentActions.select(
+                SelectionRequest(movieID: film.id, featureTitle: feature),
+                jobs: jobs, flow: flow, settings: settings, sessionsAttached: 1)
+            #expect(result.done, "feature \(feature) refused: \(result.detail)")
+        }
+
+        #expect(flow.featureSelection.movieID(for: features[0]) == buck.id)
+        #expect(flow.featureSelection.movieID(for: features[1]) == outdoors.id)
+    }
+
+    /// And an extra ticked on a two-film disc goes to **both** films.
+    ///
+    /// Current behaviour, pinned rather than endorsed. `extraTitleIndices(
+    /// forFilm:)` reuses one flat ticked set for every film and adds only that
+    /// film's own *bonus features* (#0182) on top — so a trailer selected with
+    /// `--extra 3` is encoded twice and filed into both films' folders.
+    ///
+    /// For a shared trailer reel that is arguably right. For a making-of about
+    /// one of the two films it is not, and the model already distinguishes the
+    /// case: a feature-length title can be marked a bonus feature *attached to
+    /// one film*. **That attachment has no CLI route** — `SelectionRequest
+    /// .Extra` carries a title index, a kind and a label, and nothing that says
+    /// which film it belongs to.
+    ///
+    /// This test exists so that changing it is a decision rather than an
+    /// accident.
+    @Test func anExtraOnADoubleFeatureGoesToBothFilms() async throws {
+        let (jobs, flow, settings) = try makeFlow()
+        let features = flow.featureSelection.features
+        let shared = 3
+        try #require(!features.contains(shared), "title \(shared) must not be a feature")
+
+        let result = await AgentActions.select(
+            SelectionRequest(extras: [.init(titleIndex: shared, kind: "Trailers", label: "Trailer")]),
+            jobs: jobs, flow: flow, settings: settings, sessionsAttached: 1)
+        #expect(result.done, "the extra was refused: \(result.detail)")
+        #expect(jobs.selectedExtraTitleIndices == [shared])
+
+        for feature in features {
+            #expect(flow.extraTitleIndices(forFilmForTesting: feature, jobs: jobs) == [shared],
+                    "one ticked extra is currently encoded for every film on the disc")
+        }
+    }
 }
