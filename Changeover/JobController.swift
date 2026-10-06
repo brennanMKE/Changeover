@@ -787,7 +787,10 @@ final class JobController {
         // what makes `isRunning`/`currentJobID`/`currentJobState`/
         // `currentMetadata`/`logDisplayRows`/`lastOutcome` all reflect this job,
         // synchronously, before the `Task` below ever runs.
-        let job = Job(id: jobID, metadata: request.metadata, disc: disc, log: JobLog(capacity: logCapacity), request: request)
+        // #0225 — the resolved plan travels with the job, so `status` can say
+        // what this job will encode rather than what was selected before it.
+        let job = Job(id: jobID, metadata: request.metadata, disc: disc,
+                      log: JobLog(capacity: logCapacity), request: request, extras: extrasPlan)
 
         // Carry the identification story into the job's own log.
         //

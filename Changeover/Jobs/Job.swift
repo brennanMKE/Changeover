@@ -50,6 +50,16 @@ final class Job {
     /// `JobController.retry(id:settings:)` refuses a job without it.
     let request: RipRequest?
 
+    /// #0225 — the extras this job will actually encode, resolved at start.
+    ///
+    /// Not `request.extraTitleIndices`, which is what was *asked for*.
+    /// `ExtrasPlan.make` drops the feature title and anything the held scan
+    /// does not know, so the request can name an extra this job will never
+    /// produce. An agent confirming mid-job that title 5 is queued needs the
+    /// answer that is true of the running job, not of the selection that
+    /// started it — and the selection can move on while the job runs.
+    let extras: ExtrasPlan
+
     private(set) var state: JobState = .initial
     /// #0142 — the most recent HandBrake progress line for this job, tagged
     /// with which encode it belongs to (`JobProgress`). Cleared by every
@@ -116,7 +126,12 @@ final class Job {
         identification = lines
     }
 
-    init(id: JobID, metadata: MovieMetadata, disc: URL, log: JobLog, startDate: Date = Date(), request: RipRequest? = nil) {
+    /// - Parameter extras: defaulted empty so every existing construction
+    ///   site — the history view's, the tests' — keeps compiling and means what
+    ///   it always did. `JobController.start` passes the resolved plan.
+    init(id: JobID, metadata: MovieMetadata, disc: URL, log: JobLog, startDate: Date = Date(),
+         request: RipRequest? = nil, extras: ExtrasPlan = ExtrasPlan()) {
+        self.extras = extras
         self.id = id
         self.metadata = metadata
         self.disc = disc

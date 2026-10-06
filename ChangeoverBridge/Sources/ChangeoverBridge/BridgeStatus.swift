@@ -416,6 +416,18 @@ public struct JobStatus: Codable, Sendable, Equatable {
     /// level because the top-level `film` follows the *current selection*, which
     /// can move on while a job is still running.
     public var film: FilmStatus?
+    /// #0225 — the extras this job will encode, resolved when it started.
+    ///
+    /// `unit`, `extraIndex` and `extraCount` already said *which* extra is
+    /// running and how many there are; what was missing was which titles they
+    /// are. An agent could not confirm mid-job that title 5 was queued without
+    /// reading the app's flow log over SSH, which is not an interface.
+    ///
+    /// Resolved, not requested: `ExtrasPlan.make` drops the feature title and
+    /// anything the held scan does not know, so the request can name an extra
+    /// the job will never produce. And read from the *job*, not the current
+    /// selection — the selection can move on while a forty-minute encode runs.
+    public var extras: [PlannedExtra]?
 
     public init(
         running: Bool,
@@ -431,7 +443,8 @@ public struct JobStatus: Codable, Sendable, Equatable {
         outcome: String? = nil,
         failureReason: String? = nil,
         cancelledBy: String? = nil,
-        film: FilmStatus? = nil
+        film: FilmStatus? = nil,
+        extras: [PlannedExtra]? = nil
     ) {
         self.running = running
         self.id = id
@@ -447,6 +460,7 @@ public struct JobStatus: Codable, Sendable, Equatable {
         self.failureReason = failureReason
         self.cancelledBy = cancelledBy
         self.film = film
+        self.extras = extras
     }
 
     /// The phases after which nothing more happens to this job.

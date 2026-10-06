@@ -89,6 +89,12 @@ extension BridgeStatus {
             if let id = job.id { rows.append(("job id", id)) }
             if let reason = job.failureReason { rows.append(("job failure", reason)) }
             // #0205 — who stopped it, for the person reading `status` over SSH.
+            // #0225 — what this job will encode, so `status` answers it
+            // without anyone reading the app's flow log over SSH.
+            for extra in job.extras ?? [] {
+                let name = extra.label ?? "unnamed"
+                rows.append(("job extra", "title \(extra.titleIndex) → \(extra.folderName)/\(name)"))
+            }
             if let who = job.cancelledBy {
                 rows.append(("cancelled by", JobStatus.cancelledByPhrase(who)))
             }

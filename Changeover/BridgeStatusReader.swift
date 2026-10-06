@@ -325,7 +325,20 @@ nonisolated enum BridgeStatusReader {
                 // of who decided and is what `snapshot` reads for `film` too.
                 chosenBy: IdentificationSummary.chooser(jobs.identificationStory).rawValue,
                 libraryCheck: .idle
-            )
+            ),
+            // #0225 — what this job will encode, from the job's own resolved
+            // plan rather than from the live selection, which can move on while
+            // a forty-minute encode runs.
+            extras: (jobs.current ?? jobs.history.last).map { job in
+                job.extras.items.map { item in
+                    PlannedExtra(
+                        titleIndex: item.titleIndex,
+                        label: item.label,
+                        folderName: AgentActions.folderName(of: item),
+                        durationSeconds: item.durationSeconds
+                    )
+                }
+            }
         )
     }
 

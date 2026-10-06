@@ -770,7 +770,7 @@ enum AgentActions {
     /// `PlexOrganizer.move`, rather than re-derived from the label. A second
     /// derivation would be a second answer, and this one is reported to an agent as
     /// a fact about where the file is going.
-    private static func folderName(of item: ExtrasPlan.Item) -> String {
+    static func folderName(of item: ExtrasPlan.Item) -> String {
         switch item.filing {
         case .bonusFeature(let kind, _): kind.folderName
         }
