@@ -19,6 +19,13 @@ struct RippingStepView: View {
     /// where the plan comes from and passes it here.
     var plan: DiscRipPlan?
 
+    /// #0228 — every item this disc is importing, with its state.
+    ///
+    /// Passed in rather than derived here, the same way `plan` is: this view
+    /// takes plain values and the flow owns where they come from. Defaulted
+    /// empty so every existing call site compiles and draws nothing new.
+    var importRows: [ImportProgressList.Row] = []
+
     var body: some View {
         VStack(spacing: 0) {
             if let job = jobs.job(id: jobID) {
@@ -28,6 +35,7 @@ struct RippingStepView: View {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         progressBlock(job: job, now: context.date)
                     }
+                    importList
                     identificationPanel(job: job)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -48,6 +56,74 @@ struct RippingStepView: View {
                 Spacer()
                 cancelButton
             }
+        }
+    }
+
+    /// #0228 — everything this disc is importing, and where each item got to.
+    ///
+    /// The app knew all of this and showed almost none of it: the per-item list
+    /// lived on the **Done** step, only for films, and only once everything had
+    /// finished — so the forty minutes when it is most useful were the forty
+    /// minutes it was missing. The bar above says how far the *current* encode
+    /// has got; this says what the disc is producing and what is left.
+    ///
+    /// Hidden when there is nothing to add. On a one-film disc with no extras
+    /// the list is a single row repeating the heading, and `docs/
+    /// plain-language-ui.md` is clear that a screen says what the person needs
+    /// and no more.
+    @ViewBuilder
+    private var importList: some View {
+        let rows = importRows
+        if rows.count > 1 {
+            VStack(alignment: .leading, spacing: 6) {
+                if let summary = ImportProgressList.summary(rows) {
+                    Text(summary)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(rows) { row in
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(color(row.state.tone))
+                            .frame(width: 7, height: 7)
+                        // An extra is filed inside a film's folder, so it is
+                        // drawn inside it.
+                        if case .extra(let folder) = row.kind {
+                            Text(folder)
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .padding(.leading, 10)
+                        }
+                        Text(row.name)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer(minLength: 8)
+                        Text(row.status)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+        }
+    }
+
+    /// The dot's colour. `ImportProgressList.Tone` names the meaning and this
+    /// is the only place that turns one into a colour, so the list stays
+    /// testable without SwiftUI.
+    private func color(_ tone: ImportProgressList.Tone) -> Color {
+        switch tone {
+        case .good: return .green
+        case .bad: return .red
+        case .active: return .accentColor
+        case .muted: return .secondary
+        case .pending: return Color.secondary.opacity(0.4)
         }
     }
 

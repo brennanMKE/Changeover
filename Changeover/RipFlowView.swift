@@ -258,7 +258,12 @@ struct RipFlowView: View {
             // #0163/#0164 — the disc's plan, so the Ripping step can say which
             // film of how many this is and what follows it. `nil` on an
             // ordinary disc, which is every sentence's "say nothing new" case.
-            RippingStepView(jobID: jobID, plan: flow.ripPlan)
+            RippingStepView(
+                jobID: jobID,
+                plan: flow.ripPlan,
+                // #0228 — what this disc is importing and where each item got
+                // to. Built by the flow, which owns both sources.
+                importRows: flow.importProgressRows(jobs: jobs))
         case .done(let jobID):
             // #0164 — the per-disc report: one row per film, imported or
             // skipped. On a one-film disc the plan holds one entry and every

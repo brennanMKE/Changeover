@@ -132,6 +132,17 @@ struct DVDPipeline {
     /// job's own `Job.reportProgress(_:)`.
     var reportProgress: @MainActor (JobProgress) -> Void = { _ in }
 
+    /// #0227 — reports where one extra got to, by title index.
+    ///
+    /// The extras loop is forgiving on purpose: a failed extra is logged and
+    /// skipped rather than failing a job whose feature is already in Plex
+    /// (#0031). That left the failure **only in the log** — a job could finish
+    /// `succeeded` having produced three of four extras with nothing on screen
+    /// or in `status` saying which was lost. This is the channel that makes it
+    /// visible. Defaulted to a no-op so every existing construction site
+    /// compiles unchanged.
+    var reportExtra: @MainActor (Int, ExtraOutcome) -> Void = { _, _ in }
+
     /// #0049 review — the end-of-job eject (#0005). Production passes
     /// `JobContext.eject`, which goes through `JobController`'s ejector seam
     /// and applies a partial eject to controller state. Defaulted to
@@ -924,8 +935,17 @@ struct DVDPipeline {
                 if Task.isCancelled {
                     let remaining = extras.items.count - index
                     log("⚠︎ Cancelled — skipping the remaining \(remaining) extra(s). The feature is already in Plex.")
+                    // #0227 — every extra that will now never run says so, so
+                    // the list shows "Cancelled" rather than leaving them
+                    // waiting for something that is not coming.
+                    for skipped in extras.items[index...] {
+                        await MainActor.run {
+                            reportExtra(skipped.titleIndex, .skipped(reason: "cancelled"))
+                        }
+                    }
                     break extrasLoop
                 }
+                await MainActor.run { reportExtra(item.titleIndex, .running) }
 
                 let extraFilter = DeinterlaceDecision.decide(
                     frameRate:         item.frameRate,
@@ -985,10 +1005,24 @@ struct DVDPipeline {
                     if extraFailure.reason == .cancelled {
                         let remainingAfterThis = extras.items.count - index - 1
                         log("⚠︎ Cancelled during extra title \(item.titleIndex) — skipping the remaining \(remainingAfterThis) extra(s). The feature is already in Plex.")
+                        for skipped in extras.items[index...] {
+                            await MainActor.run {
+                                reportExtra(skipped.titleIndex, .skipped(reason: "cancelled"))
+                            }
+                        }
                         break extrasLoop
                     }
 
                     log("✗ Extra title \(item.titleIndex) failed to encode: \(String(describing: extraFailure.reason)) — skipping")
+                    // #0227 — the failure that used to live only in the log.
+                    // The app's own wording for the failure, not
+                    // `String(describing:)` — this reaches a person and an
+                    // agent, and `FailurePresenter` is where it is written.
+                    let why = FailurePresenter.headline(
+                        for: extraFailure.reason, stage: extraFailure.stage)
+                    await MainActor.run {
+                        reportExtra(item.titleIndex, .failed(reason: why))
+                    }
 
                 case .success(let extraURL):
                     // #0037: the same check as the feature, log-only — a
@@ -1038,6 +1072,11 @@ struct DVDPipeline {
                         )
                         succeededExtras += 1
                         if item.isBonusFeature { succeededBonusFeatures += 1 }
+                        // #0227 — filed, which is the only state that means
+                        // the file is actually in Plex. Reported after the
+                        // move rather than after the encode, because an extra
+                        // that encoded and failed to move produced nothing.
+                        await MainActor.run { reportExtra(item.titleIndex, .done) }
                     } catch {
                         // #0178: the organizer has already logged *why* —
                         // for a bonus feature, which of its two guards
@@ -1046,6 +1085,9 @@ struct DVDPipeline {
                         // own folder, so it no longer has to say which.
                         let tree = "\(libraryRoots.moviesPath)/\(metadata.folderName)"
                         log("✗ Extra title \(item.titleIndex) failed to move into \(tree) — deleting")
+                        await MainActor.run {
+                            reportExtra(item.titleIndex, .failed(reason: "could not be filed into \(tree)"))
+                        }
                         // #0031 decision: an extra whose move failed is
                         // deleted, not kept — the disc remains the source,
                         // unlike the feature (#0012), so there is nothing to

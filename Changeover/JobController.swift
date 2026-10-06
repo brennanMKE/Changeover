@@ -92,6 +92,8 @@ final class JobController {
         /// on the wrong job. Defaulted to a no-op so a hand-built context in
         /// a test needn't supply one.
         var progress: @MainActor (JobProgress) -> Void = { _ in }
+        /// #0227 — where one extra got to, by title index.
+        var extraOutcome: @MainActor (Int, ExtraOutcome) -> Void = { _, _ in }
         /// #0049 review — the #0005 automatic end-of-job eject. Bound by
         /// `start` to the controller's own `ejector` seam, so the pipeline
         /// ejects through the same fake a test injects, and the outcome
@@ -544,6 +546,7 @@ final class JobController {
             log:         context.log,
             reportPhase: context.phase,
             reportProgress: context.progress,
+            reportExtra: context.extraOutcome,
             eject:       context.eject,
             keepDisc:    context.keepDisc,
             discRemoved: context.discRemoved
@@ -818,6 +821,9 @@ final class JobController {
         // …and kept addressable, so the Ripping step can show exactly these.
         job.recordIdentification(story)
 
+        // #0227 — every planned extra starts as waiting, so the window can
+        // list what is coming before anything has run.
+        job.seedExtraOutcomes()
         current = job
         // #0042 review: the between-job lines belong to the gap before this
         // job; once it ends, the idle view shows its log and then only what
@@ -850,6 +856,9 @@ final class JobController {
             // drains out of HandBrake's pipe after the job settled lands on
             // the job it belongs to, which drops it (`Job.reportProgress`).
             progress: { [job] progress in job.reportProgress(progress) },
+            extraOutcome: { [job] titleIndex, outcome in
+                job.reportExtra(outcome, titleIndex: titleIndex)
+            },
             // #0049 review: the automatic end-of-job eject goes through the
             // same `ejector` seam as the manual one, and its outcome is
             // applied to controller state — a partial eject here leaves the

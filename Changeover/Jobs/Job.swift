@@ -120,6 +120,34 @@ final class Job {
     /// reasoning was wrong.
     private(set) var identification: [String] = []
 
+    /// #0227 — where each of this job's extras got to, by title index.
+    ///
+    /// Seeded `waiting` for everything in `extras` the moment the job starts,
+    /// so the window can list what is coming before anything has run. The
+    /// pipeline reports each transition.
+    private(set) var extraOutcomes: [Int: ExtraOutcome] = [:]
+
+    /// Records where one extra got to. Unknown title indices are accepted
+    /// rather than dropped: a report for a title not in the plan means the two
+    /// have diverged, and a row that appears unexpectedly is easier to notice
+    /// than one that silently does not.
+    func reportExtra(_ outcome: ExtraOutcome, titleIndex: Int) {
+        extraOutcomes[titleIndex] = outcome
+    }
+
+    /// Marks every planned extra as waiting. Called once, at start.
+    func seedExtraOutcomes() {
+        for item in extras.items where extraOutcomes[item.titleIndex] == nil {
+            extraOutcomes[item.titleIndex] = .waiting
+        }
+    }
+
+    /// Where `titleIndex` got to, defaulting to `waiting` for a planned extra
+    /// nothing has reported yet.
+    func outcome(ofExtra titleIndex: Int) -> ExtraOutcome {
+        extraOutcomes[titleIndex] ?? .waiting
+    }
+
     /// Carried in at job start from the controller's log, since all of this
     /// happens before a job exists.
     func recordIdentification(_ lines: [String]) {

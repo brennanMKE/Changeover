@@ -2320,6 +2320,70 @@ final class RipFlowController {
         )
     }
 
+    /// #0228 — everything this disc is importing, with each item's state.
+    ///
+    /// Built from the two places that already track it rather than from a new
+    /// one: films from `ripPlan`, whose entries have carried
+    /// waiting/running/done/failed/skipped since #0163, and extras from the
+    /// running job's own `extraOutcomes` (#0227).
+    ///
+    /// Read from the **job**, not from the live selection. A forty-minute
+    /// encode outlives whatever is ticked on screen, and a list that followed
+    /// the selection would describe a job that is not the one running — the
+    /// same reasoning #0225 applied to `status`.
+    func importProgressRows(jobs: JobController) -> [ImportProgressList.Row] {
+        let job = jobs.current ?? jobs.history.last
+        let films: [ImportProgressList.FilmRow]
+        if let plan = ripPlan, !plan.entries.isEmpty {
+            films = plan.entries.map { entry in
+                ImportProgressList.FilmRow(
+                    titleIndex: entry.feature,
+                    name: entry.metadata.baseName,
+                    state: Self.listState(ofEntry: entry.state))
+            }
+        } else if let job {
+            // A single-film disc has no plan — the one job is the whole of it.
+            films = [ImportProgressList.FilmRow(
+                titleIndex: job.request?.featureTitleIndex ?? 0,
+                name: job.metadata.baseName,
+                state: Self.listState(ofJob: job))]
+        } else {
+            films = []
+        }
+
+        guard let job else { return ImportProgressList.rows(films: films, extras: []) }
+        let feature = job.request?.featureTitleIndex ?? films.first?.titleIndex ?? 0
+        let extras = job.extras.items.map { item in
+            ImportProgressList.ExtraRow(
+                titleIndex: item.titleIndex,
+                name: item.label ?? "Title \(item.titleIndex)",
+                folderName: AgentActions.folderName(of: item),
+                filmTitleIndex: feature,
+                state: ImportProgressList.state(of: job.outcome(ofExtra: item.titleIndex)))
+        }
+        return ImportProgressList.rows(films: films, extras: extras)
+    }
+
+    /// A film's plan entry as a list state.
+    nonisolated static func listState(ofEntry state: DiscRipPlan.State) -> ImportProgressList.State {
+        switch state {
+        case .waiting: return .waiting
+        case .running: return .running
+        case .done: return .done
+        case .failed: return .failed(reason: nil)
+        case .skipped(let reason): return .skipped(reason: reason)
+        }
+    }
+
+    /// The single-film case, where there is no plan to read — the job's own
+    /// phase is the answer.
+    nonisolated static func listState(ofJob job: Job) -> ImportProgressList.State {
+        if let outcome = job.outcome {
+            return outcome.failure == nil ? .done : .failed(reason: nil)
+        }
+        return job.state.phase.isTerminal ? .done : .running
+    }
+
     /// #0163 — the same request for a film named **explicitly**, rather than
     /// for whatever the mirrored singular selection happens to hold.
     ///
