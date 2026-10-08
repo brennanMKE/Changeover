@@ -469,28 +469,32 @@ final class RipFlowController {
     /// reads the same features again changes nothing (`setFeatures` is keyed
     /// on the list), so this is safe to call as often as everything else in
     /// `reconcile` is.
-    private func syncFeatures(jobs: JobController, apiKey: String) {
-        // #0176 — the scan first, unconditionally. The override panel and the
-        // fit check both read the held scan, and before this it was only
-        // written on the branch below, which a single-feature disc never
-        // takes.
+    /// #0235 — bring the derived view of the disc up to date, with no search
+    /// side effects and no `apiKey` needed.
+    ///
+    /// `syncFeatures` does this and then goes on to create search models and
+    /// carry typed text, which is why it needs an API key and why it is only
+    /// called from `reconcile` — that is, from the rip window's `onChange`.
+    /// The bridge's whole premise is that an agent drives the app with the
+    /// window closed, so the Start gate must not depend on a SwiftUI view
+    /// having run. An agent would otherwise see the answer the scan gave before
+    /// the menus arrived and never the corrected one.
+    ///
+    /// Idempotent and cheap: it returns having done nothing when the derived
+    /// indices have not moved, which is the common case.
+    ///
+    /// Deliberately **not** called from `startDecision`. That is read on every
+    /// gate evaluation including from inside a SwiftUI update, and mutating
+    /// observable state there is #0193's crash. The agent verbs call it
+    /// explicitly instead, where it is an action rather than a read.
+    func refreshDerivedState(jobs: JobController) {
         currentScanState = jobs.scanState
-        // #0235 — mirrored beside the scan, and for the same reason: the
-        // derived answers below are read without a `JobController` to hand.
-        // The menus land after the scan, so this is `.idle` on the first few
-        // passes and fills in later — which is exactly why `discReading`
-        // recomputes rather than storing its verdict.
         currentMenuState = jobs.menuState
-        // #0176 — what the USER said this disc holds outranks what the scan's
-        // classification makes of it. `features` is `nil` until the override
-        // is complete, so a disc with no override, or one half-answered,
-        // takes exactly the path it always did.
         let indices = manualOverride.features(amongTitles: scannedTitles.map(\.index))
             ?? FeatureSelection.features(in: Self.discOutcome(
                 jobs.scanState,
                 menuLines: jobs.menuState.menuText))
         guard indices != featureSelection.features else { return }
-
         featureSelection.setFeatures(indices)
         featureLibraryChecks = featureLibraryChecks.filter { indices.contains($0.key) }
         featureLibraryGenerations = featureLibraryGenerations.filter { indices.contains($0.key) }
@@ -498,6 +502,21 @@ final class RipFlowController {
         for index in indices where featureSearchModels[index] == nil {
             featureSearchModels[index] = MovieSearchViewModel()
         }
+    }
+
+    private func syncFeatures(jobs: JobController, apiKey: String) {
+        // #0176 — the scan first, unconditionally. The override panel and the
+        // fit check both read the held scan, and before this it was only
+        // written on the branch below, which a single-feature disc never
+        // takes.
+        // #0235 — the mirrors and the feature count, shared with the agent path
+        // so the two cannot derive the disc differently. Returns having done
+        // nothing when the count has not moved, so the work below still only
+        // runs on a real change.
+        let before = featureSelection.features
+        refreshDerivedState(jobs: jobs)
+        let indices = featureSelection.features
+        guard indices != before else { return }
 
         // #0156 — never throw away what the user typed.
         //

@@ -202,6 +202,13 @@ enum AgentActions {
         settings: AppSettings,
         sessionsAttached: Int
     ) async -> ActionResult {
+        // #0235 — the derived view of the disc, before anything is decided on
+        // it. `syncFeatures` is reached only from `reconcile`, which the rip
+        // window drives, so an agent working a closed window would read the
+        // answer the scan gave before the menus arrived and never the corrected
+        // one. The same reasoning as the note below about `currentScanState`:
+        // nothing on the agent path may depend on a view having run.
+        flow.refreshDerivedState(jobs: jobs)
         let decision = AgentSelectionPlan.decide(
             request: request,
             mountedInsertionID: jobs.insertedDisc?.insertionID.uuidString,
@@ -502,6 +509,11 @@ enum AgentActions {
         settings: AppSettings,
         sessionsAttached: Int
     ) -> ActionResult {
+        // #0235 — see `select`. The Start gate reads `featureSelection`, which
+        // only the rip window's reconcile keeps current; an agent must not need
+        // a window open for the gate to know what the menus said.
+        flow.refreshDerivedState(jobs: jobs)
+
         let disc = BridgeStatusReader.discStatus(
             jobs.insertedDisc,
             isEjecting: jobs.isEjecting,
