@@ -1,0 +1,113 @@
+import Foundation
+import Testing
+@testable import Changeover
+
+/// #0235 — a disc offering two cuts of one film is not a double feature.
+///
+/// The case that forced this: REPO_MEN was classified `multipleFeatures`, Start
+/// refused with `noFeatureChosen`, and the CLI was asked to name a second film
+/// that does not exist.
+///
+/// The tests that matter most here are the ones proving the rule does **not**
+/// fire. A false positive collapses a genuine double feature into one film and
+/// silently loses the second — the exact failure #0157's removed chapter test
+/// caused on Uncle Buck — so every guard gets its own case.
+@Suite struct AlternateCutsTests {
+
+    private static func title(_ index: Int, seconds: Int, chapters: Int) -> DiscTitle {
+        DiscTitle(index: index, durationSeconds: seconds, chapterCount: chapters,
+                  sizeBytes: 0, outputFileName: nil, displayAspect: 1.78)
+    }
+
+    private static func disc(_ titles: [DiscTitle], label: String = "DISC") -> DiscInfo {
+        DiscInfo(volumeName: label, driveName: "drive", titles: titles)
+    }
+
+    /// Repo Men's real numbers: 1:59:28 and 1:51:06, 21 chapters each.
+    private static let repoMen = [
+        title(1, seconds: 7168, chapters: 21),
+        title(2, seconds: 6666, chapters: 21),
+    ]
+
+    /// Uncle Buck / The Great Outdoors — a genuine double feature with almost
+    /// exactly Repo Men's shape. This is why the menu has to decide.
+    private static let uncleBuck = [
+        title(1, seconds: 6000, chapters: 17),
+        title(2, seconds: 5460, chapters: 17),
+    ]
+
+    private static let repoMenMenu = [
+        "PLAY UNRATED VERSION", "PLAY THEATRICAL VERSION",
+        "SCENE SELECTION", "SPECIAL FEATURES", "SETUP",
+    ]
+
+    // MARK: - The vocabulary
+
+    @Test func twoVersionWordsInAMenuNameAlternateCuts() {
+        #expect(AlternateCuts.namesAlternateCuts(menuLines: Self.repoMenMenu))
+    }
+
+    /// One version word is a label, not a choice. A disc that only sells the
+    /// unrated cut prints UNRATED and holds one film.
+    @Test func oneVersionWordIsNotAChoice() {
+        #expect(!AlternateCuts.namesAlternateCuts(
+            menuLines: ["PLAY UNRATED VERSION", "SCENE SELECTION", "SETUP"]))
+    }
+
+    /// A menu that was never read says nothing, and must not be read as saying
+    /// "one film".
+    @Test func anunreadMenuNamesNothing() {
+        #expect(!AlternateCuts.namesAlternateCuts(menuLines: []))
+    }
+
+    /// OCR drops accents on stylised type more often than it drops letters, so
+    /// matching folds them — the same convention `MenuLexicon` uses.
+    @Test func matchingIgnoresCaseAndAccents() {
+        #expect(AlternateCuts.namesAlternateCuts(
+            menuLines: ["play Ûnrated version", "Theatrical Cut"]))
+    }
+
+    // MARK: - The classification
+
+    /// The bug, as the test that would have caught it.
+    @Test func repoMenWithItsMenuIsOneFilm() {
+        #expect(DiscTitleHeuristic.severalFeatures(
+            Self.disc(Self.repoMen), menuLines: Self.repoMenMenu) == nil,
+            "two cuts offered by one menu are one film")
+    }
+
+    /// Without the menu it still reads as two features — which is the honest
+    /// answer, because nothing in the title list distinguishes it from Uncle
+    /// Buck. This pins that the fix is the menu and not a loosened threshold.
+    @Test func repoMenWithoutItsMenuIsStillTwoFeatures() {
+        #expect(DiscTitleHeuristic.severalFeatures(Self.disc(Self.repoMen))?.count == 2)
+    }
+
+    /// The regression this rule must never cause. Uncle Buck's menu names two
+    /// films, so nothing collapses.
+    @Test func agenuineDoubleFeatureSurvives() {
+        let menu = ["UNCLE BUCK", "THE GREAT OUTDOORS", "SCENE SELECTION", "SETUP"]
+        #expect(DiscTitleHeuristic.severalFeatures(
+            Self.disc(Self.uncleBuck), menuLines: menu)?.count == 2)
+    }
+
+    /// And it survives even if its menu happened to carry version words, because
+    /// the runtimes would still have to be plausible as cuts. This is belt and
+    /// braces: Uncle Buck's ratio is 0.91 so it *would* pass `plausiblyCuts`,
+    /// which is exactly why the vocabulary and not the ratio is doing the work.
+    @Test func thevocabularyIsWhatDecidesNotTheRatio() {
+        #expect(AlternateCuts.plausiblyCuts([[Self.uncleBuck[0]], [Self.uncleBuck[1]]]),
+                "Uncle Buck's runtimes alone look exactly like two cuts")
+        #expect(AlternateCuts.plausiblyCuts([[Self.repoMen[0]], [Self.repoMen[1]]]))
+    }
+
+    /// Version words must not collapse groups that cannot be cuts of one film.
+    @Test func faraparRuntimesAreNotCutsWhateverTheMenuSays() {
+        let apart = [
+            Self.title(1, seconds: 7168, chapters: 21),
+            Self.title(2, seconds: 2400, chapters: 21),
+        ]
+        #expect(!AlternateCuts.plausiblyCuts([[apart[0]], [apart[1]]]),
+                "40 minutes against two hours is not two cuts of one film")
+    }
+}

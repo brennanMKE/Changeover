@@ -167,10 +167,24 @@ public struct SelectionRequest: Codable, Sendable, Equatable {
 public struct ImportRequest: Codable, Sendable, Equatable {
     public var discInsertionID: String
     public var sessionID: String?
+    /// #0234 — the agent acknowledges whatever the window would ask a person to
+    /// confirm before starting: a runtime mismatch, a film already in Plex.
+    ///
+    /// One flag rather than one per gate. A flag per refusal means the next
+    /// confirm button added to the window silently blocks the CLI again until
+    /// somebody notices; the question the app asks is "is this the kind of
+    /// refusal a person clears with a button", and an agent that asked to
+    /// import has already answered it.
+    ///
+    /// It does not force anything. A refusal that is an environment fact or an
+    /// incomplete selection still refuses, and says that `--confirm` did not
+    /// apply.
+    public var confirm: Bool
 
-    public init(discInsertionID: String, sessionID: String? = nil) {
+    public init(discInsertionID: String, sessionID: String? = nil, confirm: Bool = false) {
         self.discInsertionID = discInsertionID
         self.sessionID = sessionID
+        self.confirm = confirm
     }
 }
 

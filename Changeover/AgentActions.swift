@@ -546,12 +546,46 @@ enum AgentActions {
         // two permitting cases, and `readyForExtrasOnly` is the one that imports
         // bonus material beside a film the library already has. Comparing against
         // one of them is exactly the bug that flag exists to prevent.
-        let gate = flow.startDecision(jobs: jobs)
+        var gate = flow.startDecision(jobs: jobs)
+
+        // #0234 — `--confirm` gives the agent the window's confirm buttons.
+        //
+        // Applied here and the gate re-read, rather than passed into
+        // `StartGate.decide`, so the acknowledgement goes through the very
+        // methods the buttons call. Those methods are no-ops unless the thing
+        // being acknowledged is actually there, and that guard is the reason an
+        // agent cannot confirm its way past a state the window would not have
+        // offered to confirm either.
+        var confirmed: String?
+        if request.confirm, !gate.permitsStart, AgentConfirmation.canConfirm(gate) {
+            confirmed = AgentConfirmation.acknowledgementDescription(gate)
+            switch gate {
+            case .runtimeMismatchUnconfirmed:
+                if let titleIndex = jobs.selectedTitleIndex,
+                   let movieID = flow.search.selectedMovie?.id {
+                    jobs.acknowledgeMismatch(titleIndex: titleIndex, movieID: movieID)
+                }
+            case .duplicateUnacknowledged:
+                flow.acknowledgeReplace()
+            default:
+                break
+            }
+            gate = flow.startDecision(jobs: jobs)
+        }
+
         guard gate.permitsStart else {
+            let reason = gate.reason ?? gate.plainReason ?? "Start is not available."
+            // Say that the flag was seen and did not apply. An agent told only
+            // "Start is not available" after passing --confirm has no way to
+            // tell the flag was ignored from the flag being insufficient, and
+            // the obvious next move is to pass it again.
+            let detail = request.confirm && !AgentConfirmation.canConfirm(gate)
+                ? AgentConfirmation.unconfirmableDetail(gate, reason: reason)
+                : reason
             return refusal(
                 verb: BridgeRequest.Action.import,
                 outcome: ActionOutcome.refusedNotPermitted,
-                detail: gate.reason ?? gate.plainReason ?? "Start is not available.",
+                detail: detail,
                 sessionsAttached: sessionsAttached,
                 disc: disc,
                 film: currentFilm(jobs: jobs, flow: flow),
@@ -582,6 +616,10 @@ enum AgentActions {
             verb: BridgeRequest.Action.import,
             outcome: ActionOutcome.started,
             detail: (jobID.map { "started \($0)" } ?? "started")
+                // Echoed, never silent: the window asks because the app
+                // believes something may be wrong, and an agent overriding that
+                // belief should leave a record of which one.
+                + (confirmed.map { " — \($0)" } ?? "")
                 + (intent == .extrasOnly
                     ? " — extras only. The film already in Plex is not touched: an extras-only "
                         + "job has no feature destination at all."

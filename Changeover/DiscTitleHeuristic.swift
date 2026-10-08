@@ -211,7 +211,14 @@ nonisolated enum DiscTitleHeuristic {
     /// host): no misses and no false positives. It fires on the two known
     /// double features — Get Hard / The Campaign and Uncle Buck / The Great
     /// Outdoors — and on nothing else.
-    nonisolated static func severalFeatures(_ disc: DiscInfo) -> [DiscTitle]? {
+    /// `menuLines` is the disc's menu text when it has been read, empty
+    /// otherwise. #0235 — the only evidence that separates two cuts of one film
+    /// from two films: on runtimes and chapters Repo Men (0.930, 21/21) and
+    /// Uncle Buck (0.910, 17/17) are indistinguishable, and Uncle Buck is two
+    /// films. Defaulted, so every caller that has no menu behaves exactly as
+    /// before.
+    nonisolated static func severalFeatures(_ disc: DiscInfo,
+                                            menuLines: [String] = []) -> [DiscTitle]? {
         let candidates = widescreenPreferred(
             disc.titles.filter { $0.durationSeconds >= featureMinimumSeconds }
         )
@@ -340,6 +347,25 @@ nonisolated enum DiscTitleHeuristic {
         if let most = chapterCounts.max(), let fewest = chapterCounts.min(), most > 0 {
             let chapterRatio = Double(fewest) / Double(most)
             guard chapterRatio >= minimumSecondFeatureChapterRatio else { return nil }
+        }
+
+        // #0235 — and the menu is not offering two cuts of one film.
+        //
+        // Asked last, after every structural rule has already decided this
+        // looks like several features, because it is the only rule here whose
+        // evidence comes from outside the title list and the only one that can
+        // say "despite all that, one film". REPO_MEN clears the runtime rule
+        // (0.930) and the chapter rule (21/21) exactly as Uncle Buck does; its
+        // menu is what says UNRATED and THEATRICAL where Uncle Buck's names two
+        // films.
+        //
+        // Both halves are required. The menu must name two different version
+        // words — one alone is a label, not a choice — and the groups must be
+        // close enough to be cuts at all, so a disc that happens to print
+        // "UNRATED" beside a 40-minute featurette is unaffected.
+        if AlternateCuts.namesAlternateCuts(menuLines: menuLines),
+           AlternateCuts.plausiblyCuts(groups) {
+            return nil
         }
 
         // One title per film: the longest in each group, which for a

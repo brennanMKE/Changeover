@@ -300,6 +300,9 @@ public enum CLIParse {
         var featureTitle: Int?
         var featureRaw: String?
         var extrasOnly = false
+        /// #0234 — the agent acknowledging whatever the window would ask a
+        /// person to confirm before Start.
+        var confirm = false
         var year: Int?
         var yearRaw: String?
         var extras: [SelectionRequest.Extra] = []
@@ -355,6 +358,9 @@ public enum CLIParse {
 
             case "--force":
                 force = true
+
+            case "--confirm":
+                confirm = true
 
             case "--timeout":
                 guard let raw = takeValue("--timeout", joined: joined) else { continue }
@@ -524,7 +530,8 @@ public enum CLIParse {
             featureRaw: featureRaw,
             extras: extras,
             extrasOnly: extrasOnly,
-            yearRaw: yearRaw
+            yearRaw: yearRaw,
+            confirm: confirm
         ) {
             return .failure(misplaced)
         }
@@ -743,7 +750,9 @@ public enum CLIParse {
                 CLIInvocation(
                     command: .import(
                         .init(
-                            request: ImportRequest(discInsertionID: discID, sessionID: sessionID),
+                            request: ImportRequest(discInsertionID: discID,
+                                                   sessionID: sessionID,
+                                                   confirm: confirm),
                             noLaunch: noLaunch,
                             timeout: timeout ?? 30
                         )
@@ -808,7 +817,7 @@ public enum CLIParse {
             "--feature-title", "--extra", "--extra-kind", "--extra-label",
             "--extras-only",
         ],
-        "import": ["--no-launch", "--session", "--disc"],
+        "import": ["--no-launch", "--session", "--disc", "--confirm"],
     ]
 
     private static func misplacedFlag(
@@ -824,7 +833,8 @@ public enum CLIParse {
         featureRaw: String?,
         extras: [SelectionRequest.Extra],
         extrasOnly: Bool = false,
-        yearRaw: String? = nil
+        yearRaw: String? = nil,
+        confirm: Bool = false
     ) -> CLIErrorPayload? {
         let allowed = accepted[verb] ?? []
         var given: [String] = []
@@ -840,6 +850,7 @@ public enum CLIParse {
         if !extras.isEmpty { given.append("--extra") }
         if extrasOnly { given.append("--extras-only") }
         if yearRaw != nil { given.append("--year") }
+        if confirm { given.append("--confirm") }
 
         guard let offender = given.first(where: { !allowed.contains($0) }) else { return nil }
 

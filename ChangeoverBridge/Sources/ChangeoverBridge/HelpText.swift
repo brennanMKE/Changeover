@@ -652,7 +652,7 @@ public enum HelpText {
     public static let importFilm = HelpPayload.CommandHelp(
         name: "import",
         summary: "Run it.",
-        usage: "\(ServiceNames.cliName) import --disc <insertionID> [--session <id>] "
+        usage: "\(ServiceNames.cliName) import --disc <insertionID> [--confirm] [--session <id>] "
             + "[--no-launch] [--timeout <seconds>] [--json]",
         discussion: """
             Presses Start. Exactly that: the same Start gate, the same RipRequest \
@@ -677,6 +677,19 @@ public enum HelpText {
             Refused when the Start gate refuses; the result carries the gate's own \
             case name and reason under `startDecision` and `detail`.
 
+            --confirm clears the refusals the window clears with a button: a \
+            runtime mismatch ("Rip anyway") and a film already in Plex ("Replace \
+            the Existing File"). One flag rather than one per gate, because the \
+            question is not which flag was passed but whether this is the kind of \
+            refusal a person confirms — and an agent that asked to import has \
+            already answered it. Whatever it acknowledged is echoed in `detail`, \
+            never applied silently.
+
+            It does not force anything. A refusal that is an environment fact (no \
+            disc, scan running, HandBrake missing) or an incomplete selection (no \
+            movie, no title, no audio track) still refuses, and says that \
+            --confirm did not apply so you do not try it twice.
+
             Returns as soon as the job is started, with its id under `jobID`. Wait \
             for it with `wait --for job-done --job <id> --timeout 7200`.
 
@@ -686,6 +699,11 @@ public enum HelpText {
             HelpPayload.OptionHelp(
                 flag: "--disc <insertionID>",
                 summary: "Required. The disc this import was decided for, from status's disc.insertionID."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--confirm",
+                summary: "Acknowledge what the window would ask a person to confirm: "
+                    + "a runtime mismatch, or replacing a film already in Plex."
             ),
             sessionOption,
             HelpPayload.OptionHelp(
