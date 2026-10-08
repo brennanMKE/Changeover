@@ -190,9 +190,16 @@ public enum CLICommand: Equatable, Sendable {
     public struct ReportOptions: Equatable, Sendable {
         public var noLaunch: Bool = false
         public var timeout: Double = 10
-        public init(noLaunch: Bool = false, timeout: Double = 10) {
+        /// #0236 — narrow the report to one job.
+        ///
+        /// `import` tells the agent the id of the job it started, and `report`
+        /// then refused `--job` with "--job does not apply to report". Either
+        /// accept the id or stop advertising it; this accepts it.
+        public var jobID: String?
+        public init(noLaunch: Bool = false, timeout: Double = 10, jobID: String? = nil) {
             self.noLaunch = noLaunch
             self.timeout = timeout
+            self.jobID = jobID
         }
     }
 
@@ -686,7 +693,8 @@ public enum CLIParse {
         case "report":
             return .success(
                 CLIInvocation(
-                    command: .report(.init(noLaunch: noLaunch, timeout: timeout ?? 10)),
+                    command: .report(.init(noLaunch: noLaunch, timeout: timeout ?? 10,
+                                           jobID: jobID)),
                     json: json
                 )
             )
@@ -811,7 +819,7 @@ public enum CLIParse {
         "eject": ["--no-launch", "--force", "--session", "--disc"],
         "cancel": ["--no-launch", "--session", "--job"],
         "wait": ["--no-launch", "--for", "--job"],
-        "report": ["--no-launch"],
+        "report": ["--no-launch", "--job"],
         "select": [
             "--no-launch", "--session", "--disc", "--movie", "--query",
             "--feature-title", "--extra", "--extra-kind", "--extra-label",

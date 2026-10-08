@@ -88,6 +88,14 @@ nonisolated enum AgentJobReport {
         }
     }
 
+    /// #0236 — how many lines of HandBrake's own output a failed job carries.
+    ///
+    /// Enough to see what went wrong around the failure and not so many that a
+    /// `report` listing several jobs becomes unreadable. The tail is already
+    /// bounded upstream; this is the second bound, at the point it becomes
+    /// output somebody reads.
+    static let failureTailLines = 20
+
     /// One job from this launch's history.
     static func jobRecord(_ facts: JobFacts) -> JobReport.JobRecord {
         let snapshot = facts.snapshot
@@ -113,6 +121,34 @@ nonisolated enum AgentJobReport {
             // sometimes fixed by cleaning the disc and sometimes not.
             discUnreadable: failure?.reason == .discUnreadable,
             requestedExtras: (facts.request?.extraTitleIndices ?? []).sorted(),
+            // #0236 — the three facts a failed read has to carry.
+            //
+            // All of them already existed and none of them reached an agent.
+            // The Lady in the Water failure said "the disc could not be read —
+            // this is common and is not an app fault" and nothing else, which
+            // cannot distinguish a scratch at a fixed place on the platter from
+            // a mid-encode mount disturbing a raw-device read. Those have
+            // different next steps.
+            //
+            // Only on a failure. A succeeded job has no position to report and
+            // no tail worth carrying.
+            failedAtPercent: failure == nil
+                ? nil
+                : BridgeStatusReader.percent(of: snapshot.progress),
+            // Bounded. `JobOutcome` already holds a tail rather than a
+            // transcript — `EncodeController` never accumulates one for a
+            // 40-minute encode — and this bounds it again so one failed job
+            // cannot dominate a `report`.
+            failureLogTail: Array((failure?.logTail ?? []).suffix(Self.failureTailLines)),
+            // The line the classifier matched to reach its verdict, which is
+            // what makes the verdict checkable rather than taken on trust. The
+            // same call `FailurePresenter` makes for the window, so the two
+            // cannot cite different evidence for one failure.
+            failureEvidence: failure.flatMap { failed in
+                HandBrakeFailureClassifier.evidence(
+                    in: failed.logTail, for: failed.reason, outputPath: ""
+                )?.line
+            },
             startedAt: BridgeEvent.timestamp(snapshot.startDate),
             endedAt: snapshot.endDate.map(BridgeEvent.timestamp)
         )

@@ -656,13 +656,24 @@ enum AgentActions {
 
     static func report(
         jobs: JobController,
-        flow: RipFlowController
+        flow: RipFlowController,
+        jobID: String? = nil
     ) -> JobReport {
         var facts = jobs.history.map {
             AgentJobReport.JobFacts(snapshot: $0.snapshot, request: $0.request)
         }
         if let current = jobs.current {
             facts.append(AgentJobReport.JobFacts(snapshot: current.snapshot, request: current.request))
+        }
+        // #0236 — narrowed to one job when asked. Filtered here rather than in
+        // the renderer so `--json` is narrowed too; a JSON consumer asking
+        // about one job should not have to filter a list it did not want.
+        //
+        // An id that matches nothing yields an empty list rather than the whole
+        // history, because silently widening a narrowed question is how an
+        // agent ends up reading another job's failure as its own.
+        if let jobID {
+            facts = facts.filter { $0.snapshot.id.rawValue == jobID }
         }
         return AgentJobReport.make(
             disc: BridgeStatusReader.discStatus(

@@ -91,7 +91,8 @@ enum ActingCommands {
             defer { app.close() }
 
             let response = try await app.perform(
-                BridgeRequest(action: BridgeRequest.Action.report),
+                BridgeRequest(action: BridgeRequest.Action.report,
+                              body: ReportRequest(jobID: options.jobID)),
                 timeout: timeout
             )
             guard response.ok, let payload = response.body(as: JobReport.self) else {

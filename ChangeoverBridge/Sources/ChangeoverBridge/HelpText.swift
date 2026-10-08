@@ -515,7 +515,8 @@ public enum HelpText {
     public static let report = HelpPayload.CommandHelp(
         name: "report",
         summary: "What the last job did.",
-        usage: "\(ServiceNames.cliName) report [--no-launch] [--timeout <seconds>] [--json]",
+        usage: "\(ServiceNames.cliName) report [--job <id>] [--no-launch] "
+            + "[--timeout <seconds>] [--json]",
         discussion: """
             Three sections, because there are three different questions.
 
@@ -525,7 +526,19 @@ public enum HelpText {
             reason beside it, and an agent that treated that as an error would \
             retry something it should leave alone.
 
-            `jobs` is this launch's history, with the typed failure as the app \
+            --job <id> narrows it to one job — the id `import` reported. An id \
+            that matches nothing gives an empty list rather than the whole \
+            history, because quietly widening a narrowed question is how an agent \
+            reads another job\u{2019}s failure as its own.
+
+            A failed job carries the evidence, not just a verdict: \
+            `failedAtPercent` is how far it got, `failureEvidence` is the line \
+            HandBrake printed that the app classified on, and `failureLogTail` is \
+            the last lines of its output. On a read failure the position is most \
+            of the diagnosis — the same percentage twice is damage at a fixed \
+            place on the platter, two different ones are a marginal disc.
+
+            `jobs` is this launch\u{2019}s history, with the typed failure as the app \
             itself words it and a `discUnreadable` flag so a program does not have \
             to match on prose. That failure is common and is not a bug in the app: \
             one disc failed twice at 49%, thirty minutes in, with no visible \
@@ -538,6 +551,10 @@ public enum HelpText {
             Read-only, so it needs no watch session.
             """,
         options: [
+            HelpPayload.OptionHelp(
+                flag: "--job <id>",
+                summary: "Report only this job — the id `import` returned."
+            ),
             HelpPayload.OptionHelp(
                 flag: "--no-launch",
                 summary: "Fail instead of launching Changeover when it is not running."

@@ -443,7 +443,11 @@ final class AppXPCServer {
             return await BridgeReadVerbs.handle(request, jobs: jobs, settings: settings)
 
         case BridgeRequest.Action.report:
-            return .success("ok", body: AgentActions.report(jobs: jobs, flow: flow))
+            // #0236 — the body is optional: `report` had none before this and a
+            // CLI built against the older shape must keep working.
+            let scope = request.body(as: ReportRequest.self)
+            return .success("ok", body: AgentActions.report(jobs: jobs, flow: flow,
+                                                            jobID: scope?.jobID))
 
         case BridgeRequest.Action.eject:
             guard let body = request.body(as: EjectRequest.self) else { return malformed(request) }

@@ -164,6 +164,21 @@ public struct SelectionRequest: Codable, Sendable, Equatable {
 ///
 /// Making it required means an agent cannot accidentally skip the check. An
 /// optional field would have been checked only by the callers who remembered.
+/// #0236 — what `report` is being asked about.
+///
+/// `report` took no body at all until now. It gained one so `--job` can travel:
+/// `import` hands the agent a job id and `report` refused to accept it back,
+/// which left the id advertised and unusable.
+public struct ReportRequest: Codable, Sendable, Equatable {
+    /// Narrow the report to one job. `nil` reports every job this launch ran,
+    /// which is the previous behaviour and stays the default.
+    public var jobID: String?
+
+    public init(jobID: String? = nil) {
+        self.jobID = jobID
+    }
+}
+
 public struct ImportRequest: Codable, Sendable, Equatable {
     public var discInsertionID: String
     public var sessionID: String?
@@ -580,6 +595,30 @@ public struct JobReport: Codable, Sendable, Equatable {
         /// own log and never fails the job for one. Reported honestly as the
         /// request rather than dressed up as a result.
         public var requestedExtras: [Int]
+        /// #0236 — how far the job got, as a percentage, when it failed.
+        ///
+        /// The single most useful fact about a failed read and the one `report`
+        /// used to throw away. Lady in the Water failed at 67 %; a second
+        /// failure at the same place is damage on the platter, a failure
+        /// somewhere else is a marginal disc, and the difference decides what
+        /// to do next. `nil` when the job never reported progress or did not
+        /// fail.
+        public var failedAtPercent: Double?
+        /// What HandBrake itself said, as a bounded tail.
+        ///
+        /// Already captured in `JobOutcome.failed(stage:reason:logTail:)` and
+        /// already rendered in the window; it simply never reached an agent,
+        /// which was left with "this is common and is not an app fault" and no
+        /// way to tell a scratched disc from anything else.
+        public var failureLogTail: [String]
+        /// The one line `HandBrakeFailureClassifier` matched to reach its
+        /// verdict, when there is one.
+        ///
+        /// Separate from the tail because it is the evidence rather than the
+        /// context: it is why the app called this `discUnreadable` rather than
+        /// something else, and it is what makes the verdict checkable instead
+        /// of taken on trust.
+        public var failureEvidence: String?
         public var startedAt: String
         public var endedAt: String?
 
@@ -596,6 +635,9 @@ public struct JobReport: Codable, Sendable, Equatable {
             failureReason: String? = nil,
             discUnreadable: Bool = false,
             requestedExtras: [Int] = [],
+            failedAtPercent: Double? = nil,
+            failureLogTail: [String] = [],
+            failureEvidence: String? = nil,
             startedAt: String,
             endedAt: String? = nil
         ) {
@@ -611,6 +653,9 @@ public struct JobReport: Codable, Sendable, Equatable {
             self.failureReason = failureReason
             self.discUnreadable = discUnreadable
             self.requestedExtras = requestedExtras
+            self.failedAtPercent = failedAtPercent
+            self.failureLogTail = failureLogTail
+            self.failureEvidence = failureEvidence
             self.startedAt = startedAt
             self.endedAt = endedAt
         }

@@ -236,10 +236,27 @@ extension JobReport {
             }
             lines.append(line)
             if let reason = job.failureReason {
-                lines.append("    failed at \(job.failureStage ?? "an unknown stage"): \(reason)")
+                // #0236 — where it stopped, beside what went wrong. On a read
+                // failure the position is most of the diagnosis: the same
+                // percentage twice is damage at a fixed place on the platter,
+                // two different ones are a marginal disc.
+                var failed = "    failed at \(job.failureStage ?? "an unknown stage")"
+                if let percent = job.failedAtPercent {
+                    failed += String(format: " (%.0f%% in)", percent)
+                }
+                lines.append(failed + ": \(reason)")
             }
             if job.discUnreadable {
                 lines.append("    the disc could not be read — this is common and is not an app fault")
+            }
+            // #0236 — the evidence, so the verdict above is checkable rather
+            // than taken on trust.
+            if let evidence = job.failureEvidence {
+                lines.append("    HandBrake said: \(evidence)")
+            }
+            if !job.failureLogTail.isEmpty {
+                lines.append("    last \(job.failureLogTail.count) line(s) from HandBrake:")
+                for line in job.failureLogTail { lines.append("      \(line)") }
             }
         }
 
