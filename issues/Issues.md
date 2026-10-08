@@ -158,7 +158,22 @@ Any additional context, guesses at root cause, related code locations.
 ## Filing a new issue
 
 1. Confirm `issues/project.json` exists. If missing, create it (see schema above) before filing the first issue — `name` should match this guide's heading; `url` is the project's canonical web URL (HTTPS, not SSH).
-2. Find the highest existing `NNNN.md` and increment. Start at `0001` if the folder is empty. Skip past reserved high numbers (e.g. `8888`, `9999` for test issues).
+2. **Pick the next number from git history, not from the folder.** Many tickets
+   in this project were worked and committed without ever getting a file under
+   `issues/`, so the highest `NNNN.md` is far behind the highest number actually
+   used. On 2026-10-07 "highest file + 1" handed out `#0153`–`#0156`, all four
+   of which were already taken by commits from weeks earlier, and searching the
+   history for `#0154` returned two unrelated tickets.
+
+   ```bash
+   # the real high-water mark: every number any commit message has ever used
+   git log --format='%B' --all | grep -oE '#[0-9]{4}' | sed 's/#//' | sort -n | tail -1
+   # and the highest filed issue
+   ls issues/[0-9][0-9][0-9][0-9].md | sed 's#.*/##;s/\.md//' | sort -n | tail -1
+   ```
+
+   Take the larger of the two and increment. Start at `0001` if both are empty.
+   Skip past reserved high numbers (e.g. `8888`, `9999` for test issues).
 3. Create `issues/NNNN.md` from the template.
 4. Set status to `open`.
 5. Use today's date for First seen.
