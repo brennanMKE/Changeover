@@ -135,6 +135,37 @@ nonisolated enum MenuState: Equatable, Sendable {
 ///
 /// Every case is a caption, never a failure: the rip is byte-identical to
 /// what it is today in all of them (`docs/menu-intelligence.md` §9).
+extension MenuState {
+
+    /// #0235 — every distinct line the OCR read, as text rather than as
+    /// captions.
+    ///
+    /// `MenuStatusLine.lines` returns the sentences the window shows. This
+    /// returns what is actually printed on the disc's menus, which is a
+    /// different thing and the only evidence that can say whether two titles
+    /// are two films or two cuts of one.
+    ///
+    /// Empty whenever the menus have not been read — which a caller must treat
+    /// as "no evidence", never as "no cuts". The menus finish after the scan,
+    /// so empty is the normal state for the first part of every disc's visit.
+    var menuText: [String] {
+        guard case .ready(let menu) = self, let ocr = menu.ocr else { return [] }
+        var seen = Set<String>()
+        var result: [String] = []
+        for still in ocr.stills {
+            for observation in still.observations {
+                let text = observation.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty, text.contains(where: \.isLetter) else { continue }
+                let key = text.lowercased()
+                guard !seen.contains(key) else { continue }
+                seen.insert(key)
+                result.append(text)
+            }
+        }
+        return result
+    }
+}
+
 nonisolated enum MenuUnavailable: Error, Equatable, Sendable {
     /// No `changeover-menudump` on this Mac.
     case helperMissing(path: String)

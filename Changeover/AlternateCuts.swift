@@ -90,17 +90,40 @@ nonisolated enum AlternateCuts {
         (" " + haystack + " ").contains(" " + needle + " ")
     }
 
-    /// The distinct version words this menu names.
+    /// Words that make a line an offer of an edition rather than a mention of
+    /// one.
+    ///
+    /// Reading REPO_MEN's real menu is what put this here. "THEATRICAL" appears
+    /// on four of its pages, only one of which is the choice: the others are a
+    /// DVS notice and a disclaimer. And on half the DVDs ever pressed the
+    /// bonus page says **THEATRICAL TRAILER**, which would have collapsed a
+    /// genuine double feature the moment its menu also said EXTENDED anywhere.
+    ///
+    /// A line that offers a cut says which cut *of what*: "PLAY UNRATED
+    /// VERSION", "DIRECTOR'S CUT". A trailer is neither, so a version word with
+    /// no qualifier beside it is not evidence.
+    static let qualifiers = ["version", "cut"]
+
+    /// Lines that disqualify themselves whatever else they contain.
+    static let disqualifiers = ["trailer"]
+
+    /// Whether this line is offering an edition.
+    static func offersAnEdition(_ folded: String) -> Bool {
+        guard !disqualifiers.contains(where: { containsWords(folded, $0) }) else { return false }
+        return qualifiers.contains { containsWords(folded, $0) }
+    }
+
+    /// The distinct version words this menu names **as a choice of edition**.
     ///
     /// Distinct, because the signal is that the menu distinguishes **two**
     /// editions. A single "UNRATED" on a disc holding one cut is a label, not a
     /// choice, and must not collapse anything.
     static func versionWords(inMenu lines: [String]) -> [String] {
-        let haystack = lines.map(fold)
+        let offers = lines.map(fold).filter(offersAnEdition)
         var found: [String] = []
         for word in versionWords {
             let folded = fold(word)
-            if haystack.contains(where: { containsWords($0, folded) }), !found.contains(folded) {
+            if offers.contains(where: { containsWords($0, folded) }), !found.contains(folded) {
                 found.append(folded)
             }
         }

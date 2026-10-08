@@ -475,12 +475,20 @@ final class RipFlowController {
         // written on the branch below, which a single-feature disc never
         // takes.
         currentScanState = jobs.scanState
+        // #0235 — mirrored beside the scan, and for the same reason: the
+        // derived answers below are read without a `JobController` to hand.
+        // The menus land after the scan, so this is `.idle` on the first few
+        // passes and fills in later — which is exactly why `discReading`
+        // recomputes rather than storing its verdict.
+        currentMenuState = jobs.menuState
         // #0176 — what the USER said this disc holds outranks what the scan's
         // classification makes of it. `features` is `nil` until the override
         // is complete, so a disc with no override, or one half-answered,
         // takes exactly the path it always did.
         let indices = manualOverride.features(amongTitles: scannedTitles.map(\.index))
-            ?? FeatureSelection.features(in: Self.discOutcome(jobs.scanState))
+            ?? FeatureSelection.features(in: Self.discOutcome(
+                jobs.scanState,
+                menuLines: jobs.menuState.menuText))
         guard indices != featureSelection.features else { return }
 
         featureSelection.setFeatures(indices)
@@ -514,9 +522,12 @@ final class RipFlowController {
     /// when no scan has completed. The same classification the Choose step's
     /// table and the scan status line already run — read here rather than
     /// stored, so there is one answer and no copy of it to go stale.
-    nonisolated static func discOutcome(_ scanState: ScanState) -> DiscTitleHeuristic.Outcome? {
+    nonisolated static func discOutcome(_ scanState: ScanState,
+                                        menuLines: [String] = []) -> DiscTitleHeuristic.Outcome? {
         guard case .scanned(let result) = scanState else { return nil }
-        return DiscTitleHeuristic.classify(result.disc, mainFeatureIndex: result.mainFeatureIndex)
+        return DiscTitleHeuristic.classify(result.disc,
+                                           mainFeatureIndex: result.mainFeatureIndex,
+                                           menuLines: menuLines)
     }
 
     /// A results row clicked inside one feature's block (or the pick cleared).
@@ -956,6 +967,9 @@ final class RipFlowController {
     /// titles to pick from is exactly the dead end this ticket is about.
     private(set) var currentScanState: ScanState = .idle
 
+    /// The menu read, mirrored beside the scan. See `syncFeatures`.
+    private(set) var currentMenuState: MenuState = .idle
+
     /// Every title the scan read, in disc order — the raw table, not the
     /// app's judgement of which rows are features.
     ///
@@ -986,7 +1000,7 @@ final class RipFlowController {
     /// Read from the held scan rather than stored, like every other derived
     /// answer here.
     var discReading: DiscTitleHeuristic.Outcome? {
-        Self.discOutcome(currentScanState)
+        Self.discOutcome(currentScanState, menuLines: currentMenuState.menuText)
     }
 
     /// "This disc holds this many films." `nil` gives it back to the app.

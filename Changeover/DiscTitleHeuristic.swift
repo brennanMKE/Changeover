@@ -113,9 +113,16 @@ nonisolated enum DiscTitleHeuristic {
 
     /// Classifies the scanned disc. `mainFeatureIndex` is HandBrake's
     /// `MainFeature` as reported by the scanner (#0024).
+    /// `menuLines` is the disc's menu text once the OCR has read it, empty
+    /// before that. #0235 — the only evidence that separates two cuts of one
+    /// film from two films. Defaulted, because the menus finish **after** the
+    /// scan: every caller gets the honest answer for what it knows at the time,
+    /// and because this function is recomputed on demand rather than stored,
+    /// the answer improves by itself once the menus land.
     nonisolated static func classify(
         _ disc: DiscInfo,
-        mainFeatureIndex: Int?
+        mainFeatureIndex: Int?,
+        menuLines: [String] = []
     ) -> Outcome {
         // #0039 — checked first, and separately from `.none` below: a scan
         // that read zero titles never looked at the disc's contents in a
@@ -164,7 +171,7 @@ nonisolated enum DiscTitleHeuristic {
         // ran, because a single answer from outside short-circuited it.
         //
         // Naming one title is not evidence that the others are not features.
-        if let several = severalFeatures(disc) {
+        if let several = severalFeatures(disc, menuLines: menuLines) {
             return .multipleFeatures(indices: several.map(\.index))
         }
 

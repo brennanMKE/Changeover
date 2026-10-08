@@ -41,6 +41,64 @@ import Testing
         "SCENE SELECTION", "SPECIAL FEATURES", "SETUP",
     ]
 
+    // MARK: - Against the real disc
+
+    /// #0235's second round. The first version of this rule passed every
+    /// synthetic test and did nothing at all on the disc, because the menu
+    /// lines never reached `severalFeatures` in production — the same shape as
+    /// #0216, where a match could not fire because the thing it needed was
+    /// never measured.
+    ///
+    /// So this one is fed REPO_MEN's actual OCR output, 191 lines of it,
+    /// captured off joe. It lives in the external corpus rather than in this
+    /// repository: #0224 moved authored menu text out of a public repo, and a
+    /// disc's menu wording is exactly that. Skips when the corpus is absent.
+    @Test func therealRepoMenMenuNamesAlternateCuts() throws {
+        guard let url = DiscAssets.file("menu-lines.json", inDisc: "repo-men") else {
+            // Returns rather than fails, the way the rest of the asset-backed
+            // suite does. `DiscAssetAvailabilityTests` is what makes a thin run
+            // look thin, so a silent skip here cannot hide a missing corpus.
+            return
+        }
+        let lines = try JSONDecoder().decode([String].self, from: Data(contentsOf: url))
+        #expect(lines.count > 50, "the fixture should be the whole menu, not a sample")
+
+        let words = AlternateCuts.versionWords(inMenu: lines)
+        #expect(words.contains("unrated"))
+        #expect(words.contains("theatrical"))
+        #expect(AlternateCuts.namesAlternateCuts(menuLines: lines))
+
+        #expect(DiscTitleHeuristic.severalFeatures(
+            Self.disc(Self.repoMen), menuLines: lines) == nil,
+            "the real menu should collapse the two cuts into one film")
+    }
+
+    /// The trailing asterisk on "PLAY UNRATED VERSION*" is why matching folds
+    /// punctuation to spaces rather than comparing raw strings.
+    @Test func punctuationGluedToAWordDoesNotHideIt() {
+        #expect(AlternateCuts.namesAlternateCuts(
+            menuLines: ["PLAY UNRATED VERSION*", "PLAY THEATRICAL VERSION"]))
+    }
+
+    /// The false positive the real menu warned about.
+    ///
+    /// "THEATRICAL TRAILER" is on a great many discs. Before the qualifier
+    /// rule, a double feature whose bonus page said THEATRICAL TRAILER and
+    /// whose other page said EXTENDED would have been collapsed into one film,
+    /// silently losing the second feature.
+    @Test func atrailerIsNotAnEdition() {
+        #expect(!AlternateCuts.namesAlternateCuts(
+            menuLines: ["THEATRICAL TRAILER", "EXTENDED VERSION"]))
+        #expect(AlternateCuts.versionWords(inMenu: ["THEATRICAL TRAILER"]).isEmpty)
+    }
+
+    /// And a version word with no qualifier beside it is a mention, not an
+    /// offer. REPO_MEN's own menu says "ON THE THEATRICAL" on a DVS notice.
+    @Test func amentionIsNotAnOffer() {
+        #expect(AlternateCuts.versionWords(inMenu: ["ON THE THEATRICAL"]).isEmpty)
+        #expect(AlternateCuts.versionWords(inMenu: ["PLAY THEATRICAL VERSION"]) == ["theatrical"])
+    }
+
     // MARK: - The vocabulary
 
     @Test func twoVersionWordsInAMenuNameAlternateCuts() {
