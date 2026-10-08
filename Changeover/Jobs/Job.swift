@@ -34,6 +34,20 @@ final class Job {
     let metadata: MovieMetadata
     /// The disc's mounted volume root this job reads from (#0014).
     let disc: URL
+    /// #0232 — which **insertion** this job belongs to.
+    ///
+    /// Not the same question as `disc`, which is a path and is equal across two
+    /// visits of the same disc. `DiscInsertion.insertionID` is minted once per
+    /// insertion, so it is the only thing that tells "this job is about the disc
+    /// in the drive" from "this job is about the one before it".
+    ///
+    /// Needed because `JobController.currentJobState` is `current ?? history
+    /// .last`: once a job ends, the last one keeps being reported, and `status`
+    /// showed a finished job beside a newly inserted disc with nothing saying
+    /// the two described different discs.
+    ///
+    /// Optional so hand-built test jobs needn't invent one, like `request`.
+    let discInsertionID: String?
     /// This job's own log (#0043) — created once, by `JobController.start`,
     /// and never reset in place or shared with any other job.
     let log: JobLog
@@ -158,7 +172,8 @@ final class Job {
     ///   site — the history view's, the tests' — keeps compiling and means what
     ///   it always did. `JobController.start` passes the resolved plan.
     init(id: JobID, metadata: MovieMetadata, disc: URL, log: JobLog, startDate: Date = Date(),
-         request: RipRequest? = nil, extras: ExtrasPlan = ExtrasPlan()) {
+         request: RipRequest? = nil, extras: ExtrasPlan = ExtrasPlan(),
+         discInsertionID: String? = nil) {
         self.extras = extras
         self.id = id
         self.metadata = metadata
@@ -166,6 +181,7 @@ final class Job {
         self.log = log
         self.startDate = startDate
         self.request = request
+        self.discInsertionID = discInsertionID
     }
 
     /// Applies one mid-job phase report (`JobController.JobContext.phase`),

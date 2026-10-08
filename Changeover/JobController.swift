@@ -793,7 +793,11 @@ final class JobController {
         // #0225 — the resolved plan travels with the job, so `status` can say
         // what this job will encode rather than what was selected before it.
         let job = Job(id: jobID, metadata: request.metadata, disc: disc,
-                      log: JobLog(capacity: logCapacity), request: request, extras: extrasPlan)
+                      log: JobLog(capacity: logCapacity), request: request, extras: extrasPlan,
+                      // #0232 — stamped at start, so a finished job can still
+                      // say which insertion it was about once the next disc is
+                      // in the drive.
+                      discInsertionID: insertedDisc?.insertionID.uuidString)
 
         // Carry the identification story into the job's own log.
         //

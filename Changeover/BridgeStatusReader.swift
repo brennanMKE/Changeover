@@ -288,6 +288,30 @@ nonisolated enum BridgeStatusReader {
         // the same job the window does rather than inventing a second rule.
         guard let state = jobs.currentJobState else { return nil }
         let job = jobs.current
+
+        // #0232 — a finished job stops being reported once its disc has gone.
+        //
+        // `current ?? history.last` keeps naming the last job forever, so after
+        // one disc was imported and the next went in, `status` showed the
+        // previous disc's job — id, film and all seventeen extras — beside the
+        // new disc's name, with nothing saying they described different discs.
+        // An agent reading that sees a disc with a completed job attached and
+        // can reasonably conclude this disc has already been imported.
+        //
+        // Cleared rather than tagged. Tagging keeps a stale block on screen and
+        // asks every reader to notice a field; clearing says the only true
+        // thing, which is that nothing is happening with the disc in the drive.
+        // The record is not lost — `report` reads `jobs.history` directly and
+        // is where a finished job belongs.
+        //
+        // The decision is `StaleJobRule`, so it can be read and tested without a
+        // JobController — and so there is one answer, not a copy of it here.
+        if job == nil, let finished = jobs.history.last {
+            guard StaleJobRule.stillCurrent(
+                jobInsertion: finished.discInsertionID,
+                mountedInsertion: jobs.insertedDisc?.insertionID.uuidString
+            ) else { return nil }
+        }
         let progress = job?.progress
         let outcome = jobs.lastOutcome ?? job?.outcome
 
