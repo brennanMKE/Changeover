@@ -672,8 +672,17 @@ enum AgentActions {
         // An id that matches nothing yields an empty list rather than the whole
         // history, because silently widening a narrowed question is how an
         // agent ends up reading another job's failure as its own.
+        var unknownJobID: String?
         if let jobID {
-            facts = facts.filter { $0.snapshot.id.rawValue == jobID }
+            let matched = facts.filter { $0.snapshot.id.rawValue == jobID }
+            if matched.isEmpty {
+                // Said out loud, not left as an empty list. An empty `jobs`
+                // beside a normal-looking report of everything else reads as an
+                // answer, and it is not one — the question was about a job this
+                // launch has never heard of. The CLI refuses on this.
+                unknownJobID = jobID
+            }
+            facts = matched
         }
         return AgentJobReport.make(
             disc: BridgeStatusReader.discStatus(
@@ -684,7 +693,8 @@ enum AgentActions {
             ),
             plan: flow.ripPlan,
             history: facts,
-            reliability: DiscReliabilityLog.recentRecords()
+            reliability: DiscReliabilityLog.recentRecords(),
+            unknownJobID: unknownJobID
         )
     }
 

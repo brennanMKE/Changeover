@@ -268,7 +268,20 @@ extension JobReport {
                 if let reason = record.failureReason {
                     line += "  — \(record.failureStage ?? "?")/\(reason)"
                 }
+                // #0240 — the job id, so a persisted row can be tied back to a
+                // `--job` query, and the evidence, so a failure can still be
+                // diagnosed after the restart that wiped the launch history.
+                if let jobID = record.jobID { line += "  [\(jobID)]" }
+                if let percent = record.failedAtPercent {
+                    line += String(format: "  %.0f%% in", percent)
+                }
                 lines.append(line)
+                if let evidence = record.failureEvidence {
+                    lines.append("      HandBrake said: \(evidence)")
+                }
+                for tail in record.failureLogTail ?? [] {
+                    lines.append("        \(tail)")
+                }
             }
         }
 

@@ -170,6 +170,7 @@ public struct SelectionRequest: Codable, Sendable, Equatable {
 /// `import` hands the agent a job id and `report` refused to accept it back,
 /// which left the id advertised and unusable.
 public struct ReportRequest: Codable, Sendable, Equatable {
+
     /// Narrow the report to one job. `nil` reports every job this launch ran,
     /// which is the previous behaviour and stays the default.
     public var jobID: String?
@@ -522,6 +523,18 @@ public struct WaitResult: Codable, Sendable, Equatable {
 /// not-a-bug failure, measured on one disc twice at 49% thirty minutes in.
 public struct JobReport: Codable, Sendable, Equatable {
 
+    /// #0236 — the id a `--job` filter asked about and did not find.
+    ///
+    /// Filtering to an unknown id used to leave an empty `jobs` list beside a
+    /// perfectly normal-looking report of everything else, which reads as an
+    /// answer. It is not one: the question was about a job this launch has
+    /// never heard of. The CLI refuses on this rather than printing.
+    ///
+    /// Launch-scoped, which is the root of the problem rather than a detail:
+    /// `jobs.history` is wiped by every restart, and an install is exactly what
+    /// happens between a failure and someone asking about it. See #0240.
+    public var unknownJobID: String?
+
     /// One film on the disc's plan.
     public struct FilmEntry: Codable, Sendable, Equatable {
         /// The disc title index this film is on.
@@ -673,6 +686,14 @@ public struct JobReport: Codable, Sendable, Equatable {
         public var outcome: String
         public var failureStage: String?
         public var failureReason: String?
+        /// #0240 — the evidence, read back from disk.
+        ///
+        /// The launch history is wiped by every restart and an install is
+        /// exactly what happens between a failure and the question about it, so
+        /// these are the copies that survive.
+        public var failedAtPercent: Double?
+        public var failureEvidence: String?
+        public var failureLogTail: [String]?
 
         public init(
             date: String,
@@ -682,7 +703,10 @@ public struct JobReport: Codable, Sendable, Equatable {
             producedBy: String? = nil,
             outcome: String,
             failureStage: String? = nil,
-            failureReason: String? = nil
+            failureReason: String? = nil,
+            failedAtPercent: Double? = nil,
+            failureEvidence: String? = nil,
+            failureLogTail: [String]? = nil
         ) {
             self.date = date
             self.volumeName = volumeName
@@ -692,6 +716,9 @@ public struct JobReport: Codable, Sendable, Equatable {
             self.outcome = outcome
             self.failureStage = failureStage
             self.failureReason = failureReason
+            self.failedAtPercent = failedAtPercent
+            self.failureEvidence = failureEvidence
+            self.failureLogTail = failureLogTail
         }
     }
 
@@ -707,12 +734,14 @@ public struct JobReport: Codable, Sendable, Equatable {
         disc: DiscStatus? = nil,
         films: [FilmEntry] = [],
         jobs: [JobRecord] = [],
-        reliability: [ReliabilityRecord] = []
+        reliability: [ReliabilityRecord] = [],
+        unknownJobID: String? = nil
     ) {
         self.generatedAt = generatedAt
         self.disc = disc
         self.films = films
         self.jobs = jobs
         self.reliability = reliability
+        self.unknownJobID = unknownJobID
     }
 }

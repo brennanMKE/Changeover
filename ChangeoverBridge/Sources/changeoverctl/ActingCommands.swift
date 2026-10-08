@@ -106,6 +106,26 @@ enum ActingCommands {
                     )
                 )
             }
+            // #0236 — refuse rather than print a report about something else.
+            //
+            // An unmatched `--job` used to leave an empty `jobs` list beside a
+            // perfectly normal-looking report of everything else, which reads
+            // as an answer. It is not one: the question was about a job this
+            // launch has never heard of. The id is worth repeating, because the
+            // usual cause is that the app restarted — `jobs.history` is
+            // launch-scoped, and an install is exactly what happens between a
+            // failure and someone asking about it.
+            if let unknown = payload.unknownJobID {
+                return reporter.failure(
+                    CLIErrorPayload(
+                        code: BridgeExitCode.requestFailed,
+                        kind: CLIErrorPayload.Kind.requestFailed,
+                        message: "no job \(unknown) in this launch's history",
+                        hint: "the app's job history is per launch, so a restart clears it. "
+                            + "`report` with no --job still shows the persisted reliability log."
+                    )
+                )
+            }
             reporter.report(payload)
             return BridgeExitCode.success
         } catch {

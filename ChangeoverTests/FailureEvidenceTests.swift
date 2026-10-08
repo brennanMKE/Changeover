@@ -92,6 +92,56 @@ import Testing
         #expect(record.failureEvidence != nil, "a dvdnav read error should match a signature")
     }
 
+    // MARK: - #0240 — surviving a restart
+
+    /// The reason this matters, stated as a test.
+    ///
+    /// `jobs.history` is launch-scoped. Both Lady in the Water failures became
+    /// unanswerable minutes after they happened, because the build that carried
+    /// the diagnostics restarted the app that held them — and an install is
+    /// exactly what happens between a failure and someone asking about it. The
+    /// reliability log already survives restarts, so the evidence lives there
+    /// too.
+    @Test func thepersistedRecordCarriesTheEvidence() {
+        let record = DiscReliabilityLog.Record(
+            date: "2026-10-08T22:12:23Z",
+            volumeName: "LADY_IN_THE_WATER",
+            movie: "Lady in the Water (2006) {tmdb-1933}",
+            jobID: "job-20261008-144208-CDE6",
+            producedBy: nil,
+            failedAtPercent: 67,
+            failureEvidence: "ERROR: dvdnav: Read Error",
+            failureLogTail: Self.handBrakeTail,
+            primary: DiscReliabilityLog.StageReason(stage: .encode, reason: "discUnreadable"),
+            decision: nil,
+            fallback: nil,
+            makemkvVersion: nil,
+            outcome: "failed"
+        )
+        let wire = AgentJobReport.reliabilityRecord(record)
+        #expect(wire.failedAtPercent == 67)
+        #expect(wire.failureEvidence == "ERROR: dvdnav: Read Error")
+        #expect(wire.failureLogTail?.contains("ERROR: dvdnav: Read Error") == true)
+        // The job id was already persisted and simply never reported, so a
+        // persisted row could not be tied back to a `--job` query.
+        #expect(wire.jobID == "job-20261008-144208-CDE6")
+    }
+
+    /// Lines written before these fields existed must decode unchanged — the
+    /// log is append-only and the file on joe is full of them.
+    @Test func anolderPersistedLineStillDecodes() throws {
+        let json = """
+        {"date":"2026-10-04T12:00:00Z","volumeName":"NEXT","movie":"Next (2007)",
+         "outcome":"failed","primary":{"stage":"encode","reason":"discUnreadable"}}
+        """
+        let record = try JSONDecoder().decode(
+            DiscReliabilityLog.Record.self, from: Data(json.utf8))
+        #expect(record.failedAtPercent == nil)
+        #expect(record.failureEvidence == nil)
+        #expect(record.failureLogTail == nil)
+        #expect(record.outcome == "failed")
+    }
+
     /// `discUnreadable` stays its own flag. The evidence is additional, not a
     /// replacement for the thing a program branches on.
     @Test func thetypedFlagIsUnchanged() {

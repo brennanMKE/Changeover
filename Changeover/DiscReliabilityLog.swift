@@ -40,6 +40,26 @@ enum DiscReliabilityLog {
         /// filters on `primary.stage` should account for this: these records
         /// say something about the *machine's setup*, not about the disc
         /// named in `movie`/`volumeName`.
+        /// #0240 — the evidence, persisted.
+        ///
+        /// `jobs.history` is launch-scoped and an install is exactly what
+        /// happens between a failure and someone asking about it: both Lady in
+        /// the Water failures were unanswerable minutes after they happened,
+        /// because the build carrying the diagnostics restarted the app that
+        /// held them. This log already survives restarts, so the evidence
+        /// belongs here too.
+        ///
+        /// All three optional, so every line already on disk decodes unchanged.
+        /// `var` with a default, unlike its neighbours, so the memberwise
+        /// initializer keeps working for every existing construction site and
+        /// so a line written before these fields existed decodes to `nil`
+        /// rather than failing. The log is append-only and the file on joe is
+        /// full of such lines.
+        var failedAtPercent: Double? = nil
+        /// The line `HandBrakeFailureClassifier` matched to reach its verdict.
+        var failureEvidence: String? = nil
+        /// A bounded tail of HandBrake's own output.
+        var failureLogTail: [String]? = nil
         let primary: StageReason?
         /// `"notEligible"` | `"unavailable"` | `"attempted"` | `nil`.
         let decision: String?

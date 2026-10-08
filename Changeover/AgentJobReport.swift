@@ -168,7 +168,15 @@ nonisolated enum AgentJobReport {
             // so every line on disk has `fallback == nil`, and reporting a field
             // that is always absent is noise in a payload an agent reads.
             failureStage: record.primary?.stage.rawValue,
-            failureReason: record.primary?.reason
+            failureReason: record.primary?.reason,
+            // #0240 — the persisted evidence. This is the copy that survives a
+            // restart, and a restart between a failure and the question about
+            // it is the normal case: both Lady in the Water failures were
+            // unanswerable minutes later because the build carrying the
+            // diagnostics restarted the app holding them.
+            failedAtPercent: record.failedAtPercent,
+            failureEvidence: record.failureEvidence,
+            failureLogTail: record.failureLogTail
         )
     }
 
@@ -182,6 +190,7 @@ nonisolated enum AgentJobReport {
         plan: DiscRipPlan?,
         history: [JobFacts],
         reliability: [DiscReliabilityLog.Record],
+        unknownJobID: String? = nil,
         now: Date = Date()
     ) -> JobReport {
         JobReport(
@@ -189,7 +198,8 @@ nonisolated enum AgentJobReport {
             disc: disc,
             films: (plan?.entries ?? []).map(filmEntry),
             jobs: history.map(jobRecord),
-            reliability: reliability.map(reliabilityRecord)
+            reliability: reliability.map(reliabilityRecord),
+            unknownJobID: unknownJobID
         )
     }
 }

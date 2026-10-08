@@ -207,10 +207,32 @@ struct DVDPipeline {
         }
     }
 
-    private func progressReporter(_ unit: JobProgress.Unit) -> @MainActor (HandBrakeProgress) -> Void {
+    /// #0240 — the furthest any encode in this run reported.
+    ///
+    /// A reference type because `DVDPipeline` is a struct (deliberately — see
+    /// the type's own note) and the progress closures escape. Written from the
+    /// closure, read in `run()` when the record is built.
+    ///
+    /// It has to be kept here at all because the job's own progress is cleared
+    /// on every phase edge, so by the time a failure is recorded the number is
+    /// gone. On a read failure it is most of the diagnosis: two failures at the
+    /// same percentage are damage at a fixed place on the platter, two
+    /// different ones are a marginal disc.
+    @MainActor
+    final class FurthestProgress {
+        var percent: Double?
+        func observe(_ value: Double) { percent = max(percent ?? 0, value) }
+    }
+
+    private func progressReporter(_ unit: JobProgress.Unit,
+                                  furthest: FurthestProgress) -> @MainActor (HandBrakeProgress) -> Void {
         let report = reportProgress
         return { encode in
-            report(JobProgress(unit: unit, encode: encode, receivedAt: Date()))
+            let progress = JobProgress(unit: unit, encode: encode, receivedAt: Date())
+            if let percent = BridgeStatusReader.percent(of: progress) {
+                furthest.observe(percent)
+            }
+            report(progress)
         }
     }
 
@@ -258,6 +280,7 @@ struct DVDPipeline {
         // Reliability-log bookkeeping, filled in as the run progresses so
         // every `return` below can pass through `finish(_:)` — no path
         // skips the record.
+        let furthest = FurthestProgress()
         var producedBy: ProducedBy?
         var primaryRecord: DiscReliabilityLog.StageReason?
         var decisionRecord: String?
@@ -318,6 +341,19 @@ struct DVDPipeline {
                 movie:          metadata.folderName,
                 jobID:          jobID.rawValue,
                 producedBy:     producedBy?.rawValue,
+                // #0240 — the evidence goes to disk with the row, because
+                // `jobs.history` is launch-scoped and an install between a
+                // failure and the question is the normal case rather than a
+                // corner one.
+                failedAtPercent: outcome.failure == nil ? nil : furthest.percent,
+                failureEvidence: outcome.failure.flatMap { failed in
+                    HandBrakeFailureClassifier.evidence(
+                        in: failed.logTail, for: failed.reason, outputPath: ""
+                    )?.line
+                },
+                failureLogTail: outcome.failure.map {
+                    Array($0.logTail.suffix(AgentJobReport.failureTailLines))
+                },
                 primary:        primaryRecord,
                 decision:       decisionRecord,
                 fallback:       fallbackRecord,
@@ -643,7 +679,7 @@ struct DVDPipeline {
                 filter:        deinterlaceFilter,
                 audio:         selection.audio,
                 markers:       markerSelection,
-                progress:      progressReporter(.feature),
+                progress:      progressReporter(.feature, furthest: furthest),
                 log:           log
             )
 
@@ -758,7 +794,8 @@ struct DVDPipeline {
                         volumeName:     volumeName,
                         jobID:          jobID,
                         fallbackAudio:  selection.fallbackAudio,
-                        targetDurationSeconds: selection.featureDurationSeconds
+                        targetDurationSeconds: selection.featureDurationSeconds,
+                        furthest:       furthest
                     ) {
                     case .failure(let runFailure):
                         fallbackRecord = runFailure.record
@@ -982,7 +1019,8 @@ struct DVDPipeline {
                     filter:        extraFilter,
                     audio:         .sourceDefault,
                     progress:      progressReporter(
-                        .extra(index: index + 1, count: extras.items.count, titleIndex: item.titleIndex)
+                        .extra(index: index + 1, count: extras.items.count, titleIndex: item.titleIndex),
+                        furthest: furthest
                     ),
                     log:           log
                 ) {
@@ -1198,7 +1236,11 @@ struct DVDPipeline {
         volumeName:     String,
         jobID:          JobID,
         fallbackAudio:  EncodeController.AudioSelection,
-        targetDurationSeconds: Int?
+        targetDurationSeconds: Int?,
+        // #0240 — the same high-water mark the primary encode writes to, so a
+        // failure in the fallback reports where the FALLBACK got to rather than
+        // silently reporting the primary's last position as its own.
+        furthest:       FurthestProgress
     ) async -> Result<URL, FallbackRunFailure> {
         // #0004 §2: the rip job directory shares the run's single job id, so
         // `Working/encoding/<jobID>/` and `Working/ripping/<jobID>/` always
@@ -1290,7 +1332,7 @@ struct DVDPipeline {
                 handbrakePath: handbrakePath,
                 filter:        fallbackFilter,
                 audio:         fallbackAudio,
-                progress:      progressReporter(.fallback),
+                progress:      progressReporter(.fallback, furthest: furthest),
                 log:           log
             )
 
