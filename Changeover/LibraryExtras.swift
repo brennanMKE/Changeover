@@ -60,25 +60,62 @@ nonisolated enum LibraryExtras {
     static func verdicts(forTitles titles: [DiscTitle],
                          against extras: [LibraryExtraFile]) -> [Verdict] {
         let timed = extras.filter { ($0.file.durationSeconds ?? 0) > 0 }
-        var available = timed
-        var result: [Verdict] = []
-        for title in titles.sorted(by: { $0.index < $1.index }) {
-            let hit = available
-                .enumerated()
-                .filter { abs(($0.element.file.durationSeconds ?? 0) - title.durationSeconds) <= toleranceSeconds }
-                .min { abs(($0.element.file.durationSeconds ?? 0) - title.durationSeconds)
-                     < abs(($1.element.file.durationSeconds ?? 0) - title.durationSeconds) }
-            if let hit {
-                // One file answers for one title: two extras of the same
-                // length on one disc are two different videos, and the second
-                // must not be declared held on the strength of the first.
-                available.remove(at: hit.offset)
-                result.append(Verdict(titleIndex: title.index, existing: hit.element))
-            } else {
-                result.append(Verdict(titleIndex: title.index, existing: nil))
+        let ordered = titles.sorted { $0.index < $1.index }
+
+        // #0231 — pair titles with files in order of how well they AGREE, not
+        // in title order.
+        //
+        // The previous version walked the titles by index and gave each one
+        // its nearest unclaimed file. That is greedy in the wrong dimension: a
+        // title considered early takes a file that a later title matches
+        // exactly, and the later title is then reported missing. On Pacific
+        // Rim: Uprising, title 11 (0:32) claimed the 0:38 file — six seconds
+        // out, but inside the tolerance and nothing closer was left — and
+        // title 30, whose runtime was 0:38 exactly, was reported as not in the
+        // library at all. Three extras were wrong that way, and the output
+        // reads as an instruction to re-import files that are already filed.
+        //
+        // So build every acceptable pairing, sort by the size of the
+        // disagreement, and take them best-first. A perfect match is always
+        // claimed before a merely tolerable one, whatever order the titles are
+        // in. Ties break on title index, then on file name, so the result does
+        // not depend on the order the filesystem listed things in.
+        struct Pairing {
+            var titleIndex: Int
+            var fileOffset: Int
+            var distance: Int
+            var fileName: String
+        }
+        var pairings: [Pairing] = []
+        for title in ordered {
+            for (offset, extra) in timed.enumerated() {
+                let distance = abs((extra.file.durationSeconds ?? 0) - title.durationSeconds)
+                guard distance <= toleranceSeconds else { continue }
+                pairings.append(Pairing(titleIndex: title.index, fileOffset: offset,
+                                        distance: distance, fileName: extra.file.name))
             }
         }
-        return result
+        pairings.sort {
+            if $0.distance != $1.distance { return $0.distance < $1.distance }
+            if $0.titleIndex != $1.titleIndex { return $0.titleIndex < $1.titleIndex }
+            return $0.fileName < $1.fileName
+        }
+
+        // One file answers for one title: two extras of the same length on one
+        // disc are two different videos, and the second must not be declared
+        // held on the strength of the first.
+        var claimedTitles: Set<Int> = []
+        var claimedFiles: Set<Int> = []
+        var holder: [Int: LibraryExtraFile] = [:]
+        for pairing in pairings {
+            guard !claimedTitles.contains(pairing.titleIndex),
+                  !claimedFiles.contains(pairing.fileOffset) else { continue }
+            claimedTitles.insert(pairing.titleIndex)
+            claimedFiles.insert(pairing.fileOffset)
+            holder[pairing.titleIndex] = timed[pairing.fileOffset]
+        }
+
+        return ordered.map { Verdict(titleIndex: $0.index, existing: holder[$0.index]) }
     }
 
     /// The titles still worth importing — what the eject decision and the

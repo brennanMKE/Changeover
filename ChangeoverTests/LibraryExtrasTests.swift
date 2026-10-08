@@ -33,6 +33,71 @@ import Testing
         title(12, seconds: 516), title(13, seconds: 510), title(14, seconds: 291),
     ]
 
+    /// #0231 — a title must not lose its file to a title that merely tolerates it.
+    ///
+    /// Observed on Pacific Rim: Uprising, where all 17 extras had imported
+    /// successfully and `library` reported three of them missing. The matcher
+    /// walked titles in index order and gave each its nearest unclaimed file,
+    /// so title 11 (0:32) took the 0:38 file — six seconds out, inside the
+    /// twelve-second tolerance, nothing closer left — and title 30, whose
+    /// runtime is 0:38 exactly, was then reported as not in the library.
+    ///
+    /// The output is agent-facing, which is what makes it serious: it does not
+    /// merely omit something, it states confidently that three extras are
+    /// missing, and an agent acting on that re-imports files already filed.
+    @Test func aperfectMatchIsClaimedBeforeAToleratedOne() {
+        let titles = [Self.title(11, seconds: 32), Self.title(30, seconds: 38)]
+        let files = [Self.filed("Featurettes", "Jake & Nate Discuss Jake's Return.mp4", seconds: 38)]
+        let verdicts = LibraryExtras.verdicts(forTitles: titles, against: files)
+
+        #expect(verdicts.first { $0.titleIndex == 30 }?.existing?.file.name
+                == "Jake & Nate Discuss Jake's Return.mp4",
+                "the 0:38 file belongs to the title whose runtime is 0:38")
+        #expect(verdicts.first { $0.titleIndex == 11 }?.isHeld == false)
+        #expect(LibraryExtras.stillMissing(verdicts) == [11])
+    }
+
+    /// The same shape with every extra present, which is the real disc.
+    ///
+    /// Three near-duplicate runtimes and three files that match them exactly.
+    /// Index order would have the 0:32 titles consume the 0:35 and 0:38 files
+    /// and report the titles those files came from as missing. Nothing should
+    /// be missing here.
+    @Test func closeRuntimesAllPairWithTheirOwnFile() {
+        let titles = [
+            Self.title(9, seconds: 32), Self.title(11, seconds: 32),
+            Self.title(30, seconds: 38), Self.title(33, seconds: 35),
+        ]
+        let files = [
+            Self.filed("Featurettes", "a.mp4", seconds: 32),
+            Self.filed("Featurettes", "b.mp4", seconds: 32),
+            Self.filed("Featurettes", "Jake & Nate.mp4", seconds: 38),
+            Self.filed("Featurettes", "Kaiju Brain from Fury.mp4", seconds: 35),
+        ]
+        let verdicts = LibraryExtras.verdicts(forTitles: titles, against: files)
+
+        #expect(LibraryExtras.stillMissing(verdicts).isEmpty,
+                "every title has an exact-length file; none should be reported missing")
+        #expect(verdicts.first { $0.titleIndex == 30 }?.existing?.file.name == "Jake & Nate.mp4")
+        #expect(verdicts.first { $0.titleIndex == 33 }?.existing?.file.name
+                == "Kaiju Brain from Fury.mp4")
+    }
+
+    /// Order of the library listing must not change the answer.
+    ///
+    /// The filesystem decides what order `LibraryProbe` returns files in, and
+    /// that is not something a report should depend on.
+    @Test func thelistingOrderDoesNotChangeTheResult() {
+        let titles = [Self.title(11, seconds: 32), Self.title(30, seconds: 38)]
+        let forward = [Self.filed("F", "x.mp4", seconds: 38), Self.filed("F", "y.mp4", seconds: 32)]
+        let reversed = Array(forward.reversed())
+
+        let a = LibraryExtras.verdicts(forTitles: titles, against: forward)
+        let b = LibraryExtras.verdicts(forTitles: titles, against: reversed)
+        #expect(a == b)
+        #expect(a.first { $0.titleIndex == 30 }?.existing?.file.name == "x.mp4")
+    }
+
     @Test func atitleAlreadyFiledIsRecognisedByItsRuntime() {
         let verdicts = LibraryExtras.verdicts(
             forTitles: Self.signsExtras,
