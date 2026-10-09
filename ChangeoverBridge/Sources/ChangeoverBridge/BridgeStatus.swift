@@ -40,6 +40,21 @@ public struct BridgeStatus: Codable, Sendable, Equatable {
     public var scan: ScanStatus
     public var film: FilmStatus?
     public var job: JobStatus?
+    /// #0243 — the most recently finished job, when it is not `job`.
+    ///
+    /// Exists for one reason: on a disc holding two films, job 1 reaches a
+    /// terminal phase and job 2 starts 55 ms later, so between two snapshots
+    /// `job` goes straight from job 1 `organizing` to job 2 `starting`. The
+    /// event feed is a diff of snapshots, so job 1's terminal state is never
+    /// observed and **no `job.finished` is ever emitted for it** — while
+    /// `import`'s own help tells an agent to wait on exactly that event for
+    /// exactly that id. The agent waits forever.
+    ///
+    /// Carrying the finished job in the snapshot is what lets the diff say so.
+    /// `nil` when nothing has finished, and when the finished job is still
+    /// `job` — in which case the ordinary phase transition already reported it
+    /// and reporting it twice would be worse than not at all.
+    public var lastFinished: JobStatus?
     public var start: StartStatus
     /// Whether the app is currently making decisions of its own.
     public var automation: AutomationStatus
@@ -53,6 +68,7 @@ public struct BridgeStatus: Codable, Sendable, Equatable {
         scan: ScanStatus,
         film: FilmStatus? = nil,
         job: JobStatus? = nil,
+        lastFinished: JobStatus? = nil,
         start: StartStatus,
         automation: AutomationStatus,
         library: LibraryStatus
@@ -63,6 +79,7 @@ public struct BridgeStatus: Codable, Sendable, Equatable {
         self.scan = scan
         self.film = film
         self.job = job
+        self.lastFinished = lastFinished
         self.start = start
         self.automation = automation
         self.library = library

@@ -217,6 +217,47 @@ public enum BridgeStatusDiff {
     // MARK: - Job
 
     private static func jobDrafts(from old: BridgeStatus, to new: BridgeStatus) -> [EventDraft] {
+        finishedJobDrafts(from: old, to: new) + currentJobDrafts(from: old, to: new)
+    }
+
+    /// #0243 — a job that finished and was replaced in the same breath.
+    ///
+    /// On a double feature job 1 reaches a terminal phase and job 2 starts 55 ms
+    /// later, so `job` goes from job 1 `organizing` straight to job 2 `starting`
+    /// between two snapshots, and job 1's terminal state is never seen by
+    /// `currentJobDrafts` below — which only ever looks at `new.job`. No
+    /// `job.finished` was emitted for it, while `import`'s own help tells an
+    /// agent to wait on exactly that event for exactly that id. The agent waited
+    /// forever: a hang, not a cosmetic gap.
+    ///
+    /// Separate from `currentJobDrafts` rather than folded into it, because the
+    /// two answer different questions — "did the job being reported change
+    /// state" and "did a job end without ever being reported as ended" — and the
+    /// second has to fire even when nothing else about the snapshot moved.
+    ///
+    /// `lastFinished` is `nil` whenever the finished job is still the reported
+    /// one, which is the single-film case, so this cannot double-report what the
+    /// ordinary phase transition already says.
+    private static func finishedJobDrafts(from old: BridgeStatus,
+                                          to new: BridgeStatus) -> [EventDraft] {
+        guard let finished = new.lastFinished, old.lastFinished?.id != finished.id
+        else { return [] }
+        let detail = finished.failureReason.map { " — \($0)" } ?? ""
+        return [
+            EventDraft(
+                kind: BridgeEvent.Kind.jobFinished,
+                summary: "the job \(finished.outcome ?? finished.phase)\(detail)",
+                disc: new.disc,
+                film: finished.film ?? new.film,
+                job: finished,
+                flow: new.flow,
+                start: new.start
+            )
+        ]
+    }
+
+    private static func currentJobDrafts(from old: BridgeStatus,
+                                         to new: BridgeStatus) -> [EventDraft] {
         guard let job = new.job else { return [] }
         let previous = old.job
 

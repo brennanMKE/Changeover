@@ -72,6 +72,12 @@ nonisolated enum BridgeStatusReader {
                 libraryCheck: flow.libraryCheckForThisEdition
             ),
             job: jobStatus(jobs),
+            // #0243 — the job that finished and was immediately replaced.
+            //
+            // Only when it is not the job above: on a single-film disc the
+            // finished job IS `job`, the ordinary phase transition reports it,
+            // and reporting it twice is worse than not at all.
+            lastFinished: lastFinishedJob(jobs),
             start: startStatus(
                 flow.startDecision(jobs: jobs),
                 autoStartSecondsRemaining: flow.autoStartRemaining
@@ -279,6 +285,48 @@ nonisolated enum BridgeStatusReader {
         case .done(_, .present): "present"
         case .done(_, .unreachable): "unreachable"
         }
+    }
+
+    /// #0243 — the most recently finished job, when the current job is a
+    /// different one.
+    ///
+    /// On a double feature job 1 reaches a terminal phase and job 2 starts 55 ms
+    /// later, so `job` goes straight from one to the other between two snapshots
+    /// and the feed — which is a diff of snapshots — never sees job 1 finish. An
+    /// agent told by `import`'s own help to wait on `job.finished` for that id
+    /// waits forever. This is what lets the diff report it.
+    ///
+    /// Deliberately thin. It carries what identifies the job and how it ended,
+    /// and nothing that would need the live controller — the point is to let a
+    /// watcher close the book on an id, not to re-describe the job.
+    @MainActor
+    static func lastFinishedJob(_ jobs: JobController) -> JobStatus? {
+        guard let finished = jobs.history.last else { return nil }
+        // Not when it is already the reported job: there the ordinary phase
+        // transition reports it, and reporting it twice is worse than not at
+        // all.
+        guard finished.id.rawValue != jobs.currentJobID else { return nil }
+        let outcome = finished.outcome ?? finished.state.outcome
+        guard let outcome else { return nil }
+        return JobStatus(
+            running: false,
+            id: finished.id.rawValue,
+            phase: JobState.terminalPhase(for: outcome).rawValue,
+            outcome: outcomeName(outcome),
+            failureReason: failureReason(outcome),
+            // The same call `jobStatus` makes, so the two cannot disagree about
+            // who chose. It is read from the LIVE identification story, which on
+            // a double feature has already moved to the second film by the time
+            // this fires — so on that disc it describes the disc's chooser
+            // rather than this job's. Accepted rather than guessed at: #0242 is
+            // open on this field having no way to say "not recorded", and
+            // inventing a value here would be a ninth instance of the same
+            // family rather than a fix.
+            film: filmStatus(finished.metadata, resolvedBy: nil,
+                             chosenBy: IdentificationSummary.chooser(
+                                jobs.identificationStory).rawValue,
+                             libraryCheck: .idle)
+        )
     }
 
     @MainActor

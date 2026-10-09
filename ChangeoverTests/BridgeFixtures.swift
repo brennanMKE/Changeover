@@ -148,6 +148,8 @@ enum BridgeFixtures {
         scan: ScanStatus? = nil,
         film: FilmStatus? = nil,
         job: JobStatus? = nil,
+        /// #0243 — a job that ended and was replaced before the next snapshot.
+        lastFinished: JobStatus? = nil,
         start: StartStatus? = nil,
         sessions: Int = 0
     ) -> BridgeStatus {
@@ -158,6 +160,7 @@ enum BridgeFixtures {
             scan: scan ?? Self.scan(),
             film: film,
             job: job,
+            lastFinished: lastFinished,
             start: start ?? Self.start(),
             automation: AutomationStatus(
                 suspended: sessions > 0,
