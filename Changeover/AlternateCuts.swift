@@ -110,6 +110,13 @@ nonisolated enum AlternateCuts {
     /// A line that offers a cut says which cut *of what*: "PLAY UNRATED
     /// VERSION", "DIRECTOR'S CUT". A trailer is neither, so a version word with
     /// no qualifier beside it is not evidence.
+    ///
+    /// Confirmed against a real disc rather than invented text: DRAGNET (1987)
+    /// has a bonus page reading "THEATRICAL TRAILER", and 714 lines of its menu
+    /// are pinned in the corpus with the assertion that none of them counts as
+    /// an edition. Its prose carries the other trap too — "one released
+    /// theatrically in 1954" — which whole-word matching rejects for the same
+    /// reason it rejects "rated" inside "unrated".
     static let qualifiers = ["version", "cut"]
 
     /// Lines that disqualify themselves whatever else they contain.

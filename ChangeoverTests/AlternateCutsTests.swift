@@ -87,6 +87,40 @@ import Testing
             "the real menu should collapse the two cuts into one film")
     }
 
+    /// #0235 — the false positive, against a real disc that carries it.
+    ///
+    /// Until now the trailer guard was only tested against text I invented,
+    /// which agreed with my own rule by construction. DRAGNET (1987) has a
+    /// genuine bonus page reading "THEATRICAL TRAILER", captured off joe
+    /// 2026-10-09: 714 lines of real menu text, and the whole point is that
+    /// **none** of them may count as an edition.
+    ///
+    /// It also happens to carry the other trap, in prose: "series were
+    /// produced, one released theatrically in 1954". Whole-word matching is
+    /// what keeps "theatrically" from counting as "theatrical" — the same
+    /// discipline that keeps "unrated" from counting as "rated".
+    ///
+    /// DRAGNET is a single-feature disc, so `severalFeatures` returns before
+    /// the menu check is ever reached; this exercises the vocabulary directly,
+    /// which is the part that would have been wrong.
+    @Test func arealTheatricalTrailerIsNotAnEdition() throws {
+        guard let url = DiscAssets.file("menu-lines.json", inDisc: "dragnet") else { return }
+        let lines = try JSONDecoder().decode([String].self, from: Data(contentsOf: url))
+        #expect(lines.count > 500, "the fixture should be the whole menu, not a sample")
+        #expect(lines.contains("THEATRICAL TRAILER"),
+                "this fixture exists for that line; if it is gone the test is pointless")
+
+        #expect(AlternateCuts.versionWords(inMenu: lines).isEmpty,
+                "a trailer and a sentence about 1954 are not an offer of an edition")
+        #expect(!AlternateCuts.namesAlternateCuts(menuLines: lines))
+
+        // And the rule still cannot collapse a disc on this evidence, even if
+        // one arrived with two features.
+        #expect(DiscTitleHeuristic.severalFeatures(
+            Self.disc(Self.willis), menuLines: lines)?.count == 2,
+            "DRAGNET's menu must not collapse a double feature")
+    }
+
     /// The trailing asterisk on "PLAY UNRATED VERSION*" is why matching folds
     /// punctuation to spaces rather than comparing raw strings.
     @Test func punctuationGluedToAWordDoesNotHideIt() {
