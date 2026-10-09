@@ -343,7 +343,12 @@ enum AgentActions {
             }
             // The same call the window's results row makes, so the choice, the
             // model and the gate cannot disagree.
-            flow.selectFeature(movieID: movieID, feature: feature, jobs: jobs, settings: settings)
+            // #0242 — say it was an agent. `selectFeature` reaches `select`
+            // through `applyActiveFeature`, whose default is `.user`, so an
+            // agent's pick on a double feature was recorded as a person's.
+            flow.selectFeature(movieID: movieID, feature: feature, jobs: jobs,
+                               settings: settings, origin: .agent,
+                               askedFor: request.query)
             guard flow.featureSelection.movieID(for: feature) == movieID else {
                 return refusal(
                     verb: BridgeRequest.Action.select,

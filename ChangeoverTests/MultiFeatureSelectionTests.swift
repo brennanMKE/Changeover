@@ -471,6 +471,59 @@ struct MultiFeatureSelectionTests {
         #expect(flow.selectedMovieID == nil)
     }
 
+    // MARK: - #0242 — who chose
+
+    /// An agent's pick on a double feature was recorded as the user's.
+    ///
+    /// Observed on WILLIS, 2026-10-08: both films chosen through
+    /// `changeoverctl select`, and `status.film.chosenBy` said `user`.
+    ///
+    /// The cause is a default, not a missing record. `select(movieID:jobs:
+    /// apiKey:origin:askedFor:)` defaults `origin` to `.user` for the benefit of
+    /// the window's results row, and `selectFeature` reaches it through
+    /// `applyActiveFeature`, which had no idea who asked and so inherited that
+    /// default. #0200 fixed exactly this on the single-film path and left this
+    /// one, because nothing on it took an origin at all.
+    ///
+    /// `chosenBy` exists so a person can tell what the machine decided from what
+    /// they decided — it is the field behind #0195's banner — so attributing an
+    /// automated choice to the one party who was not involved is worse than
+    /// reporting nothing.
+    @Test func anagentsPickOnADoubleFeatureIsRecordedAsTheAgents() throws {
+        let jobs = Self.controller(scan: Self.tripleFeatureScan())
+        let flow = RipFlowController()
+        let settings = AppSettings()
+        flow.reconcile(jobs: jobs, apiKey: "", settings: settings)
+        try #require(flow.featureSelection.isMultiFeature)
+
+        let movie = try Self.movie(id: 7183, title: "Perfect Stranger", year: "2007-04-13")
+        let feature = try #require(flow.featureSelection.features.first)
+        flow.featureSearch(feature)?.results = [movie]
+        flow.selectFeature(movieID: movie.id, feature: feature, jobs: jobs,
+                           settings: settings, origin: .agent,
+                           askedFor: "Perfect Stranger")
+
+        #expect(IdentificationSummary.chooser(jobs.identificationStory) == .agent,
+                "an agent chose this film; saying a person did is the bug")
+    }
+
+    /// And the window's own path still records a person, so the fix did not
+    /// simply relabel everything as an agent.
+    @Test func apersonsPickOnADoubleFeatureIsStillTheirs() throws {
+        let jobs = Self.controller(scan: Self.tripleFeatureScan())
+        let flow = RipFlowController()
+        let settings = AppSettings()
+        flow.reconcile(jobs: jobs, apiKey: "", settings: settings)
+
+        let movie = try Self.movie(id: 30815, title: "Mortal Thoughts", year: "1991-04-19")
+        let feature = try #require(flow.featureSelection.features.first)
+        flow.featureSearch(feature)?.results = [movie]
+        // No origin — exactly what `ChooseMovieStepView` passes.
+        flow.selectFeature(movieID: movie.id, feature: feature, jobs: jobs, settings: settings)
+
+        #expect(IdentificationSummary.chooser(jobs.identificationStory) == .user)
+    }
+
     // MARK: - The single-feature disc, unchanged
 
     /// The whole point of keeping the per-feature state empty on an ordinary

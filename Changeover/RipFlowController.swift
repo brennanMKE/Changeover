@@ -550,7 +550,16 @@ final class RipFlowController {
     }
 
     /// A results row clicked inside one feature's block (or the pick cleared).
-    func selectFeature(movieID: Int?, feature: Int, jobs: JobController, settings: AppSettings) {
+    /// - Parameters:
+    ///   - origin: #0242 — who chose. Threaded rather than defaulted at the
+    ///     bottom, because the bottom's default is `.user` and this path reaches
+    ///     it through `applyActiveFeature`, which has no idea who asked. An
+    ///     agent selecting a film on a double feature was recorded as the user
+    ///     having chosen it, which is #0200's bug on a path #0200 did not touch.
+    ///   - askedFor: the term the caller searched with, for the same reason
+    ///     `select` takes one.
+    func selectFeature(movieID: Int?, feature: Int, jobs: JobController, settings: AppSettings,
+                       origin: SelectionOrigin = .user, askedFor: String? = nil) {
         guard let model = featureSearchModels[feature] else { return }
         model.select(movieID: movieID, apiKey: settings.tmdbAPIKey)
         featureSelection.choose(movieID: movieID, for: feature)
@@ -567,7 +576,7 @@ final class RipFlowController {
         }
         // #0161: last film's answer must not sit under this film's name.
         featureLibraryChecks[feature] = nil
-        applyActiveFeature(jobs: jobs, settings: settings)
+        applyActiveFeature(jobs: jobs, settings: settings, origin: origin, askedFor: askedFor)
         // #0182: naming (or un-naming) a film changes what a bonus feature on
         // this disc has to attach to, so the attachments are re-resolved here
         // rather than discovered to be wrong at Start.
@@ -1219,14 +1228,19 @@ final class RipFlowController {
     /// named is still on screen.
     ///
     /// A single-feature disc never reaches here.
-    private func applyActiveFeature(jobs: JobController, settings: AppSettings) {
+    /// - Parameter origin: #0242 — who chose, forwarded to `select`, whose own
+    ///   default is `.user`. Inheriting that default here is what recorded an
+    ///   agent's pick on a double feature as a person's.
+    private func applyActiveFeature(jobs: JobController, settings: AppSettings,
+                                    origin: SelectionOrigin = .user,
+                                    askedFor: String? = nil) {
         guard featureSelection.isMultiFeature else { return }
         let apiKey = settings.tmdbAPIKey
 
         guard let feature = featureSelection.active,
               let model = featureSearchModels[feature],
               let movie = model.selectedMovie else {
-            select(movieID: nil, jobs: jobs, apiKey: apiKey)
+            select(movieID: nil, jobs: jobs, apiKey: apiKey, origin: origin)
             jobs.selectTitle(nil, settings: settings)
             return
         }
@@ -1234,7 +1248,8 @@ final class RipFlowController {
         // `search.select` resolves the movie out of `results`, so the results
         // have to be there before the pick is made.
         search.present(query: model.query, results: model.results)
-        select(movieID: movie.id, jobs: jobs, apiKey: apiKey)
+        select(movieID: movie.id, jobs: jobs, apiKey: apiKey,
+               origin: origin, askedFor: askedFor)
         // Nothing is preselected on a multi-feature disc (#0157) — naming the
         // film for one feature is the only statement the user makes about
         // which part of the disc to rip, so it settles the title too.
