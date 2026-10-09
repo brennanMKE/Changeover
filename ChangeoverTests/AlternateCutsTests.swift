@@ -36,6 +36,20 @@ import Testing
         title(2, seconds: 5460, chapters: 17),
     ]
 
+    /// WILLIS, measured on hardware 2026-10-08: Perfect Stranger 1:48:55 with
+    /// 11 chapters and Mortal Thoughts 1:42:43 with 9. A genuine double
+    /// feature whose runtimes are CLOSER than Repo Men's two cuts — 0.943
+    /// against 0.930 — which is why no ratio threshold can work.
+    private static let willis = [
+        title(5, seconds: 6535, chapters: 11),
+        title(6, seconds: 6163, chapters: 9),
+    ]
+
+    /// Its whole menu, one page, as the OCR read it. No edition words at all.
+    private static let willisMenu = [
+        "MORTAL", "THOUGHTS", "PERFECT", "STRANGER", "SUBTITLES: ON/OFF",
+    ]
+
     private static let repoMenMenu = [
         "PLAY UNRATED VERSION", "PLAY THEATRICAL VERSION",
         "SCENE SELECTION", "SPECIAL FEATURES", "SETUP",
@@ -97,6 +111,26 @@ import Testing
     @Test func amentionIsNotAnOffer() {
         #expect(AlternateCuts.versionWords(inMenu: ["ON THE THEATRICAL"]).isEmpty)
         #expect(AlternateCuts.versionWords(inMenu: ["PLAY THEATRICAL VERSION"]) == ["theatrical"])
+    }
+
+    /// The inversion, pinned. A genuine double feature with runtimes closer
+    /// than the real pair of cuts.
+    ///
+    /// If this ever fails because someone added a ratio rule, read the table in
+    /// `AlternateCuts`: WILLIS scores 0.943 and Repo Men 0.930, so any
+    /// threshold that collapses Repo Men collapses WILLIS first and loses
+    /// Mortal Thoughts without saying so.
+    @Test func agenuineDoubleFeatureWithCloserRuntimesThanTheRealCutsSurvives() {
+        #expect(DiscTitleHeuristic.severalFeatures(
+            Self.disc(Self.willis), menuLines: Self.willisMenu)?.count == 2,
+            "WILLIS is two films; its menu names two films and no edition")
+        #expect(AlternateCuts.versionWords(inMenu: Self.willisMenu).isEmpty)
+
+        // And the runtimes really are closer than the disc that IS two cuts.
+        let willisRatio = 6163.0 / 6535.0
+        let repoMenRatio = 6666.0 / 7168.0
+        #expect(willisRatio > repoMenRatio,
+                "the premise of this test: a ratio rule would be inverted")
     }
 
     // MARK: - The vocabulary

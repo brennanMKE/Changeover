@@ -13,14 +13,21 @@ import Foundation
 ///
 /// They are too close to the real thing to separate. Measured:
 ///
+///     WILLIS       1:48:55 / 1:42:43   ratio 0.943   11 /  9 chapters   TWO films
 ///     Repo Men     1:59:28 / 1:51:06   ratio 0.930   21 / 21 chapters   ONE film
 ///     Uncle Buck   1:40    / 1:31      ratio 0.910   17 / 17 chapters   TWO films
 ///
-/// Twenty thousandths apart on runtime and identical on chapters. Any threshold
-/// that catches Repo Men catches Uncle Buck, and Uncle Buck is a genuine double
-/// feature whose two films an earlier rule already fought to keep — #0157's
+/// Read that table again, because it is the whole argument. The one disc that
+/// IS two cuts sits **between** two discs that are not, and WILLIS — a genuine
+/// double feature — has the *closest* runtimes of the three. A ratio threshold
+/// would not merely be imprecise here; it would be inverted. Chapters do not
+/// rescue it either: Uncle Buck's two films match exactly at 17/17, and #0157's
 /// chapter test was removed precisely because it rejected discs whose counts
-/// agreed, which is Uncle Buck's shape exactly.
+/// agreed.
+///
+/// Nothing in the title list can separate these cases, and a rule built on
+/// runtimes or chapters would have collapsed WILLIS into one film and lost
+/// Mortal Thoughts silently.
 ///
 /// So this does not touch the runtime or chapter rules at all. It asks a
 /// different question, of a different source: **does the menu offer these as
@@ -49,6 +56,7 @@ nonisolated enum AlternateCuts {
     /// Matching is case-insensitive and diacritic-folded, the same convention
     /// `MenuLexicon` uses and for the same reason: OCR drops accents on
     /// stylised type more often than it drops letters.
+    ///
     /// `rated` is deliberately absent. It is a real edition word — a disc can
     /// offer "RATED VERSION" beside "UNRATED VERSION" — but it is a substring of
     /// "unrated", and a menu naming only the unrated cut would score two. Word
