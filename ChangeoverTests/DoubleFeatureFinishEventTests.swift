@@ -75,6 +75,54 @@ import Testing
         #expect(finished.count == 1, "one job ending is one event, not two")
     }
 
+    /// The regression #0243 shipped with, found on hardware the next day.
+    ///
+    /// Dragnet's job ended and was reported normally while it was still
+    /// `status.job`. #0232 then cleared it when the disc left. When the NEXT
+    /// disc's job started, `lastFinished` became non-nil for the first time —
+    /// and the old guard, which asked only whether `lastFinished` had *changed*,
+    /// replayed a `succeeded` for a job that had finished the previous day, in
+    /// the same millisecond as the new job's `starting`.
+    ///
+    /// The peer's waiter took it as the NEW job finishing and tried to eject
+    /// 0.4 s into the encode. `eject` refused because a job was running, so
+    /// nothing was lost — but the next such mistake might not be so lucky.
+    ///
+    /// My original test for this compared two identical snapshots, which is the
+    /// case that never happens. This one reproduces the real sequence.
+    @Test func afinishAnnouncedOnceIsNotReplayedWhenTheNextDiscStarts() {
+        // Dragnet's job, already announced as succeeded while it was still the
+        // reported job, then cleared with its disc (#0232).
+        let afterDragnet = Self.status(job: nil, lastFinished: nil)
+        // A new disc, a new job. `lastFinished` becomes non-nil here for the
+        // first time, which is exactly what used to trigger the replay.
+        let burbsStarting = Self.status(
+            job: Self.job("FFE5", phase: "starting"),
+            lastFinished: Self.job("E2EC", phase: "succeeded", outcome: "succeeded"))
+
+        let finished = BridgeStatusDiff.drafts(from: afterDragnet, to: burbsStarting)
+            .filter { $0.kind == BridgeEvent.Kind.jobFinished }
+        // E2EC finished yesterday and was announced then. Announcing it again
+        // as the next disc starts is worse than not at all.
+        #expect(finished.isEmpty)
+    }
+
+    /// And the same thing one step later: a terminal job still sitting in
+    /// `status.job` when the next one replaces it was already announced by the
+    /// ordinary phase transition.
+    @Test func ajobAlreadySeenTerminalIsNotAnnouncedTwice() {
+        let settled = Self.status(
+            job: Self.job("ONLY", phase: "succeeded", outcome: "succeeded"))
+        let nextStarting = Self.status(
+            job: Self.job("NEXT", phase: "starting"),
+            lastFinished: Self.job("ONLY", phase: "succeeded", outcome: "succeeded"))
+
+        let finished = BridgeStatusDiff.drafts(from: settled, to: nextStarting)
+            .filter { $0.kind == BridgeEvent.Kind.jobFinished }
+        #expect(finished.isEmpty,
+                "the phase transition to succeeded already said so")
+    }
+
     /// A job that finished and was already reported must not be reported again
     /// on every later snapshot.
     @Test func thesameFinishedJobIsNotReportedTwice() {

@@ -121,6 +121,40 @@ import Testing
             "DRAGNET's menu must not collapse a double feature")
     }
 
+    /// #0235 — the richest negative case yet, and the one I could not have
+    /// invented.
+    ///
+    /// The 'Burbs (1989), captured off joe 2026-10-09: 644 lines whose bonus
+    /// page reads "ALTERNATE ENDING" beside "THEATRICAL TRAILER", and whose
+    /// biography prose contains **"Dante extended a similar freedom to his
+    /// cast"**.
+    ///
+    /// That last line is the point. `extended` is a version word, spelled as a
+    /// whole word, in a sentence about a director's working method. Word-
+    /// boundary matching does not save it — only the qualifier rule does, by
+    /// asking whether the line also offers a *version* or a *cut*. Without that
+    /// rule, a double feature with this disc's bonus text would have been
+    /// collapsed into one film and the second silently lost.
+    ///
+    /// It also shows why "alternate" is not in the vocabulary. "ALTERNATE
+    /// ENDING" is a real bonus feature on a great many discs and says nothing
+    /// about which cut of the film you are about to watch.
+    @Test func realProseContainingAVersionWordIsNotAnEdition() throws {
+        guard let url = DiscAssets.file("menu-lines.json", inDisc: "burbs") else { return }
+        let lines = try JSONDecoder().decode([String].self, from: Data(contentsOf: url))
+        #expect(lines.count > 500)
+        #expect(lines.contains("THEATRICAL TRAILER"))
+        #expect(lines.contains("ALTERNATE ENDING"))
+        #expect(lines.contains { $0.contains("extended a similar freedom") })
+
+        // A trailer, an alternate ending and a sentence about a director are
+        // not offers of an edition.
+        #expect(AlternateCuts.versionWords(inMenu: lines).isEmpty)
+        #expect(DiscTitleHeuristic.severalFeatures(
+            Self.disc(Self.willis), menuLines: lines)?.count == 2,
+            "The 'Burbs' menu must not collapse a double feature")
+    }
+
     /// The trailing asterisk on "PLAY UNRATED VERSION*" is why matching folds
     /// punctuation to spaces rather than comparing raw strings.
     @Test func punctuationGluedToAWordDoesNotHideIt() {

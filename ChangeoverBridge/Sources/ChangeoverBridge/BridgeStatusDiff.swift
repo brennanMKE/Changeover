@@ -240,7 +240,27 @@ public enum BridgeStatusDiff {
     /// ordinary phase transition already says.
     private static func finishedJobDrafts(from old: BridgeStatus,
                                           to new: BridgeStatus) -> [EventDraft] {
-        guard let finished = new.lastFinished, old.lastFinished?.id != finished.id
+        // The guard is on the PREVIOUS snapshot's job, not on `lastFinished`
+        // changing. That distinction is the whole fix for the regression this
+        // shipped with.
+        //
+        // Keying on "`lastFinished` is new" replayed a finish that had already
+        // been announced: Dragnet's job ended and was reported normally while it
+        // was still `status.job`, then #0232 cleared it when the disc left, and
+        // the NEXT disc's job starting made it newly non-nil — so a succeeded
+        // event for a job finished the previous day was emitted in the same
+        // millisecond as the new job's `starting`. A waiter that keys on
+        // "job.finished arrived" rather than on the id tried to eject 0.4 s into
+        // an encode.
+        //
+        // What this is actually for is narrow: a job that was **mid-flight in
+        // the last snapshot** and has been replaced without ever being seen
+        // terminal. If the previous snapshot already showed it terminal, the
+        // ordinary phase transition announced it and there is nothing to add.
+        guard let finished = new.lastFinished,
+              let previous = old.job,
+              previous.id == finished.id,
+              !JobStatus.isTerminal(previous.phase)
         else { return [] }
         let detail = finished.failureReason.map { " — \($0)" } ?? ""
         return [
