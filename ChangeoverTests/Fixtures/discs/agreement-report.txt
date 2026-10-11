@@ -9,13 +9,14 @@ The heuristic decides what is encoded. Nothing below does, today or in
 this pass: it is the evidence for whether the disc's own answer could
 ever be trusted to preselect a title (menu-intelligence.md §11.4).
 
-7 discs: agree 1 · disagree 0 · menu abstained 1 · heuristic abstained 0 · both abstained 2 · not captured 3
+8 discs: agree 1 · disagree 0 · menu abstained 1 · heuristic abstained 0 · both abstained 2 · not captured 4
 
 Verdicts
 --------
 disc                       scanner       heuristic                 disc menu                           verdict
 bloodsport                 title 1       title 1 (scanner)         title 1 (pgcCommands, "Play Movie")  agree
 dragon-tattoo              title 1       title 1 (scanner)         — (notCaptured)                     notCaptured
+fletch                     title 1       title 1 (scanner)         — (notCaptured)                     notCaptured
 get-hard-campaign          title 5       — (severalFeatures)       — (unresolved)                      bothAbstained
 hornets-nest               none (-1)     title 11 (length)         — (notCaptured)                     notCaptured
 oppenheimer                title 7       title 7 (scanner)         — (unresolved)                      menuAbstained

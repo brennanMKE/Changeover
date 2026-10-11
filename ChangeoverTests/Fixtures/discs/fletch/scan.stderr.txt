@@ -1,0 +1,216 @@
+[19:16:08] Compile-time hardening features are enabled
+[19:16:09] hb_init: starting libhb thread
+[19:16:09] thread 16b987000 started ("libhb")
+HandBrake 1.11.2 (2026060700) - Darwin arm64 - https://handbrake.fr
+8 CPUs detected
+Opening /dev/disk4...
+[19:16:09] OS: macOS 27.0 (26A428)
+[19:16:09] CPU: Apple M1
+[19:16:09]  - logical processor count: 8
+[19:16:09] hb_scan: path=/dev/disk4, title_index=0
+disc.c:333: failed opening UDF image /dev/disk4
+disc.c:437: error opening file BDMV/index.bdmv
+disc.c:437: error opening file BDMV/BACKUP/index.bdmv
+[19:16:09] bd: not a bd - trying as a stream/file instead
+libdvdread: Could not open /dev/disk4 with libdvdcss.
+libdvdread: Can't open /dev/disk4 for reading
+libdvdnav: Unable to open device file /dev/disk4.
+libdvdread: Attempting to retrieve all CSS keys
+libdvdread: This can take a _long_ time, please be patient
+libdvdread: Get key for /VIDEO_TS/VIDEO_TS.VOB at 0x00000144
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_01_0.VOB at 0x000004b2
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_01_1.VOB at 0x000023e2
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_02_0.VOB at 0x002d0e57
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_02_1.VOB at 0x002d0e5b
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_03_0.VOB at 0x002e9f2f
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_03_1.VOB at 0x002e9f33
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_04_0.VOB at 0x002f1695
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_04_1.VOB at 0x002f1699
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_05_0.VOB at 0x00394681
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_05_1.VOB at 0x00394685
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_06_0.VOB at 0x00396884
+libdvdread: Elapsed time 0
+libdvdread: Get key for /VIDEO_TS/VTS_06_1.VOB at 0x00396889
+libdvdread: Elapsed time 0
+libdvdread: Found 6 VTS's
+libdvdread: Elapsed time 0
+libdvdread: Could not open /dev/disk4 with libdvdcss.
+libdvdread: Can't open /dev/disk4 for reading
+[19:16:10] scan: DVD has 8 title(s)
+[19:16:10] scan: scanning title 1
+[19:16:10] scan: duration is 01:38:07 (5887567 ms)
+[19:16:10] pgc_id: 1, pgn: 1: pgc: 0x7af926bd40
+[19:16:10] scan: checking audio 1
+[19:16:10] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[19:16:10] scan: checking audio 2
+[19:16:10] scan: id=0x81bd, lang=español (AC3), 3cc=spa ext=0
+[19:16:10] scan: checking audio 3
+[19:16:10] scan: id=0x82bd, lang=Francais (AC3), 3cc=fra ext=0
+[19:16:10] scan: checking subtitle 1
+[19:16:10] scan: id=0x20bd, lang=English (Wide Screen) [VOBSUB], 3cc=eng ext=0
+[19:16:10] scan: checking subtitle 2
+[19:16:10] scan: id=0x21bd, lang=español (Wide Screen) [VOBSUB], 3cc=spa ext=0
+[19:16:10] scan: checking subtitle 3
+[19:16:10] scan: id=0x22bd, lang=Francais (Wide Screen) [VOBSUB], 3cc=fra ext=0
+[19:16:10] scan: title 1 has 17 chapters
+[19:16:10] scan: chap 1, 395467 ms
+[19:16:10] scan: chap 2, 296600 ms
+[19:16:10] scan: chap 3, 180467 ms
+[19:16:10] scan: chap 4, 480133 ms
+[19:16:10] scan: chap 5, 370133 ms
+[19:16:10] scan: chap 6, 265700 ms
+[19:16:10] scan: chap 7, 507734 ms
+[19:16:10] scan: chap 8, 350000 ms
+[19:16:10] scan: chap 9, 299166 ms
+[19:16:10] scan: chap 10, 401200 ms
+[19:16:10] scan: chap 11, 553600 ms
+[19:16:10] scan: chap 12, 388500 ms
+[19:16:10] scan: chap 13, 281700 ms
+[19:16:10] scan: chap 14, 330500 ms
+[19:16:10] scan: chap 15, 462967 ms
+[19:16:10] scan: chap 16, 322700 ms
+[19:16:10] scan: chap 17, 1000 ms
+[19:16:10] scan: aspect = 16:9
+[19:16:10] scan: scanning title 2
+[19:16:10] scan: duration is 00:05:17 (317000 ms)
+[19:16:10] pgc_id: 1, pgn: 1: pgc: 0x7af926bd40
+[19:16:10] scan: checking audio 1
+[19:16:10] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[19:16:10] scan: title 2 has 2 chapters
+[19:16:10] scan: chap 1, 316000 ms
+[19:16:10] scan: chap 2, 1000 ms
+[19:16:10] scan: aspect = 4:3
+[19:16:10] scan: scanning title 3
+[19:16:10] scan: duration is 00:01:34 (94433 ms)
+[19:16:10] pgc_id: 1, pgn: 1: pgc: 0x7af926bd40
+[19:16:10] scan: checking audio 1
+[19:16:10] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[19:16:10] scan: checking subtitle 1
+[19:16:10] scan: id=0x20bd, lang=English (4:3) [VOBSUB], 3cc=eng ext=0
+[19:16:10] scan: checking subtitle 2
+[19:16:10] scan: id=0x21bd, lang=español (4:3) [VOBSUB], 3cc=spa ext=0
+[19:16:10] scan: checking subtitle 3
+[19:16:10] scan: id=0x22bd, lang=Francais (4:3) [VOBSUB], 3cc=fra ext=0
+[19:16:10] scan: title 3 has 2 chapters
+[19:16:10] scan: chap 1, 93433 ms
+[19:16:10] scan: chap 2, 1000 ms
+[19:16:10] scan: aspect = 4:3
+[19:16:10] scan: scanning title 4
+[19:16:11] scan: duration is 00:26:34 (1594166 ms)
+[19:16:11] pgc_id: 1, pgn: 1: pgc: 0x7af926bd40
+[19:16:11] scan: checking audio 1
+[19:16:11] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[19:16:11] scan: checking subtitle 1
+[19:16:11] scan: id=0x20bd, lang=English (Wide Screen) [VOBSUB], 3cc=eng ext=0
+[19:16:11] scan: checking subtitle 2
+[19:16:11] scan: id=0x21bd, lang=español (Wide Screen) [VOBSUB], 3cc=spa ext=0
+[19:16:11] scan: checking subtitle 3
+[19:16:11] scan: id=0x22bd, lang=Francais (Wide Screen) [VOBSUB], 3cc=fra ext=0
+[19:16:11] scan: title 4 has 2 chapters
+[19:16:11] scan: chap 1, 1593166 ms
+[19:16:11] scan: chap 2, 1000 ms
+[19:16:11] scan: aspect = 16:9
+[19:16:11] scan: scanning title 5
+[19:16:11] scan: duration is 00:04:55 (295500 ms)
+[19:16:11] pgc_id: 2, pgn: 1: pgc: 0x7af926bd40
+[19:16:11] scan: checking audio 1
+[19:16:11] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[19:16:11] scan: checking subtitle 1
+[19:16:11] scan: id=0x20bd, lang=English (Wide Screen) [VOBSUB], 3cc=eng ext=0
+[19:16:11] scan: checking subtitle 2
+[19:16:11] scan: id=0x21bd, lang=español (Wide Screen) [VOBSUB], 3cc=spa ext=0
+[19:16:11] scan: checking subtitle 3
+[19:16:11] scan: id=0x22bd, lang=Francais (Wide Screen) [VOBSUB], 3cc=fra ext=0
+[19:16:11] scan: title 5 has 2 chapters
+[19:16:11] scan: chap 1, 294500 ms
+[19:16:11] scan: chap 2, 1000 ms
+[19:16:11] scan: aspect = 16:9
+[19:16:11] scan: scanning title 6
+[19:16:11] scan: duration is 00:02:38 (158834 ms)
+[19:16:11] pgc_id: 3, pgn: 1: pgc: 0x7af9804000
+[19:16:11] scan: checking audio 1
+[19:16:11] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[19:16:11] scan: checking subtitle 1
+[19:16:11] scan: id=0x20bd, lang=English (Wide Screen) [VOBSUB], 3cc=eng ext=0
+[19:16:11] scan: checking subtitle 2
+[19:16:11] scan: id=0x21bd, lang=español (Wide Screen) [VOBSUB], 3cc=spa ext=0
+[19:16:11] scan: checking subtitle 3
+[19:16:11] scan: id=0x22bd, lang=Francais (Wide Screen) [VOBSUB], 3cc=fra ext=0
+[19:16:11] scan: title 6 has 2 chapters
+[19:16:11] scan: chap 1, 157834 ms
+[19:16:11] scan: chap 2, 1000 ms
+[19:16:11] scan: aspect = 16:9
+[19:16:11] scan: scanning title 7
+[19:16:11] scan: duration is 00:00:24 (24000 ms)
+[19:16:11] pgc_id: 1, pgn: 1: pgc: 0x7af926be80
+[19:16:11] scan: checking audio 1
+[19:16:11] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[19:16:11] scan: title 7 has 2 chapters
+[19:16:11] scan: chap 1, 23000 ms
+[19:16:11] scan: chap 2, 1000 ms
+[19:16:11] scan: aspect = 16:9
+[19:16:11] scan: scanning title 8
+[19:16:12] scan: duration is 00:00:14 (14667 ms)
+[19:16:12] pgc_id: 1, pgn: 1: pgc: 0x7af926be80
+[19:16:12] scan: checking audio 1
+[19:16:12] scan: id=0x80bd, lang=English (AC3), 3cc=eng ext=0
+[19:16:12] scan: title 8 has 2 chapters
+[19:16:12] scan: chap 1, 13667 ms
+[19:16:12] scan: chap 2, 1000 ms
+[19:16:12] scan: aspect = 16:9
+[19:16:19] scan: decoding previews for title 1
+[19:16:19] scan: title angle(s) 1
+[19:16:19] scan: audio 0x81bd: ac3, rate=48000Hz, bitrate=192000 español (AC3, 2.0 ch, 192 kbps)
+[19:16:19] scan: audio 0x82bd: ac3, rate=48000Hz, bitrate=192000 Francais (AC3, 2.0 ch, Dolby Surround, 192 kbps)
+[19:16:19] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=448000 English (AC3, 5.1 ch, 448 kbps)
+[19:16:21] using bitstream PAR 32:27
+[19:16:21] scan: 10 previews, 720x480, 23.976 fps, autocrop = 8/12/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[19:16:21] scan: decoding previews for title 2
+[19:16:21] scan: title angle(s) 1
+[19:16:21] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, 192 kbps)
+[19:16:22] using bitstream PAR 8:9
+[19:16:22] scan: 10 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 4:3, PAR 8:9, color profile: 6-1-6, chroma location: left
+[19:16:22] scan: decoding previews for title 3
+[19:16:23] scan: title angle(s) 1
+[19:16:23] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, 192 kbps)
+[19:16:24] using bitstream PAR 8:9
+[19:16:24] scan: 10 previews, 720x480, 23.976 fps, autocrop = 0/0/4/6, aspect 4:3, PAR 8:9, color profile: 6-1-6, chroma location: left
+[19:16:24] scan: decoding previews for title 4
+[19:16:24] scan: title angle(s) 1
+[19:16:25] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, 192 kbps)
+[19:16:26] using bitstream PAR 32:27
+[19:16:26] scan: 10 previews, 720x480, 29.970 fps, autocrop = 10/10/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[19:16:26] scan: decoding previews for title 5
+[19:16:26] scan: title angle(s) 1
+[19:16:26] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, 192 kbps)
+[19:16:27] using bitstream PAR 32:27
+[19:16:27] scan: 10 previews, 720x480, 29.970 fps, autocrop = 10/10/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[19:16:27] scan: decoding previews for title 6
+[19:16:27] scan: title angle(s) 1
+[19:16:28] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=192000 English (AC3, 2.0 ch, 192 kbps)
+[19:16:29] using bitstream PAR 32:27
+[19:16:29] scan: 10 previews, 720x480, 29.970 fps, autocrop = 10/12/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[19:16:29] Title is likely interlaced or telecined (5 out of 10 previews). You should do something about that.
+[19:16:29] scan: decoding previews for title 7
+[19:16:29] scan: title angle(s) 1
+[19:16:29] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=448000 English (AC3, 5.1 ch, 448 kbps)
+[19:16:30] using bitstream PAR 32:27
+[19:16:30] scan: 10 previews, 720x480, 29.970 fps, autocrop = 0/0/2/4, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[19:16:30] scan: decoding previews for title 8
+[19:16:30] scan: title angle(s) 1
+[19:16:31] scan: audio 0x80bd: ac3, rate=48000Hz, bitrate=448000 English (AC3, 5.1 ch, 448 kbps)
+[19:16:32] using bitstream PAR 32:27
+[19:16:32] scan: 10 previews, 720x480, 29.970 fps, autocrop = 0/0/0/0, aspect 16:9, PAR 32:27, color profile: 6-1-6, chroma location: left
+[19:16:32] libhb: scan thread found 8 valid title(s)
+HandBrake has exited.

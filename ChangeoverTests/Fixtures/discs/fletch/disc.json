@@ -1,0 +1,64 @@
+{
+  "formatVersion": 2,
+  "slug": "fletch",
+  "volumeName": "FLETCH",
+  "driveName": "joe",
+  "discId": "0eeb8e701f73dac6dc6f5e68bc7b3846",
+  "driveModel": "PLDS DVD+-RW DS-8A8SH",
+  "handbrakeVersion": "HandBrake 1.11.2",
+  "capturedDate": "2026-10-10",
+  "reviewed": true,
+  "capture": {
+    "tool": "Tools/capture-disc.sh",
+    "toolVersion": 2,
+    "ifoFiles": 7,
+    "rawArchive": "joe:~/changeover-fixtures/fletch"
+  },
+  "menus": {
+    "captured": false,
+    "css": "available",
+    "menuCount": 40,
+    "stillCount": 33,
+    "ocrRun": true,
+    "judgeRun": false,
+    "missing": [],
+    "archivedOutsideRepo": "~/changeover-fixtures/fletch/menus (gordon, joe) and /Volumes/Media/Changeover/Fixtures/fletch/menus"
+  },
+  "notes": "Reviewed by hand 2026-10-10. Single feature: title 1 at 5887s with 17 chapters is the film; the seven short titles are bonus material (the 26:35 making-of is title 4). Not a Play All or TV-season disc. Feature carries three audio tracks (English, Spanish, French, all ac3) and three VOBSUB subtitle tracks in the same three languages, none duplicated, so both counts are 3. Captured for #0244: FLETCH's four bonus-menu buttons (vtsm-01-lu1-pgc12) all target menu:1.pgc5, a dispatch PGC rather than a title, so no bonus label can be tied to a title index. It is the first disc of that shape in the corpus. The IFO files and menu material (33 stills, ocr.json) are NOT here: #0224 keeps authored menu content out of this public repo. They are in the external corpus at ~/changeover-fixtures/fletch on gordon and joe, and on joe under /Volumes/Media/Changeover/Fixtures/fletch.",
+  "expect": {
+    "titleCount": 8,
+    "mainFeatureIndex": 1,
+    "outcome": "single",
+    "outcomeIndex": 1,
+    "outcomeEpisodes": null,
+    "featureDurationSeconds": 5887,
+    "featureChapterCount": 17,
+    "audioTrackCount": 3,
+    "subtitleGroupCount": 3,
+    "menu": null,
+    "agreement": {
+      "heuristicRoute": "scanner",
+      "heuristicTitle": 1,
+      "menuRoute": "notCaptured",
+      "scannerRaw": 1,
+      "scannerTitle": 1,
+      "signals": {
+        "buttonCount": 0,
+        "chapterButtons": 0,
+        "chapterNamesEmitted": 0,
+        "chapterNamesRead": 0,
+        "chapterPages": 0,
+        "labels": [],
+        "largestMenuButtons": 0,
+        "menuCount": 0,
+        "menusWithButtons": 0,
+        "spokenLanguages": [],
+        "subtitleLanguages": [],
+        "titleJumpingButtons": 0,
+        "titlesJumpedTo": []
+      },
+      "slug": "fletch",
+      "verdict": "notCaptured"
+    }
+  }
+}
