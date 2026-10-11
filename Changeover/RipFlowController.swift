@@ -656,13 +656,13 @@ final class RipFlowController {
             // One TMDB lookup per distinct term across every candidate split,
             // cached, so three splits of a four-word label cost at most the
             // number of distinct parts rather than three times the films.
-            var looked: [String: FeatureMatching.Candidate?] = [:]
+            var looked: [String: [FeatureMatching.Candidate]] = [:]
             func resolve(_ splits: [[String]]) async -> [FeatureMatching.Assignment]? {
                 for term in Set(splits.flatMap { $0 }) where looked[term] == nil {
-                    looked[term] = await Self.candidate(for: term, apiKey: apiKey)
+                    looked[term] = await Self.candidates(for: term, apiKey: apiKey)
                 }
                 return FeatureMatching.bestSplit(
-                    features: titles, splits: splits, lookUp: { looked[$0] ?? nil })
+                    features: titles, splits: splits, lookUp: { looked[$0] ?? [] })
             }
 
             // Rung 1: the volume label, cut every way it can be cut.
@@ -769,14 +769,32 @@ final class RipFlowController {
     }
 
     /// One TMDB search plus its runtime, as `FeatureMatching` needs it.
-    private static func candidate(for term: String, apiKey: String) async -> FeatureMatching.Candidate? {
+    /// #0248 — several films per term, not just TMDB's top hit.
+    ///
+    /// This returned `.first` only, which quietly made the matcher's question
+    /// "is TMDB's top hit close enough" instead of "which of these films is
+    /// this title". On a WILLIS collection "SUNSET" resolved to **Sunset
+    /// Boulevard** (1950, 110 m) — 3.1 minutes from the 1:46:56 title, which
+    /// fits — while the actual film, Sunset (1988, 107 m), is 0.07 minutes from
+    /// it and was never offered. The app was ready to file the wrong film.
+    ///
+    /// The flat three-minute window used to hide this by rejecting Sunset
+    /// Boulevard too. #0246 widened it to match the rest of the app and
+    /// uncovered the real fault, which was here all along: a matcher given one
+    /// candidate cannot choose.
+    private static func candidates(for term: String, apiKey: String) async -> [FeatureMatching.Candidate] {
         let client = TMDBClient()
-        guard let top = try? await client.searchMovies(query: term, apiKey: apiKey).first,
-              let details = try? await client.movieDetails(id: top.id, apiKey: apiKey),
-              let runtime = details.runtimeMinutes
-        else { return nil }
-        return FeatureMatching.Candidate(term: term, movieID: top.id, title: top.title,
-                                         year: top.yearText, runtimeMinutes: runtime)
+        guard let results = try? await client.searchMovies(query: term, apiKey: apiKey)
+        else { return [] }
+        var out: [FeatureMatching.Candidate] = []
+        for movie in results.prefix(FeatureMatching.maximumCandidatesPerTerm) {
+            guard let details = try? await client.movieDetails(id: movie.id, apiKey: apiKey),
+                  let runtime = details.runtimeMinutes
+            else { continue }
+            out.append(FeatureMatching.Candidate(term: term, movieID: movie.id, title: movie.title,
+                                                 year: movie.yearText, runtimeMinutes: runtime))
+        }
+        return out
     }
 
     /// #0167 — "Don't import this one".
@@ -1922,7 +1940,12 @@ final class RipFlowController {
                 FlowDiagnostics.note("interrogate film: feature \(naming.feature) is not a scanned title")
                 continue
             }
-            guard let candidate = await Self.candidate(for: naming.label, apiKey: apiKey) else {
+            // #0248 — every candidate the term offers, and let the runtime
+            // choose. Taking TMDB's top hit here had the same fault the feature
+            // match had: it asked "is the first result close enough" rather
+            // than "which of these is this title".
+            let found = await Self.candidates(for: naming.label, apiKey: apiKey)
+            guard let candidate = FeatureMatching.bestFit(for: title, among: found) else {
                 FlowDiagnostics.note("interrogate film: “\(naming.label)” found no film with a runtime")
                 continue
             }

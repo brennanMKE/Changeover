@@ -106,9 +106,9 @@ import Testing
             features: features,
             splits: FeatureMatching.splits(from: ["Get Hard", "The Campaign"], choose: 2),
             lookUp: { term in
-                guard let minutes = runtimes[term] else { return nil }
-                return FeatureMatching.Candidate(term: term, movieID: minutes, title: term,
-                                                 year: "2015", runtimeMinutes: minutes)
+                guard let minutes = runtimes[term] else { return [] }
+                return [FeatureMatching.Candidate(term: term, movieID: minutes, title: term,
+                                                  year: "2015", runtimeMinutes: minutes)]
             })
         let placed = assignments ?? []
         #expect(placed.count == 2)
@@ -132,9 +132,9 @@ import Testing
             splits: FeatureMatching.splits(
                 from: ["Kevin Hart", "Get Hard", "The Campaign"], choose: 2),
             lookUp: { term in
-                guard let minutes = runtimes[term] else { return nil }
-                return FeatureMatching.Candidate(term: term, movieID: minutes, title: term,
-                                                 year: "2015", runtimeMinutes: minutes)
+                guard let minutes = runtimes[term] else { return [] }
+                return [FeatureMatching.Candidate(term: term, movieID: minutes, title: term,
+                                                  year: "2015", runtimeMinutes: minutes)]
             })
         #expect(assignments?.map(\.candidate.title).sorted() == ["Get Hard", "The Campaign"])
     }

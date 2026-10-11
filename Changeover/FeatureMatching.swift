@@ -158,20 +158,80 @@ nonisolated enum FeatureMatching {
     static func bestSplit(
         features: [DiscTitle],
         splits: [[String]],
-        lookUp: (String) -> Candidate?
+        lookUp: (String) -> [Candidate]
     ) -> [Assignment]? {
         var best: (total: Double, assignments: [Assignment])?
         for split in splits {
-            let candidates = split.compactMap(lookUp)
-            // A split only counts when every part named a film.
-            guard candidates.count == split.count else { continue }
-            guard let assignments = assign(features: features, candidates: candidates) else { continue }
-            let total = assignments.reduce(0) { $0 + $1.errorMinutes }
-            if best == nil || total < best!.total {
-                best = (total, assignments)
+            let perTerm = split.map(lookUp)
+            // A split only counts when every part named at least one film.
+            guard perTerm.allSatisfy({ !$0.isEmpty }) else { continue }
+
+            // #0248 — every combination of one candidate per term, not just
+            // the first hit for each.
+            //
+            // A term resolved to exactly one film — TMDB's top result — and
+            // the matcher could then only accept or reject that one. On a
+            // WILLIS collection the term "SUNSET" resolved to **Sunset
+            // Boulevard** (1950, 110 m), which is 3.1 minutes from the 1:46:56
+            // title and fits; the actual film, Sunset (1988, 107 m), is 0.07
+            // minutes from it and was never a candidate at all. The app was
+            // about to file the wrong film under the wrong name.
+            //
+            // Bounded hard: `maximumCandidatesPerTerm` to the power of the
+            // feature count, times the permutations `assign` already walks.
+            // Four features at four candidates each is 256 combinations of 24
+            // orderings — arithmetic, and the TMDB lookups were already paid
+            // for by the caller.
+            for combination in combinations(of: perTerm) {
+                guard let assignments = assign(features: features, candidates: combination)
+                else { continue }
+                let total = assignments.reduce(0) { $0 + $1.errorMinutes }
+                if best == nil || total < best!.total {
+                    best = (total, assignments)
+                }
             }
         }
         return best?.assignments
+    }
+
+    /// How many TMDB results one term may offer the matcher.
+    ///
+    /// #0248 — one was too few: it made the matcher's job "is TMDB's top hit
+    /// close enough" when the question is "which of these films is this
+    /// title". Four is enough for the right film to be present — Sunset (1988)
+    /// is the second hit for "Sunset" — without turning one disc into a
+    /// hundred detail lookups.
+    static let maximumCandidatesPerTerm = 4
+
+    /// #0248 — the candidate whose runtime best matches one title, or `nil`
+    /// when none of them fits it at all.
+    ///
+    /// For the single-title path, where there is no pairing to solve and the
+    /// only question is which of several films this one title is. The
+    /// must-have case: "SUNSET" against a 1:46:56 title is **Sunset (1988)**,
+    /// 0.07 minutes out, and never *Sunset Boulevard* (1950), 3.1 minutes out
+    /// and merely inside tolerance.
+    static func bestFit(for title: DiscTitle, among candidates: [Candidate]) -> Candidate? {
+        candidates
+            .filter { fits(runtimeMinutes: $0.runtimeMinutes, titleDurationSeconds: title.durationSeconds) }
+            .min { a, b in
+                errorMinutes(a, title) < errorMinutes(b, title)
+            }
+    }
+
+    /// How far one candidate's listed runtime is from one title's, in minutes.
+    static func errorMinutes(_ candidate: Candidate, _ title: DiscTitle) -> Double {
+        abs(Double(candidate.runtimeMinutes) - Double(title.durationSeconds) / 60)
+    }
+
+    /// One candidate from each term, every way round.
+    static func combinations(of perTerm: [[Candidate]]) -> [[Candidate]] {
+        var result: [[Candidate]] = [[]]
+        for candidates in perTerm {
+            let capped = candidates.prefix(maximumCandidatesPerTerm)
+            result = result.flatMap { partial in capped.map { partial + [$0] } }
+        }
+        return result
     }
 
     /// #0171 — candidate splits from a flat list of titles.

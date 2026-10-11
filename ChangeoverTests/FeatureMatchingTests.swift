@@ -75,7 +75,7 @@ import Testing
             "Great Outdoors": Self.candidate("Great Outdoors", 2617, "The Great Outdoors", "1988", 91),
         ]
         let assignments = try #require(FeatureMatching.bestSplit(
-            features: Self.uncleBuckFeatures, splits: splits, lookUp: { known[$0] }))
+            features: Self.uncleBuckFeatures, splits: splits, lookUp: { known[$0].map { [$0] } ?? [] }))
         #expect(Set(assignments.map(\.candidate.movieID)) == [2616, 2617])
     }
 
@@ -85,7 +85,7 @@ import Testing
         let splits = DiscLabelSplit.candidateSplits(volumeName: "7000078778_1", count: 2)
         #expect(splits.isEmpty)
         #expect(FeatureMatching.bestSplit(
-            features: Self.getHardFeatures, splits: splits, lookUp: { _ in nil }) == nil)
+            features: Self.getHardFeatures, splits: splits, lookUp: { _ in [] }) == nil)
     }
 
     // MARK: - Refusing rather than guessing
@@ -173,6 +173,87 @@ import Testing
         #expect(FeatureMatching.assign(
             features: [Self.title(7, onDisc)],
             candidates: [Self.candidate("Alpha Dog", 7457, "Alpha Dog", "2006", listed)]) != nil)
+    }
+
+    // MARK: - #0248 — the right film, not the first one that fits
+
+    /// The must-have, in the words it was asked for: "SUNSET" on a 106:56
+    /// title resolves to 38560, never 599.
+    ///
+    /// A WILLIS collection, 2026-10-11. The term "SUNSET" resolved to TMDB's
+    /// top hit — **Sunset Boulevard** (1950, 110 m) — which is 3.1 minutes from
+    /// the 1:46:56 title and fits. The actual film, **Sunset** (1988, 107 m),
+    /// is 0.07 minutes from it and was never offered to the matcher at all,
+    /// because the resolver took `.first` of the search results.
+    ///
+    /// The app was one auto-start away from filing Sunset Boulevard into
+    /// Sunset's folder. The old flat three-minute window hid this by rejecting
+    /// Sunset Boulevard too; #0246 widened it to agree with the rest of the app
+    /// and uncovered the fault underneath.
+    @Test func sunsetResolvesToTheFilmAndNotToSunsetBoulevard() throws {
+        let title = Self.title(3, 106 * 60 + 56)
+        let sunset = Self.candidate("SUNSET", 38560, "Sunset", "1988", 107)
+        let boulevard = Self.candidate("SUNSET", 599, "Sunset Boulevard", "1950", 110)
+
+        // Both fit the window. That is the point: fitting is not choosing.
+        #expect(FeatureMatching.fits(runtimeMinutes: 110, titleDurationSeconds: title.durationSeconds))
+        #expect(FeatureMatching.fits(runtimeMinutes: 107, titleDurationSeconds: title.durationSeconds))
+
+        // Whichever order TMDB returns them in.
+        #expect(FeatureMatching.bestFit(for: title, among: [boulevard, sunset])?.movieID == 38560)
+        #expect(FeatureMatching.bestFit(for: title, among: [sunset, boulevard])?.movieID == 38560)
+    }
+
+    /// And through `bestSplit`, which is the path the disc actually takes.
+    @Test func thebestSplitPathPrefersTheCloserFilm() throws {
+        let assignments = try #require(FeatureMatching.bestSplit(
+            features: [Self.title(3, 106 * 60 + 56)],
+            splits: [["SUNSET"]],
+            lookUp: { _ in [
+                Self.candidate("SUNSET", 599, "Sunset Boulevard", "1950", 110),
+                Self.candidate("SUNSET", 38560, "Sunset", "1988", 107),
+            ] }))
+        #expect(assignments.first?.candidate.movieID == 38560)
+    }
+
+    /// A term that names nothing fitting still yields nothing, rather than the
+    /// least-bad of several wrong answers.
+    @Test func noCandidateFitsMeansNoAnswer() {
+        let title = Self.title(3, 106 * 60 + 56)
+        #expect(FeatureMatching.bestFit(for: title, among: [
+            Self.candidate("X", 1, "Much Shorter", "2000", 40),
+            Self.candidate("X", 2, "Much Longer", "2000", 200),
+        ]) == nil)
+    }
+
+    /// The whole disc, solved as one pairing — the case the agent did by hand.
+    ///
+    /// Hudson Hawk (100 m) and The Whole Nine Yards (98 m) against titles of
+    /// 99:49 and 98:30. One-to-one on total error: 0.4 the right way round
+    /// against 3.3 swapped.
+    @Test func thewholeWillisDiscPairsOneToOne() throws {
+        let features = [
+            Self.title(3, 106 * 60 + 56),
+            Self.title(4, 99 * 60 + 49),
+            Self.title(8, 98 * 60 + 30),
+        ]
+        let assignments = try #require(FeatureMatching.bestSplit(
+            features: features,
+            splits: [["SUNSET", "HUDSON HAWK", "The Whole Nine Yards"]],
+            lookUp: { term in
+                switch term {
+                case "SUNSET": return [
+                    Self.candidate(term, 599, "Sunset Boulevard", "1950", 110),
+                    Self.candidate(term, 38560, "Sunset", "1988", 107),
+                ]
+                case "HUDSON HAWK": return [Self.candidate(term, 9292, "Hudson Hawk", "1991", 100)]
+                default: return [Self.candidate(term, 2069, "The Whole Nine Yards", "2000", 98)]
+                }
+            }))
+        let byFeature = Dictionary(uniqueKeysWithValues: assignments.map { ($0.feature, $0.candidate.movieID) })
+        #expect(byFeature[3] == 38560, "title 3 is Sunset (1988), not Sunset Boulevard")
+        #expect(byFeature[4] == 9292)
+        #expect(byFeature[8] == 2069)
     }
 
     // MARK: - More than two
