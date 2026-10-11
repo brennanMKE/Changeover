@@ -66,10 +66,30 @@ nonisolated enum FeatureMatching {
     /// How far one film's listed runtime may sit from the title it is placed
     /// on.
     ///
-    /// Three minutes, against measured errors of 0.2 to 0.6. The slack is for
-    /// TMDB rounding to whole minutes and for discs that include or omit
-    /// studio logos, not for making a doubtful match fit — every correct
-    /// pairing measured so far is an order of magnitude inside it.
+    /// #0246 — **the same question `RuntimeCrossCheck` asks**, not a second
+    /// answer to it. This was a flat three minutes, chosen against measured
+    /// errors of 0.2 to 0.6, and on the WILLIS triple feature it rejected a
+    /// correct pairing the rest of the app accepts: Alpha Dog's listed 122
+    /// minutes against a 117:36 title is 4.4 minutes out, over this bar and
+    /// comfortably inside `RuntimeCrossCheck`'s 6% + 60s, which allows 8.3
+    /// minutes at that length.
+    ///
+    /// So the matcher refused to propose a pairing that the Start gate would
+    /// then have accepted — two parts of one app disagreeing about whether one
+    /// film is one title. #0216 lifted `LibraryExtras.isSameRuntime` out for
+    /// exactly this reason: "two answers to 'do these runtimes agree' is how
+    /// one report starts contradicting another."
+    ///
+    /// Proportional rather than flat also fixes a scale problem a flat bar
+    /// always had: three minutes is generous on a 40-minute episode and tight
+    /// on a three-hour film, and nothing about TMDB's rounding or a disc's
+    /// studio logos scales with runtime the way its tolerance for them should.
+    static func fits(runtimeMinutes: Int, titleDurationSeconds: Int) -> Bool {
+        RuntimeCrossCheck.compare(discSeconds: titleDurationSeconds,
+                                  tmdbRuntimeMinutes: runtimeMinutes).isConsistent
+    }
+
+    /// Kept for callers that want a number to show. No longer the rule.
     static let maximumErrorMinutes: Double = 3
 
     /// Places every candidate on a different feature, or gives up.
@@ -107,7 +127,14 @@ nonisolated enum FeatureMatching {
             for (position, feature) in features.enumerated() {
                 let candidate = candidates[order[position]]
                 let error = abs(Double(candidate.runtimeMinutes) - Double(feature.durationSeconds) / 60)
-                guard error <= tolerance else { fits = false; break }
+                // #0246 — the shared rule, so the matcher cannot refuse a
+                // pairing the Start gate would accept. `tolerance` still
+                // overrides it for a caller that wants to be stricter.
+                let within = tolerance == maximumErrorMinutes
+                    ? Self.fits(runtimeMinutes: candidate.runtimeMinutes,
+                                titleDurationSeconds: feature.durationSeconds)
+                    : error <= tolerance
+                guard within else { fits = false; break }
                 total += error
                 assignments.append(Assignment(feature: feature.index,
                                               candidate: candidate,

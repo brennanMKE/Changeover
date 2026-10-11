@@ -122,15 +122,57 @@ import Testing
         #expect(FeatureMatching.assign(features: [], candidates: []) == nil)
     }
 
-    /// The tolerance is real: three minutes is inside, four is not.
-    @Test func theToleranceIsEnforced() {
+    /// The tolerance is real, and it is now **the same one the rest of the app
+    /// uses**.
+    ///
+    /// #0246 — this asserted a flat three minutes. That bar rejected a correct
+    /// pairing the Start gate would have accepted: on the WILLIS triple
+    /// feature, Alpha Dog's listed 122 minutes against a 117:36 title is 4.4
+    /// minutes out, over the flat bar and comfortably inside
+    /// `RuntimeCrossCheck`'s 6% + 60s. The matcher refused to propose
+    /// something the gate would then accept, which is two parts of one app
+    /// disagreeing about whether one film is one title.
+    ///
+    /// So the numbers here moved on purpose. At 60 minutes the shared rule
+    /// allows about four and a half: 64 is inside, 65 is not.
+    @Test func theToleranceIsTheSharedOne() {
         let feature = [Self.title(1, 60 * 60)]   // exactly 60 minutes
         #expect(FeatureMatching.assign(
             features: feature,
-            candidates: [Self.candidate("X", 1, "X", "2000", 63)]) != nil)
+            candidates: [Self.candidate("X", 1, "X", "2000", 64)]) != nil)
         #expect(FeatureMatching.assign(
             features: feature,
-            candidates: [Self.candidate("X", 1, "X", "2000", 64)]) == nil)
+            candidates: [Self.candidate("X", 1, "X", "2000", 65)]) == nil)
+    }
+
+    /// Widening the window must not turn the matcher into something that will
+    /// place any film on any title. A film half again as long is still refused.
+    @Test func adoubtfulMatchIsStillRefused() {
+        let feature = [Self.title(1, 60 * 60)]
+        #expect(FeatureMatching.assign(
+            features: feature,
+            candidates: [Self.candidate("X", 1, "X", "2000", 90)]) == nil)
+        #expect(FeatureMatching.assign(
+            features: feature,
+            candidates: [Self.candidate("X", 1, "X", "2000", 40)]) == nil)
+    }
+
+    /// The two checks agree about the same pairing, which is the point.
+    ///
+    /// #0216 lifted `LibraryExtras.isSameRuntime` out for this reason: two
+    /// answers to "do these runtimes agree" is how one report starts
+    /// contradicting another. This is that, between the matcher and the gate.
+    @Test func thematcherAgreesWithTheCrossCheck() {
+        // Alpha Dog's real numbers: 122 minutes listed, 1:57:36 on the disc.
+        let listed = 122
+        let onDisc = 117 * 60 + 36
+
+        #expect(RuntimeCrossCheck.compare(discSeconds: onDisc,
+                                          tmdbRuntimeMinutes: listed).isConsistent)
+        #expect(FeatureMatching.fits(runtimeMinutes: listed, titleDurationSeconds: onDisc))
+        #expect(FeatureMatching.assign(
+            features: [Self.title(7, onDisc)],
+            candidates: [Self.candidate("Alpha Dog", 7457, "Alpha Dog", "2006", listed)]) != nil)
     }
 
     // MARK: - More than two

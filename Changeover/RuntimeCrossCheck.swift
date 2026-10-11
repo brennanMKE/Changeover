@@ -44,6 +44,14 @@ nonisolated enum RuntimeCrossCheck {
         case consistent(deltaSeconds: Int)
         case mismatch(deltaSeconds: Int)
         case notRun(NotRunReason)
+
+        /// #0246 — so `FeatureMatching` can ask this question without
+        /// restating the answer. A verdict that never ran is not consistent:
+        /// "nothing was compared" must not read as "they agree".
+        var isConsistent: Bool {
+            if case .consistent = self { return true }
+            return false
+        }
     }
 
     /// The comparison, in integer seconds throughout (no `Double`, matching
