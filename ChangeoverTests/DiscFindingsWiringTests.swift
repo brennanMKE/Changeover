@@ -270,6 +270,49 @@ struct DiscFindingsWiringTests {
 
     /// "Signs" came back with no runtime, so the disc could not corroborate it
     /// — and it is shown rather than acted on or dropped.
+    /// #0249 — a question the feature match has already answered is not an
+    /// open one.
+    ///
+    /// A film claim arrives from a menu with no runtime, so
+    /// `DiscInterrogation.verify` cannot check it and returns it unverified —
+    /// deliberately, because names are bound to titles by TMDB runtimes in
+    /// `FeatureMatching`. The line it produced was then logged seconds after
+    /// the feature match had placed those very names: on a WILLIS disc all
+    /// three films were reported unconfirmed while two were already assigned.
+    @Test func afilmClaimIsNotReportedOnceTheFeatureMatchHasNamedThem() {
+        let plan = DiscFindings.Plan(unconfirmed: [
+            DiscFindings.Unconfirmed(question: .films, label: "SUNSET"),
+        ])
+        #expect(DiscFindings.unconfirmedLines(plan, filmsAlreadyNamed: true).isEmpty)
+        #expect(DiscFindings.unconfirmedLines(plan, filmsAlreadyNamed: false).count == 1)
+    }
+
+    /// And when it is still open, the sentence says something true.
+    ///
+    /// It used to read "unconfirmed by the disc's runtimes", which asserts the
+    /// runtimes were consulted and did not confirm it. They were never
+    /// consulted: a menu prints titles, not lengths, so there is no runtime on
+    /// the claim to check against anything.
+    @Test func theunconfirmedFilmSentenceDoesNotBlameTheRuntimes() {
+        let plan = DiscFindings.Plan(unconfirmed: [
+            DiscFindings.Unconfirmed(question: .films, label: "SUNSET"),
+        ])
+        let line = DiscFindings.unconfirmedLines(plan, filmsAlreadyNamed: false).first ?? ""
+        #expect(line.contains("unconfirmed"), "#0171 — it must still reach the user")
+        #expect(!line.contains("by the disc's runtimes"),
+                "the runtimes were never consulted; a menu carries none")
+    }
+
+    /// Bonus and extra claims are untouched: those DO carry runtimes off the
+    /// menu, so "no title on this disc runs that long" is a real check that
+    /// really failed.
+    @Test func bonusClaimsAreStillReportedWhenFilmsAreNamed() {
+        let plan = DiscFindings.Plan(unconfirmed: [
+            DiscFindings.Unconfirmed(question: .bonusFeature, label: "Making Of"),
+        ])
+        #expect(DiscFindings.unconfirmedLines(plan, filmsAlreadyNamed: true).count == 1)
+    }
+
     @Test func anUnconfirmedClaimReachesTheUser() async throws {
         let jobs = Self.controller(scan: Self.signsScan(), ocr: Self.signsOCR())
         let flow = RipFlowController()

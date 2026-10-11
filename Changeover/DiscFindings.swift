@@ -180,11 +180,35 @@ nonisolated enum DiscFindings {
     /// Phrased as the disc speaking and the app withholding judgement, because
     /// that is exactly the state of affairs: "the menus suggest" is true, and
     /// "this disc holds" would not be.
-    static func unconfirmedLines(_ plan: Plan) -> [String] {
-        plan.unconfirmed.map { claim in
+    /// - Parameter filmsAlreadyNamed: #0249 — whether `FeatureMatching` has
+    ///   already bound every feature on this disc to a film.
+    ///
+    ///   A film claim arrives from a menu with **no runtime** — menus print
+    ///   titles, not lengths — so `DiscInterrogation.verify` cannot check one
+    ///   and returns every film name unverified. That is deliberate and its own
+    ///   comment says so: names are bound to titles by TMDB runtimes in
+    ///   `FeatureMatching`, "which knows things this does not".
+    ///
+    ///   But the sentence it produced read as a verdict, and it was logged
+    ///   seconds **after** the feature match had successfully placed those very
+    ///   names. On a WILLIS disc all three films were reported "unconfirmed by
+    ///   the disc's runtimes" while two of them were already assigned. Two
+    ///   parts of the app appeared to disagree about one disc, and neither was
+    ///   wrong — one was saying "not my job" in language that sounds like "not
+    ///   true".
+    static func unconfirmedLines(_ plan: Plan, filmsAlreadyNamed: Bool = false) -> [String] {
+        plan.unconfirmed.compactMap { claim in
             switch claim.question {
             case .films:
-                return "The menus suggest a film called “\(claim.label)” — unconfirmed by the disc's runtimes"
+                // Nothing to report: the question this path cannot answer has
+                // already been answered by the path that can.
+                guard !filmsAlreadyNamed else { return nil }
+                // And when it has not been, say what is actually true. The old
+                // wording claimed the runtimes had been consulted and had
+                // failed to confirm; they were never consulted, because a menu
+                // does not print one.
+                return "The menus suggest a film called “\(claim.label)” — unconfirmed here; "
+                    + "a menu carries no runtime, so only a TMDB match can confirm a film's name"
             case .bonusFeature:
                 return "The menus suggest bonus material called “\(claim.label)” — no title on this disc runs that long"
             case .extras:

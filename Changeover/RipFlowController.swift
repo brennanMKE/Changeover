@@ -1710,7 +1710,13 @@ final class RipFlowController {
     /// says something unconfirmable is still telling us something, and #0171's
     /// whole cost was an answer that existed and reached nobody.
     var unconfirmedDiscClaims: [String] {
-        discFindings.map(DiscFindings.unconfirmedLines) ?? []
+        guard let discFindings else { return [] }
+        // #0249 — the same suppression the log uses, so the window and the
+        // flow log cannot say different things about the same disc. That
+        // divergence is what this ticket is about.
+        let everyFeatureNamed = !featureSelection.features.isEmpty
+            && featureSelection.features.allSatisfy { featureSelection.movieID(for: $0) != nil }
+        return DiscFindings.unconfirmedLines(discFindings, filmsAlreadyNamed: everyFeatureNamed)
     }
 
     /// Ask the disc what is on it, once its menus have settled.
@@ -1844,7 +1850,12 @@ final class RipFlowController {
 
         // Everything the disc could not prove, said out loud. #0171: an
         // answer nobody can reach is indistinguishable from no answer.
-        for line in DiscFindings.unconfirmedLines(plan) {
+        // #0249 — the feature match runs first and knows more. If it has named
+        // every feature, a film claim this path could not check is not an open
+        // question and must not be logged as one.
+        let everyFeatureNamed = !featureSelection.features.isEmpty
+            && featureSelection.features.allSatisfy { featureSelection.movieID(for: $0) != nil }
+        for line in DiscFindings.unconfirmedLines(plan, filmsAlreadyNamed: everyFeatureNamed) {
             FlowDiagnostics.note("interrogate unconfirmed: \(line)")
             jobs.note("  · \(line)")
         }
