@@ -407,13 +407,50 @@ nonisolated enum DiscTitleHeuristic {
         var groups: [[DiscTitle]] = []
         for title in sorted {
             if let last = groups.last, let previous = last.last,
-               title.durationSeconds - previous.durationSeconds <= distinctFeatureSeparationSeconds {
+               title.durationSeconds - previous.durationSeconds <= distinctFeatureSeparationSeconds,
+               sameChapterStructure(previous, title) {
                 groups[groups.count - 1].append(title)
             } else {
                 groups.append([title])
             }
         }
         return groups
+    }
+
+    /// #0247 — whether two nearly-equal runtimes are two cuts of one film
+    /// rather than two films that happen to run the same length.
+    ///
+    /// Proximity alone said they were, and a real disc falsified it. A third
+    /// WILLIS collection holds Sunset, Hudson Hawk and The Whole Nine Yards;
+    /// Hudson Hawk runs 1:39:49 and The Whole Nine Yards 1:38:30, **79 seconds
+    /// apart**. Two entirely different films were chained into one group, the
+    /// disc was read as holding two features instead of three, and the third
+    /// film could not be imported at all. The menu named all three and the app
+    /// logged the disagreement before trusting the runtimes over it.
+    ///
+    /// Chapter count separates them, and the evidence is unanimous across
+    /// every case this project has:
+    ///
+    ///     Adventureland   8 branching variants   29 chapters each   ONE film
+    ///     Identity        two cuts, 67 s apart   28 and 28          ONE film
+    ///     Repo Men        two cuts, 8 min apart  21 and 21          ONE film
+    ///     Hudson Hawk / The Whole Nine Yards     11 and 9           TWO films
+    ///
+    /// Two cuts of one film are authored from one chapter list: the extended
+    /// cut adds footage inside existing chapters, and a branching variant is
+    /// the same cells in a different order. Two films have no reason to agree.
+    ///
+    /// The converse is deliberately **not** claimed. Agreeing counts are not
+    /// evidence of one film — Uncle Buck and The Great Outdoors are two films
+    /// with 17 each, and #0157's removed rule failed exactly by assuming
+    /// otherwise. This only ever *separates*; it never joins.
+    ///
+    /// A count of zero is unknown, not different: a scan that could not read a
+    /// chapter list must not split a film in two. The pair then falls back to
+    /// proximity alone, which is where this started.
+    nonisolated static func sameChapterStructure(_ a: DiscTitle, _ b: DiscTitle) -> Bool {
+        guard a.chapterCount > 0, b.chapterCount > 0 else { return true }
+        return a.chapterCount == b.chapterCount
     }
 
     /// Anything wider than this counts as widescreen; below it, 4:3.

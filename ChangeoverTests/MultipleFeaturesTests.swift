@@ -177,6 +177,61 @@ import Testing
                 == .single(index: 1, source: .scanner))
     }
 
+    /// #0247 — two different films 79 seconds apart.
+    ///
+    /// A third WILLIS collection, 2026-10-11: Sunset (1:46:56), Hudson Hawk
+    /// (1:39:49) and The Whole Nine Yards (1:38:30). The last two are **79
+    /// seconds apart**, so single-linkage proximity chained them into one
+    /// group, the disc was read as holding two features instead of three, and
+    /// The Whole Nine Yards could not be imported at all.
+    ///
+    /// The menu named all three — "SUNSET | HUDSON HAWK | The- | Whole | Nine
+    /// Yards" — and `flow.log` recorded the disagreement before the grouping
+    /// won anyway:
+    ///
+    ///     the menus named 3 film(s); count agreement more(found: 3, expected: 2)
+    ///
+    /// Chapter counts separate them where runtime cannot.
+    @Test func twoFilmsAMinuteApartAreStillTwoFilms() {
+        let willis = Self.disc([
+            Self.title(3, seconds: 6_416, chapters: 16),   // Sunset, 1:46:56
+            Self.title(4, seconds: 5_989, chapters: 11),   // Hudson Hawk, 1:39:49
+            Self.title(8, seconds: 5_910, chapters: 9),    // Whole Nine Yards, 1:38:30
+        ])
+        let features = DiscTitleHeuristic.severalFeatures(willis)
+        #expect(features?.count == 3, "three films, and the third was being lost")
+        #expect(features?.map(\.index) == [3, 4, 8])
+    }
+
+    /// The rule only ever separates. Agreeing chapter counts are NOT evidence
+    /// of one film — Uncle Buck and The Great Outdoors are two films with 17
+    /// each, and #0157's removed rule failed by assuming otherwise.
+    @Test func agreeingChapterCountsDoNotJoinTwoFilms() {
+        #expect(DiscTitleHeuristic.sameChapterStructure(
+            Self.title(1, seconds: 5_425, chapters: 17),
+            Self.title(2, seconds: 5_978, chapters: 17)))
+        // Still two features, because they are nine minutes apart.
+        let uncleBuck = Self.disc([
+            Self.title(1, seconds: 5_425, chapters: 17),
+            Self.title(2, seconds: 5_978, chapters: 17),
+        ])
+        #expect(DiscTitleHeuristic.severalFeatures(uncleBuck)?.count == 2)
+    }
+
+    /// An unread chapter list is unknown, not different. A scan that could not
+    /// read one must not split a film in two.
+    @Test func anunknownChapterCountDoesNotSplitAFilm() {
+        #expect(DiscTitleHeuristic.sameChapterStructure(
+            Self.title(1, seconds: 5_397, chapters: 0),
+            Self.title(2, seconds: 5_464, chapters: 28)))
+        let cuts = Self.disc([
+            Self.title(1, seconds: 5_397, chapters: 0),
+            Self.title(2, seconds: 5_464, chapters: 0),
+        ])
+        #expect(DiscTitleHeuristic.severalFeatures(cuts) == nil,
+                "no chapter data means fall back to proximity, not split")
+    }
+
     /// A theatrical/extended pair is one film in two cuts, not two films.
     ///
     /// Identity, 2026-09-24: 1:29:57 and 1:31:04 — 67 seconds apart, extra
