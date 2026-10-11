@@ -242,6 +242,51 @@ import Testing
         }
     }
 
+    /// #0246 — a title the menu set across two lines.
+    ///
+    /// The WILLIS triple feature's whole menu is the three films:
+    /// `Jackal | MERCURY | RISING | ALPHA DOG`. The OCR reports one
+    /// observation per line, so "MERCURY" and "RISING" arrived separately, the
+    /// menu was read as naming FOUR films against three features, and
+    /// "MERCURY RISING" was never searched for at all — nothing joined two
+    /// lines. Measured from flow.log on joe, 2026-10-11:
+    ///
+    ///     feature match: the menus named 4 film(s) — Jackal | MERCURY | RISING | ALPHA DOG
+    ///     feature match: trying 12 term(s) — Jackal | MERCURY | RISING | ALPHA DOG |
+    ///                    ackal | ckal | Jacka | Jack | ERCURY | RCURY | MERCUR | MERCU
+    ///
+    /// Eight of those twelve are shavings of two words. The disc named its own
+    /// films and the app could not read them.
+    @Test func atitleSetAcrossTwoLinesIsSearchedFor() {
+        let terms = OCRSearchTerms.terms(
+            lines: ["Jackal", "MERCURY", "RISING", "ALPHA DOG", "SUBTITLES: ON/OFF"])
+        #expect(terms.contains("MERCURY RISING"),
+                "the two halves of one title have to be put back together")
+        #expect(terms.contains("Jackal"))
+        #expect(terms.contains("ALPHA DOG"))
+    }
+
+    /// And the join comes before the shavings, which is the half of the fix
+    /// that matters. All three films were already in the old term list; they
+    /// simply could not survive the cap once four variants of each line were
+    /// ahead of them.
+    @Test func ajoinOutranksACharacterShaving() throws {
+        let terms = OCRSearchTerms.terms(lines: ["MERCURY", "RISING", "ALPHA DOG"])
+        let join = try #require(terms.firstIndex(of: "MERCURY RISING"))
+        let shaving = terms.firstIndex(of: "ERCURY")
+        if let shaving {
+            #expect(join < shaving, "a real pair of words beats a damaged one")
+        }
+    }
+
+    /// Furniture is not joined to its neighbour. A disc with several language
+    /// lines would otherwise produce a run of nonsense pairs.
+    @Test func furnitureIsNotJoined() {
+        let terms = OCRSearchTerms.terms(
+            lines: ["WITH ENGLISH SUBTITLES", "WITH SPANISH SUBTITLES"])
+        #expect(!terms.contains { $0.contains("SUBTITLES WITH") })
+    }
+
     /// Titles the model did read lead the pool: they are the best evidence
     /// there is, and the cut at `maximumTerms` must not fall on them.
     @Test func modelTitlesComeFirst() {

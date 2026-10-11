@@ -49,7 +49,15 @@ nonisolated enum OCRSearchTerms {
     /// A bound on the whole pool, so a disc with forty menu pages cannot turn
     /// into hundreds of TMDB calls. Ordered best-first, so the cut falls on
     /// the least plausible readings.
-    static let maximumTerms = 12
+    /// Raised from 12 for #0246.
+    ///
+    /// The cap exists so a damaged menu does not become hundreds of TMDB
+    /// calls, and 18 is still nowhere near that. It had to move because the
+    /// ordering did: with every whole line and every join ahead of the
+    /// shavings, "CAMPAIGN" — the only term that finds the Get Hard disc's
+    /// second film — lands at 16. 18 is that plus headroom, so the next disc
+    /// with one more menu line does not silently lose a film.
+    static let maximumTerms = 18
 
     /// Candidate search terms, best first and deduplicated.
     ///
@@ -92,20 +100,78 @@ nonisolated enum OCRSearchTerms {
             furniture.append((cleaned, looksLikeMenuFurniture(cleaned)))
         }
 
-        for (cleaned, isFurniture) in furniture.sorted(by: { !$0.1 && $1.1 }) {
-            _ = isFurniture
-            add(cleaned)
-            // Then the same line with its damaged edges shaved, front first:
-            // a menu prints a title's first letters decoratively far more
-            // often than its last.
+        let ranked = furniture.sorted(by: { !$0.1 && $1.1 })
+
+        // #0246 — adjacent lines joined, before anything derived from a single
+        // line.
+        //
+        // A menu sets a title across two lines whenever it is too long or the
+        // designer liked it that way, and the OCR reports one observation per
+        // line. The WILLIS triple feature's menu reads
+        //
+        //     Jackal | MERCURY | RISING | ALPHA DOG
+        //
+        // which is three films counted as four, and "MERCURY RISING" was never
+        // searched for, because nothing here ever put two lines together. The
+        // disc named its own films and the app could not read them.
+        //
+        // Early, because a join is strong evidence: two real words in order,
+        // exactly as the menu set them. Pairs only and adjacent only — longer
+        // combinations are a combinatorial pool of mostly nonsense that would
+        // eat the cap.
+        //
+        // Furniture is not joined. "WITH ENGLISH SUBTITLES WITH SPANISH
+        // SUBTITLES" is not a film, and a disc with several language lines
+        // produces a run of them.
+        // #0246 — ordered by how good the evidence is, not by which line it
+        // came from.
+        //
+        // Four tiers, and furniture sinks to the back of every one of them,
+        // which is what the note above always meant by "sinks to the back of
+        // the pool".
+        //
+        //   1. whole lines that are not furniture — a real film's name, read
+        //      undamaged, is the best thing here
+        //   2. adjacent pairs of those lines joined
+        //   3. shavings of those lines
+        //   4. everything furniture, whole and shaved
+        //
+        // The old code walked the lines and emitted each one's shavings before
+        // moving on. That cost the WILLIS triple feature a film: its menu names
+        // three in four lines, and eight of the twelve slots went on shavings
+        // of the first two ("ackal", "ckal", "ERCURY", "RCURY"…), so "ALPHA
+        // DOG" — a whole line, a real film, sitting right there — never got a
+        // slot. A damaged reading of one line must not outrank an undamaged
+        // reading of another.
+        //
+        // The shavings still earn tier 3 rather than being dropped: the Get
+        // Hard disc's second film is found only as "CAMPAIGN", a shaving of the
+        // damaged line "D\u{00B0}\u{00C7}AMPAIGN". Front first, since a menu prints a title's
+        // first letters decoratively more often than its last.
+        func shavings(of cleaned: String) -> [String] {
             let characters = Array(cleaned)
+            var out: [String] = []
             for drop in 1...maximumTrim where characters.count - drop >= minimumLength {
-                add(String(characters.dropFirst(drop)))
+                out.append(String(characters.dropFirst(drop)))
             }
             for drop in 1...maximumTrim where characters.count - drop >= minimumLength {
-                add(String(characters.dropLast(drop)))
+                out.append(String(characters.dropLast(drop)))
             }
+            return out
         }
+
+        let real = ranked.filter { !$0.1 }.map(\.0)
+        let menuWords = ranked.filter { $0.1 }.map(\.0)
+
+        for line in real { add(line) }
+        // Pairs only, adjacent only: longer combinations are a combinatorial
+        // pool of mostly nonsense. Furniture is not joined at all — "WITH
+        // ENGLISH SUBTITLES WITH SPANISH SUBTITLES" is not a film, and a disc
+        // with several language lines produces a run of them.
+        for pair in zip(real, real.dropFirst()) { add(pair.0 + " " + pair.1) }
+        for line in real { for shaved in shavings(of: line) { add(shaved) } }
+        for line in menuWords { add(line) }
+        for line in menuWords { for shaved in shavings(of: line) { add(shaved) } }
 
         return Array(pool.prefix(maximumTerms))
     }
