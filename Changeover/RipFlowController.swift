@@ -787,9 +787,16 @@ final class RipFlowController {
     /// blocked, because the Confirm step judged the whole disc by whichever
     /// film happened to be active. A film you do not want should not have to
     /// be ripped or argued past.
-    func setFeatureSkipped(_ skip: Bool, feature: Int, jobs: JobController, settings: AppSettings) {
+    /// - Parameter origin: #0245 — who skipped it. Threaded for the reason
+    ///   #0242 records: `applyActiveFeature` forwards to `select`, whose default
+    ///   is `.user`, so an agent skipping a film would otherwise be written into
+    ///   the identification story as a person having done it. That is the same
+    ///   defaulted parameter being inherited by a third path, which is exactly
+    ///   what #0242 said would happen again.
+    func setFeatureSkipped(_ skip: Bool, feature: Int, jobs: JobController, settings: AppSettings,
+                           origin: SelectionOrigin = .user) {
         featureSelection.setSkipped(skip, for: feature)
-        applyActiveFeature(jobs: jobs, settings: settings)
+        applyActiveFeature(jobs: jobs, settings: settings, origin: origin)
         // Skipping a film takes its bonus features with it — there is no folder
         // left to put them in. `FeatureSelection.bonusTarget` already says so;
         // this is what makes the extras selection agree.

@@ -466,6 +466,48 @@ enum AgentActions {
             await flow.checkLibrary(settings: settings)
         }
 
+        // #0245 — "Don't import this one", for an agent.
+        //
+        // Applied after the film choices, so `--skip` and `--movie` in one call
+        // mean what they read as: name these, leave that one out. Routed through
+        // `setFeatureSkipped`, the same method the window's link calls, so the
+        // plan, the gate and the extras attachment cannot disagree about which
+        // films are running — a second path here would be a second chance to
+        // get it wrong.
+        //
+        // `.agent` because the skip goes on to `applyActiveFeature`, whose
+        // default is `.user`. That is #0242's defaulted parameter reaching a
+        // third path, exactly as that ticket predicted it would.
+        var skipped: [Int] = []
+        var unskipped: [Int] = []
+        for feature in request.skipFeatures where flow.featureSelection.features.contains(feature) {
+            flow.setFeatureSkipped(true, feature: feature, jobs: jobs,
+                                   settings: settings, origin: .agent)
+            skipped.append(feature)
+        }
+        for feature in request.unskipFeatures where flow.featureSelection.features.contains(feature) {
+            flow.setFeatureSkipped(false, feature: feature, jobs: jobs,
+                                   settings: settings, origin: .agent)
+            unskipped.append(feature)
+        }
+        // A title that is not a feature on this disc is refused rather than
+        // ignored. Silently accepting it would report success for a skip that
+        // never happened, and the film would then import.
+        let unknownSkips = (request.skipFeatures + request.unskipFeatures)
+            .filter { !flow.featureSelection.features.contains($0) }
+        if !unknownSkips.isEmpty {
+            let names = unknownSkips.map(String.init).joined(separator: ", ")
+            let features = flow.featureSelection.features.map(String.init).joined(separator: ", ")
+            return refusal(
+                verb: BridgeRequest.Action.select,
+                outcome: ActionOutcome.refusedUnknownTitle,
+                detail: "title(s) \(names) are not features on this disc. "
+                    + "The features are \(features.isEmpty ? "none — this disc holds one film" : features). "
+                    + "Nothing was skipped.",
+                sessionsAttached: sessionsAttached
+            )
+        }
+
         // Reported back from the resolved plan rather than from the request, so an
         // agent reads what the app will actually do — including the folder a label
         // was derived into, which it did not name.

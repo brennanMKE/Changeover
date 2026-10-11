@@ -112,6 +112,21 @@ public struct SelectionRequest: Codable, Sendable, Equatable {
     /// The disc title index to encode as the feature.
     public var featureTitle: Int?
     public var extras: [Extra]
+    /// #0245 — feature titles to leave out of this disc's plan, the CLI's
+    /// equivalent of the window's "Don't import this one" (#0167).
+    ///
+    /// Without it, the only way an agent could leave a film out was never to
+    /// name it, which fails three ways: `select` is additive so a named film
+    /// cannot be un-named; asking the app whether a film is already in Plex
+    /// requires naming it, which puts it in the plan; and a film the app itself
+    /// guessed cannot be dropped at all.
+    ///
+    /// A skipped film is **reported as skipped**, not merely absent. "Nobody
+    /// asked for this" and "someone decided against this" are different facts
+    /// and an agent reading the plan back needs to tell them apart.
+    public var skipFeatures: [Int]
+    /// Feature titles to put back into the plan.
+    public var unskipFeatures: [Int]
     /// #0202 — take only the extras, leaving a film already in Plex alone.
     ///
     /// This is what the window's "Import Just the Extras" button records, and
@@ -134,7 +149,9 @@ public struct SelectionRequest: Codable, Sendable, Equatable {
         query: String? = nil,
         featureTitle: Int? = nil,
         extras: [Extra] = [],
-        extrasOnly: Bool = false
+        extrasOnly: Bool = false,
+        skipFeatures: [Int] = [],
+        unskipFeatures: [Int] = []
     ) {
         self.discInsertionID = discInsertionID
         self.sessionID = sessionID
@@ -143,11 +160,14 @@ public struct SelectionRequest: Codable, Sendable, Equatable {
         self.featureTitle = featureTitle
         self.extras = extras
         self.extrasOnly = extrasOnly
+        self.skipFeatures = skipFeatures
+        self.unskipFeatures = unskipFeatures
     }
 
     /// Whether this request asks for anything at all.
     public var isEmpty: Bool {
         movieID == nil && query == nil && featureTitle == nil && extras.isEmpty && !extrasOnly
+            && skipFeatures.isEmpty && unskipFeatures.isEmpty
     }
 }
 

@@ -313,6 +313,9 @@ public enum CLIParse {
         var year: Int?
         var yearRaw: String?
         var extras: [SelectionRequest.Extra] = []
+        /// #0245 — the CLI's "Don't import this one".
+        var skipFeatures: [Int] = []
+        var unskipFeatures: [Int] = []
         var positional: [String] = []
         /// The first thing that was wrong, held rather than returned so that an
         /// explicit `--help` still wins over it.
@@ -368,6 +371,26 @@ public enum CLIParse {
 
             case "--confirm":
                 confirm = true
+
+            case "--skip":
+                guard let raw = takeValue("--skip", joined: joined) else { continue }
+                guard let index = Int(raw), index > 0 else {
+                    deferredFailure = deferredFailure ?? usage(
+                        "--skip needs a title index, not \(raw)",
+                        hint: "take it from `\(ServiceNames.cliName) status --json`")
+                    continue
+                }
+                skipFeatures.append(index)
+
+            case "--unskip":
+                guard let raw = takeValue("--unskip", joined: joined) else { continue }
+                guard let index = Int(raw), index > 0 else {
+                    deferredFailure = deferredFailure ?? usage(
+                        "--unskip needs a title index, not \(raw)",
+                        hint: "take it from `\(ServiceNames.cliName) status --json`")
+                    continue
+                }
+                unskipFeatures.append(index)
 
             case "--timeout":
                 guard let raw = takeValue("--timeout", joined: joined) else { continue }
@@ -538,7 +561,9 @@ public enum CLIParse {
             extras: extras,
             extrasOnly: extrasOnly,
             yearRaw: yearRaw,
-            confirm: confirm
+            confirm: confirm,
+            skipFeatures: skipFeatures,
+            unskipFeatures: unskipFeatures
         ) {
             return .failure(misplaced)
         }
@@ -707,7 +732,9 @@ public enum CLIParse {
                 query: query,
                 featureTitle: featureTitle,
                 extras: extras,
-                extrasOnly: extrasOnly
+                extrasOnly: extrasOnly,
+                skipFeatures: skipFeatures,
+                unskipFeatures: unskipFeatures
             )
             guard !request.isEmpty else {
                 // Refused rather than treated as a no-op: a script that built an
@@ -823,7 +850,7 @@ public enum CLIParse {
         "select": [
             "--no-launch", "--session", "--disc", "--movie", "--query",
             "--feature-title", "--extra", "--extra-kind", "--extra-label",
-            "--extras-only",
+            "--extras-only", "--skip", "--unskip",
         ],
         "import": ["--no-launch", "--session", "--disc", "--confirm"],
     ]
@@ -842,7 +869,9 @@ public enum CLIParse {
         extras: [SelectionRequest.Extra],
         extrasOnly: Bool = false,
         yearRaw: String? = nil,
-        confirm: Bool = false
+        confirm: Bool = false,
+        skipFeatures: [Int] = [],
+        unskipFeatures: [Int] = []
     ) -> CLIErrorPayload? {
         let allowed = accepted[verb] ?? []
         var given: [String] = []
@@ -859,6 +888,8 @@ public enum CLIParse {
         if extrasOnly { given.append("--extras-only") }
         if yearRaw != nil { given.append("--year") }
         if confirm { given.append("--confirm") }
+        if !skipFeatures.isEmpty { given.append("--skip") }
+        if !unskipFeatures.isEmpty { given.append("--unskip") }
 
         guard let offender = given.first(where: { !allowed.contains($0) }) else { return nil }
 

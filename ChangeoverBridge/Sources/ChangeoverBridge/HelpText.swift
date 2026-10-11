@@ -572,9 +572,27 @@ public enum HelpText {
         summary: "Name the feature, the film and any extras to import.",
         usage: "\(ServiceNames.cliName) select [--movie <tmdb-id>] [--query <term>] "
             + "[--feature-title <n>] [--extra <n> [--extra-kind <folder>] "
-            + "[--extra-label <text>]]… [--extras-only] [--disc <insertionID>] "
-            + "[--session <id>] [--json]",
+            + "[--extra-label <text>]]… [--extras-only] [--skip <n>] [--unskip <n>] "
+            + "[--disc <insertionID>] [--session <id>] [--json]",
         discussion: """
+            --skip <title> leaves a film out of a multi-film disc: the CLI's \
+            "Don\u{2019}t import this one". Before it, the only way to leave a film \
+            out was never to name it, which fails three ways — select is additive so \
+            a named film cannot be un-named, asking whether a film is already in \
+            Plex means naming it and so putting it in the plan, and a film the app \
+            guessed for itself could not be dropped at all. --unskip <title> puts \
+            one back.
+
+            A skipped film is reported AS skipped rather than merely absent. \
+            "Nobody asked for this" and "someone decided against this" are \
+            different facts, and an agent reading the plan back needs to tell them \
+            apart. A title that is not a feature on this disc is refused, not \
+            ignored: silently accepting it would report success for a skip that \
+            never happened and the film would import anyway.
+
+            Skips apply after the film choices, so --movie and --skip in one call \
+            mean what they read as: name these, leave that one out.
+
             Additive: name the film on one call and tick an extra on the next, the \
             way a person clicking the window does. An entirely empty select is a \
             usage error rather than a no-op, because a script that built one has a \
@@ -626,6 +644,15 @@ public enum HelpText {
             \(authorisationNote)
             """,
         options: [
+            HelpPayload.OptionHelp(
+                flag: "--skip <title>",
+                summary: "Leave this feature out of the plan — the window\u{2019}s \u{201C}Don\u{2019}t import this one\u{201D}."
+            ),
+            HelpPayload.OptionHelp(
+                flag: "--unskip <title>",
+                summary: "Put a skipped feature back into the plan."
+            ),
+
             HelpPayload.OptionHelp(flag: "--movie <tmdb-id>", summary: "The film, by TMDB id."),
             HelpPayload.OptionHelp(
                 flag: "--query <term>",
